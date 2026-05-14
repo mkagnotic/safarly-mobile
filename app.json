@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Safarly",
+    "slug": "safarly-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FAECF3"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAECF3"
+      },
+      "package": "com.anonymous.safarlymobile"
+    }
+  }
+}
