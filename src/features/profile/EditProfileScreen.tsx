@@ -128,7 +128,7 @@ export function EditProfileScreen() {
   // ───────── Loading state (initial fetch) ─────────
   if (initialLoading && !profile) {
     return (
-      <Screen safeBackgroundColor={colors.card} refreshEnabled={false}>
+      <Screen refreshEnabled={false}>
         <View style={styles.headerRow}>
           <Pressable
             style={styles.backButton}
@@ -151,7 +151,7 @@ export function EditProfileScreen() {
   // ───────── Error state (only when we have nothing to seed the form with) ─────────
   if (loadError && !profile) {
     return (
-      <Screen safeBackgroundColor={colors.card} refreshEnabled={false}>
+      <Screen refreshEnabled={false}>
         <View style={styles.headerRow}>
           <Pressable
             style={styles.backButton}
@@ -184,7 +184,7 @@ export function EditProfileScreen() {
   const initials = initialsFromFullName(name || profile?.name || "");
 
   return (
-    <Screen safeBackgroundColor={colors.card} contentContainerStyle={styles.scroll} refreshEnabled={false}>
+    <Screen contentContainerStyle={styles.scroll} refreshEnabled={false}>
       <View style={styles.headerRow}>
         <Pressable
           style={styles.backButton}

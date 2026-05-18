@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import { SafarlyMark } from "@/components/brand/SafarlyMark";
 import { GoogleG } from "@/components/icons/GoogleG";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -221,28 +223,35 @@ export function LoginScreen() {
     );
   }
 
-  const bottomBlockHeight = 240;
+  // ≈ height of the absolutely-positioned `actions` block, so the hero content
+  // centers in the visible area above the buttons (not behind them).
+  const bottomBlockHeight = 290;
   return (
     <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
       <View style={[styles.wrap, { paddingTop: 8 }]}>
         <View style={[styles.center, { paddingBottom: bottomBlockHeight }]}>
           <View style={styles.logoBlock}>
             <View style={styles.logoWrap}>
-              <Ionicons name="airplane-outline" size={32} color={colors.white} style={styles.logoPlane} />
+              <SafarlyMark size={48} />
             </View>
             <Text style={styles.title}>Welcome to Safarly</Text>
             <Text style={styles.subtitleHero}>Send parcels with travelers. Save money. Build trust.</Text>
           </View>
 
           <View style={styles.illustration}>
-            <View style={styles.ringOuter}>
+            <Animated.View style={[styles.ringOuter, { transform: [{ translateY: bubbleFloat }] }]}>
               <View style={styles.ringInner}>
-                <View style={styles.heroPlaneTilt}>
-                  <Ionicons name="airplane-outline" size={46} color={colors.primary} />
+                <View style={styles.heroMark}>
+                  <Image
+                    source={require("../../assets/brand/team.png")}
+                    style={styles.heroImage}
+                    resizeMode="contain"
+                    accessibilityIgnoresInvertColors
+                  />
                 </View>
               </View>
               <Animated.View
-                style={[styles.floatingBadge, styles.floatingMint, { transform: [{ translateY: bubbleFloat }, { rotate: bubbleRotate }] }]}
+                style={[styles.floatingBadge, styles.floatingMint, { transform: [{ rotate: bubbleRotate }] }]}
               >
                 <Text style={styles.badgeText}>📦</Text>
               </Animated.View>
@@ -250,21 +259,22 @@ export function LoginScreen() {
                 style={[
                   styles.floatingBadge,
                   styles.floatingTravelBubble,
-                  { transform: [{ translateY: bubbleFloat }, { rotate: bubbleRotate }] },
+                  { transform: [{ rotate: bubbleRotate }] },
                 ]}
               >
                 <Text style={styles.badgeText}>✈️</Text>
               </Animated.View>
-            </View>
+            </Animated.View>
           </View>
         </View>
 
-        <View style={[styles.actions, { paddingBottom: 12 }]}>
+        <View style={[styles.actions, { paddingBottom: 28 }]}>
           <AppButton
             label="Continue with Email"
             variant="primary"
             onPress={() => setMode("email")}
             style={styles.ctaButton}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.white} />}
           />
           <View style={styles.separatorRow}>
@@ -309,14 +319,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-start",
     paddingHorizontal: 10,
-    paddingTop: 64,
+    paddingTop: 56,
   },
   logoBlock: { alignItems: "center" },
   logoWrap: {
     width: 76,
     height: 76,
     borderRadius: 24,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -326,9 +338,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  logoPlane: { transform: [{ translateX: 2.5 }, { translateY: -2.5 }, { rotate: "-42deg" }] },
-  heroPlaneTilt: { transform: [{ rotate: "-42deg" }], alignItems: "center", justifyContent: "center" },
-  title: { color: colors.text, fontWeight: "800", fontSize: 30, textAlign: "center" },
+  heroMark: { alignItems: "center", justifyContent: "center" },
+  /** Sized to sit inside the 112px inner ring (4px border) with margin to spare. */
+  heroImage: { width: 88, height: 88 },
+  title: { color: colors.wordmark, fontWeight: "800", fontSize: 30, textAlign: "center" },
   subtitleHero: {
     color: colors.mutedText,
     marginTop: 8,
@@ -336,7 +349,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-  illustration: { marginTop: 32, alignItems: "center", justifyContent: "center" },
+  illustration: { marginTop: 32, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
   ringOuter: {
     width: 176,
     height: 176,
@@ -369,10 +382,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  floatingMint: { right: -10, top: -4, backgroundColor: "#D8F0E5" },
+  floatingMint: { right: -6, top: -6, backgroundColor: "#D8F0E5" },
   floatingTravelBubble: {
-    left: -10,
-    bottom: 6,
+    left: -6,
+    bottom: -6,
     backgroundColor: HERO_INNER_PEACH,
     borderWidth: 0,
     shadowOpacity: 0.07,
@@ -444,6 +457,6 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: colors.white, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   switchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 16 },
   switchText: { color: colors.mutedText, fontSize: 14 },
-  switchLink: { color: colors.primary, fontSize: 14, fontWeight: "700" },
+  switchLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },
   switchLinkDisabled: { opacity: 0.5 },
 });

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context"; // NOSONAR
+import { SafarlyMark } from "@/components/brand/SafarlyMark";
+import { SafarlyWordmark } from "@/components/brand/SafarlyWordmark";
+import { HeroBackground } from "@/components/ui/HeroBackground";
 import { useAppStore } from "@/store/useAppStore";
-import { colors, primaryTint, screenCanvas, splashBackgroundGradient } from "@/theme/colors";
+import { colors, screenCanvas } from "@/theme/colors";
 
 export function SplashScreen() {
   const setSplashDone = useAppStore((s) => s.setSplashDone);
@@ -38,22 +39,16 @@ export function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[...splashBackgroundGradient.colors]}
-        locations={[...splashBackgroundGradient.locations]}
-        start={splashBackgroundGradient.start}
-        end={splashBackgroundGradient.end}
-        style={StyleSheet.absoluteFillObject}
-      />
+      <HeroBackground />
       <SafeAreaView style={styles.safe} edges={["top", "right", "left", "bottom"]}>
         <View style={styles.center}>
-          <Animated.View style={[styles.logoWrap, { transform: [{ translateY: bounce }] }]}>
-            <View style={styles.planeTilt}>
-              <Ionicons name="airplane-outline" size={42} color={colors.primary} />
+          <Animated.View style={[styles.logoStack, { transform: [{ translateY: bounce }] }]}>
+            <SafarlyMark size={104} />
+            <View style={styles.wordmarkWrap}>
+              <SafarlyWordmark width={164} />
             </View>
+            <Text style={styles.tagline}>Connecting People And Parcels</Text>
           </Animated.View>
-          <Text style={styles.logo}>Safarly</Text>
-          <Text style={styles.tagline}>Deliver anywhere, travel together</Text>
         </View>
 
         <View style={styles.loaderRow}>
@@ -80,30 +75,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenCanvas },
   safe: { flex: 1, backgroundColor: "transparent" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 },
-  logoWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: primaryTint.stroke20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 2,
+  /** Vertical brand lockup: mark → SAFARLY → tagline (matches web full logo). */
+  logoStack: { alignItems: "center" },
+  /** Gap between the mark glyph and the SAFARLY wordmark. */
+  wordmarkWrap: { marginTop: 14 },
+  tagline: {
+    color: colors.primary,
+    marginTop: 10,
+    fontSize: 14,
+    letterSpacing: 0.4,
+    fontWeight: "500",
+    textAlign: "center",
   },
-  /** Line-art plane: tilt toward top-right like brand splash */
-  planeTilt: {
-    transform: [{ rotate: "-42deg" }],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: { color: colors.text, fontSize: 34, fontWeight: "800" },
-  tagline: { color: colors.mutedText, marginTop: 8, fontSize: 14, textAlign: "center" },
   loaderRow: {
     flexDirection: "row",
     justifyContent: "center",

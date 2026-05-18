@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { SafarlyMark } from "@/components/brand/SafarlyMark";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -99,12 +100,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.logoWrap}>
-              <Ionicons
-                name="airplane-outline"
-                size={28}
-                color={colors.white}
-                style={styles.logoPlane}
-              />
+              <SafarlyMark size={42} />
             </View>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>
@@ -217,12 +213,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
   },
-  logoPlane: { transform: [{ translateX: 2 }, { translateY: -2 }, { rotate: "-42deg" }] },
   title: { color: colors.text, fontWeight: "800", fontSize: 26, textAlign: "center" },
   subtitle: { color: colors.mutedText, marginTop: 8, fontSize: 14, textAlign: "center", maxWidth: 280 },
   form: { gap: 16, marginBottom: 24 },

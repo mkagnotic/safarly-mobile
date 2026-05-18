@@ -4,7 +4,6 @@ import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppFeedbackProvider } from "@/context/AppFeedbackContext";
 import { AuthProvider } from "@/context/AuthContext";
-import { DimPulseProvider } from "@/context/DimPulseContext";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { colors, screenCanvas } from "@/theme/colors";
 
@@ -26,14 +25,12 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: screenCanvas }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <DimPulseProvider>
-            <AppFeedbackProvider>
-              <NavigationContainer theme={appTheme}>
-                <StatusBar style="dark" />
-                <RootNavigator />
-              </NavigationContainer>
-            </AppFeedbackProvider>
-          </DimPulseProvider>
+          <AppFeedbackProvider>
+            <NavigationContainer theme={appTheme}>
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </NavigationContainer>
+          </AppFeedbackProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

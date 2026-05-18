@@ -11,10 +11,25 @@ type Props = {
   variant?: "primary" | "secondary" | "danger" | "dark";
   disabled?: boolean;
   leftIcon?: ReactNode;
+  /**
+   * Override the primary variant's [start, end] gradient (e.g. a CTA-accent
+   * color). Pass the same color twice for a solid fill. Ignored for other
+   * variants.
+   */
+  gradientColors?: readonly [string, string];
 };
 
-export function AppButton({ label, onPress, style, variant = "primary", disabled = false, leftIcon }: Readonly<Props>) {
+export function AppButton({
+  label,
+  onPress,
+  style,
+  variant = "primary",
+  disabled = false,
+  leftIcon,
+  gradientColors,
+}: Readonly<Props>) {
   if (variant === "primary") {
+    const grad = gradientColors ?? [colors.primary, colors.primaryGradientEnd];
     return (
       <Pressable
         android_ripple={{ color: "rgba(255,255,255,0.16)" }}
@@ -23,13 +38,14 @@ export function AppButton({ label, onPress, style, variant = "primary", disabled
         style={({ pressed }) => [
           styles.base,
           styles.primaryOuter,
+          { backgroundColor: grad[0] },
           disabled && styles.disabled,
           pressed && styles.pressed,
           style,
         ]}
       >
         <LinearGradient
-          colors={[colors.primary, colors.primaryGradientEnd]}
+          colors={[grad[0], grad[1]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFillObject}

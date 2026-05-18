@@ -3,8 +3,8 @@
  * `primary` matches web `primary-deep` (icons, chrome, CTAs); `primarySoft` matches web `primary` (lavender fills).
  */
 export const colors = {
-  /** Fallback / flat surfaces — midpoint of `screenBackgroundGradient` (#FAF5FF → #EEF2FF) */
-  background: "#F4F4FF",
+  /** Fallback / flat surfaces — warm midpoint of `heroBackgroundGradient` (peach → pink → purple) */
+  background: "#FBEDF1",
   /** Near-black — strong contrast on glass gradients + white cards */
   foreground: "#08070D",
   /** Web `--card` — crisp white for elevated surfaces */
@@ -34,6 +34,18 @@ export const colors = {
   primaryForeground: "#2D1550",
   /** Paired with `primary` in gradients (buttons, pressed chrome) */
   primaryGradientEnd: "#735AD8",
+  /**
+   * Brand wordmark purple — the exact color baked into the "SAFARLY" wordmark
+   * SVG and web `safarly_web` `BrandMark` (`text-[#A74EFF]`). Use for headings
+   * that should read as brand voice (onboarding titles, etc.).
+   */
+  wordmark: "#A74EFF",
+  /**
+   * CTA accent orange — matches web `safarly_web` primary CTA
+   * (`linear-gradient(180deg,#FB923C,#F97316)`). Used for high-emphasis action
+   * buttons (e.g. onboarding Next / Get Started).
+   */
+  ctaAccent: "#F97316",
 
   /** Web `--secondary` */
   secondary: "#C9B8FF",
@@ -85,31 +97,47 @@ export const primaryTint = {
 } as const;
 
 /**
- * Root + stack + tab scene background in light mode — midpoint of the diagonal wash
- * (`#FAF5FF` → `#EEF2FF`) so flashes during transitions match `screenBackgroundGradient`.
+ * Root + stack + tab scene background in light mode — warm midpoint of the hero
+ * wash so flashes during transitions match `heroBackgroundGradient` (no cool flash).
  */
-export const screenCanvas = "#F4F4FF" as const;
+export const screenCanvas = "#FBEDF1" as const;
 
 /**
- * Diagonal wash: pale violet (TL) → pale indigo (BR). Applied to every page via `Screen`.
+ * Warm hero wash — mirrors web `.gradient-bg-hero`: a peach→pink→purple diagonal
+ * base plus soft corner glows. RN has no radial-gradient, so each web radial blob
+ * is approximated with a corner-anchored linear gradient fading to transparent.
+ * Glows are ordered topmost-first (matches web paint order).
  */
-export const screenBackgroundGradient = {
-  colors: ["#FAF5FF", "#EEF2FF"] as const,
-  locations: [0, 1] as const,
-  start: { x: 0, y: 0 },
-  end: { x: 1, y: 1 },
+export const heroBackgroundGradient = {
+  base: {
+    colors: ["#FFF4EB", "#FBEAF0", "#F1E0F5"] as const,
+    locations: [0, 0.55, 1] as const,
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  },
+  glows: [
+    {
+      colors: ["rgba(255, 220, 194, 0.95)", "rgba(255, 220, 194, 0)"] as const,
+      start: { x: 0, y: 0 },
+      end: { x: 0.78, y: 0.72 },
+    },
+    {
+      colors: ["rgba(250, 209, 226, 0.85)", "rgba(250, 209, 226, 0)"] as const,
+      start: { x: 1, y: 0.06 },
+      end: { x: 0.28, y: 0.74 },
+    },
+    {
+      colors: ["rgba(229, 192, 237, 0.85)", "rgba(229, 192, 237, 0)"] as const,
+      start: { x: 1, y: 1 },
+      end: { x: 0.2, y: 0.2 },
+    },
+    {
+      colors: ["rgba(243, 206, 237, 0.55)", "rgba(243, 206, 237, 0)"] as const,
+      start: { x: 0.38, y: 1 },
+      end: { x: 0.46, y: 0.42 },
+    },
+  ],
 } as const;
-
-/** Soft cool vignette — light enough to preserve the pastel gradient (dim pulse adds depth). */
-export const glassVignetteGradient = {
-  colors: ["rgba(163, 136, 250, 0.05)", "rgba(255, 255, 255, 0)", "rgba(140, 155, 255, 0.07)"] as const,
-  locations: [0, 0.48, 1] as const,
-  start: { x: 0.5, y: 0 },
-  end: { x: 0.5, y: 1 },
-} as const;
-
-/** Static mist — subtle lavender over the peach/lavender base */
-export const glassAtmosphere = "rgba(115, 85, 155, 0.045)" as const;
 
 /** Frost strength (native BlurView); web uses `glassTabBarFallback` + CSS blur when available */
 export const glassBlurIntensity = {
@@ -117,22 +145,5 @@ export const glassBlurIntensity = {
   tabBar: 38,
 } as const;
 
-/** Tab bar fill when blur/CSS blur isn’t used — frosted pastel aligned with screen gradient */
-export const glassTabBarFallback = "rgba(244, 244, 255, 0.93)" as const;
-
-/** Breathing dim overlay — capped low so the underlying screen gradient stays clearly visible. */
-export const glassDimPulse = {
-  /** One half-cycle (dim up or dim down); full breath ≈ 2× this — slightly slower = fewer layout passes */
-  durationMs: 3400,
-  /** Soft swing — small enough not to wash out the #FAF5FF → #EEF2FF gradient at peak */
-  opacityMin: 0.0,
-  opacityMax: 0.06,
-  /** Soft indigo mist — keyed to the cool gradient endpoints */
-  layer: "#E0E4FF" as const,
-} as const;
-
-/**
- * Splash screen — same diagonal wash as `screenBackgroundGradient` so the first paint and
- * transition into onboarding/home match the cool violet–indigo shell (no dark flash).
- */
-export const splashBackgroundGradient = screenBackgroundGradient;
+/** Tab bar fill when blur/CSS blur isn’t used — frosted pastel aligned with the warm hero wash */
+export const glassTabBarFallback = "rgba(251, 237, 241, 0.93)" as const;

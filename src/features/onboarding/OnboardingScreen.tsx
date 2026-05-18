@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { AppButton } from "@/components/ui/AppButton";
@@ -9,11 +9,6 @@ import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 
 const swipeExitEasing = Easing.out(Easing.cubic);
-
-/** Mint / green “travel” hero — same layout as default rings, different palette + plane styling */
-const TRAVEL_GREEN = "#16A34A";
-/** Warm yellow-gold shield on Trust & Safety slide (outline) */
-const TRUST_SHIELD_GOLD = "#C9A227";
 
 type OnboardingSlide = {
   title: string;
@@ -62,7 +57,6 @@ export function OnboardingScreen() {
   const slideOpacity = useRef(new Animated.Value(1)).current;
   const dragX = useRef(new Animated.Value(0)).current;
   const bubbleFloat = useRef(new Animated.Value(0)).current;
-  const bubbleSpin = useRef(new Animated.Value(0)).current;
   const translateX = useMemo(() => Animated.add(slideX, dragX), [slideX, dragX]);
 
   useEffect(() => {
@@ -102,33 +96,21 @@ export function OnboardingScreen() {
     };
   }, [current, direction]);
 
-  // Run once: bubbleFloat/bubbleSpin are stable refs — listing them in deps could re-run the effect
-  // and briefly stop loops (rare, but avoids “content vanishes” glitches on some devices).
+  // Run once: bubbleFloat is a stable ref — listing it in deps could re-run the
+  // effect and briefly stop the loop (avoids "content vanishes" glitches).
+  // Gentle up/down float on the centered 3D icon (same idea as the splash bounce).
   useEffect(() => {
     const bubbleFloatLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(bubbleFloat, { toValue: -6, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(bubbleFloat, { toValue: 6, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    const bubbleSpinLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bubbleSpin, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(bubbleSpin, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(bubbleFloat, { toValue: -8, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(bubbleFloat, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     );
     bubbleFloatLoop.start();
-    bubbleSpinLoop.start();
     return () => {
       bubbleFloatLoop.stop();
-      bubbleSpinLoop.stop();
     };
   }, []);
-
-  const bubbleRotate = bubbleSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["-5deg", "5deg"],
-  });
 
   const goToSlide = (next: number) => {
     dragX.stopAnimation();
@@ -150,23 +132,6 @@ export function OnboardingScreen() {
     if ((c === 0 && x > 0) || (c === slides.length - 1 && x < 0)) x *= 0.22;
     dragX.setValue(x);
   }, [dragX]);
-
-  const renderSlideIcon = (slide: OnboardingSlide) => {
-    const travelPlaneStyle = Platform.OS === "ios" ? styles.travelPlaneTiltIos : styles.travelPlaneTilt;
-    if (slide.visual === "travel") {
-      return (
-        <View style={travelPlaneStyle}>
-          <Ionicons name="airplane-outline" size={48} color={TRAVEL_GREEN} />
-        </View>
-      );
-    }
-
-    if (slide.visual === "trust") {
-      return <Ionicons name="shield-outline" size={48} color={TRUST_SHIELD_GOLD} />;
-    }
-
-    return <Ionicons name={slide.icon} size={46} color={colors.primary} />;
-  };
 
   const handleSwipeEnd = useCallback(
     (translationX: number, velocityX: number) => {
@@ -279,11 +244,12 @@ export function OnboardingScreen() {
           <View style={[styles.center, { paddingBottom: bottomBlockHeight }]}>
             <Animated.View style={{ width: "100%", alignItems: "center", transform: [{ translateX }] }}>
               <Animated.View style={{ width: "100%", alignItems: "center", opacity: slideOpacity }}>
-                <View
+                <Animated.View
                   style={[
                     styles.ringOuter,
                     currentSlide.visual === "travel" && styles.ringOuterTravel,
                     currentSlide.visual === "trust" && styles.ringOuterTrust,
+                    { transform: [{ translateY: bubbleFloat }] },
                   ]}
                 >
                   <View
@@ -293,19 +259,9 @@ export function OnboardingScreen() {
                       currentSlide.visual === "trust" && styles.ringInnerTrust,
                     ]}
                   >
-                    {renderSlideIcon(currentSlide)}
+                    <Text style={styles.centerEmoji}>{currentSlide.bubble}</Text>
                   </View>
-                  <Animated.View
-                    style={[
-                      styles.floatingBubble,
-                      currentSlide.visual === "travel" && styles.floatingBubbleTravel,
-                      currentSlide.visual === "trust" && styles.floatingBubbleTrust,
-                      { transform: [{ translateY: bubbleFloat }, { rotate: bubbleRotate }] },
-                    ]}
-                  >
-                    <Text style={styles.floatingEmoji}>{currentSlide.bubble}</Text>
-                  </Animated.View>
-                </View>
+                </Animated.View>
                 <Text
                   style={[styles.title, current === 0 ? styles.titleFirstLine : styles.titleConstrained]}
                   numberOfLines={current === 0 ? 1 : undefined}
@@ -320,7 +276,7 @@ export function OnboardingScreen() {
           </View>
         </GestureDetector>
 
-        <View style={[styles.bottom, { paddingBottom: 10 }]}>
+        <View style={[styles.bottom, { paddingBottom: 28 }]}>
           <View style={styles.dots}>
             {slides.map((slide, i) => (
               <Pressable key={slide.title} onPress={() => goToSlide(i)} style={[styles.dot, i === current && styles.activeDot]} />
@@ -330,6 +286,7 @@ export function OnboardingScreen() {
             label={isLast ? "Get Started" : "Next"}
             onPress={() => (isLast ? finishOnboarding() : goToSlide(current + 1))}
             style={styles.ctaButton}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
           />
         </View>
       </View>
@@ -349,7 +306,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   skipPressable: { paddingVertical: 8, paddingLeft: 12 },
-  skip: { color: colors.mutedText, fontWeight: "600", fontSize: 14 },
+  skip: { color: colors.ctaAccent, fontWeight: "600", fontSize: 14 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -363,38 +320,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#C8EBE0",
     borderColor: "rgba(255, 255, 255, 0.9)",
   },
-  travelPlaneTilt: {
-    transform: [{ rotate: "-42deg" }],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  travelPlaneTiltIos: {
-    transform: [{ rotate: "-42deg" }],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  floatingBubbleTravel: {
-    borderWidth: 0,
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  /** Trust & safety: pale cream outer, soft peach inner, subtle floating card */
+  /** Trust & safety: pale cream outer, soft peach inner */
   ringOuterTrust: {
     backgroundColor: "#F7F4EF",
   },
   ringInnerTrust: {
     backgroundColor: "#EDD8C8",
     borderColor: "rgba(255, 252, 248, 0.95)",
-  },
-  floatingBubbleTrust: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 0,
-    shadowOpacity: 0.06,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
   },
   ringOuter: {
     width: 176,
@@ -415,25 +347,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  floatingBubble: {
-    position: "absolute",
-    right: -14,
-    top: -6,
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+  /** 3D emoji as the centered hero icon (floats via `bubbleFloat`). */
+  /**
+   * Sized to stay inside the ring's inner circle on every slide. The inner
+   * circle is 112px with a 4px border (~104px usable; ~73px inscribed square),
+   * so 46px keeps even the wider emoji (✈️, 🤝) clear of the border. lineHeight
+   * == fontSize + no Android font padding keeps the glyph optically centered.
+   */
+  centerEmoji: {
+    fontSize: 46,
+    lineHeight: 46,
+    textAlign: "center",
+    includeFontPadding: false,
   },
-  floatingEmoji: { fontSize: 22 },
-  title: { color: colors.text, fontSize: 24, fontWeight: "800", lineHeight: 30, textAlign: "center" },
+  title: { color: colors.wordmark, fontSize: 24, fontWeight: "800", lineHeight: 30, textAlign: "center" },
   /** First slide: full row width so "Send Parcels Worldwide" does not wrap */
   titleFirstLine: { alignSelf: "stretch" },
   titleConstrained: { maxWidth: 280, alignSelf: "center" },
@@ -443,5 +370,5 @@ const styles = StyleSheet.create({
   ctaButton: { alignSelf: "center", width: "88%", maxWidth: 340 },
   dots: { flexDirection: "row", justifyContent: "center", gap: 8 },
   dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#D1D5DB" },
-  activeDot: { width: 24, backgroundColor: colors.primary },
+  activeDot: { width: 24, backgroundColor: colors.ctaAccent },
 });

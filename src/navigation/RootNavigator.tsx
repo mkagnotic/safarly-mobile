@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, View, type ViewStyle, useColorScheme } from "react-native";
+import { Easing, Platform, StyleSheet, Text, View, type ViewStyle, useColorScheme } from "react-native";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
@@ -59,15 +59,18 @@ import { MatchScreen } from "@/features/matching/MatchScreen";
 import { BuddyCompletionScreen } from "@/features/matching/BuddyCompletionScreen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAppStore } from "@/store/useAppStore";
-import { useDimPulse } from "@/context/DimPulseContext";
+import { useStoreHydrated } from "@/hooks/useStoreHydrated";
 import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
-import { colors, glassBlurIntensity, glassDimPulse, glassTabBarFallback, screenCanvas } from "@/theme/colors";
+import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
+
+/** Dev-only floating "Data On/Off" pill. Hidden for now — flip to re-enable. */
+const SHOW_DATA_TOGGLE = false;
 
 /**
  * Bridges navigation into SignupScreen's prop-based callback so the screen
@@ -130,35 +133,16 @@ function renderGlassTabBarBackground() {
 }
 
 function GlassTabBarBackground() {
-  const dimPulse = useDimPulse();
-  const pulseLayer = (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        {
-          backgroundColor: glassDimPulse.layer,
-          opacity: dimPulse.interpolate({
-            inputRange: [0, 1],
-            outputRange: [glassDimPulse.opacityMin, glassDimPulse.opacityMax],
-          }),
-        },
-      ]}
-    />
-  );
-
   if (Platform.OS === "web") {
     return (
-      <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            { backgroundColor: glassTabBarFallback },
-            { backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)" } as ViewStyle,
-          ]}
-        />
-        {pulseLayer}
-      </View>
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: glassTabBarFallback },
+          { backdropFilter: "blur(26px)", WebkitBackdropFilter: "blur(26px)" } as ViewStyle,
+        ]}
+      />
     );
   }
   if (Platform.OS === "android") {
@@ -166,7 +150,6 @@ function GlassTabBarBackground() {
       <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
         <View style={[StyleSheet.absoluteFillObject, { backgroundColor: glassTabBarFallback }]} />
         <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(255, 255, 255, 0.12)" }]} />
-        {pulseLayer}
       </View>
     );
   }
@@ -174,7 +157,6 @@ function GlassTabBarBackground() {
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
       <BlurView intensity={glassBlurIntensity.tabBar} tint="light" style={StyleSheet.absoluteFillObject} />
       <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { backgroundColor: "rgba(255, 255, 255, 0.12)" }]} />
-      {pulseLayer}
     </View>
   );
 }
@@ -311,6 +293,13 @@ export function RootNavigator() {
     }))
   );
 
+  // Don't pick a stack until AsyncStorage has rehydrated — otherwise a
+  // returning user briefly sees pre-hydration defaults (e.g. onboarding flashes
+  // because `onboarded` reads false before storage loads). The Splash stays up
+  // until both its timer fired AND the store is hydrated.
+  const hydrated = useStoreHydrated();
+  const showSplash = !splashDone || !hydrated;
+
   // Web parity: broadcast our presence so other users see us as "online" in
   // their chat headers (`useConversationPresence.online`). Hook self-guards on
   // a missing user id, so it's safe to mount unconditionally.
@@ -335,18 +324,18 @@ export function RootNavigator() {
           headerTitleStyle: { fontWeight: "700" },
         }}
       >
-        {!splashDone && <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />}
-        {splashDone && !onboarded && <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />}
-        {splashDone && onboarded && !authenticated && (
+        {showSplash && <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />}
+        {!showSplash && !onboarded && <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />}
+        {!showSplash && onboarded && !authenticated && (
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Signup" component={SignupScreenWrapper} options={{ headerShown: false, animation: "slide_from_bottom" }} />
           </>
         )}
-        {splashDone && onboarded && authenticated && !profileSetupDone && (
+        {!showSplash && onboarded && authenticated && !profileSetupDone && (
           <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
         )}
-        {splashDone && onboarded && authenticated && profileSetupDone && (
+        {!showSplash && onboarded && authenticated && profileSetupDone && (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="Wallet" component={WalletScreen} options={{ headerShown: false }} />
@@ -357,15 +346,17 @@ export function RootNavigator() {
           </>
         )}
       </Stack.Navigator>
-      <Pressable
-        onPress={toggleLiveDataVisibility}
-        style={[styles.dataToggle, { top: Math.max(insets.top + 8, 18) }]}
-        accessibilityRole="button"
-        accessibilityLabel={showLiveData ? "Hide app data" : "Show app data"}
-      >
-        <Ionicons name={showLiveData ? "eye-outline" : "eye-off-outline"} size={14} color={colors.white} />
-        <Text style={styles.dataToggleText}>{showLiveData ? "Data On" : "Data Off"}</Text>
-      </Pressable>
+      {SHOW_DATA_TOGGLE && (
+        <Pressable
+          onPress={toggleLiveDataVisibility}
+          style={[styles.dataToggle, { top: Math.max(insets.top + 8, 18) }]}
+          accessibilityRole="button"
+          accessibilityLabel={showLiveData ? "Hide app data" : "Show app data"}
+        >
+          <Ionicons name={showLiveData ? "eye-outline" : "eye-off-outline"} size={14} color={colors.white} />
+          <Text style={styles.dataToggleText}>{showLiveData ? "Data On" : "Data Off"}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

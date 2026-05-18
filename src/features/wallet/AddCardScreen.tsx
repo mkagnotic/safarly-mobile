@@ -90,7 +90,7 @@ export function AddCardScreen() {
   }, [addPaymentMethod, cardNumber, cardholderName, expiry, setLiveDataVisibility]);
 
   return (
-    <Screen safeBackgroundColor={colors.card} refreshEnabled={false} contentContainerStyle={styles.content}>
+    <Screen refreshEnabled={false} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />

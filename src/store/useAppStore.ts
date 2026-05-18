@@ -249,7 +249,11 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "safarly-mobile-store",
-      version: 10,
+      // v11: one-time onboarding replay — `migrate` resets `onboarded` so any
+      // install persisted at an older version shows the onboarding flow again
+      // exactly once. After the user finishes it, `finishOnboarding` re-persists
+      // `onboarded: true` under v11 and it stays one-time from then on.
+      version: 11,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persistedState: unknown) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState as AppState;
@@ -258,6 +262,8 @@ export const useAppStore = create<AppState>()(
         return {
           ...state,
           userProfile,
+          // One-time replay (see version note above).
+          onboarded: false,
           profileSetupDone: state.profileSetupDone ?? false,
           paymentMethods: normalizePaymentMethods(state.paymentMethods),
           parcels: mergeSeedParcels(state.parcels),

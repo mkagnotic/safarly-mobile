@@ -13,16 +13,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
-import { useDimPulse } from "@/context/DimPulseContext";
-import {
-  colors,
-  glassAtmosphere,
-  glassDimPulse,
-  glassVignetteGradient,
-  screenBackgroundGradient,
-} from "@/theme/colors";
+import { HeroBackground } from "@/components/ui/HeroBackground";
+import { colors } from "@/theme/colors";
 
 /** Extra space below the safe-area top inset so headers + icons sit slightly lower on every screen. */
 export const SCREEN_EXTRA_TOP = 10;
@@ -54,7 +47,6 @@ export function Screen({
   const transition = useRef(new Animated.Value(1)).current;
   /** Avoid a visible flash (1 → 0 → 1) on the first paint of each screen instance. */
   const skipNextEntrance = useRef(true);
-  const dimPulse = useDimPulse();
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -123,40 +115,7 @@ export function Screen({
 
   return (
     <View style={styles.root}>
-      {useFadedGradient ? (
-        <>
-          <LinearGradient
-            colors={[...screenBackgroundGradient.colors]}
-            locations={[...screenBackgroundGradient.locations]}
-            start={screenBackgroundGradient.start}
-            end={screenBackgroundGradient.end}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
-          <LinearGradient
-            colors={[...glassVignetteGradient.colors]}
-            locations={[...glassVignetteGradient.locations]}
-            start={glassVignetteGradient.start}
-            end={glassVignetteGradient.end}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: glassAtmosphere }]} pointerEvents="none" />
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              StyleSheet.absoluteFillObject,
-              {
-                backgroundColor: glassDimPulse.layer,
-                opacity: dimPulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [glassDimPulse.opacityMin, glassDimPulse.opacityMax],
-                }),
-              },
-            ]}
-          />
-        </>
-      ) : null}
+      {useFadedGradient ? <HeroBackground /> : null}
       <SafeAreaView style={[styles.safe, { backgroundColor: innerBg }]} edges={edges}>
         {disableKeyboardAvoiding ? (
           <Animated.View style={[styles.flex, { backgroundColor: innerBg }, animatedScreenStyle]}>

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
-import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { AppButton } from "@/components/ui/AppButton";
