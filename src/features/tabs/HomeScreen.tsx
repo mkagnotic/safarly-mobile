@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -7,10 +7,11 @@ import {
   useNavigation,
 } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Image, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Platform, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
 import { useActivityFeed } from "@/hooks/api/useActivityFeed";
@@ -19,7 +20,7 @@ import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { useUnreadNotificationsCount } from "@/hooks/api/useUnreadNotificationsCount";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { type Conversation, type FeedItem } from "@/services/api";
+import { getErrorMessage, type Conversation, type FeedItem } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard, shadowSoft } from "@/theme/elevation";
 
@@ -48,13 +49,29 @@ function formatShortDate(iso: string): string {
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
-  const { profile, refetch: refetchProfile } = useMyProfile();
-  const { items: activity, loading: activityLoading, refetch: refetchActivity } =
-    useActivityFeed({ perPage: 4 });
-  const { conversations, loading: convsLoading, refetch: refetchConvs } =
-    useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
+  const {
+    profile,
+    loading: profileLoading,
+    error: profileError,
+    refetch: refetchProfile,
+  } = useMyProfile();
+  const {
+    items: activity,
+    loading: activityLoading,
+    error: activityError,
+    refetch: refetchActivity,
+  } = useActivityFeed({ perPage: 4 });
+  const {
+    conversations,
+    loading: convsLoading,
+    error: convsError,
+    refetch: refetchConvs,
+  } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
   const { count: messagesUnread } = useUnreadInboxCount();
   const { count: notificationsUnread } = useUnreadNotificationsCount();
+
+  const firstError = profileError ?? activityError ?? convsError;
+  const formError = firstError ? getErrorMessage(firstError) : null;
 
   const airplaneStyle = Platform.OS === "ios" ? styles.airplaneTiltIos : styles.airplaneTilt;
 
@@ -70,6 +87,10 @@ export function HomeScreen() {
     [conversations, user?.id],
   );
 
+  // `&& !profile` keeps the name stable across realtime refetches that flip
+  // `loading` after the first paint — otherwise the skeleton would flash back
+  // every time the hook revalidates.
+  const showGreetingSkeleton = profileLoading && !profile;
   const greetingName = profile?.name ?? "there";
 
   const handleRefresh = useCallback(() => {
@@ -126,19 +147,21 @@ export function HomeScreen() {
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
           <Text style={styles.muted}>Welcome back</Text>
-          <Text style={styles.title} numberOfLines={1}>
-            {greetingName}
-          </Text>
+          {showGreetingSkeleton ? (
+            <View
+              style={styles.titleSkeletonRow}
+              accessibilityRole="progressbar"
+              accessibilityLabel="Loading your name"
+            >
+              <PulseBar style={styles.titleSkeleton} />
+            </View>
+          ) : (
+            <Text style={styles.title} numberOfLines={1}>
+              {greetingName}
+            </Text>
+          )}
         </View>
         <View style={styles.headerActions}>
-          <Pressable
-            style={styles.iconBadge}
-            onPress={() => navigation.navigate("SearchTab")}
-            accessibilityRole="button"
-            accessibilityLabel="Search"
-          >
-            <Ionicons name="search-outline" size={18} color={colors.text} />
-          </Pressable>
           <Pressable
             style={styles.iconBadge}
             onPress={() => navigation.navigate("Notifications")}
@@ -152,13 +175,33 @@ export function HomeScreen() {
             <Ionicons name="notifications-outline" size={18} color={colors.text} />
             {notificationsUnread > 0 ? <View style={styles.badgeDot} /> : null}
           </Pressable>
+          <Pressable
+            style={styles.avatarBadge}
+            onPress={() => navigation.navigate("Profile")}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+          >
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : (
+              <View style={[styles.avatarImage, styles.avatarFallback]}>
+                <Text style={styles.avatarInitialsText}>{getInitials(profile?.name)}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
       </View>
+
+      {formError ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner message={formError} />
+        </View>
+      ) : null}
 
       {/* ───────── Hero ───────── */}
       <Card elevated={false} style={[styles.heroCard, shadowCard()]}>
         <View style={styles.heroBadge}>
-          <Ionicons name="sparkles" size={12} color={colors.primary} />
+          <Ionicons name="sparkles" size={12} color={colors.wordmark} />
           <Text style={styles.heroBadgeText}>Peer-to-peer delivery network</Text>
         </View>
         <Text style={styles.heroTitle}>
@@ -179,7 +222,7 @@ export function HomeScreen() {
           subtitle="I'm traveling and can deliver parcels"
           icon="airplane-outline"
           iconStyle={airplaneStyle}
-          tint={colors.primary}
+          tint={colors.wordmark}
           tintBg={colors.surfaceTintPrimary}
           onPress={() => navigation.navigate("ListTripTab")}
         />
@@ -207,7 +250,7 @@ export function HomeScreen() {
       <View style={styles.sectionHeaderRow}>
         <View style={styles.sectionHeaderLeft}>
           <View style={[styles.sectionIcon, { backgroundColor: colors.surfaceTintPrimary }]}>
-            <Ionicons name="flash-outline" size={16} color={colors.primary} />
+            <Ionicons name="flash-outline" size={16} color={colors.wordmark} />
           </View>
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>Activity</Text>
@@ -391,6 +434,25 @@ function ConversationRow({ conversation, onPress }: Readonly<ConversationRowProp
   );
 }
 
+function PulseBar({ style }: Readonly<{ style?: View["props"]["style"] }>) {
+  const opacity = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.45, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+    };
+  }, [opacity]);
+
+  return <Animated.View style={[style, { opacity }]} />;
+}
+
 function SkeletonRows({ count }: Readonly<{ count: number }>) {
   return (
     <View style={styles.sectionList}>
@@ -421,8 +483,19 @@ const styles = StyleSheet.create({
   },
   headerTextWrap: { flex: 1, minWidth: 0 },
   headerActions: { flexDirection: "row", gap: 8 },
-  muted: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  muted: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  // `height` matches the title's lineHeight so swapping in the skeleton bar
+  // doesn't shift surrounding content when the profile load finishes.
+  titleSkeletonRow: { height: 30, justifyContent: "center" },
+  titleSkeleton: {
+    width: 160,
+    height: 22,
+    borderRadius: 8,
+    backgroundColor: colors.border,
+  },
+
+  bannerSlot: { marginBottom: 14 },
   iconBadge: {
     width: 42,
     height: 42,
@@ -434,12 +507,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...shadowSoft(),
   },
+  avatarBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    ...shadowSoft(),
+  },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 21 },
+  avatarFallback: { alignItems: "center", justifyContent: "center" },
+  avatarInitialsText: { color: colors.wordmark, fontSize: 13, fontWeight: "800" },
   badgeDot: {
     position: "absolute",
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.wordmark,
     right: 11,
     top: 11,
   },
@@ -466,10 +552,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: primaryTint.stroke20,
   },
-  heroBadgeText: { color: colors.primary, fontSize: 11, fontWeight: "800" },
+  heroBadgeText: { color: colors.wordmark, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 },
   heroTitle: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
-  heroAccent: { color: colors.primary },
-  heroBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19 },
+  heroAccent: { color: colors.wordmark },
+  heroBody: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500" },
 
   // Action grid (3 cards stacked)
   actionGrid: { gap: 10, marginBottom: 18 },
@@ -510,8 +596,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 2,
   },
-  actionTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
-  actionSubtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2, lineHeight: 16 },
+  actionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  actionSubtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
   airplaneTilt: { transform: [{ rotate: "-42deg" }] },
   airplaneTiltIos: { transform: [{ rotate: "-42deg" }] },
 
@@ -532,9 +618,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sectionHeaderText: { flex: 1, minWidth: 0 },
-  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
-  sectionSubtitle: { color: colors.mutedText, fontSize: 11, marginTop: 1 },
-  seeAll: { color: colors.primary, fontSize: 12, fontWeight: "800" },
+  sectionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  sectionSubtitle: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", marginTop: 2 },
+  seeAll: { color: colors.ctaAccent, fontSize: 13, fontWeight: "700" },
 
   // Section card
   sectionCard: {
@@ -552,11 +638,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
   },
-  activityTitle: { color: colors.text, fontSize: 13, fontWeight: "700", lineHeight: 18 },
-  activityDescription: { color: colors.mutedText, fontSize: 12, marginTop: 4, lineHeight: 16 },
+  activityTitle: { color: colors.text, fontSize: 14, fontWeight: "700", lineHeight: 20 },
+  activityDescription: { color: colors.mutedText, fontSize: 13, fontWeight: "500", marginTop: 4, lineHeight: 19 },
   activityDate: {
     color: colors.subtleText,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
     marginTop: 8,
@@ -578,7 +664,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  conversationInitials: { color: colors.primary, fontSize: 13, fontWeight: "800" },
+  conversationInitials: { color: colors.wordmark, fontSize: 14, fontWeight: "800" },
   conversationBody: { flex: 1, minWidth: 0 },
   conversationTopRow: {
     flexDirection: "row",
@@ -586,15 +672,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  conversationName: { color: colors.text, fontSize: 14, fontWeight: "700", flex: 1 },
-  conversationDate: { color: colors.subtleText, fontSize: 10, fontWeight: "600" },
-  conversationPreview: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
+  conversationName: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700", flex: 1 },
+  conversationDate: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
+  conversationPreview: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
   conversationBadge: {
     minWidth: 22,
     height: 22,
     paddingHorizontal: 6,
     borderRadius: 11,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.wordmark,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -602,13 +688,14 @@ const styles = StyleSheet.create({
 
   // Empty
   emptyState: { alignItems: "center", paddingVertical: 28, gap: 6, paddingHorizontal: 18 },
-  emptyTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  emptyTitle: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "800" },
   emptyBody: {
     color: colors.mutedText,
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "500",
     textAlign: "center",
-    maxWidth: 260,
-    lineHeight: 16,
+    maxWidth: 280,
+    lineHeight: 19,
   },
 
   // Skeleton

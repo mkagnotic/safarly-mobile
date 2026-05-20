@@ -4,7 +4,12 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showAppAlert } from "@/feedback/appFeedback";
-import { isTerminal, labelForStatus, toneForStatus } from "@/features/travels/statusLabels";
+import {
+  isImplicitStatus,
+  isTerminal,
+  labelForStatus,
+  toneForStatus,
+} from "@/features/travels/statusLabels";
 import type { Parcel, Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
@@ -49,12 +54,13 @@ export const TravelCard = memo(function TravelCard({
   const status = item.status ?? "";
   const tone = toneForStatus(status);
   const canModify = !isTerminal(status);
+  const showStatusPill = !!status && !isImplicitStatus(status);
 
   const iconName: keyof typeof Ionicons.glyphMap =
     type === "flight" ? "airplane-outline" : "cube-outline";
-  const iconColor = type === "flight" ? colors.primary : colors.safe;
+  const iconColor = type === "flight" ? colors.wordmark : colors.safe;
   const iconBg =
-    type === "flight" ? "rgba(255, 122, 38, 0.10)" : "rgba(34, 197, 94, 0.10)";
+    type === "flight" ? "rgba(167, 78, 255, 0.10)" : "rgba(34, 197, 94, 0.10)";
 
   const subtitle =
     type === "flight"
@@ -113,45 +119,46 @@ export const TravelCard = memo(function TravelCard({
             {subtitle}
           </Text>
         ) : null}
-        <View style={styles.bottomRow}>
+        {showStatusPill ? (
           <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
             <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
               {labelForStatus(status)}
             </Text>
           </View>
-          {canModify && (onEdit || onDelete) ? (
-            <View style={styles.actionsRow}>
-              {onEdit ? (
-                <Pressable
-                  onPress={onEdit}
-                  style={styles.actionButton}
-                  hitSlop={6}
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit"
-                >
-                  <Ionicons name="pencil-outline" size={14} color={colors.mutedText} />
-                </Pressable>
-              ) : null}
-              {onDelete ? (
-                <Pressable
-                  onPress={handleDeletePress}
-                  disabled={isDeleting}
-                  style={styles.actionButton}
-                  hitSlop={6}
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete"
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator size="small" color={colors.mutedText} />
-                  ) : (
-                    <Ionicons name="trash-outline" size={14} color={colors.danger} />
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
+        ) : null}
+      </View>
+
+      {canModify && (onEdit || onDelete) ? (
+        <View style={styles.actionsColumn}>
+          {onEdit ? (
+            <Pressable
+              onPress={onEdit}
+              style={styles.actionButton}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Edit"
+            >
+              <Ionicons name="pencil-outline" size={16} color={colors.mutedText} />
+            </Pressable>
+          ) : null}
+          {onDelete ? (
+            <Pressable
+              onPress={handleDeletePress}
+              disabled={isDeleting}
+              style={styles.actionButton}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Delete"
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color={colors.mutedText} />
+              ) : (
+                <Ionicons name="trash-outline" size={16} color={colors.mutedText} />
+              )}
+            </Pressable>
           ) : null}
         </View>
-      </View>
+      ) : null}
     </Pressable>
   );
 });
@@ -175,49 +182,42 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 18,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   flightIconTilt: { transform: [{ rotate: "-42deg" }] },
-  body: { flex: 1, minWidth: 0 },
+  body: { flex: 1, minWidth: 0, gap: 4 },
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  routeText: { color: colors.text, fontSize: 14, fontWeight: "700", flexShrink: 1 },
-  subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
-  bottomRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    rowGap: 6,
-    columnGap: 8,
-  },
+  routeText: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700", flexShrink: 1 },
+  subtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
   statusPill: {
     alignSelf: "flex-start",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
+    marginTop: 6,
   },
-  statusPillText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
-  actionsRow: { flexDirection: "row", gap: 4 },
+  statusPillText: { fontSize: 10, lineHeight: 14, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
+  actionsColumn: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 4 },
   actionButton: {
-    width: 28,
-    height: 28,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
+    borderRadius: 10,
   },
 });

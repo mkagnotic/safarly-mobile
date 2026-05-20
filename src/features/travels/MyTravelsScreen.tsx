@@ -12,9 +12,10 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { useBuddyListings } from "@/hooks/api/useBuddyListings";
@@ -56,6 +57,7 @@ export function MyTravelsScreen() {
   const archive = useTrips({ filter: "my_archived" });
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: flights.total },
@@ -94,16 +96,12 @@ export function MyTravelsScreen() {
       after: () => void,
     ) => {
       setDeletingId(id);
+      setFormError(null);
       try {
         await mutate(id);
-        showToast({ title: "Removed", variant: "success", duration: 2000 });
         after();
       } catch (err) {
-        showToast({
-          title: "Couldn't remove",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
+        setFormError(`Couldn't remove. ${getErrorMessage(err)}`);
       } finally {
         setDeletingId(null);
       }
@@ -165,38 +163,42 @@ export function MyTravelsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refetchActive}
-            tintColor={colors.primary}
+            tintColor={colors.wordmark}
           />
         }
       >
         <View style={styles.headerRow}>
           <View style={styles.titleBlock}>
-            <Text style={styles.title}>My Travels</Text>
+            <Text style={styles.title}>My travels</Text>
             <Text style={styles.subtitle}>
-              Track all your flights, packages, and travel partners
+              Track all your flights, packages, and travel partners.
             </Text>
           </View>
         </View>
 
+        {formError ? (
+          <View style={styles.bannerSlot}>
+            <FormBanner message={formError} onDismiss={() => setFormError(null)} />
+          </View>
+        ) : null}
+
+        {/* Action row — standard AppButton recipe (radius 16, 14/16 padding,
+            15/700 label, scale-on-press). Send is the primary (orange CTA);
+            List is the secondary (white card + border) — matches every other
+            primary/secondary button pair across the app. */}
         <View style={styles.actionsRow}>
-          <Pressable
-            style={styles.secondaryButton}
+          <AppButton
+            label="List trip"
+            variant="secondary"
             onPress={goListTrip}
-            accessibilityRole="button"
-            accessibilityLabel="List a trip"
-          >
-            <Ionicons name="add" size={16} color={colors.text} />
-            <Text style={styles.secondaryButtonText}>List Trip</Text>
-          </Pressable>
-          <Pressable
-            style={styles.primaryButton}
+            style={styles.actionButtonFlex}
+          />
+          <AppButton
+            label="Send parcel"
             onPress={goSendParcel}
-            accessibilityRole="button"
-            accessibilityLabel="Send a parcel"
-          >
-            <Ionicons name="cube-outline" size={16} color={colors.white} />
-            <Text style={styles.primaryButtonText}>Send Parcel</Text>
-          </Pressable>
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.actionButtonFlex}
+          />
         </View>
 
         <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
@@ -372,7 +374,7 @@ function PackagesTab({
     <View>
       <View style={styles.section}>
         <View style={styles.sectionHeading}>
-          <Ionicons name="cube-outline" size={16} color={colors.primary} />
+          <Ionicons name="cube-outline" size={16} color={colors.wordmark} />
           <Text style={styles.sectionTitle}>Send</Text>
           <Text style={styles.sectionHint}>(Packages I'm Delivering)</Text>
         </View>
@@ -514,7 +516,7 @@ function ArchiveTab({
 function CenteredSpinner({ small }: Readonly<{ small?: boolean }>) {
   return (
     <View style={[styles.centered, small && styles.centeredSmall]}>
-      <ActivityIndicator size={small ? "small" : "large"} color={colors.primary} />
+      <ActivityIndicator size={small ? "small" : "large"} color={colors.wordmark} />
     </View>
   );
 }
@@ -528,13 +530,12 @@ function ErrorBlock({
       <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
       <Text style={styles.errorTitle}>Couldn't load this list</Text>
       <Text style={styles.errorBody}>{message}</Text>
-      <Pressable
-        style={styles.retryButton}
+      <AppButton
+        label="Try again"
         onPress={() => void onRetry()}
-        accessibilityRole="button"
-      >
-        <Text style={styles.retryButtonText}>Try again</Text>
-      </Pressable>
+        gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+        style={styles.retryButtonWrap}
+      />
     </View>
   );
 }
@@ -559,19 +560,17 @@ function EmptyBlock({
   return (
     <View style={[styles.emptyWrap, compact && styles.emptyCompact]}>
       <View style={styles.emptyIconBox}>
-        <Ionicons name={icon} size={compact ? 22 : 28} color={colors.primary} />
+        <Ionicons name={icon} size={compact ? 22 : 28} color={colors.wordmark} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptySubtitle}>{subtitle}</Text>
       {actionLabel && onAction ? (
-        <Pressable
-          style={styles.emptyCta}
+        <AppButton
+          label={actionLabel}
           onPress={onAction}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-        >
-          <Text style={styles.emptyCtaText}>{actionLabel}</Text>
-        </Pressable>
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.emptyCtaWrap}
+        />
       ) : null}
     </View>
   );
@@ -582,40 +581,15 @@ function EmptyBlock({
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 },
 
-  // Header
-  headerRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", marginTop: 8, marginBottom: 12 },
   titleBlock: { flex: 1 },
-  title: { color: colors.text, fontSize: 24, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 13, marginTop: 4, fontWeight: "500" },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginTop: 4 },
+  bannerSlot: { marginBottom: 14 },
 
-  // Action buttons row
-  actionsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
-  secondaryButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  secondaryButtonText: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  primaryButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  primaryButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
+  actionsRow: { flexDirection: "row", gap: 10, marginTop: 16, marginBottom: 18 },
+  actionButtonFlex: { flex: 1 },
 
-  // Tabs
   tabsRow: {
     flexDirection: "row",
     backgroundColor: colors.surfaceMuted,
@@ -632,14 +606,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  tabText: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
+  tabText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   tabTextActive: { color: colors.text },
 
   // Sections within Packages
   section: { marginBottom: 18 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  sectionTitle: { color: colors.text, fontSize: 15, fontWeight: "800" },
-  sectionHint: { color: colors.mutedText, fontSize: 12, fontWeight: "500" },
+  sectionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  sectionHint: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
   dashedEmpty: {
     paddingVertical: 24,
     paddingHorizontal: 16,
@@ -649,21 +623,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: "center",
   },
-  dashedEmptyText: { color: colors.mutedText, fontSize: 13, fontWeight: "500" },
+  dashedEmptyText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
 
   // Loading / error / empty
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
   centeredSmall: { paddingVertical: 24 },
-  errorTitle: { color: colors.text, fontSize: 15, fontWeight: "800" },
-  errorBody: { color: colors.mutedText, fontSize: 12, textAlign: "center", maxWidth: 280 },
-  retryButton: {
-    marginTop: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-  },
-  retryButtonText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  errorBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500", textAlign: "center", maxWidth: 280 },
+  retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
   emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
   emptyCompact: { paddingVertical: 20 },
   emptyIconBox: {
@@ -672,22 +639,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceWarm,
+    backgroundColor: colors.surfaceTintPrimary,
   },
-  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: "800", marginTop: 4 },
+  emptyTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800", marginTop: 4 },
   emptySubtitle: {
     color: colors.mutedText,
     fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
     textAlign: "center",
     maxWidth: 300,
     marginTop: 2,
   },
-  emptyCta: {
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-  },
-  emptyCtaText: { color: colors.white, fontSize: 14, fontWeight: "800" },
+  emptyCtaWrap: { marginTop: 12, alignSelf: "stretch", maxWidth: 240 },
 });

@@ -62,3 +62,10 @@ export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
 export function isTerminal(status: string): boolean {
   return TERMINAL_STATUSES.has(status);
 }
+
+/** Default "everything is normal" states — pill is suppressed for these. */
+const IMPLICIT_STATUSES: ReadonlySet<string> = new Set(["active", "can_carry"]);
+
+export function isImplicitStatus(status: string): boolean {
+  return IMPLICIT_STATUSES.has(status);
+}

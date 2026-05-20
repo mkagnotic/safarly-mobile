@@ -1,4 +1,4 @@
-import { PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
+import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -16,6 +16,14 @@ import { useIsFocused } from "@react-navigation/native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { colors } from "@/theme/colors";
+
+/**
+ * When `provided: true`, an ancestor (e.g. MainTabs) is already painting a
+ * continuous gradient behind all screens, so each Screen suppresses its own
+ * HeroBackground. Lifting the background out of the scenes is what prevents
+ * the "ghost of the other page" effect during tab transitions.
+ */
+export const ScreenBackgroundContext = createContext<{ provided: boolean }>({ provided: false });
 
 /** Extra space below the safe-area top inset so headers + icons sit slightly lower on every screen. */
 export const SCREEN_EXTRA_TOP = 10;
@@ -42,8 +50,10 @@ export function Screen({
   disableKeyboardAvoiding = false,
 }: Props) {
   const isFocused = useIsFocused();
+  const { provided: backgroundProvidedByAncestor } = useContext(ScreenBackgroundContext);
   const surfaceBg = safeBackgroundColor ?? colors.background;
   const useFadedGradient = safeBackgroundColor === undefined;
+  const renderHeroHere = useFadedGradient && !backgroundProvidedByAncestor;
   const transition = useRef(new Animated.Value(1)).current;
   /** Avoid a visible flash (1 → 0 → 1) on the first paint of each screen instance. */
   const skipNextEntrance = useRef(true);
@@ -115,7 +125,7 @@ export function Screen({
 
   return (
     <View style={styles.root}>
-      {useFadedGradient ? <HeroBackground /> : null}
+      {renderHeroHere ? <HeroBackground /> : null}
       <SafeAreaView style={[styles.safe, { backgroundColor: innerBg }]} edges={edges}>
         {disableKeyboardAvoiding ? (
           <Animated.View style={[styles.flex, { backgroundColor: innerBg }, animatedScreenStyle]}>

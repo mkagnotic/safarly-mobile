@@ -25,6 +25,7 @@ import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
+import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
@@ -36,6 +37,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { signInWithPassword, signInWithGoogle } = useAuth();
+
+  // Cross-screen notice handed in by SignupScreen (e.g. "Check your email").
+  const pendingNotice = useAppStore((s) => s.pendingNotice);
+  const clearPendingNotice = useAppStore((s) => s.clearPendingNotice);
+  const loginNotice = pendingNotice?.target === "login" ? pendingNotice : null;
 
   const goToSignup = useCallback(() => navigation.navigate("Signup"), [navigation]);
 
@@ -93,6 +99,7 @@ export function LoginScreen() {
     setSubmitting(true);
     try {
       await signInWithPassword(normalizedEmail, password);
+      if (loginNotice) clearPendingNotice();
       // Navigation flips via AuthContext → store → RootNavigator.
     } catch (err) {
       const mapped = mapAuthError(err, "signin");
@@ -166,6 +173,17 @@ export function LoginScreen() {
             </View>
 
             <Text style={styles.subtitle}>Welcome back. Sign in to continue.</Text>
+
+            {loginNotice ? (
+              <View style={styles.bannerSlot}>
+                <FormBanner
+                  variant={loginNotice.variant}
+                  title={loginNotice.title}
+                  message={loginNotice.message}
+                  onDismiss={clearPendingNotice}
+                />
+              </View>
+            ) : null}
 
             {formError ? (
               <View style={styles.bannerSlot}>
@@ -258,9 +276,10 @@ export function LoginScreen() {
     );
   }
 
-  // Reserve room for the absolutely-positioned `actions` block; bump it when
-  // the error banner is showing so the hero doesn't get overlapped.
-  const bottomBlockHeight = formError ? 290 + 80 : 290;
+  // Reserve room for the absolutely-positioned `actions` block; bump when a
+  // banner is showing so the hero doesn't get overlapped.
+  const hasWelcomeBanner = !!(formError || loginNotice);
+  const bottomBlockHeight = hasWelcomeBanner ? 290 + 80 : 290;
   return (
     <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
       <View style={[styles.wrap, { paddingTop: 8 }]}>
@@ -284,6 +303,16 @@ export function LoginScreen() {
         </View>
 
         <View style={[styles.actions, { paddingBottom: 28 }]}>
+          {loginNotice ? (
+            <View style={styles.welcomeBannerSlot}>
+              <FormBanner
+                variant={loginNotice.variant}
+                title={loginNotice.title}
+                message={loginNotice.message}
+                onDismiss={clearPendingNotice}
+              />
+            </View>
+          ) : null}
           {formError ? (
             <View style={styles.welcomeBannerSlot}>
               <FormBanner message={formError} />

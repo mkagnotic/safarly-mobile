@@ -104,6 +104,8 @@ const initialState = {
   opportunities: seedOpportunities,
   reviews: seedReviews,
   safetyAlerts: seedSafetyAlerts,
+  // Excluded from `partialize` below — never survives a relaunch by design.
+  pendingNotice: null as AppState["pendingNotice"],
 };
 
 export const useAppStore = create<AppState>()(
@@ -113,6 +115,8 @@ export const useAppStore = create<AppState>()(
       setSplashDone: () => set({ splashDone: true }),
       finishOnboarding: () => set({ onboarded: true }),
       finishProfileSetup: () => set({ profileSetupDone: true }),
+      setPendingNotice: (notice) => set({ pendingNotice: notice }),
+      clearPendingNotice: () => set({ pendingNotice: null }),
       login: () => set({ authenticated: true }),
       logout: () => set({ authenticated: false, profileSetupDone: false }),
       toggleLiveDataVisibility: () => set((state) => ({ showLiveData: !state.showLiveData })),

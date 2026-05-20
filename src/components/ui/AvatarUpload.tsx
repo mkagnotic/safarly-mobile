@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { showToast } from "@/feedback/appFeedback";
 import { supabase } from "@/integrations/supabase/client";
 import { colors } from "@/theme/colors";
 
@@ -15,22 +14,29 @@ type Props = {
   disabled?: boolean;
 };
 
+type Status =
+  | { kind: "warning"; title: string; message: string }
+  | { kind: "error"; title: string; message: string }
+  | null;
+
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled }: Readonly<Props>) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl ?? null);
   const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<Status>(null);
 
   const pickAndUpload = async () => {
     if (uploading || disabled) return;
+    setStatus(null);
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        showToast({
+        setStatus({
+          kind: "warning",
           title: "Permission needed",
           message: "Allow photo access to upload a profile picture.",
-          variant: "warning",
         });
         return;
       }
@@ -44,11 +50,11 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
       const asset = result.assets[0];
 
       if (asset.mimeType && !ALLOWED_MIME.has(asset.mimeType)) {
-        showToast({ title: "Unsupported format", message: "Use JPG, PNG, or WebP.", variant: "error" });
+        setStatus({ kind: "error", title: "Unsupported format", message: "Use JPG, PNG, or WebP." });
         return;
       }
       if (asset.fileSize && asset.fileSize > MAX_BYTES) {
-        showToast({ title: "Too large", message: "Image must be under 5 MB.", variant: "error" });
+        setStatus({ kind: "error", title: "Too large", message: "Image must be under 5 MB." });
         return;
       }
 
@@ -64,7 +70,7 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
           upsert: true,
         });
       if (uploadError) {
-        showToast({ title: "Upload failed", message: uploadError.message, variant: "error" });
+        setStatus({ kind: "error", title: "Upload failed", message: uploadError.message });
         return;
       }
 
@@ -73,10 +79,10 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
       setPreviewUrl(cacheBusted);
       onChange(cacheBusted);
     } catch (err) {
-      showToast({
+      setStatus({
+        kind: "error",
         title: "Couldn't upload photo",
         message: err instanceof Error ? err.message : "Try again in a moment.",
-        variant: "error",
       });
     } finally {
       setUploading(false);
@@ -85,6 +91,7 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
 
   const handleRemove = () => {
     if (uploading || disabled) return;
+    setStatus(null);
     setPreviewUrl(null);
     onChange(null);
   };
@@ -135,6 +142,29 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
           {uploading ? "Uploading…" : previewUrl ? "Change photo" : "Add photo"}
         </Text>
       </Pressable>
+      {status ? (
+        <View
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          style={[styles.statusRow, status.kind === "warning" ? styles.statusWarn : styles.statusError]}
+        >
+          <Ionicons
+            name={status.kind === "warning" ? "warning" : "alert-circle"}
+            size={14}
+            color={status.kind === "warning" ? colors.warning : colors.danger}
+            style={styles.statusIcon}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              { color: status.kind === "warning" ? colors.warning : colors.danger },
+            ]}
+          >
+            <Text style={styles.statusTitle}>{status.title}. </Text>
+            {status.message}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -188,4 +218,26 @@ const styles = StyleSheet.create({
   },
   linkText: { color: colors.ctaAccent, fontSize: 13, fontWeight: "700" },
   linkTextDisabled: { opacity: 0.5 },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: 280,
+  },
+  statusWarn: {
+    backgroundColor: "rgba(245, 159, 10, 0.10)",
+    borderColor: "rgba(245, 159, 10, 0.36)",
+  },
+  statusError: {
+    backgroundColor: "rgba(220, 40, 40, 0.08)",
+    borderColor: "rgba(220, 40, 40, 0.32)",
+  },
+  statusIcon: { marginTop: 1 },
+  statusText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "500" },
+  statusTitle: { fontWeight: "800" },
 });

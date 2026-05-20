@@ -5,11 +5,13 @@ import { useMemo } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback } from "react";
-import { Easing, Platform, StyleSheet, Text, View, type ViewStyle, useColorScheme } from "react-native";
+import { Platform, StyleSheet, Text, View, type ViewStyle, useColorScheme } from "react-native";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { HeroBackground } from "@/components/ui/HeroBackground";
+import { ScreenBackgroundContext } from "@/components/ui/Screen";
 // BuddiesScreen kept on disk but no longer rendered — Buddies bottom tab now
 // hosts the Inbox (MessagesScreen) to match web's `Home / Search / My Travels / Inbox` nav.
 import { HomeScreen } from "@/features/tabs/HomeScreen";
@@ -130,6 +132,15 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   BuddyCompletionTab: "checkmark-done-circle",
 };
 
+/** Filled variants for focused tabs. `search` has no filled glyph in Ionicons. */
+const TAB_ICONS_FOCUSED: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Home: "home",
+  Parcels: "cube",
+  Trips: "search",
+  Buddies: "chatbox",
+  Profile: "person",
+};
+
 function renderGlassTabBarBackground() {
   return <GlassTabBarBackground />;
 }
@@ -163,14 +174,11 @@ function GlassTabBarBackground() {
   );
 }
 
-function renderTabIcon(routeName: string, color: string, size: number) {
-  return (
-    <Ionicons
-      name={TAB_ICONS[routeName] ?? "ellipse"}
-      size={size}
-      color={color}
-    />
-  );
+function renderTabIcon(routeName: string, focused: boolean, color: string, size: number) {
+  const iconName = focused
+    ? TAB_ICONS_FOCUSED[routeName] ?? TAB_ICONS[routeName] ?? "ellipse"
+    : TAB_ICONS[routeName] ?? "ellipse";
+  return <Ionicons name={iconName} size={size} color={color} />;
 }
 
 /** Helper to create hidden tab screen options */
@@ -179,11 +187,9 @@ const HIDDEN_TAB = { tabBarButton: () => null, tabBarItemStyle: { display: "none
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const language = useAppStore((s) => s.language);
-  const colorScheme = useColorScheme();
   const usesEdgeToEdge = insets.bottom > 0;
   const bottomPadding = usesEdgeToEdge ? Math.max(insets.bottom - 2, 8) : 10;
   const barHeight = 62 + bottomPadding;
-  const transitionBackground = colorScheme === "dark" ? "#0B0B0C" : screenCanvas;
 
   // Web parity (`CustomerNavbar.tsx:103-107`): show an unread-count pill on the
   // Inbox link. React Navigation's `tabBarBadge` accepts a string|number — we
@@ -195,15 +201,22 @@ function MainTabs() {
     () =>
       ({ route }: { route: { name: string } }) => ({
         headerShown: false,
-        animation: "fade" as const,
-        transitionSpec: {
-          animation: "timing" as const,
-          config: { duration: 210, easing: Easing.out(Easing.cubic) },
-        },
+        // `Screen` owns the entrance fade per scene; `shift`/`fade` here would
+        // double up by cross-blending scenes mid-transition (visible ghosting).
+        animation: "none" as const,
         unmountOnBlur: false,
         freezeOnBlur: true,
-        sceneStyle: { backgroundColor: transitionBackground },
-        tabBarActiveTintColor: colors.tabBarActive,
+        // Transparent so the navigator-level HeroBackground shows through.
+        // Flattening elevation/shadow stops react-native-screens from painting
+        // a trailing edge between scenes.
+        sceneStyle: {
+          backgroundColor: "transparent",
+          elevation: 0,
+          shadowOpacity: 0,
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 0,
+        },
+        tabBarActiveTintColor: colors.wordmark,
         tabBarInactiveTintColor: colors.tabBarInactive,
         tabBarLabelStyle: { fontSize: 11, fontWeight: "700" as const, marginBottom: usesEdgeToEdge ? 0 : 2 },
         tabBarBackground: renderGlassTabBarBackground,
@@ -216,15 +229,21 @@ function MainTabs() {
           paddingTop: 6,
           paddingBottom: bottomPadding,
         },
-        tabBarIcon: ({ color, size }: { color: string; size: number }) => renderTabIcon(route.name, color, size),
+        tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) =>
+          renderTabIcon(route.name, focused, color, size),
       }),
-    [barHeight, bottomPadding, transitionBackground, usesEdgeToEdge]
+    [barHeight, bottomPadding, usesEdgeToEdge]
   );
 
   return (
-    <Tabs.Navigator backBehavior="history" screenOptions={tabScreenOptions}>
-      {/* Visible tabs */}
-      <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t(language, "tabs.home") }} />
+    // One continuous HeroBackground behind the Navigator (vs one per scene)
+    // keeps the gradient stable across tab swaps. See ScreenBackgroundContext.
+    <ScreenBackgroundContext.Provider value={SCREEN_BACKGROUND_PROVIDED}>
+      <View style={styles.tabRoot}>
+        <HeroBackground />
+        <Tabs.Navigator backBehavior="history" screenOptions={tabScreenOptions}>
+          {/* Visible tabs */}
+          <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t(language, "tabs.home") }} />
       <Tabs.Screen name="Parcels" component={MyTravelsScreen} options={{ tabBarLabel: t(language, "tabs.parcels") }} />
       <Tabs.Screen name="Trips" component={SearchScreen} options={{ tabBarLabel: t(language, "tabs.trips") }} />
       <Tabs.Screen
@@ -233,10 +252,11 @@ function MainTabs() {
         options={{
           tabBarLabel: t(language, "tabs.buddies"),
           tabBarBadge: inboxBadge,
-          tabBarBadgeStyle: { backgroundColor: colors.primary, color: colors.white, fontSize: 10, fontWeight: "800" },
+          tabBarBadgeStyle: { backgroundColor: colors.wordmark, color: colors.white, fontSize: 10, fontWeight: "800" },
         }}
       />
-      <Tabs.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: t(language, "tabs.profile") }} />
+      {/* Reached via the avatar in HomeScreen's top-right, not from the tab bar. */}
+      <Tabs.Screen name="Profile" component={ProfileScreen} options={HIDDEN_TAB} />
 
       {/* Hidden tab routes */}
       <Tabs.Screen name="ActivityTab" component={AllActivityScreen} options={HIDDEN_TAB} />
@@ -274,11 +294,16 @@ function MainTabs() {
       <Tabs.Screen name="DisputesTab" component={DisputesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="FileDisputeTab" component={FileDisputeScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SafetyAlertsTab" component={SafetyAlertsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="MatchTab" component={MatchScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="BuddyCompletionTab" component={BuddyCompletionScreen} options={HIDDEN_TAB} />
-    </Tabs.Navigator>
+          <Tabs.Screen name="MatchTab" component={MatchScreen} options={HIDDEN_TAB} />
+          <Tabs.Screen name="BuddyCompletionTab" component={BuddyCompletionScreen} options={HIDDEN_TAB} />
+        </Tabs.Navigator>
+      </View>
+    </ScreenBackgroundContext.Provider>
   );
 }
+
+/** Stable reference keeps Provider consumers from re-rendering on every MainTabs render. */
+const SCREEN_BACKGROUND_PROVIDED = { provided: true } as const;
 
 export function RootNavigator() {
   const insets = useSafeAreaInsets();
@@ -322,7 +347,12 @@ export function RootNavigator() {
           headerStyle: { backgroundColor: screenCanvas },
           headerTintColor: colors.text,
           headerShadowVisible: false,
-          contentStyle: { backgroundColor: transitionBackground },
+          // Flatten so stack pushes don't carry a leading-edge shadow.
+          contentStyle: {
+            backgroundColor: transitionBackground,
+            elevation: 0,
+            shadowOpacity: 0,
+          },
           headerTitleStyle: { fontWeight: "700" },
         }}
       >
@@ -371,6 +401,7 @@ export function RootNavigator() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: screenCanvas },
+  tabRoot: { flex: 1, backgroundColor: screenCanvas },
   dataToggle: {
     position: "absolute",
     left: 12,

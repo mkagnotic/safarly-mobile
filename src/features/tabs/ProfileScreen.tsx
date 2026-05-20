@@ -160,6 +160,20 @@ export function ProfileScreen() {
 
   return (
     <Screen contentContainerStyle={styles.contentContainer} refreshEnabled onRefresh={refetch}>
+      {/* Back affordance — Profile is reached via the HomeScreen avatar, not a tab. */}
+      <View style={styles.screenHeader}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={6}
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Pressable>
+        <Text style={styles.screenTitle}>Profile</Text>
+      </View>
+
       {/* ───────── Profile card ───────── */}
       <Card style={styles.profileCard}>
         <View style={styles.profileRow}>
@@ -349,6 +363,24 @@ const styles = StyleSheet.create({
   contentContainer: { paddingTop: 16, paddingBottom: 32 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 120, gap: 12 },
   centeredText: { color: colors.mutedText, fontSize: 14, fontWeight: "500" },
+
+  screenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 34,
+    marginTop: 16,
+    marginBottom: 18,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  screenTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
 
   // Error
   errorTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },

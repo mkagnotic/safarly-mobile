@@ -21,7 +21,6 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
-import { showToast } from "@/feedback/appFeedback";
 import {
   ApiClientError,
   authApi,
@@ -136,7 +135,6 @@ export function ProfileSetupScreen() {
         }
         await authApi.acceptTerms(TERMS_VERSION);
         finishProfileSetup();
-        showToast({ title: "Welcome to Safarly!", variant: "success" });
       } catch (err) {
         setFormError(mapAuthError(err, "signup").message);
       } finally {

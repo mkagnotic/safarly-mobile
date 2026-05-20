@@ -19,9 +19,10 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { useBuddyListings } from "@/hooks/api/useBuddyListings";
@@ -185,6 +186,7 @@ export function CreateBuddyScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -238,10 +240,8 @@ export function CreateBuddyScreen() {
 
   const handleAddLanguage = useCallback(
     (lang: string) => {
-      if (languages.length >= 3) {
-        showToast({ title: "Up to 3 languages", variant: "warning" });
-        return;
-      }
+      // Defensive — the picker button is disabled at the cap.
+      if (languages.length >= 3) return;
       if (!languages.includes(lang)) {
         setLanguages([...languages, lang]);
       }
@@ -253,46 +253,44 @@ export function CreateBuddyScreen() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
+    setFormError(null);
     if (!fromCity) {
-      showToast({ title: "Departure city required", variant: "error" });
+      setFormError("Departure city is required.");
       return;
     }
     if (!toCity) {
-      showToast({ title: "Destination city required", variant: "error" });
+      setFormError("Destination city is required.");
       return;
     }
     if (dateMode === "single" && !departDate) {
-      showToast({ title: "Pick a travel date", variant: "error" });
+      setFormError("Pick a travel date.");
       return;
     }
     if (dateMode === "range" && !departDate) {
-      showToast({ title: "Pick a start date", variant: "error" });
+      setFormError("Pick a start date.");
       return;
     }
     if (dateMode === "range" && !returnDate) {
-      showToast({ title: "Pick an end date", variant: "error" });
+      setFormError("Pick an end date.");
       return;
     }
     const effectiveFrom = departDate;
     const effectiveTo = dateMode === "range" ? returnDate : departDate;
     if (!effectiveFrom || !effectiveTo) {
-      showToast({ title: "Pick your travel dates", variant: "error" });
+      setFormError("Pick your travel dates.");
       return;
     }
     if (effectiveFrom < today) {
-      showToast({ title: "Travel date can't be in the past", variant: "error" });
+      setFormError("Travel date can't be in the past.");
       return;
     }
     if (effectiveTo > maxDate) {
-      showToast({
-        title: "Travel dates must be within 12 months",
-        variant: "error",
-      });
+      setFormError("Travel dates must be within 12 months.");
       return;
     }
     const ageNum = age ? parseInt(age, 10) : undefined;
     if (ageNum !== undefined && (ageNum < 18 || ageNum > 120)) {
-      showToast({ title: "Age must be between 18 and 120", variant: "error" });
+      setFormError("Age must be between 18 and 120.");
       return;
     }
 
@@ -316,18 +314,13 @@ export function CreateBuddyScreen() {
     try {
       if (isEditMode && editId) {
         await buddiesApi.update(editId, payload);
-        showToast({ title: "Buddy request updated", variant: "success" });
         navigation.navigate("Parcels");
       } else {
         await buddiesApi.create(payload);
         setSubmitted(true);
       }
     } catch (err) {
-      showToast({
-        title: "Couldn't save buddy listing",
-        message: getErrorMessage(err),
-        variant: "error",
-      });
+      setFormError(`Couldn't save buddy listing. ${getErrorMessage(err)}`);
     } finally {
       setSubmitting(false);
     }
@@ -363,31 +356,29 @@ export function CreateBuddyScreen() {
           >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
+          <Text style={styles.title}>Buddy listing created</Text>
         </View>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
             <Ionicons name="people-outline" size={40} color={colors.safe} />
           </View>
-          <Text style={styles.successTitle}>Buddy Listing Created! 🤝</Text>
+          <Text style={styles.successTitle}>Buddy listing created</Text>
           <Text style={styles.successBody}>
-            Travelers on your route can now find you and send connection
-            requests.
+            Travelers on your route can now find you and send connection requests.
           </Text>
           <View style={styles.successButtons}>
-            <Pressable
+            <AppButton
+              label="View in my travels"
               onPress={() => navigation.navigate("Parcels")}
-              style={[styles.button, styles.buttonPrimary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonPrimaryText}>View in My Travels</Text>
-            </Pressable>
-            <Pressable
+              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+              style={styles.successButtonFlex}
+            />
+            <AppButton
+              label="Go home"
+              variant="secondary"
               onPress={() => navigation.navigate("Home")}
-              style={[styles.button, styles.buttonSecondary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonSecondaryText}>Go Home</Text>
-            </Pressable>
+              style={styles.successButtonFlex}
+            />
           </View>
         </View>
       </Screen>
@@ -408,29 +399,32 @@ export function CreateBuddyScreen() {
         >
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
-        <View>
-          <Text style={styles.title}>
-            {isEditMode ? "Edit Travel Buddy Request" : "Find a Travel Buddy"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isEditMode
-              ? "Update your travel partner request so other travelers can find the latest details."
-              : "Share your travel plans and connect with fellow travelers on your route."}
-          </Text>
-        </View>
+        <Text style={styles.title}>
+          {isEditMode ? "Edit travel buddy" : "Find a travel buddy"}
+        </Text>
       </View>
+      <Text style={styles.subtitle}>
+        {isEditMode
+          ? "Update your travel partner request so other travelers can find the latest details."
+          : "Share your travel plans and connect with fellow travelers on your route."}
+      </Text>
 
       {isEditMode && listingsLoading ? (
         <View style={styles.editLoadingRow}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.wordmark} />
           <Text style={styles.editLoadingText}>Loading your existing buddy request…</Text>
         </View>
       ) : null}
       {editLoadingError ? (
-        <View style={styles.editErrorBox}>
-          <Text style={styles.editErrorText}>
-            Buddy request not found. It may have been removed already.
-          </Text>
+        <View style={styles.bannerSlot}>
+          <FormBanner
+            message="Buddy request not found. It may have been removed already."
+          />
+        </View>
+      ) : null}
+      {formError ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner message={formError} onDismiss={() => setFormError(null)} />
         </View>
       ) : null}
 
@@ -459,7 +453,7 @@ export function CreateBuddyScreen() {
             accessibilityRole="button"
             accessibilityLabel="Swap direction"
           >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.primary} />
+            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
             <Text style={styles.swapButtonText}>Swap Direction</Text>
           </Pressable>
         </View>
@@ -693,7 +687,7 @@ export function CreateBuddyScreen() {
           <TextInput
             value={layover}
             onChangeText={setLayover}
-            placeholder="e.g. Dubai — 4h layover"
+            placeholder="e.g. New York — 4h layover"
             placeholderTextColor={colors.subtleText}
             style={styles.input}
           />
@@ -719,34 +713,24 @@ export function CreateBuddyScreen() {
           />
         </View>
 
-        {/* Submit */}
         <View style={styles.submitRow}>
-          <Pressable
-            onPress={() => void handleSubmit()}
-            disabled={submitting || (isEditMode && (listingsLoading || !editListing))}
-            style={[
-              styles.submitButton,
-              (submitting || (isEditMode && (listingsLoading || !editListing))) &&
-                styles.buttonDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={isEditMode ? "Save buddy request" : "Find my travel buddy"}
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Ionicons name="people-outline" size={16} color={colors.white} />
-            )}
-            <Text style={styles.submitButtonText}>
-              {submitting
+          <AppButton
+            label={
+              submitting
                 ? isEditMode
                   ? "Saving…"
                   : "Creating…"
                 : isEditMode
-                  ? "Save Buddy Request"
-                  : "Find My Travel Buddy"}
-            </Text>
-          </Pressable>
+                  ? "Save buddy request"
+                  : "Find my travel buddy"
+            }
+            onPress={() => void handleSubmit()}
+            disabled={submitting || (isEditMode && (listingsLoading || !editListing))}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            leftIcon={
+              submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+            }
+          />
         </View>
       </View>
 
@@ -845,7 +829,7 @@ function ListPickerModal({
                   {item}
                 </Text>
                 {isSel ? (
-                  <Ionicons name="checkmark" size={16} color={colors.primary} />
+                  <Ionicons name="checkmark" size={16} color={colors.wordmark} />
                 ) : null}
               </Pressable>
             );
@@ -973,7 +957,14 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
-  headerRow: { marginTop: 8, marginBottom: 14, gap: 12 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 34,
+    marginTop: 16,
+    marginBottom: 18,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -981,10 +972,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-start",
   },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 8 },
-  subtitle: { color: colors.mutedText, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  bannerSlot: { marginBottom: 14 },
 
   editLoadingRow: {
     flexDirection: "row",
@@ -992,16 +983,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  editLoadingText: { color: colors.mutedText, fontSize: 13 },
-  editErrorBox: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(220, 40, 40, 0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(220, 40, 40, 0.30)",
-  },
-  editErrorText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
+  editLoadingText: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
 
   card: {
     backgroundColor: colors.card,
@@ -1012,19 +994,9 @@ const styles = StyleSheet.create({
     gap: 18,
   },
 
-  field: { gap: 6 },
-  fieldLabel: {
-    color: colors.subtleText,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  fieldLabelMuted: {
-    color: colors.mutedText,
-    fontWeight: "500",
-    textTransform: "none",
-  },
+  field: { gap: 8 },
+  fieldLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
   countryChipRow: { flexDirection: "row" },
   countryChip: {
@@ -1034,7 +1006,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceTintPrimary,
     marginBottom: 6,
   },
-  countryChipText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
   swapRow: { alignItems: "center" },
   swapButton: {
@@ -1048,15 +1020,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
 
   input: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.input,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
   },
   selectInput: {
     flexDirection: "row",
@@ -1064,7 +1038,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
-  selectInputText: { color: colors.text, fontSize: 14, flex: 1 },
+  selectInputText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
   textarea: { minHeight: 84, paddingTop: 12 },
 
   rangeRow: { flexDirection: "row", gap: 8 },
@@ -1080,11 +1054,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   unitToggleButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  unitToggleButtonActive: { backgroundColor: colors.primary },
-  unitToggleText: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
+  unitToggleButtonActive: { backgroundColor: colors.wordmark },
+  unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   unitToggleTextActive: { color: colors.white },
 
-  helperText: { color: colors.mutedText, fontSize: 11, marginTop: 4 },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
 
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
   chip: {
@@ -1098,22 +1072,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: primaryTint.stroke20,
   },
-  chipText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  chipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
-  submitRow: { alignItems: "center", marginTop: 4 },
-  submitButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-  },
-  submitButtonText: { color: colors.white, fontSize: 14, fontWeight: "800" },
-  buttonDisabled: { opacity: 0.6 },
+  submitRow: { marginTop: 4 },
 
-  // Success
+  // Success state
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
   successIconBubble: {
     width: 80,
@@ -1124,31 +1087,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  successTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  successTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   successBody: {
     color: colors.mutedText,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
     textAlign: "center",
     maxWidth: 320,
-    lineHeight: 19,
   },
-  successButtons: { flexDirection: "row", gap: 10, marginTop: 18 },
-  button: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 140,
-  },
-  buttonPrimary: { backgroundColor: colors.primary },
-  buttonPrimaryText: { color: colors.white, fontSize: 13, fontWeight: "800" },
-  buttonSecondary: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  buttonSecondaryText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
+  successButtonFlex: { flex: 1 },
 
   // Modal sheets shared
   modalBackdrop: {
@@ -1175,7 +1124,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pickerTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  pickerTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   pickerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1184,8 +1133,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   pickerRowSelected: { backgroundColor: colors.surfaceTintPrimary, borderRadius: 8 },
-  pickerRowText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  pickerRowTextSelected: { color: colors.primary, fontWeight: "800" },
+  pickerRowText: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  pickerRowTextSelected: { color: colors.wordmark, fontWeight: "800" },
   pickerSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   // Calendar
@@ -1214,7 +1163,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
   },
-  calendarTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  calendarTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   calendarWeekRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1225,6 +1174,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: colors.subtleText,
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.4,
   },
@@ -1236,9 +1186,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 10,
   },
-  calendarCellSelected: { backgroundColor: colors.primary },
-  calendarCellToday: { borderWidth: 1, borderColor: colors.primary },
-  calendarCellText: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  calendarCellSelected: { backgroundColor: colors.wordmark },
+  calendarCellToday: { borderWidth: 1, borderColor: colors.wordmark },
+  calendarCellText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   calendarCellTextMuted: { color: colors.subtleText },
   calendarCellTextDisabled: { color: colors.subtleText, opacity: 0.4 },
   calendarCellTextSelected: { color: colors.white, fontWeight: "800" },

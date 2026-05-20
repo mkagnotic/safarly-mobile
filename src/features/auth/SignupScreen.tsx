@@ -15,8 +15,8 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
-import { showToast } from "@/feedback/appFeedback";
 import { mapAuthError } from "@/services/auth/authErrors";
+import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 
 interface Props {
@@ -35,6 +35,7 @@ interface FormErrors {
 
 export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const { signUpWithPassword } = useAuth();
+  const setPendingNotice = useAppStore((s) => s.setPendingNotice);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -87,17 +88,16 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
         phone,
       });
       if (hasSession) {
-        // AuthContext fires SIGNED_IN -> RootNavigator transitions to ProfileSetup.
-        showToast({ title: "Account created!", variant: "success" });
+        // AuthContext fires SIGNED_IN → RootNavigator swaps to ProfileSetup.
         return;
       }
-      // Email confirmation is required by the project — user must confirm
-      // before they can sign in. Bounce them back to Login with a hint.
-      showToast({
+      // Email confirmation required — hand the notice to LoginScreen so it
+      // survives this screen unmounting.
+      setPendingNotice({
+        target: "login",
+        variant: "info",
         title: "Check your email",
         message: "We sent you a confirmation link to finish setup.",
-        variant: "info",
-        duration: 5000,
       });
       onSwitchToLogin();
     } catch (err) {

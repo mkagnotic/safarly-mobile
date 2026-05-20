@@ -17,9 +17,10 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -144,6 +145,7 @@ export function SendParcelScreen() {
   const [currency, setCurrency] = useState<Currency>("USD");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
@@ -183,42 +185,41 @@ export function SendParcelScreen() {
   const hasSizeError = sizeErrors.l || sizeErrors.w || sizeErrors.h;
 
   const handleSubmit = useCallback(async () => {
+    setFormError(null);
     if (!fromCity) {
-      showToast({ title: "Origin city required", variant: "error" });
+      setFormError("Origin city is required.");
       return;
     }
     if (!toCity) {
-      showToast({ title: "Destination city required", variant: "error" });
+      setFormError("Destination city is required.");
       return;
     }
     const w = parseFloat(weight);
     if (!w || w <= 0) {
-      showToast({ title: "Enter a valid weight", variant: "error" });
+      setFormError("Enter a valid parcel weight.");
       return;
     }
     if (hasSizeError) {
-      showToast({
-        title: "Size exceeds carry-on limit",
-        message: `Max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}.`,
-        variant: "error",
-      });
+      setFormError(
+        `Size exceeds airline carry-on limit (max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}).`,
+      );
       return;
     }
     if (!deliveryBy) {
-      showToast({ title: "Pick a delivery-by date", variant: "error" });
+      setFormError("Pick a delivery-by date.");
       return;
     }
     if (deliveryBy < today) {
-      showToast({ title: "Delivery date can't be in the past", variant: "error" });
+      setFormError("Delivery date can't be in the past.");
       return;
     }
     if (deliveryBy > maxDate) {
-      showToast({ title: "Delivery date must be within 12 months", variant: "error" });
+      setFormError("Delivery date must be within 12 months.");
       return;
     }
     const fee = parseFloat(feeOffered);
     if (!fee || fee <= 0) {
-      showToast({ title: "Enter a valid cost offered", variant: "error" });
+      setFormError("Enter a valid cost offered.");
       return;
     }
 
@@ -256,11 +257,7 @@ export function SendParcelScreen() {
       });
       setSubmitted(true);
     } catch (err) {
-      showToast({
-        title: "Couldn't post request",
-        message: getErrorMessage(err),
-        variant: "error",
-      });
+      setFormError(`Couldn't post request. ${getErrorMessage(err)}`);
     } finally {
       setSubmitting(false);
     }
@@ -299,30 +296,29 @@ export function SendParcelScreen() {
           >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
+          <Text style={styles.title}>Request posted</Text>
         </View>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
             <Ionicons name="checkmark" size={40} color={colors.safe} />
           </View>
-          <Text style={styles.successTitle}>Request Posted! 📦</Text>
+          <Text style={styles.successTitle}>Request posted</Text>
           <Text style={styles.successBody}>
             Carriers on matching routes will be notified. Sit tight!
           </Text>
           <View style={styles.successButtons}>
-            <Pressable
+            <AppButton
+              label="View my parcels"
               onPress={() => navigation.navigate("Parcels")}
-              style={[styles.button, styles.buttonPrimary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonPrimaryText}>View My Parcels</Text>
-            </Pressable>
-            <Pressable
+              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+              style={styles.successButtonFlex}
+            />
+            <AppButton
+              label="Go home"
+              variant="secondary"
               onPress={() => navigation.navigate("Home")}
-              style={[styles.button, styles.buttonSecondary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonSecondaryText}>Go Home</Text>
-            </Pressable>
+              style={styles.successButtonFlex}
+            />
           </View>
         </View>
       </Screen>
@@ -341,14 +337,17 @@ export function SendParcelScreen() {
         >
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
-        <View>
-          <Text style={styles.title}>Your Parcel Details</Text>
-          <Text style={styles.subtitle}>
-            Tell us where your parcel needs to go and we'll find the perfect
-            carrier for you.
-          </Text>
-        </View>
+        <Text style={styles.title}>Your Parcel Details</Text>
       </View>
+      <Text style={styles.subtitle}>
+        Tell us where your parcel needs to go and we'll find the perfect carrier for you.
+      </Text>
+
+      {formError ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner message={formError} onDismiss={() => setFormError(null)} />
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         {/* From location */}
@@ -375,7 +374,7 @@ export function SendParcelScreen() {
             accessibilityRole="button"
             accessibilityLabel="Swap direction"
           >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.primary} />
+            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
             <Text style={styles.swapButtonText}>Swap Direction</Text>
           </Pressable>
         </View>
@@ -447,7 +446,7 @@ export function SendParcelScreen() {
           </View>
           <Text style={[styles.helperText, hasSizeError && styles.helperError]}>
             {hasSizeError
-              ? `⚠️ Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
+              ? `Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
               : `Airline carry-on max: ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}`}
           </Text>
         </View>
@@ -518,7 +517,7 @@ export function SendParcelScreen() {
 
         {/* Cost Offered */}
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Cost Offered 💰</Text>
+          <Text style={styles.fieldLabel}>Cost offered</Text>
           <View style={styles.costRow}>
             <CurrencyToggle value={currency} onChange={setCurrency} />
             <View style={styles.costInputWrap}>
@@ -564,24 +563,16 @@ export function SendParcelScreen() {
           </View>
         </View>
 
-        {/* Submit */}
         <View style={styles.submitRow}>
-          <Pressable
+          <AppButton
+            label={submitting ? "Posting…" : "Submit & find carriers"}
             onPress={() => void handleSubmit()}
             disabled={submitting}
-            style={[styles.submitButton, submitting && styles.buttonDisabled]}
-            accessibilityRole="button"
-            accessibilityLabel="Submit and find carriers"
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Ionicons name="cube-outline" size={16} color={colors.white} />
-            )}
-            <Text style={styles.submitButtonText}>
-              {submitting ? "Posting…" : "📦 Submit & Find Carriers"}
-            </Text>
-          </Pressable>
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            leftIcon={
+              submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+            }
+          />
         </View>
       </View>
 
@@ -787,13 +778,7 @@ function CalendarModal({
         </View>
 
         <View style={styles.calendarFooter}>
-          <Pressable
-            onPress={onClose}
-            style={[styles.button, styles.buttonSecondary]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.buttonSecondaryText}>Cancel</Text>
-          </Pressable>
+          <AppButton label="Cancel" variant="secondary" onPress={onClose} />
         </View>
       </View>
     </Modal>
@@ -803,7 +788,14 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
-  headerRow: { marginTop: 8, marginBottom: 14, gap: 12 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 34,
+    marginTop: 16,
+    marginBottom: 18,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -811,10 +803,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-start",
   },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 8 },
-  subtitle: { color: colors.mutedText, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  bannerSlot: { marginBottom: 14 },
 
   card: {
     backgroundColor: colors.card,
@@ -825,22 +817,10 @@ const styles = StyleSheet.create({
     gap: 18,
   },
 
-  field: { gap: 6 },
-  fieldLabel: {
-    color: colors.subtleText,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  fieldLabelInline: {
-    color: colors.subtleText,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  fieldLabelMuted: { color: colors.mutedText, fontWeight: "500", textTransform: "none" },
+  field: { gap: 8 },
+  fieldLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  fieldLabelInline: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
   countryChipRow: { flexDirection: "row" },
   countryChip: {
@@ -850,7 +830,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceTintPrimary,
     marginBottom: 6,
   },
-  countryChipText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
   swapRow: { alignItems: "center" },
   swapButton: {
@@ -864,20 +844,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
 
   input: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.input,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
   },
-  inputError: { borderWidth: 1, borderColor: colors.danger },
+  inputError: { borderColor: colors.danger },
   textarea: { minHeight: 84, paddingTop: 12 },
   dateInput: { flexDirection: "row", alignItems: "center", gap: 10 },
-  dateInputText: { color: colors.text, fontSize: 14 },
+  dateInputText: { color: colors.text, fontSize: 15, lineHeight: 22 },
 
   unitToggleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
   unitToggle: {
@@ -892,15 +874,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  unitToggleButtonActive: { backgroundColor: colors.primary },
-  unitToggleText: { color: colors.mutedText, fontSize: 11, fontWeight: "700" },
+  unitToggleButtonActive: { backgroundColor: colors.wordmark },
+  unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   unitToggleTextActive: { color: colors.white },
 
   sizeRow: { flexDirection: "row", gap: 10 },
-  sizeCell: { flex: 1, gap: 4 },
-  sizeCellLabel: { color: colors.subtleText, fontSize: 10 },
+  sizeCell: { flex: 1, gap: 6 },
+  sizeCellLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
 
-  helperText: { color: colors.mutedText, fontSize: 11, marginTop: 4 },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
   helperError: { color: colors.danger, fontWeight: "700" },
 
   costRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
@@ -912,8 +894,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   currencyButton: { paddingHorizontal: 10, paddingVertical: Platform.OS === "ios" ? 11 : 9, borderRadius: 10 },
-  currencyButtonActive: { backgroundColor: colors.primary },
-  currencyText: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
+  currencyButtonActive: { backgroundColor: colors.wordmark },
+  currencyText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   currencyTextActive: { color: colors.white },
   costInputWrap: { flex: 1, position: "relative" },
   costSymbol: {
@@ -921,7 +903,8 @@ const styles = StyleSheet.create({
     left: 12,
     top: Platform.OS === "ios" ? 12 : 10,
     color: colors.mutedText,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: "700",
     zIndex: 1,
   },
@@ -934,27 +917,17 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "rgba(245, 159, 10, 0.10)",
     borderWidth: 1,
-    borderColor: "rgba(245, 159, 10, 0.25)",
+    borderColor: "rgba(245, 159, 10, 0.36)",
   },
   warningIcon: { marginTop: 2 },
   warningBody: { flex: 1, gap: 4 },
-  warningTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
-  warningText: { color: colors.mutedText, fontSize: 12, lineHeight: 17 },
+  warningTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
+  warningText: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500" },
   warningStrong: { color: colors.text, fontWeight: "800" },
 
-  submitRow: { alignItems: "center", marginTop: 4 },
-  submitButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-  },
-  submitButtonText: { color: colors.white, fontSize: 14, fontWeight: "800" },
+  submitRow: { marginTop: 4 },
 
-  // Buttons (success state)
+  // Success state
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
   successIconBubble: {
     width: 80,
@@ -965,32 +938,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  successTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  successTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   successBody: {
     color: colors.mutedText,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
     textAlign: "center",
     maxWidth: 320,
-    lineHeight: 19,
   },
-  successButtons: { flexDirection: "row", gap: 10, marginTop: 18 },
-  button: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 132,
-  },
-  buttonPrimary: { backgroundColor: colors.primary },
-  buttonPrimaryText: { color: colors.white, fontSize: 13, fontWeight: "800" },
-  buttonSecondary: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  buttonSecondaryText: { color: colors.text, fontSize: 13, fontWeight: "700" },
-  buttonDisabled: { opacity: 0.6 },
+  successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
+  successButtonFlex: { flex: 1 },
 
   // Calendar modal
   calendarBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
@@ -1019,13 +977,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
   },
-  calendarTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  calendarTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   calendarWeekRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   calendarWeekday: {
     width: `${100 / 7}%`,
     textAlign: "center",
     color: colors.subtleText,
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.4,
   },
@@ -1037,9 +996,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 10,
   },
-  calendarCellSelected: { backgroundColor: colors.primary },
-  calendarCellToday: { borderWidth: 1, borderColor: colors.primary },
-  calendarCellText: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  calendarCellSelected: { backgroundColor: colors.wordmark },
+  calendarCellToday: { borderWidth: 1, borderColor: colors.wordmark },
+  calendarCellText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   calendarCellTextMuted: { color: colors.subtleText },
   calendarCellTextDisabled: { color: colors.subtleText, opacity: 0.4 },
   calendarCellTextSelected: { color: colors.white, fontWeight: "800" },

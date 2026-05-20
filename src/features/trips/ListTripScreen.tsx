@@ -17,9 +17,10 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -177,6 +178,7 @@ export function ListTripScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -204,10 +206,8 @@ export function ListTripScreen() {
 
   const handleAddBuddyLanguage = useCallback(
     (lang: string) => {
-      if (buddyLanguages.length >= 3) {
-        showToast({ title: "Up to 3 languages", variant: "warning" });
-        return;
-      }
+      // Defensive — the picker button is disabled at the cap.
+      if (buddyLanguages.length >= 3) return;
       if (!buddyLanguages.includes(lang)) {
         setBuddyLanguages([...buddyLanguages, lang]);
       }
@@ -219,39 +219,40 @@ export function ListTripScreen() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
+    setFormError(null);
     if (!fromCity) {
-      showToast({ title: "Departure city required", variant: "error" });
+      setFormError("Departure city is required.");
       return;
     }
     if (!toCity) {
-      showToast({ title: "Arrival city required", variant: "error" });
+      setFormError("Arrival city is required.");
       return;
     }
     if (!departDate) {
-      showToast({ title: "Pick a travel date", variant: "error" });
+      setFormError("Pick a travel date.");
       return;
     }
     if (departDate < today) {
-      showToast({ title: "Travel date can't be in the past", variant: "error" });
+      setFormError("Travel date can't be in the past.");
       return;
     }
     if (departDate > maxDate) {
-      showToast({ title: "Travel date must be within 12 months", variant: "error" });
+      setFormError("Travel date must be within 12 months.");
       return;
     }
     if (dateMode === "range" && returnDate) {
       if (returnDate > maxDate) {
-        showToast({ title: "Return date must be within 12 months", variant: "error" });
+        setFormError("Return date must be within 12 months.");
         return;
       }
       if (returnDate < departDate) {
-        showToast({ title: "Return date must be after departure", variant: "error" });
+        setFormError("Return date must be after departure.");
         return;
       }
     }
     const w = parseFloat(maxWeight);
     if (!w || w <= 0) {
-      showToast({ title: "Enter a valid max weight", variant: "error" });
+      setFormError("Enter a valid maximum weight.");
       return;
     }
 
@@ -293,11 +294,7 @@ export function ListTripScreen() {
       });
       setSubmitted(true);
     } catch (err) {
-      showToast({
-        title: "Couldn't post trip",
-        message: getErrorMessage(err),
-        variant: "error",
-      });
+      setFormError(`Couldn't post trip. ${getErrorMessage(err)}`);
     } finally {
       setSubmitting(false);
     }
@@ -338,12 +335,13 @@ export function ListTripScreen() {
           >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
+          <Text style={styles.title}>Trip Posted</Text>
         </View>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
             <Ionicons name="airplane-outline" size={40} color={colors.safe} />
           </View>
-          <Text style={styles.successTitle}>You're All Set! ✈️</Text>
+          <Text style={styles.successTitle}>You're all set</Text>
           <Text style={styles.successBody}>
             We're searching for the best parcel matches for your route.
             {openToBuddy
@@ -351,20 +349,18 @@ export function ListTripScreen() {
               : ""}
           </Text>
           <View style={styles.successButtons}>
-            <Pressable
+            <AppButton
+              label="View my travels"
               onPress={() => navigation.navigate("Parcels")}
-              style={[styles.button, styles.buttonPrimary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonPrimaryText}>View My Travels</Text>
-            </Pressable>
-            <Pressable
+              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+              style={styles.successButtonFlex}
+            />
+            <AppButton
+              label="Go home"
+              variant="secondary"
               onPress={() => navigation.navigate("Home")}
-              style={[styles.button, styles.buttonSecondary]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonSecondaryText}>Go Home</Text>
-            </Pressable>
+              style={styles.successButtonFlex}
+            />
           </View>
         </View>
       </Screen>
@@ -383,13 +379,17 @@ export function ListTripScreen() {
         >
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
-        <View>
-          <Text style={styles.title}>Your Travel Details</Text>
-          <Text style={styles.subtitle}>
-            Share your travel plans and we'll find the best parcel matches for you.
-          </Text>
-        </View>
+        <Text style={styles.title}>Your Travel Details</Text>
       </View>
+      <Text style={styles.subtitle}>
+        Share your travel plans and we'll find the best parcel matches for you.
+      </Text>
+
+      {formError ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner message={formError} onDismiss={() => setFormError(null)} />
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         {/* From */}
@@ -416,7 +416,7 @@ export function ListTripScreen() {
             accessibilityRole="button"
             accessibilityLabel="Swap direction"
           >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.primary} />
+            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
             <Text style={styles.swapButtonText}>Swap Direction</Text>
           </Pressable>
         </View>
@@ -627,7 +627,7 @@ export function ListTripScreen() {
         {/* Buddy companion fields */}
         {openToBuddy ? (
           <View style={styles.buddyPanel}>
-            <Text style={styles.buddyPanelHeading}>✨ TRAVEL COMPANION DETAILS</Text>
+            <Text style={styles.buddyPanelHeading}>Travel companion details</Text>
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
@@ -704,7 +704,7 @@ export function ListTripScreen() {
               <TextInput
                 value={buddyLayover}
                 onChangeText={setBuddyLayover}
-                placeholder="e.g. Dubai — 4h layover"
+                placeholder="e.g. New York — 4h layover"
                 placeholderTextColor={colors.subtleText}
                 style={styles.input}
               />
@@ -712,24 +712,16 @@ export function ListTripScreen() {
           </View>
         ) : null}
 
-        {/* Submit */}
         <View style={styles.submitRow}>
-          <Pressable
+          <AppButton
+            label={submitting ? "Finding matches…" : "Submit & find matches"}
             onPress={() => void handleSubmit()}
             disabled={submitting}
-            style={[styles.submitButton, submitting && styles.buttonDisabled]}
-            accessibilityRole="button"
-            accessibilityLabel="Submit and find matches"
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <Ionicons name="rocket" size={16} color={colors.white} />
-            )}
-            <Text style={styles.submitButtonText}>
-              {submitting ? "Finding Matches…" : "🚀 Submit & Find Matches"}
-            </Text>
-          </Pressable>
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            leftIcon={
+              submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+            }
+          />
         </View>
       </View>
 
@@ -864,7 +856,7 @@ function ListPickerModal({
                   {item}
                 </Text>
                 {isSel ? (
-                  <Ionicons name="checkmark" size={16} color={colors.primary} />
+                  <Ionicons name="checkmark" size={16} color={colors.wordmark} />
                 ) : null}
               </Pressable>
             );
@@ -992,7 +984,14 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
-  headerRow: { marginTop: 8, marginBottom: 14, gap: 12 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 34,
+    marginTop: 16,
+    marginBottom: 18,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -1000,10 +999,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-start",
   },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: 8 },
-  subtitle: { color: colors.mutedText, fontSize: 13, marginTop: 4, lineHeight: 18 },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  bannerSlot: { marginBottom: 14 },
 
   card: {
     backgroundColor: colors.card,
@@ -1014,22 +1013,18 @@ const styles = StyleSheet.create({
     gap: 18,
   },
 
-  field: { gap: 6 },
+  field: { gap: 8 },
   fieldLabel: {
-    color: colors.subtleText,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "600",
   },
   fieldLabelInline: {
-    color: colors.subtleText,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "600",
   },
-  fieldLabelMuted: { color: colors.mutedText, fontWeight: "500", textTransform: "none" },
+  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
   countryChipRow: { flexDirection: "row" },
   countryChip: {
@@ -1039,7 +1034,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceTintPrimary,
     marginBottom: 6,
   },
-  countryChipText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
   swapRow: { alignItems: "center" },
   swapButton: {
@@ -1053,18 +1048,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.primary, fontSize: 12, fontWeight: "700" },
+  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
 
+  // Match AppInput's visual recipe: input bg + 1px wordmark-tinted border,
+  // 12 radius, paddingVertical 12, fontSize 15.
   input: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.input,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
   },
   selectInput: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  selectInputText: { color: colors.text, fontSize: 14, flex: 1 },
+  selectInputText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
 
   rangeRow: { flexDirection: "row", gap: 8 },
   rangeCell: { flex: 1 },
@@ -1078,15 +1077,15 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   unitToggleButton: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  unitToggleButtonActive: { backgroundColor: colors.primary },
-  unitToggleText: { color: colors.mutedText, fontSize: 11, fontWeight: "700" },
+  unitToggleButtonActive: { backgroundColor: colors.wordmark },
+  unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   unitToggleTextActive: { color: colors.white },
 
   sizeRow: { flexDirection: "row", gap: 10 },
-  sizeCell: { flex: 1, gap: 4 },
-  sizeCellLabel: { color: colors.subtleText, fontSize: 10 },
+  sizeCell: { flex: 1, gap: 6 },
+  sizeCellLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
 
-  helperText: { color: colors.mutedText, fontSize: 11, marginTop: 4 },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
 
   // Buddy opt-in
   buddyOptInRow: {
@@ -1102,20 +1101,19 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 6,
+    borderRadius: 5,
     borderWidth: 2,
-    borderColor: colors.controlOutline,
+    borderColor: colors.ctaAccent,
     backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 2,
   },
-  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkboxChecked: { backgroundColor: colors.ctaAccent, borderColor: colors.ctaAccent },
   buddyOptInText: { flex: 1, gap: 4 },
-  buddyOptInTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
-  buddyOptInBody: { color: colors.mutedText, fontSize: 12, lineHeight: 17 },
+  buddyOptInTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
+  buddyOptInBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500" },
 
-  // Buddy companion panel
   buddyPanel: {
     borderRadius: 14,
     padding: 14,
@@ -1125,10 +1123,11 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   buddyPanelHeading: {
-    color: colors.primary,
-    fontSize: 11,
+    color: colors.wordmark,
+    fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
@@ -1143,21 +1142,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  chipText: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  chipText: { color: colors.text, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
-  // Submit
-  submitRow: { alignItems: "center", marginTop: 4 },
-  submitButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-  },
-  submitButtonText: { color: colors.white, fontSize: 14, fontWeight: "800" },
-  buttonDisabled: { opacity: 0.6 },
+  submitRow: { marginTop: 4 },
 
   // Success
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
@@ -1170,31 +1157,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  successTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  successTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   successBody: {
     color: colors.mutedText,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
     textAlign: "center",
     maxWidth: 320,
-    lineHeight: 19,
   },
-  successButtons: { flexDirection: "row", gap: 10, marginTop: 18 },
-  button: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 132,
-  },
-  buttonPrimary: { backgroundColor: colors.primary },
-  buttonPrimaryText: { color: colors.white, fontSize: 13, fontWeight: "800" },
-  buttonSecondary: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  buttonSecondaryText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
+  successButtonFlex: { flex: 1 },
 
   // Modal sheets shared
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
@@ -1218,7 +1191,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pickerTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  pickerTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   pickerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1227,8 +1200,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   pickerRowSelected: { backgroundColor: colors.surfaceTintPrimary, borderRadius: 8 },
-  pickerRowText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  pickerRowTextSelected: { color: colors.primary, fontWeight: "800" },
+  pickerRowText: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  pickerRowTextSelected: { color: colors.wordmark, fontWeight: "800" },
   pickerSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   // Calendar
@@ -1257,13 +1230,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surfaceMuted,
   },
-  calendarTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  calendarTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
   calendarWeekRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   calendarWeekday: {
     width: `${100 / 7}%`,
     textAlign: "center",
     color: colors.subtleText,
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.4,
   },
@@ -1275,9 +1249,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 10,
   },
-  calendarCellSelected: { backgroundColor: colors.primary },
-  calendarCellToday: { borderWidth: 1, borderColor: colors.primary },
-  calendarCellText: { color: colors.text, fontSize: 13, fontWeight: "600" },
+  calendarCellSelected: { backgroundColor: colors.wordmark },
+  calendarCellToday: { borderWidth: 1, borderColor: colors.wordmark },
+  calendarCellText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   calendarCellTextMuted: { color: colors.subtleText },
   calendarCellTextDisabled: { color: colors.subtleText, opacity: 0.4 },
   calendarCellTextSelected: { color: colors.white, fontWeight: "800" },

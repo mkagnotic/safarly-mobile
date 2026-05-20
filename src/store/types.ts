@@ -19,6 +19,19 @@ import type { AppTimeFormat, AppTimeZone } from "@/features/profile/preferencesC
 
 export type KycStatus = "not_started" | "pending" | "verified" | "rejected";
 
+/**
+ * Cross-screen inline notice. Set on the source screen before navigating;
+ * the destination renders it via `<FormBanner />` and calls `clearPendingNotice`
+ * on dismiss. Used in place of toasts for flows like signup → login.
+ */
+export type PendingNotice = {
+  variant: "info" | "success" | "warning" | "error";
+  title?: string;
+  message: string;
+  /** Optional screen key — destination can choose to ignore notices not addressed to it. */
+  target?: "login" | "home" | "profile-setup";
+};
+
 export type UserProfile = {
   fullName: string;
   email: string;
@@ -68,9 +81,13 @@ export interface AppState {
   language: AppLanguage;
   timeFormat: AppTimeFormat;
   timeZone: AppTimeZone;
+  /** Transient — not persisted. See `PendingNotice`. */
+  pendingNotice: PendingNotice | null;
 
   // Actions
   setSplashDone: () => void;
+  setPendingNotice: (notice: PendingNotice | null) => void;
+  clearPendingNotice: () => void;
   finishOnboarding: () => void;
   finishProfileSetup: () => void;
   login: () => void;
