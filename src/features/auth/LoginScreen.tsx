@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
@@ -21,7 +21,6 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
-import { showToast } from "@/feedback/appFeedback";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
@@ -54,8 +53,12 @@ export function LoginScreen() {
   const passwordRef = useRef<TextInput>(null);
 
   const bubbleFloat = useRef(new Animated.Value(0)).current;
+  const isFocused = useIsFocused();
 
+  // Reset to rest on focus so the hero never lands mid-cycle when returning from Signup.
   useEffect(() => {
+    if (!isFocused) return;
+    bubbleFloat.setValue(0);
     const float = Animated.loop(
       Animated.sequence([
         Animated.timing(bubbleFloat, { toValue: -6, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -66,7 +69,7 @@ export function LoginScreen() {
     return () => {
       float.stop();
     };
-  }, [bubbleFloat]);
+  }, [bubbleFloat, isFocused]);
 
   const validate = useCallback((nextEmail: string, nextPassword: string) => {
     const next: { email?: string; password?: string } = {};
@@ -75,7 +78,6 @@ export function LoginScreen() {
     if (!nextPassword) next.password = "Password is required";
     else if (nextPassword.length < 6) next.password = "Min 6 characters";
     setErrors(next);
-    // Standard pattern: move focus to the first invalid field on a failed submit.
     if (next.email) emailRef.current?.focus();
     else if (next.password) passwordRef.current?.focus();
     return Object.keys(next).length === 0;
@@ -84,16 +86,14 @@ export function LoginScreen() {
   const handleSignIn = useCallback(async () => {
     if (submitting) return;
     setFormError(null);
-    // Normalize before validating + sending so a stray space/case can't cause
-    // a confusing "incorrect credentials".
+    // Normalize so a stray space/case can't trigger a misleading "incorrect credentials".
     const normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail !== email) setEmail(normalizedEmail);
     if (!validate(normalizedEmail, password)) return;
     setSubmitting(true);
     try {
       await signInWithPassword(normalizedEmail, password);
-      // Navigation transition is driven by the AuthContext -> store -> RootNavigator.
-      // No imperative navigate() needed here.
+      // Navigation flips via AuthContext → store → RootNavigator.
     } catch (err) {
       const mapped = mapAuthError(err, "signin");
       if (mapped.target === "email") {
@@ -112,43 +112,38 @@ export function LoginScreen() {
 
   const handleGoogleSignIn = useCallback(async () => {
     if (googleSubmitting) return;
+    setFormError(null);
     setGoogleSubmitting(true);
     try {
       await signInWithGoogle();
-      // Like password sign-in: AuthContext -> store -> RootNavigator drives the
-      // screen transition. No imperative navigate() here.
     } catch (err) {
-      // User backed out of the Google sheet — not an error, stay quiet.
+      // Backed out of the Google sheet — not an error.
       if (err instanceof AuthCancelledError) return;
-      showToast({
-        title: "Google sign-in failed",
-        message: getErrorMessage(err),
-        variant: "error",
-      });
+      // OAuth-specific copy wins (e.g. "email registered with password"); fall
+      // back to the generic mapper for network/rate-limit messaging.
+      const rawMessage = getErrorMessage(err);
+      const code = (err as { code?: unknown })?.code;
+      const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null);
+      if (oauthMapped !== rawMessage) {
+        setFormError(oauthMapped);
+      } else {
+        setFormError(mapAuthError(err, "signin").message);
+      }
     } finally {
       setGoogleSubmitting(false);
     }
   }, [googleSubmitting, signInWithGoogle]);
 
-  const onComingSoon = useCallback(
-    (provider: string) =>
-      showToast({
-        title: `${provider} sign-in coming soon`,
-        message: "Use your email and password for now.",
-        variant: "info",
-      }),
-    [],
-  );
+  // Clear stale banner when switching between Welcome and the Email form.
+  useEffect(() => {
+    setFormError(null);
+  }, [mode]);
 
   if (mode === "email") {
     return (
       <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
-        {/* Screen already wraps in KeyboardAvoidingView; we add a ScrollView so
-            the form stays reachable when the keyboard opens. flexGrow: 1 keeps
-            marginTop:auto pinning the button to the bottom when there's room,
-            and lets the form scroll when the keyboard shrinks the view —
-            avoiding the layout jump that caused the white flash during the
-            keyboard-rise animation. */}
+        {/* Screen owns the KAV; ScrollView + flexGrow:1 keeps marginTop:auto
+            working while letting the form scroll past the keyboard. */}
         <ScrollView
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
@@ -263,9 +258,9 @@ export function LoginScreen() {
     );
   }
 
-  // ≈ height of the absolutely-positioned `actions` block, so the hero content
-  // centers in the visible area above the buttons (not behind them).
-  const bottomBlockHeight = 290;
+  // Reserve room for the absolutely-positioned `actions` block; bump it when
+  // the error banner is showing so the hero doesn't get overlapped.
+  const bottomBlockHeight = formError ? 290 + 80 : 290;
   return (
     <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
       <View style={[styles.wrap, { paddingTop: 8 }]}>
@@ -289,6 +284,11 @@ export function LoginScreen() {
         </View>
 
         <View style={[styles.actions, { paddingBottom: 28 }]}>
+          {formError ? (
+            <View style={styles.welcomeBannerSlot}>
+              <FormBanner message={formError} />
+            </View>
+          ) : null}
           <AppButton
             label="Continue with Email"
             variant="primary"
@@ -317,11 +317,12 @@ export function LoginScreen() {
               )
             }
           />
+          {/* Apple sign-in not yet wired up. */}
           <AppButton
-            label="Continue with Apple"
-            onPress={() => onComingSoon("Apple")}
+            label="Continue with Apple (coming soon)"
+            onPress={() => {}}
             variant="dark"
-            disabled={googleSubmitting}
+            disabled
             style={[styles.ctaButton, styles.gap]}
             leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
           />
@@ -344,9 +345,7 @@ export function LoginScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  /** flexGrow:1 keeps the inner container filling the scroll viewport so
-   *  `marginTop: "auto"` on authActions still pins the button to the bottom
-   *  when there's room. Mirrors the SignupScreen pattern. */
+  /** flexGrow:1 lets marginTop:auto pin authActions while the form scrolls when needed. */
   scrollContent: { flexGrow: 1 },
   wrap: { flex: 1, justifyContent: "space-between" },
   center: {
@@ -373,7 +372,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  /** Standalone hero — no longer constrained by the old inner ring, so it can fill more of the area. */
   heroImage: { width: 260, height: 260 },
   title: { color: colors.wordmark, fontWeight: "800", fontSize: 30, textAlign: "center" },
   subtitleHero: {
@@ -385,8 +383,7 @@ const styles = StyleSheet.create({
   },
   illustration: { marginTop: 32, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
   actions: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 20 },
-  // Full-bleed within the container's 20px side padding — matches the
-  // Create account / Sign in primary button width.
+  welcomeBannerSlot: { marginBottom: 12 },
   ctaButton: { alignSelf: "stretch" },
   gap: { marginTop: 10 },
   separatorRow: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
@@ -394,7 +391,7 @@ const styles = StyleSheet.create({
   or: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
   terms: { color: colors.mutedText, textAlign: "center", marginTop: 14, fontSize: 12 },
 
-  // Email form — shared visual structure with SignupScreen (keep values in sync).
+  // Email form — keep these values in sync with SignupScreen + ProfileSetup.
   authContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
   headerRow: {
     flexDirection: "row",
@@ -417,8 +414,7 @@ const styles = StyleSheet.create({
   bannerSlot: { marginBottom: 18 },
   form: { gap: 16, marginBottom: 24 },
   passwordInput: { paddingRight: 44 },
-  // Anchored to the input box (label + 8px margin = ~24px; AppInput box ≈ 46px)
-  // so the icon centers on the field. Keep in sync with SignupScreen.
+  // Anchored to the AppInput box (label area + ~24px) so the icon centers on the field.
   eyeToggle: {
     position: "absolute",
     right: 8,

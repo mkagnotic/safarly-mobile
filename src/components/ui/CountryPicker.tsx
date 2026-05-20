@@ -80,10 +80,18 @@ export function CountryPicker({
         accessibilityRole="button"
         accessibilityLabel={selectedLabel || placeholder}
       >
-        <Text style={[styles.fieldText, !selectedLabel && styles.fieldPlaceholder]} numberOfLines={1}>
+        {/* Plain Text, not TextInput — Android renders non-editable inputs with
+            disabled metrics that can't be overridden. fieldText below uses
+            explicit metrics to align with AppInput's editable TextInput. */}
+        <Text
+          style={[styles.fieldText, !selectedLabel ? styles.fieldPlaceholder : null]}
+          numberOfLines={1}
+        >
           {selectedLabel || placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={colors.mutedText} />
+        <View style={styles.chevronWrap} pointerEvents="none">
+          <Ionicons name="chevron-down" size={18} color={colors.mutedText} />
+        </View>
       </Pressable>
 
       <Modal
@@ -153,21 +161,37 @@ export function CountryPicker({
 }
 
 const styles = StyleSheet.create({
+  // Mirrors AppInput.input so the picker reads the same height as text inputs.
   field: {
-    minHeight: 52,
-    borderRadius: 12,
     backgroundColor: colors.input,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    borderRadius: 12,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingRight: 38,
+    minHeight: 48,
+    justifyContent: "center",
   },
-  fieldError: { borderWidth: 1, borderColor: colors.danger },
+  fieldError: { borderColor: colors.danger },
   fieldPressed: { opacity: 0.85 },
   fieldDisabled: { opacity: 0.5 },
-  fieldText: { color: colors.text, fontSize: 16, fontWeight: "500", flex: 1 },
-  fieldPlaceholder: { color: colors.mutedText, fontWeight: "400" },
+  fieldText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "400",
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  fieldPlaceholder: { color: colors.mutedText },
+  chevronWrap: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15, 15, 25, 0.4)" },
   sheet: {
     position: "absolute",

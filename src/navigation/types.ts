@@ -22,6 +22,8 @@ export type RootStackParamList = {
   Earnings: undefined;
   KycVerification: undefined;
   EditProfile: undefined;
+  TermsOfService: undefined;
+  PrivacyPolicy: undefined;
 };
 
 export type MainTabParamList = {

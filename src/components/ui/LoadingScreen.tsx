@@ -1,28 +1,63 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafarlyMark } from "@/components/brand/SafarlyMark";
+import { SafarlyWordmark } from "@/components/brand/SafarlyWordmark";
 import { Screen } from "@/components/ui/Screen";
 import { colors } from "@/theme/colors";
 
 type Props = {
-  /** Short status line shown under the spinner (e.g. "Loading your profile…"). */
   message?: string;
 };
 
-/**
- * Standard full-screen loading state: the Safarly mark + a spinner + an
- * optional message, centered on the app's hero background. Use this instead
- * of a bare ActivityIndicator so loading reads as intentional and on-brand
- * (a lighter cousin of the splash screen).
- */
+const DOT_COUNT = 3;
+const DOT_STAGGER_MS = 180;
+const DOT_HALF_CYCLE_MS = 450;
+
 export function LoadingScreen({ message }: Readonly<Props>) {
+  const dots = useRef(
+    Array.from({ length: DOT_COUNT }, () => new Animated.Value(0.3)),
+  ).current;
+
+  useEffect(() => {
+    const anims = dots.map((dot, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * DOT_STAGGER_MS),
+          Animated.timing(dot, {
+            toValue: 1,
+            duration: DOT_HALF_CYCLE_MS,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0.3,
+            duration: DOT_HALF_CYCLE_MS,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+    );
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [dots]);
+
   return (
     <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
       <View style={styles.wrap}>
-        <View style={styles.markWrap}>
-          <SafarlyMark size={56} />
+        <SafarlyMark size={72} />
+        <View style={styles.wordmarkWrap}>
+          <SafarlyWordmark width={132} />
         </View>
-        <ActivityIndicator color={colors.primary} />
-        {message ? <Text style={styles.text}>{message}</Text> : null}
+
+        <View style={styles.loader}>
+          {dots.map((dot, i) => (
+            <Animated.View
+              key={i}
+              style={[styles.dot, { opacity: dot, transform: [{ scale: dot }] }]}
+            />
+          ))}
+        </View>
+
+        {message ? <Text style={styles.message}>{message}</Text> : null}
       </View>
     </Screen>
   );
@@ -30,22 +65,8 @@ export function LoadingScreen({ message }: Readonly<Props>) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, alignItems: "center", justifyContent: "center" },
-  /** Soft elevated tile behind the mark — matches the brand lockup on the auth screens. */
-  markWrap: {
-    width: 84,
-    height: 84,
-    borderRadius: 24,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  text: { color: colors.mutedText, fontSize: 14, fontWeight: "500", marginTop: 16 },
+  wordmarkWrap: { marginTop: 12 },
+  loader: { flexDirection: "row", gap: 8, marginTop: 36 },
+  dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary },
+  message: { color: colors.mutedText, fontSize: 14, fontWeight: "500", marginTop: 18 },
 });

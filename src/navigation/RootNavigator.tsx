@@ -22,6 +22,8 @@ import { LoginScreen } from "@/features/auth/LoginScreen";
 import { SignupScreen } from "@/features/auth/SignupScreen";
 import { ProfileSetupScreen } from "@/features/auth/ProfileSetupScreen";
 import { ForgotPasswordScreen } from "@/features/auth/ForgotPasswordScreen";
+import { TermsOfServiceScreen } from "@/features/legal/TermsOfServiceScreen";
+import { PrivacyPolicyScreen } from "@/features/legal/PrivacyPolicyScreen";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import { SendParcelScreen } from "@/features/parcels/SendParcelScreen";
 import { ParcelDetailsScreen } from "@/features/parcels/ParcelDetailsScreen";
@@ -333,7 +335,11 @@ export function RootNavigator() {
           </>
         )}
         {!showSplash && onboarded && authenticated && !profileSetupDone && (
-          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
+          <>
+            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
+          </>
         )}
         {!showSplash && onboarded && authenticated && profileSetupDone && (
           <>
@@ -343,6 +349,8 @@ export function RootNavigator() {
             <Stack.Screen name="Earnings" component={EarningsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="KycVerification" component={KycVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>
