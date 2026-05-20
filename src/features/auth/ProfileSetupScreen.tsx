@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   termsHeading: { color: colors.text, fontWeight: "700" },
-  termsText: { color: colors.mutedText, fontSize: 14, lineHeight: 21 },
+  termsText: { color: colors.mutedText, fontSize: 14, lineHeight: 20 },
   linksRow: { flexDirection: "row", gap: 16, justifyContent: "center", marginBottom: 18 },
   externalLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },
 
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   checkboxBoxChecked: { backgroundColor: colors.ctaAccent, borderColor: colors.ctaAccent },
-  checkboxLabel: { color: colors.text, fontSize: 13, lineHeight: 19, flex: 1 },
+  checkboxLabel: { color: colors.text, fontSize: 14, lineHeight: 20, flex: 1 },
 
   // Profile fields
   avatarWrap: { alignItems: "center", marginBottom: 20 },
