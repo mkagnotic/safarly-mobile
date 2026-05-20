@@ -3,7 +3,10 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { authApi } from "@/services/api/auth";
+import { performGoogleOAuth } from "@/services/auth/googleOAuth";
 import { useAppStore } from "@/store/useAppStore";
+
+export { AuthCancelledError } from "@/services/auth/googleOAuth";
 
 /** Server response shape from `supabase.auth.signUp`. Mirrors the relevant subset. */
 export interface SignUpResult {
@@ -22,6 +25,13 @@ interface AuthContextValue {
   /** True until the persisted session has been rehydrated from AsyncStorage. */
   initializing: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
+  /**
+   * Google OAuth. Resolves once the session is set (the same
+   * `onAuthStateChange` path as password sign-in then drives navigation).
+   * Throws `AuthCancelledError` if the user backs out — callers should treat
+   * that as a no-op, not an error.
+   */
+  signInWithGoogle: () => Promise<void>;
   signUpWithPassword: (
     email: string,
     password: string,
@@ -102,6 +112,12 @@ export function AuthProvider({ children }: Readonly<Props>) {
       initializing,
       signInWithPassword: async (email, password) => {
         await authApi.customerLogin(email.trim(), password);
+      },
+      signInWithGoogle: async () => {
+        // The native account picker + ID-token exchange lives in the service
+        // layer; the provider just owns "this completes a session". Success
+        // flips the store via the onAuthStateChange listener above.
+        await performGoogleOAuth();
       },
       signUpWithPassword: async (email, password, metadata) => {
         // We bypass `authApi.customerSignup` here so we can pass `options.data`

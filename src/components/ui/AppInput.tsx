@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { colors } from "@/theme/colors";
 
@@ -6,19 +7,32 @@ type Props = TextInputProps & {
   error?: string;
 };
 
-export function AppInput({ label, error, style, ...rest }: Props) {
+export const AppInput = forwardRef<TextInput, Props>(function AppInput(
+  { label, error, style, ...rest },
+  ref,
+) {
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
+        ref={ref}
         placeholderTextColor={colors.mutedText}
         style={[styles.input, rest.multiline && styles.multiline, error && styles.inputError, style]}
         {...rest}
+        // After {...rest} so the error hint always wins. Screen readers
+        // announce the label, then the error as a hint, so a focused invalid
+        // field reads "<label>, <error>".
+        accessibilityLabel={rest.accessibilityLabel ?? label}
+        accessibilityHint={error ?? rest.accessibilityHint}
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 14 },

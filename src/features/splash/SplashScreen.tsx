@@ -94,7 +94,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 24,
     paddingTop: 8,
-    paddingBottom: 14,
+    // Matches the Welcome screen's bottom block so the dots sit the same
+    // distance above the safe-area edge.
+    paddingBottom: 28,
   },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
 });

@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "scheme": "safarly",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#FAECF3"
@@ -13,13 +14,17 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.anonymous.safarlymobile"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FAECF3"
       },
       "package": "com.anonymous.safarlymobile"
-    }
+    },
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ]
   }
 }

@@ -1,27 +1,22 @@
 import "react-native-url-polyfill/auto";
 
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 import type { Database } from "./types";
 
-/**
- * React Native Supabase client.
- *
- * Differences from the web client:
- *   - `AsyncStorage` instead of `localStorage` for the auth session.
- *   - `detectSessionInUrl: false`: there is no URL bar on native to parse a
- *     post-OAuth fragment from. OAuth on RN goes through a deep link handler
- *     that calls `supabase.auth.setSession()` directly — never URL detection.
- *   - URL polyfill imported at the top: `supabase-js` builds request URLs with
- *     the `URL` constructor, which is incomplete in Hermes/RN out of the box.
- */
+// `detectSessionInUrl` is platform-gated: native uses an in-app token flow
+// (no URL hash to parse), web uses Supabase's browser redirect which returns
+// tokens in the URL fragment. `react-native-url-polyfill/auto` is required
+// because supabase-js builds request URLs via the `URL` constructor, which
+// is incomplete in Hermes.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: AsyncStorage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: Platform.OS === "web",
   },
 });

@@ -367,7 +367,9 @@ const styles = StyleSheet.create({
   desc: { color: colors.mutedText, marginTop: 12, fontSize: 14, lineHeight: 22, textAlign: "center", maxWidth: 260 },
   bottom: { gap: 16, position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 20 },
   /** Slightly narrower than full-bleed row */
-  ctaButton: { alignSelf: "center", width: "88%", maxWidth: 340 },
+  // Full-bleed within the footer's 20px side padding — matches the
+  // Create account / Sign in primary button width.
+  ctaButton: { alignSelf: "stretch" },
   dots: { flexDirection: "row", justifyContent: "center", gap: 8 },
   dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#D1D5DB" },
   activeDot: { width: 24, backgroundColor: colors.ctaAccent },

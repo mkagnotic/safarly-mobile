@@ -13,6 +13,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { CountryPicker } from "@/components/ui/CountryPicker";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
@@ -187,14 +188,7 @@ export function ProfileSetupScreen() {
   }, [name]);
 
   if (loading) {
-    return (
-      <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading your profile…</Text>
-        </View>
-      </Screen>
-    );
+    return <LoadingScreen message="Loading your profile…" />;
   }
 
   return (
@@ -633,8 +627,6 @@ function BackButton({ onPress, disabled }: Readonly<{ onPress: () => void; disab
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
-  loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { color: colors.mutedText, fontSize: 14, fontWeight: "500" },
 
   // Stepper
   stepperRow: {

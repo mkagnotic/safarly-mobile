@@ -55,17 +55,16 @@ export const authApi = {
   },
 
   /**
-   * Google OAuth via Supabase Auth.
-   *
-   * RN cannot use `window.location.origin` like web. The caller must pass a
-   * `redirectTo` deep-link URL (e.g. `safarly://auth/callback`) that the app
-   * is registered to handle, and then route the returned URL into
-   * `supabase.auth.exchangeCodeForSession()` inside its deep-link handler.
+   * Google OAuth via Supabase Auth — the mobile twin of the web app's
+   * `authApi.googleLogin`. The web app does a browser redirect; native uses
+   * the OS Google account picker, which yields a signed ID token that
+   * Supabase verifies here. The Google client ID/secret still live only in
+   * the Supabase Dashboard, so the same Google credentials back both clients.
    */
-  googleLogin: async (redirectTo: string) => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+  googleSignInWithIdToken: async (idToken: string) => {
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "google",
-      options: { redirectTo, skipBrowserRedirect: true },
+      token: idToken,
     });
     if (error) throw error;
     return data;

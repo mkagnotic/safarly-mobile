@@ -6,9 +6,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,19 +16,19 @@ import {
 import { SafarlyMark } from "@/components/brand/SafarlyMark";
 import { GoogleG } from "@/components/icons/GoogleG";
 import { AppButton } from "@/components/ui/AppButton";
+import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { useAuth } from "@/context/AuthContext";
+import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
+import { mapAuthError } from "@/services/auth/authErrors";
+import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { colors } from "@/theme/colors";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
-
-/** Same fill as the big visual inner circle (`ringInner`). */
-const HERO_INNER_PEACH = "#F0DDC8";
-const HERO_INNER_RING_BORDER = "rgba(255, 252, 248, 0.95)";
 
 type Mode = "choose" | "email";
 
@@ -38,7 +36,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { signInWithPassword } = useAuth();
+  const { signInWithPassword, signInWithGoogle } = useAuth();
 
   const goToSignup = useCallback(() => navigation.navigate("Signup"), [navigation]);
 
@@ -47,10 +45,15 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  /** Form-level (server) error — wrong credentials, network, etc. */
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const bubbleFloat = useRef(new Animated.Value(0)).current;
-  const bubbleSpin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const float = Animated.loop(
@@ -59,21 +62,11 @@ export function LoginScreen() {
         Animated.timing(bubbleFloat, { toValue: 6, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ]),
     );
-    const spin = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bubbleSpin, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(bubbleSpin, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
-    );
     float.start();
-    spin.start();
     return () => {
       float.stop();
-      spin.stop();
     };
-  }, [bubbleFloat, bubbleSpin]);
-
-  const bubbleRotate = bubbleSpin.interpolate({ inputRange: [0, 1], outputRange: ["-5deg", "5deg"] });
+  }, [bubbleFloat]);
 
   const validate = useCallback((nextEmail: string, nextPassword: string) => {
     const next: { email?: string; password?: string } = {};
@@ -82,23 +75,60 @@ export function LoginScreen() {
     if (!nextPassword) next.password = "Password is required";
     else if (nextPassword.length < 6) next.password = "Min 6 characters";
     setErrors(next);
+    // Standard pattern: move focus to the first invalid field on a failed submit.
+    if (next.email) emailRef.current?.focus();
+    else if (next.password) passwordRef.current?.focus();
     return Object.keys(next).length === 0;
   }, []);
 
   const handleSignIn = useCallback(async () => {
     if (submitting) return;
-    if (!validate(email, password)) return;
+    setFormError(null);
+    // Normalize before validating + sending so a stray space/case can't cause
+    // a confusing "incorrect credentials".
+    const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail !== email) setEmail(normalizedEmail);
+    if (!validate(normalizedEmail, password)) return;
     setSubmitting(true);
     try {
-      await signInWithPassword(email, password);
+      await signInWithPassword(normalizedEmail, password);
       // Navigation transition is driven by the AuthContext -> store -> RootNavigator.
       // No imperative navigate() needed here.
     } catch (err) {
-      showToast({ title: "Sign in failed", message: getErrorMessage(err), variant: "error" });
+      const mapped = mapAuthError(err, "signin");
+      if (mapped.target === "email") {
+        setErrors((e) => ({ ...e, email: mapped.message }));
+        emailRef.current?.focus();
+      } else if (mapped.target === "password") {
+        setErrors((e) => ({ ...e, password: mapped.message }));
+        passwordRef.current?.focus();
+      } else {
+        setFormError(mapped.message);
+      }
     } finally {
       setSubmitting(false);
     }
   }, [email, password, signInWithPassword, submitting, validate]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    if (googleSubmitting) return;
+    setGoogleSubmitting(true);
+    try {
+      await signInWithGoogle();
+      // Like password sign-in: AuthContext -> store -> RootNavigator drives the
+      // screen transition. No imperative navigate() here.
+    } catch (err) {
+      // User backed out of the Google sheet — not an error, stay quiet.
+      if (err instanceof AuthCancelledError) return;
+      showToast({
+        title: "Google sign-in failed",
+        message: getErrorMessage(err),
+        variant: "error",
+      });
+    } finally {
+      setGoogleSubmitting(false);
+    }
+  }, [googleSubmitting, signInWithGoogle]);
 
   const onComingSoon = useCallback(
     (provider: string) =>
@@ -113,11 +143,20 @@ export function LoginScreen() {
   if (mode === "email") {
     return (
       <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        {/* Screen already wraps in KeyboardAvoidingView; we add a ScrollView so
+            the form stays reachable when the keyboard opens. flexGrow: 1 keeps
+            marginTop:auto pinning the button to the bottom when there's room,
+            and lets the form scroll when the keyboard shrinks the view —
+            avoiding the layout jump that caused the white flash during the
+            keyboard-rise animation. */}
+        <ScrollView
           style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.emailWrap}>
+          <View style={styles.authContainer}>
             <View style={styles.headerRow}>
               <Pressable
                 style={styles.backButton}
@@ -133,44 +172,50 @@ export function LoginScreen() {
 
             <Text style={styles.subtitle}>Welcome back. Sign in to continue.</Text>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>EMAIL</Text>
-              <TextInput
+            {formError ? (
+              <View style={styles.bannerSlot}>
+                <FormBanner message={formError} />
+              </View>
+            ) : null}
+
+            <View style={styles.form}>
+              <AppInput
+                ref={emailRef}
+                label="Email"
                 value={email}
                 onChangeText={(v) => {
                   setEmail(v);
                   if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
+                  if (formError) setFormError(null);
                 }}
-                style={[styles.input, errors.email ? styles.inputError : null]}
                 placeholder="you@example.com"
-                placeholderTextColor={colors.subtleText}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
                 editable={!submitting}
+                error={errors.email}
                 returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
               />
-              {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.fieldLabel}>PASSWORD</Text>
               <View>
-                <TextInput
+                <AppInput
+                  ref={passwordRef}
+                  label="Password"
                   value={password}
                   onChangeText={(v) => {
                     setPassword(v);
                     if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
+                    if (formError) setFormError(null);
                   }}
-                  style={[styles.input, styles.inputWithIcon, errors.password ? styles.inputError : null]}
                   placeholder="Min 6 characters"
-                  placeholderTextColor={colors.subtleText}
+                  style={styles.passwordInput}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="password"
                   editable={!submitting}
+                  error={errors.password}
                   returnKeyType="go"
                   onSubmitEditing={handleSignIn}
                 />
@@ -183,42 +228,37 @@ export function LoginScreen() {
                 >
                   <Ionicons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={18}
+                    size={20}
                     color={colors.mutedText}
                   />
                 </Pressable>
               </View>
-              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
-            <Pressable
-              style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
-              onPress={handleSignIn}
-              disabled={submitting}
-              accessibilityRole="button"
-              accessibilityLabel="Sign in"
-            >
-              {submitting ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.primaryButtonText}>Sign in</Text>
-              )}
-            </Pressable>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchText}>Don't have an account? </Text>
-              <Pressable onPress={goToSignup} disabled={submitting} hitSlop={4}>
-                <Text style={[styles.switchLink, submitting && styles.switchLinkDisabled]}>
-                  Sign up
-                </Text>
-              </Pressable>
+            <View style={styles.authActions}>
+              <AppButton
+                label={submitting ? "Signing in…" : "Sign in"}
+                onPress={handleSignIn}
+                disabled={submitting}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={
+                  submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+                }
+              />
+              <View style={styles.authSwitchRow}>
+                <Text style={styles.switchText}>Don't have an account? </Text>
+                <Pressable onPress={goToSignup} disabled={submitting} hitSlop={4}>
+                  <Text style={[styles.switchLink, submitting && styles.switchLinkDisabled]}>
+                    Sign up
+                  </Text>
+                </Pressable>
+              </View>
+              <Text style={styles.authTerms}>
+                By signing in, you agree to our Terms of Service and Privacy Policy
+              </Text>
             </View>
-
-            <Text style={styles.terms}>
-              By signing in, you agree to our Terms of Service and Privacy Policy
-            </Text>
           </View>
-        </KeyboardAvoidingView>
+        </ScrollView>
       </Screen>
     );
   }
@@ -239,32 +279,12 @@ export function LoginScreen() {
           </View>
 
           <View style={styles.illustration}>
-            <Animated.View style={[styles.ringOuter, { transform: [{ translateY: bubbleFloat }] }]}>
-              <View style={styles.ringInner}>
-                <View style={styles.heroMark}>
-                  <Image
-                    source={require("../../assets/brand/team.png")}
-                    style={styles.heroImage}
-                    resizeMode="contain"
-                    accessibilityIgnoresInvertColors
-                  />
-                </View>
-              </View>
-              <Animated.View
-                style={[styles.floatingBadge, styles.floatingMint, { transform: [{ rotate: bubbleRotate }] }]}
-              >
-                <Text style={styles.badgeText}>📦</Text>
-              </Animated.View>
-              <Animated.View
-                style={[
-                  styles.floatingBadge,
-                  styles.floatingTravelBubble,
-                  { transform: [{ rotate: bubbleRotate }] },
-                ]}
-              >
-                <Text style={styles.badgeText}>✈️</Text>
-              </Animated.View>
-            </Animated.View>
+            <Animated.Image
+              source={require("../../assets/brand/Container.png")}
+              style={[styles.heroImage, { transform: [{ translateY: bubbleFloat }] }]}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
           </View>
         </View>
 
@@ -273,6 +293,7 @@ export function LoginScreen() {
             label="Continue with Email"
             variant="primary"
             onPress={() => setMode("email")}
+            disabled={googleSubmitting}
             style={styles.ctaButton}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.white} />}
@@ -283,23 +304,33 @@ export function LoginScreen() {
             <View style={styles.separator} />
           </View>
           <AppButton
-            label="Continue with Google"
-            onPress={() => onComingSoon("Google")}
+            label={googleSubmitting ? "Signing in…" : "Continue with Google"}
+            onPress={handleGoogleSignIn}
             variant="dark"
+            disabled={googleSubmitting}
             style={styles.ctaButton}
-            leftIcon={<GoogleG size={18} />}
+            leftIcon={
+              googleSubmitting ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <GoogleG size={18} />
+              )
+            }
           />
           <AppButton
             label="Continue with Apple"
             onPress={() => onComingSoon("Apple")}
             variant="dark"
+            disabled={googleSubmitting}
             style={[styles.ctaButton, styles.gap]}
             leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
           />
           <View style={styles.switchRow}>
             <Text style={styles.switchText}>New to Safarly? </Text>
-            <Pressable onPress={goToSignup} hitSlop={4}>
-              <Text style={styles.switchLink}>Create an account</Text>
+            <Pressable onPress={goToSignup} disabled={googleSubmitting} hitSlop={4}>
+              <Text style={[styles.switchLink, googleSubmitting && styles.switchLinkDisabled]}>
+                Create an account
+              </Text>
             </Pressable>
           </View>
           <Text style={styles.terms}>
@@ -313,6 +344,10 @@ export function LoginScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  /** flexGrow:1 keeps the inner container filling the scroll viewport so
+   *  `marginTop: "auto"` on authActions still pins the button to the bottom
+   *  when there's room. Mirrors the SignupScreen pattern. */
+  scrollContent: { flexGrow: 1 },
   wrap: { flex: 1, justifyContent: "space-between" },
   center: {
     flex: 1,
@@ -338,9 +373,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  heroMark: { alignItems: "center", justifyContent: "center" },
-  /** Sized to sit inside the 112px inner ring (4px border) with margin to spare. */
-  heroImage: { width: 88, height: 88 },
+  /** Standalone hero — no longer constrained by the old inner ring, so it can fill more of the area. */
+  heroImage: { width: 260, height: 260 },
   title: { color: colors.wordmark, fontWeight: "800", fontSize: 30, textAlign: "center" },
   subtitleHero: {
     color: colors.mutedText,
@@ -350,60 +384,18 @@ const styles = StyleSheet.create({
     maxWidth: 280,
   },
   illustration: { marginTop: 32, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
-  ringOuter: {
-    width: 176,
-    height: 176,
-    borderRadius: 88,
-    backgroundColor: "#F5EFE6",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  ringInner: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: HERO_INNER_PEACH,
-    borderWidth: 4,
-    borderColor: HERO_INNER_RING_BORDER,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  floatingBadge: {
-    position: "absolute",
-    width: 46,
-    height: 46,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  floatingMint: { right: -6, top: -6, backgroundColor: "#D8F0E5" },
-  floatingTravelBubble: {
-    left: -6,
-    bottom: -6,
-    backgroundColor: HERO_INNER_PEACH,
-    borderWidth: 0,
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  badgeText: { fontSize: 18 },
   actions: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 20 },
-  ctaButton: { alignSelf: "center", width: "88%", maxWidth: 340 },
+  // Full-bleed within the container's 20px side padding — matches the
+  // Create account / Sign in primary button width.
+  ctaButton: { alignSelf: "stretch" },
   gap: { marginTop: 10 },
   separatorRow: { flexDirection: "row", alignItems: "center", marginVertical: 12, gap: 8 },
   separator: { flex: 1, height: 1, backgroundColor: colors.border },
   or: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
   terms: { color: colors.mutedText, textAlign: "center", marginTop: 14, fontSize: 12 },
 
-  // Email mode
-  emailWrap: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
+  // Email form — shared visual structure with SignupScreen (keep values in sync).
+  authContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -420,41 +412,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  screenTitle: { color: colors.text, fontSize: 22, lineHeight: 28, fontWeight: "800" },
+  screenTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
-  fieldBlock: { marginBottom: 16 },
-  fieldLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  input: {
-    minHeight: 52,
-    borderRadius: 12,
-    backgroundColor: colors.input,
-    color: colors.text,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "500",
-    paddingHorizontal: 16,
-  },
-  inputWithIcon: { paddingRight: 44 },
-  inputError: { borderWidth: 1, borderColor: colors.danger },
-  eyeToggle: { position: "absolute", right: 12, top: 0, bottom: 0, justifyContent: "center" },
-  errorText: { color: colors.danger, fontSize: 12, fontWeight: "500", marginTop: 6 },
-  primaryButton: {
-    minHeight: 52,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
+  bannerSlot: { marginBottom: 18 },
+  form: { gap: 16, marginBottom: 24 },
+  passwordInput: { paddingRight: 44 },
+  // Anchored to the input box (label + 8px margin = ~24px; AppInput box ≈ 46px)
+  // so the icon centers on the field. Keep in sync with SignupScreen.
+  eyeToggle: {
+    position: "absolute",
+    right: 8,
+    top: 24,
+    height: 46,
+    width: 40,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
   },
-  primaryButtonDisabled: { opacity: 0.6 },
-  primaryButtonText: { color: colors.white, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  authActions: { gap: 12, marginTop: "auto", paddingBottom: 28 },
+  authSwitchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
+  authTerms: { color: colors.mutedText, textAlign: "center", fontSize: 12, lineHeight: 17, marginTop: 4 },
   switchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 16 },
   switchText: { color: colors.mutedText, fontSize: 14 },
   switchLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },

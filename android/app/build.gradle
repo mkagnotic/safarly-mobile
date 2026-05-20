@@ -20,6 +20,12 @@ react {
     cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
     bundleCommand = "export:embed"
 
+    // Force JS bundling for debug too, so the APK runs standalone without
+    // Metro (needed for sideloading via tap-install on devices we can't adb
+    // install to). Default is ["debug"], which SKIPS bundling. Empty list =
+    // bundle every variant.
+    debuggableVariants = []
+
     /* Folders */
      //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
