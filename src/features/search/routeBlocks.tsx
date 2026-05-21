@@ -8,26 +8,27 @@ export function RouteHeader({
   fromCity,
   toCity,
   kind,
-}: Readonly<{ fromCity: string; toCity: string; kind: "trip" | "parcel" }>) {
+  compact,
+}: Readonly<{ fromCity: string; toCity: string; kind: "trip" | "parcel"; compact?: boolean }>) {
   const planeRotate = Platform.OS === "ios" ? "-42deg" : "-38deg";
   const icon: keyof typeof Ionicons.glyphMap =
     kind === "trip" ? "airplane-outline" : "cube-outline";
   return (
     <View style={styles.routeRow}>
-      <Text style={styles.cityText} numberOfLines={2}>
+      <Text style={[styles.cityText, compact && styles.cityTextCompact]} numberOfLines={2}>
         {fromCity}
       </Text>
       <View style={styles.routeConnector}>
         <View style={styles.routeLine} />
         <Ionicons
           name={icon}
-          size={20}
+          size={compact ? 18 : 20}
           color={colors.wordmark}
           style={kind === "trip" ? { transform: [{ rotate: planeRotate }] } : undefined}
         />
         <View style={styles.routeLine} />
       </View>
-      <Text style={styles.cityText} numberOfLines={2}>
+      <Text style={[styles.cityText, compact && styles.cityTextCompact]} numberOfLines={2}>
         {toCity}
       </Text>
     </View>
@@ -38,14 +39,25 @@ export function MetricTile({
   label,
   value,
   highlight,
-}: Readonly<{ label: string; value: string; highlight?: boolean }>) {
+  compact,
+}: Readonly<{ label: string; value: string; highlight?: boolean; compact?: boolean }>) {
   return (
-    <View style={[styles.metricCell, highlight ? styles.metricCellHighlight : null]}>
+    <View
+      style={[
+        styles.metricCell,
+        compact && styles.metricCellCompact,
+        highlight ? styles.metricCellHighlight : null,
+      ]}
+    >
       <Text style={[styles.metricLabel, highlight ? styles.metricLabelHighlight : null]}>
         {label}
       </Text>
       <Text
-        style={[styles.metricValue, highlight ? styles.metricValueHighlight : null]}
+        style={[
+          styles.metricValue,
+          compact && styles.metricValueCompact,
+          highlight ? styles.metricValueHighlight : null,
+        ]}
         numberOfLines={1}
       >
         {value}
@@ -71,6 +83,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
   },
+  cityTextCompact: { fontSize: 15, lineHeight: 20 },
   routeConnector: {
     flexDirection: "row",
     alignItems: "center",
@@ -89,6 +102,7 @@ const styles = StyleSheet.create({
     minHeight: 70,
     justifyContent: "center",
   },
+  metricCellCompact: { paddingHorizontal: 12, paddingVertical: 10, minHeight: 56 },
   metricCellHighlight: {
     backgroundColor: "rgba(167, 78, 255, 0.10)",
     borderWidth: 1,
@@ -103,5 +117,6 @@ const styles = StyleSheet.create({
   },
   metricLabelHighlight: { color: colors.wordmark, opacity: 0.95 },
   metricValue: { color: colors.text, fontSize: 17, lineHeight: 22, fontWeight: "800" },
+  metricValueCompact: { fontSize: 14, lineHeight: 19 },
   metricValueHighlight: { color: colors.wordmark },
 });

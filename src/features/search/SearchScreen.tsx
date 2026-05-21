@@ -765,11 +765,12 @@ function PackageMatchCard({
         fromCity={match.from_city}
         toCity={match.to_city}
         kind={isTrip ? "trip" : "parcel"}
+        compact
       />
 
       <MetricRow>
-        <MetricTile label="DATE" value={dateLabel} />
-        <MetricTile label={secondary.label} value={secondary.value} highlight />
+        <MetricTile label="DATE" value={dateLabel} compact />
+        <MetricTile label={secondary.label} value={secondary.value} highlight compact />
       </MetricRow>
 
       {inlineSubtitle ? (
@@ -873,10 +874,10 @@ function BuddyMatchCard({
 
       <View style={styles.travelDetailsBlock}>
         <Text style={styles.travelLabel}>TRAVEL DETAILS</Text>
-        <RouteHeader fromCity={match.from_city} toCity={match.to_city} kind="trip" />
+        <RouteHeader fromCity={match.from_city} toCity={match.to_city} kind="trip" compact />
         <MetricRow>
-          <MetricTile label="DATE" value={dateLabel} />
-          <MetricTile label="AIRLINE" value={match.airline || "—"} highlight />
+          <MetricTile label="DATE" value={dateLabel} compact />
+          <MetricTile label="AIRLINE" value={match.airline || "—"} highlight compact />
         </MetricRow>
         {details.length > 0 ? (
           <View style={styles.detailsGrid}>
@@ -1266,7 +1267,7 @@ const styles = StyleSheet.create({
   avatarLarger: { width: 48, height: 48, borderRadius: 24 },
   avatarText: { color: colors.wordmark, fontSize: 14, lineHeight: 18, fontWeight: "800" },
   personInfo: { flex: 1, minWidth: 0 },
-  personName: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  personName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700" },
   ratingText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", marginTop: 2 },
 
   // Buddy card
