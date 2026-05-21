@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { colors } from "@/theme/colors";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
@@ -152,7 +154,7 @@ export function EditTripModal({
       <View style={styles.center} pointerEvents="box-none">
         <View style={styles.card}>
           <View style={styles.header}>
-            <Text style={styles.title}>Edit Trip</Text>
+            <Text style={styles.title}>Edit trip</Text>
             <Pressable
               onPress={onCancel}
               hitSlop={8}
@@ -164,9 +166,8 @@ export function EditTripModal({
             </Pressable>
           </View>
 
-          {/* Travel Date */}
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>TRAVEL DATE</Text>
+            <Text style={styles.fieldLabel}>Travel date</Text>
             <Pressable
               onPress={() => setCalendarOpen(true)}
               style={styles.input}
@@ -174,11 +175,11 @@ export function EditTripModal({
               accessibilityLabel="Pick travel date"
               disabled={pending}
             >
-              <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
+              <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
               <Text
                 style={[
                   styles.inputText,
-                  !selectedDate && { color: colors.mutedText },
+                  !selectedDate && styles.inputPlaceholder,
                 ]}
               >
                 {dateLabel}
@@ -186,28 +187,28 @@ export function EditTripModal({
             </Pressable>
           </View>
 
-          {/* Luggage Capacity */}
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>LUGGAGE CAPACITY (KG)</Text>
+            <Text style={styles.fieldLabel}>Luggage capacity (kg)</Text>
             <TextInput
               value={form.luggage_capacity_kg}
               onChangeText={(t) => setForm((prev) => ({ ...prev, luggage_capacity_kg: t }))}
               keyboardType="decimal-pad"
               placeholder="0"
-              placeholderTextColor={colors.mutedText}
+              placeholderTextColor={colors.subtleText}
               style={styles.textInput}
               editable={!pending}
             />
           </View>
 
-          {/* Notes */}
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>NOTES</Text>
+            <Text style={styles.fieldLabel}>
+              Notes <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+            </Text>
             <TextInput
               value={form.notes}
               onChangeText={(t) => setForm((prev) => ({ ...prev, notes: t }))}
-              placeholder="Any notes for carriers..."
-              placeholderTextColor={colors.mutedText}
+              placeholder="Any notes for carriers…"
+              placeholderTextColor={colors.subtleText}
               style={[styles.textInput, styles.multiline]}
               multiline
               numberOfLines={3}
@@ -217,28 +218,23 @@ export function EditTripModal({
           </View>
 
           <View style={styles.footer}>
-            <Pressable
+            <AppButton
+              label="Cancel"
+              variant="secondary"
               onPress={onCancel}
               disabled={pending}
-              style={[styles.button, styles.cancelButton]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
+              style={styles.footerButton}
+            />
+            <AppButton
+              label={pending ? "Saving…" : "Save changes"}
               onPress={handleSubmit}
               disabled={pending}
-              style={[styles.button, styles.confirmButton, pending && styles.buttonDisabled]}
-              accessibilityRole="button"
-              accessibilityLabel="Save Changes"
-            >
-              {pending ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.confirmText}>Save Changes</Text>
-              )}
-            </Pressable>
+              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+              leftIcon={
+                pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+              }
+              style={styles.footerButton}
+            />
           </View>
         </View>
       </View>
@@ -340,70 +336,53 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 440,
-    borderRadius: 18,
+    borderRadius: 22,
     backgroundColor: colors.card,
-    padding: 18,
-    gap: 14,
+    padding: 20,
+    gap: 16,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
+
   field: { gap: 8 },
-  fieldLabel: {
-    color: colors.subtleText,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
+  fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
+
   input: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.input,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  inputText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  inputText: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "500", flex: 1 },
+  inputPlaceholder: { color: colors.subtleText },
   textInput: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.input,
+    borderColor: colors.inputBorder,
+    borderWidth: 1,
     color: colors.text,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontWeight: "500",
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    fontSize: 15,
   },
-  multiline: {
-    minHeight: 80,
-    paddingTop: 12,
-  },
+  multiline: { minHeight: 88, paddingTop: 12, textAlignVertical: "top" },
+
   footer: {
     flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end",
+    gap: 10,
     marginTop: 4,
   },
-  button: {
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 110,
-  },
-  cancelButton: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  cancelText: { color: colors.text, fontSize: 13, fontWeight: "700" },
-  confirmButton: {
-    backgroundColor: colors.primary,
-  },
-  confirmText: { color: colors.white, fontSize: 13, fontWeight: "800" },
-  buttonDisabled: { opacity: 0.6 },
+  footerButton: { flex: 1 },
 
   // Calendar
   calendarCenter: {
@@ -416,7 +395,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 360,
     backgroundColor: colors.card,
-    borderRadius: 18,
+    borderRadius: 22,
     padding: 14,
     gap: 10,
   },
@@ -426,46 +405,44 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   calendarNavButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
-  calendarTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  calendarTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   weekRow: { flexDirection: "row", justifyContent: "space-between" },
   weekday: {
     flex: 1,
     textAlign: "center",
     color: colors.subtleText,
     fontSize: 11,
+    lineHeight: 15,
     fontWeight: "700",
+    letterSpacing: 0.4,
   },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: {
     width: `${100 / 7}%`,
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  cellSelected: {
-    borderRadius: 999,
-  },
-  cellText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  cellSelected: { borderRadius: 999 },
+  cellText: { color: colors.text, fontSize: 14, lineHeight: 18, fontWeight: "600" },
   cellTextMuted: { color: colors.subtleText, opacity: 0.45 },
   cellTextDisabled: { color: colors.subtleText, opacity: 0.35 },
   cellTextSelected: {
     color: colors.white,
-    backgroundColor: colors.primary,
-    width: 32,
-    height: 32,
-    lineHeight: 32,
+    backgroundColor: colors.wordmark,
+    width: 36,
+    height: 36,
+    lineHeight: 36,
     textAlign: "center",
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
+    fontWeight: "800",
   },
 });

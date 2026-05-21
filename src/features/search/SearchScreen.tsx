@@ -3,13 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -17,6 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { CityPicker } from "@/features/search/CityPicker";
 import {
   citiesForDirection,
@@ -506,7 +501,12 @@ function PackageTabResults({
 }>) {
   if (isAutoMatch) {
     if (myParcelsLoading && myParcels.length === 0)
-      return <CenteredSpinner label="Loading your parcel requests…" />;
+      return (
+        <View>
+          <MyListingSkeleton />
+          <MyListingSkeleton />
+        </View>
+      );
     if (myParcels.length === 0)
       return (
         <EmptyResults
@@ -533,7 +533,7 @@ function PackageTabResults({
               }
             >
               {loading ? (
-                <CenteredSpinner label="Searching carrier trips…" small />
+                <MatchCardSkeleton />
               ) : matched.length === 0 ? (
                 <Text style={styles.nestedEmpty}>
                   No matched carriers yet for this route or date.
@@ -558,8 +558,7 @@ function PackageTabResults({
     );
   }
 
-  if (loading && matches.length === 0)
-    return <CenteredSpinner label="Searching carrier trips…" />;
+  if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
     return (
       <EmptyResults
@@ -593,8 +592,7 @@ function BuddyTabResults({
   navigation: Nav;
   setNotice: SetNotice;
 }>) {
-  if (loading && matches.length === 0)
-    return <CenteredSpinner label="Searching travel buddies…" />;
+  if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
     return (
       <EmptyResults
@@ -634,7 +632,12 @@ function ReceiverTabResults({
 }>) {
   if (isAutoMatch) {
     if (myTripsLoading && myTrips.length === 0)
-      return <CenteredSpinner label="Loading your trips…" />;
+      return (
+        <View>
+          <MyListingSkeleton />
+          <MyListingSkeleton />
+        </View>
+      );
     if (myTrips.length === 0)
       return (
         <EmptyResults
@@ -659,7 +662,7 @@ function ReceiverTabResults({
               }
             >
               {loading ? (
-                <CenteredSpinner label="Searching receiver requests…" small />
+                <MatchCardSkeleton />
               ) : matched.length === 0 ? (
                 <Text style={styles.nestedEmpty}>
                   No receiver requests yet for this route or date.
@@ -684,8 +687,7 @@ function ReceiverTabResults({
     );
   }
 
-  if (loading && matches.length === 0)
-    return <CenteredSpinner label="Searching receiver requests…" />;
+  if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
     return (
       <EmptyResults
@@ -957,14 +959,64 @@ function SearchModeBanner({
   );
 }
 
-function CenteredSpinner({
-  label,
-  small,
-}: Readonly<{ label: string; small?: boolean }>) {
+function MatchCardSkeleton() {
   return (
-    <View style={[styles.centered, small && styles.centeredSmall]}>
-      <ActivityIndicator size={small ? "small" : "large"} color={colors.wordmark} />
-      <Text style={styles.centeredText}>{label}</Text>
+    <View style={styles.skeletonMatchCard}>
+      <View style={styles.skeletonRouteRow}>
+        <SkeletonBlock style={styles.skeletonRouteCity} />
+        <View style={styles.skeletonRouteConnector}>
+          <View style={styles.skeletonRouteLine} />
+          <SkeletonBlock style={styles.skeletonRouteIcon} />
+          <View style={styles.skeletonRouteLine} />
+        </View>
+        <SkeletonBlock style={styles.skeletonRouteCity} />
+      </View>
+      <View style={styles.skeletonTileRow}>
+        <SkeletonBlock style={styles.skeletonTile} />
+        <SkeletonBlock style={styles.skeletonTile} />
+      </View>
+      <View style={styles.skeletonDivider} />
+      <View style={styles.skeletonPersonRow}>
+        <SkeletonBlock style={styles.skeletonAvatar} />
+        <View style={styles.skeletonPersonInfo}>
+          <SkeletonBlock style={styles.skeletonPersonName} />
+          <SkeletonBlock style={styles.skeletonPersonMeta} />
+        </View>
+      </View>
+      <View style={styles.skeletonActionsRow}>
+        <SkeletonBlock style={styles.skeletonActionButton} />
+        <SkeletonBlock style={styles.skeletonActionButton} />
+      </View>
+    </View>
+  );
+}
+
+function MatchListSkeleton({ count = 3 }: Readonly<{ count?: number }>) {
+  return (
+    <View>
+      {Array.from({ length: count }).map((_, i) => (
+        <MatchCardSkeleton key={i} />
+      ))}
+    </View>
+  );
+}
+
+function MyListingSkeleton() {
+  return (
+    <View style={styles.skeletonListingCard}>
+      <View style={styles.skeletonRouteRow}>
+        <SkeletonBlock style={styles.skeletonRouteCity} />
+        <View style={styles.skeletonRouteConnector}>
+          <View style={styles.skeletonRouteLine} />
+          <SkeletonBlock style={styles.skeletonRouteIcon} />
+          <View style={styles.skeletonRouteLine} />
+        </View>
+        <SkeletonBlock style={styles.skeletonRouteCity} />
+      </View>
+      <View style={styles.skeletonTileRow}>
+        <SkeletonBlock style={styles.skeletonTile} />
+        <SkeletonBlock style={styles.skeletonTile} />
+      </View>
     </View>
   );
 }
@@ -1106,8 +1158,45 @@ const styles = StyleSheet.create({
 
   // Loading / error / empty
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
-  centeredSmall: { paddingVertical: 16 },
-  centeredText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
+
+  skeletonMatchCard: {
+    padding: 16,
+    marginBottom: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    gap: 14,
+  },
+  skeletonListingCard: {
+    padding: 16,
+    marginBottom: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    gap: 14,
+  },
+  skeletonRouteRow: { flexDirection: "row", alignItems: "center" },
+  skeletonRouteCity: { flex: 1, height: 22, marginHorizontal: 4 },
+  skeletonRouteConnector: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  skeletonRouteLine: { width: 14, height: 1, backgroundColor: colors.border },
+  skeletonRouteIcon: { width: 20, height: 20, borderRadius: 10 },
+  skeletonTileRow: { flexDirection: "row", gap: 10 },
+  skeletonTile: { flex: 1, height: 70, borderRadius: 14 },
+  skeletonDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  skeletonPersonRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  skeletonAvatar: { width: 40, height: 40, borderRadius: 20 },
+  skeletonPersonInfo: { flex: 1, gap: 6 },
+  skeletonPersonName: { width: "55%", height: 16, borderRadius: 6 },
+  skeletonPersonMeta: { width: "35%", height: 12, borderRadius: 6 },
+  skeletonActionsRow: { flexDirection: "row", gap: 10 },
+  skeletonActionButton: { flex: 1, height: 48, borderRadius: 16 },
 
   // Nested matches inside a RouteListingCard
   nestedEmpty: {

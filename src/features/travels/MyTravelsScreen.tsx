@@ -3,22 +3,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { TravelCard } from "@/features/travels/TravelCard";
+import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
 import { useBuddyListings } from "@/hooks/api/useBuddyListings";
 import { useParcels } from "@/hooks/api/useParcels";
 import { useTrips } from "@/hooks/api/useTrips";
@@ -59,6 +54,8 @@ export function MyTravelsScreen() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [editPending, setEditPending] = useState(false);
 
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: flights.total },
@@ -146,6 +143,57 @@ export function MyTravelsScreen() {
     (id: string) => navigation.navigate("ParcelDetailsTab", { parcelId: id }),
     [navigation],
   );
+  const handleEditBuddy = useCallback(
+    (id: string) => navigation.navigate("CreateBuddyTab", { editId: id }),
+    [navigation],
+  );
+
+  const handleEditTrip = useCallback((trip: Trip) => {
+    setFormError(null);
+    setEditingTrip(trip);
+  }, []);
+
+  const handleEditTripCancel = useCallback(() => {
+    if (!editPending) setEditingTrip(null);
+  }, [editPending]);
+
+  const handleEditTripSubmit = useCallback(
+    async (values: EditTripFormValues) => {
+      if (!editingTrip) return;
+      const data: Parameters<typeof tripsApi.update>[1] = {};
+      if (values.travel_date && values.travel_date !== editingTrip.travel_date) {
+        data.travel_date = values.travel_date;
+      }
+      const capacityNum = Number(values.luggage_capacity_kg);
+      if (
+        values.luggage_capacity_kg !== "" &&
+        Number.isFinite(capacityNum) &&
+        capacityNum !== editingTrip.luggage_capacity_kg
+      ) {
+        data.luggage_capacity_kg = capacityNum;
+      }
+      if (values.notes !== (editingTrip.notes ?? "")) {
+        (data as Record<string, unknown>).notes = values.notes;
+      }
+
+      if (Object.keys(data).length === 0) {
+        setEditingTrip(null);
+        return;
+      }
+
+      setEditPending(true);
+      try {
+        await tripsApi.update(editingTrip.id, data);
+        await flights.refetch();
+        setEditingTrip(null);
+      } catch (err) {
+        setFormError(`Couldn't update trip. ${getErrorMessage(err)}`);
+      } finally {
+        setEditPending(false);
+      }
+    },
+    [editingTrip, flights],
+  );
 
   const refreshing =
     (activeTab === "flights" && flights.loading && flights.trips.length > 0) ||
@@ -212,6 +260,7 @@ export function MyTravelsScreen() {
             trips={flights.trips}
             onRetry={flights.refetch}
             onOpen={handleOpenTrip}
+            onEdit={handleEditTrip}
             onDelete={handleDeleteTrip}
             deletingId={deletingId}
             onListTrip={goListTrip}
@@ -242,6 +291,7 @@ export function MyTravelsScreen() {
             error={partners.error}
             listings={partners.listings}
             onRetry={partners.refetch}
+            onEdit={handleEditBuddy}
             onDelete={handleDeleteBuddy}
             deletingId={deletingId}
           />
@@ -257,6 +307,20 @@ export function MyTravelsScreen() {
           />
         ) : null}
       </ScrollView>
+
+      {editingTrip ? (
+        <EditTripModal
+          open
+          initial={{
+            travel_date: editingTrip.travel_date ?? "",
+            luggage_capacity_kg: `${editingTrip.luggage_capacity_kg ?? ""}`,
+            notes: editingTrip.notes ?? "",
+          }}
+          pending={editPending}
+          onCancel={handleEditTripCancel}
+          onSubmit={handleEditTripSubmit}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -300,6 +364,7 @@ function FlightsTab({
   trips,
   onRetry,
   onOpen,
+  onEdit,
   onDelete,
   deletingId,
   onListTrip,
@@ -309,11 +374,12 @@ function FlightsTab({
   trips: Trip[];
   onRetry: () => Promise<void>;
   onOpen: (id: string) => void;
+  onEdit: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
   deletingId: string | null;
   onListTrip: () => void;
 }>) {
-  if (loading && trips.length === 0) return <CenteredSpinner />;
+  if (loading && trips.length === 0) return <ListSkeleton />;
   if (error && trips.length === 0)
     return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
   if (trips.length === 0)
@@ -332,9 +398,10 @@ function FlightsTab({
         <TravelCard
           key={t.id}
           type="flight"
+          tag="TRIP LISTING"
           item={t}
           onPress={() => onOpen(t.id)}
-          onEdit={() => onOpen(t.id)}
+          onEdit={() => onEdit(t)}
           onDelete={() => onDelete(t)}
           isDeleting={deletingId === t.id}
         />
@@ -381,7 +448,7 @@ function PackagesTab({
           <Text style={styles.sectionHint}>(Packages I'm Delivering)</Text>
         </View>
         {sendLoading && sendParcels.length === 0 ? (
-          <CenteredSpinner small />
+          <ListSkeleton count={2} />
         ) : sendError && sendParcels.length === 0 ? (
           <ErrorBlock message={getErrorMessage(sendError)} onRetry={onRetrySend} />
         ) : sendParcels.length === 0 ? (
@@ -393,9 +460,9 @@ function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
+              tag="PACKAGE DELIVERY"
               item={p}
               onPress={() => onOpen(p.id)}
-              onEdit={() => onOpen(p.id)}
               onDelete={() => onDeleteSend(p)}
               isDeleting={deletingId === p.id}
             />
@@ -410,7 +477,7 @@ function PackagesTab({
           <Text style={styles.sectionHint}>(Packages I'm Receiving)</Text>
         </View>
         {receiveLoading && receiveParcels.length === 0 ? (
-          <CenteredSpinner small />
+          <ListSkeleton count={2} />
         ) : receiveError && receiveParcels.length === 0 ? (
           <ErrorBlock message={getErrorMessage(receiveError)} onRetry={onRetryReceive} />
         ) : receiveParcels.length === 0 ? (
@@ -427,9 +494,9 @@ function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
+              tag="PARCEL REQUEST"
               item={p}
               onPress={() => onOpen(p.id)}
-              onEdit={() => onOpen(p.id)}
               onDelete={() => onDeleteReceive(p)}
               isDeleting={deletingId === p.id}
             />
@@ -445,6 +512,7 @@ function PartnersTab({
   error,
   listings,
   onRetry,
+  onEdit,
   onDelete,
   deletingId,
 }: Readonly<{
@@ -452,10 +520,11 @@ function PartnersTab({
   error: Error | null;
   listings: ReturnType<typeof useBuddyListings>["listings"];
   onRetry: () => Promise<void>;
+  onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
 }>) {
-  if (loading && listings.length === 0) return <CenteredSpinner />;
+  if (loading && listings.length === 0) return <ListSkeleton />;
   if (error && listings.length === 0)
     return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
   if (listings.length === 0)
@@ -472,6 +541,7 @@ function PartnersTab({
         <BuddyPartnerCard
           key={b.id}
           item={b}
+          onEdit={() => onEdit(b.id)}
           onDelete={() => onDelete(b.id)}
           isDeleting={deletingId === b.id}
         />
@@ -493,7 +563,7 @@ function ArchiveTab({
   onRetry: () => Promise<void>;
   onOpen: (id: string) => void;
 }>) {
-  if (loading && trips.length === 0) return <CenteredSpinner />;
+  if (loading && trips.length === 0) return <ListSkeleton />;
   if (error && trips.length === 0)
     return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
   if (trips.length === 0)
@@ -507,7 +577,13 @@ function ArchiveTab({
   return (
     <View>
       {trips.map((t) => (
-        <TravelCard key={t.id} type="flight" item={t} onPress={() => onOpen(t.id)} />
+        <TravelCard
+          key={t.id}
+          type="flight"
+          tag="ARCHIVED TRIP"
+          item={t}
+          onPress={() => onOpen(t.id)}
+        />
       ))}
     </View>
   );
@@ -515,10 +591,31 @@ function ArchiveTab({
 
 // ───────────────────────── Reusable bits ─────────────────────────
 
-function CenteredSpinner({ small }: Readonly<{ small?: boolean }>) {
+function TravelCardSkeleton() {
   return (
-    <View style={[styles.centered, small && styles.centeredSmall]}>
-      <ActivityIndicator size={small ? "small" : "large"} color={colors.wordmark} />
+    <View style={styles.skeletonCard}>
+      <SkeletonBlock style={styles.skeletonTag} />
+      <View style={styles.skeletonRouteRow}>
+        <View style={styles.skeletonBodyCol}>
+          <SkeletonBlock style={styles.skeletonRoute} />
+          <SkeletonBlock style={styles.skeletonMeta} />
+        </View>
+        <View style={styles.skeletonActionsCol}>
+          <SkeletonBlock style={styles.skeletonActionButton} />
+          <SkeletonBlock style={styles.skeletonActionButton} />
+        </View>
+      </View>
+      <SkeletonBlock style={styles.skeletonStatusPill} />
+    </View>
+  );
+}
+
+function ListSkeleton({ count = 3 }: Readonly<{ count?: number }>) {
+  return (
+    <View>
+      {Array.from({ length: count }).map((_, i) => (
+        <TravelCardSkeleton key={i} />
+      ))}
     </View>
   );
 }
@@ -627,9 +724,25 @@ const styles = StyleSheet.create({
   },
   dashedEmptyText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
 
+  skeletonCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  skeletonTag: { width: 110, height: 20, borderRadius: 6, marginBottom: 12 },
+  skeletonRouteRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  skeletonBodyCol: { flex: 1, minWidth: 0, gap: 8 },
+  skeletonRoute: { width: "85%", height: 22, borderRadius: 6 },
+  skeletonMeta: { width: "65%", height: 16, borderRadius: 6 },
+  skeletonActionsCol: { gap: 8, minWidth: 76 },
+  skeletonActionButton: { height: 34, width: 76, borderRadius: 10 },
+  skeletonStatusPill: { width: 120, height: 20, borderRadius: 999, marginTop: 12 },
+
   // Loading / error / empty
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
-  centeredSmall: { paddingVertical: 24 },
   errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   errorBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500", textAlign: "center", maxWidth: 280 },
   retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },

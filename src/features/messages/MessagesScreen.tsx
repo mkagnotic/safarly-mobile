@@ -18,6 +18,7 @@ import {
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { DeclineMatchModal } from "@/components/chat/DeclineMatchModal";
 import {
   MatchConfirmationModal,
@@ -537,10 +538,10 @@ function InboxSkeleton() {
     <View style={styles.skeletonWrap}>
       {placeholders.map((i) => (
         <View key={i} style={styles.skeletonCard}>
-          <View style={styles.skeletonAvatar} />
+          <SkeletonBlock style={styles.skeletonAvatar} />
           <View style={styles.skeletonBody}>
-            <View style={styles.skeletonNameBar} />
-            <View style={styles.skeletonPreviewBar} />
+            <SkeletonBlock style={styles.skeletonNameBar} />
+            <SkeletonBlock style={styles.skeletonPreviewBar} />
           </View>
         </View>
       ))}

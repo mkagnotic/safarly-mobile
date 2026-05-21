@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
-import { colors, primaryTint } from "@/theme/colors";
+import { colors } from "@/theme/colors";
 
 export function RouteHeader({
   fromCity,
@@ -22,7 +22,7 @@ export function RouteHeader({
         <Ionicons
           name={icon}
           size={20}
-          color={colors.primary}
+          color={colors.wordmark}
           style={kind === "trip" ? { transform: [{ rotate: planeRotate }] } : undefined}
         />
         <View style={styles.routeLine} />
@@ -90,9 +90,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   metricCellHighlight: {
-    backgroundColor: primaryTint.fill10,
+    backgroundColor: "rgba(167, 78, 255, 0.10)",
     borderWidth: 1,
-    borderColor: primaryTint.stroke18,
+    borderColor: "rgba(167, 78, 255, 0.26)",
   },
   metricLabel: {
     color: colors.subtleText,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 6,
   },
-  metricLabelHighlight: { color: colors.primary, opacity: 0.95 },
+  metricLabelHighlight: { color: colors.wordmark, opacity: 0.95 },
   metricValue: { color: colors.text, fontSize: 17, lineHeight: 22, fontWeight: "800" },
-  metricValueHighlight: { color: colors.primary },
+  metricValueHighlight: { color: colors.wordmark },
 });
