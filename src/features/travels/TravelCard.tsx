@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   routeText: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800", flexShrink: 1 },
   metaText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 4 },
-  actionsCol: { gap: 8, alignItems: "flex-end" },
+  actionsCol: { gap: 8, alignItems: "flex-end", alignSelf: "center" },
   editButton: {
     minWidth: 76,
     minHeight: 34,

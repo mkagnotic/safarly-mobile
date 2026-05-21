@@ -11,6 +11,10 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import {
+  EditBuddyListingModal,
+  type EditBuddyListingFormValues,
+} from "@/features/buddies/EditBuddyListingModal";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
@@ -23,6 +27,7 @@ import {
   getErrorMessage,
   parcelsApi,
   tripsApi,
+  type BuddyListing,
   type Parcel,
   type Trip,
 } from "@/services/api";
@@ -56,6 +61,8 @@ export function MyTravelsScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [editPending, setEditPending] = useState(false);
+  const [editingBuddy, setEditingBuddy] = useState<BuddyListing | null>(null);
+  const [editBuddyPending, setEditBuddyPending] = useState(false);
 
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: flights.total },
@@ -143,9 +150,57 @@ export function MyTravelsScreen() {
     (id: string) => navigation.navigate("ParcelDetailsTab", { parcelId: id }),
     [navigation],
   );
-  const handleEditBuddy = useCallback(
-    (id: string) => navigation.navigate("CreateBuddyTab", { editId: id }),
+  const handleEditBuddy = useCallback((listing: BuddyListing) => {
+    setFormError(null);
+    setEditingBuddy(listing);
+  }, []);
+  const handleEditBuddyCancel = useCallback(() => {
+    if (!editBuddyPending) setEditingBuddy(null);
+  }, [editBuddyPending]);
+  const handleOpenBuddy = useCallback(
+    (id: string) => navigation.navigate("PartnerDetailsTab", { listingId: id }),
     [navigation],
+  );
+
+  const handleEditBuddySubmit = useCallback(
+    async (values: EditBuddyListingFormValues) => {
+      if (!editingBuddy) return;
+
+      const fromYmd = values.travel_date_from.trim();
+      if (!fromYmd) {
+        setFormError("Pick a depart date to update this listing.");
+        return;
+      }
+      const toYmd = values.travel_date_to.trim() || fromYmd;
+
+      // buddy-handler PUT is a full upsert — fields omitted get nulled, so we
+      // seed every field from the source listing and overlay just the edits.
+      const payload = {
+        from_city: editingBuddy.from_city,
+        to_city: editingBuddy.to_city,
+        travel_date: fromYmd,
+        travel_date_from: fromYmd,
+        travel_date_to: toYmd,
+        airline: values.airline.trim(),
+        bio: values.bio.trim(),
+        age: editingBuddy.age ?? undefined,
+        languages: editingBuddy.languages ?? [],
+        interests: editingBuddy.interests ?? "",
+        layover: editingBuddy.layover ?? "",
+      };
+
+      setEditBuddyPending(true);
+      try {
+        await buddiesApi.update(editingBuddy.id, payload);
+        await partners.refetch();
+        setEditingBuddy(null);
+      } catch (err) {
+        setFormError(`Couldn't update listing. ${getErrorMessage(err)}`);
+      } finally {
+        setEditBuddyPending(false);
+      }
+    },
+    [editingBuddy, partners],
   );
 
   const handleEditTrip = useCallback((trip: Trip) => {
@@ -291,6 +346,7 @@ export function MyTravelsScreen() {
             error={partners.error}
             listings={partners.listings}
             onRetry={partners.refetch}
+            onOpen={handleOpenBuddy}
             onEdit={handleEditBuddy}
             onDelete={handleDeleteBuddy}
             deletingId={deletingId}
@@ -319,6 +375,25 @@ export function MyTravelsScreen() {
           pending={editPending}
           onCancel={handleEditTripCancel}
           onSubmit={handleEditTripSubmit}
+        />
+      ) : null}
+
+      {editingBuddy ? (
+        <EditBuddyListingModal
+          open
+          initial={{
+            travel_date_from: editingBuddy.travel_date_from ?? editingBuddy.travel_date ?? "",
+            travel_date_to:
+              editingBuddy.travel_date_to &&
+              editingBuddy.travel_date_to !== editingBuddy.travel_date_from
+                ? editingBuddy.travel_date_to
+                : "",
+            airline: editingBuddy.airline ?? "",
+            bio: editingBuddy.bio ?? "",
+          }}
+          pending={editBuddyPending}
+          onCancel={handleEditBuddyCancel}
+          onSubmit={handleEditBuddySubmit}
         />
       ) : null}
     </Screen>
@@ -512,6 +587,7 @@ function PartnersTab({
   error,
   listings,
   onRetry,
+  onOpen,
   onEdit,
   onDelete,
   deletingId,
@@ -520,7 +596,8 @@ function PartnersTab({
   error: Error | null;
   listings: ReturnType<typeof useBuddyListings>["listings"];
   onRetry: () => Promise<void>;
-  onEdit: (id: string) => void;
+  onOpen: (id: string) => void;
+  onEdit: (listing: BuddyListing) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
 }>) {
@@ -541,7 +618,8 @@ function PartnersTab({
         <BuddyPartnerCard
           key={b.id}
           item={b}
-          onEdit={() => onEdit(b.id)}
+          onPress={() => onOpen(b.id)}
+          onEdit={() => onEdit(b)}
           onDelete={() => onDelete(b.id)}
           isDeleting={deletingId === b.id}
         />

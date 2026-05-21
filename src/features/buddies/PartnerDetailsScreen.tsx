@@ -17,11 +17,19 @@ import {
   labelForStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
-import { useParcelDetail } from "@/hooks/api/useParcelDetail";
+import { useBuddyListingDetail } from "@/hooks/api/useBuddyListingDetail";
 import { MainTabParamList } from "@/navigation/types";
-import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
+import {
+  ApiClientError,
+  buddiesApi,
+  getErrorMessage,
+  type BuddyListing,
+} from "@/services/api";
 import { colors } from "@/theme/colors";
-import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
+import {
+  EditBuddyListingModal,
+  type EditBuddyListingFormValues,
+} from "./EditBuddyListingModal";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -30,33 +38,23 @@ interface Notice {
   message: string;
 }
 
-type Nav = BottomTabNavigationProp<MainTabParamList, "ParcelDetailsTab">;
-type Route = RouteProp<MainTabParamList, "ParcelDetailsTab">;
+type Nav = BottomTabNavigationProp<MainTabParamList, "PartnerDetailsTab">;
+type Route = RouteProp<MainTabParamList, "PartnerDetailsTab">;
 
-const CURRENCY_SYMBOL: Record<string, string> = {
-  USD: "$",
-  INR: "₹",
-  EUR: "€",
-  GBP: "£",
-};
-
-function formatDeliveryDate(iso: string | null | undefined): string {
+function formatLongDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
-function formatFee(parcel: Parcel): string {
-  const symbol = CURRENCY_SYMBOL[parcel.fee_currency] ?? "";
-  const amount = `${parcel.fee_offered}`;
-  if (symbol) return `${symbol}${amount}`;
-  return `${amount} ${parcel.fee_currency}`;
-}
-
-function senderInitial(name: string): string {
-  const trimmed = name.trim();
-  return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+function formatDateRange(listing: BuddyListing): string {
+  const from = listing.travel_date_from ?? listing.travel_date;
+  const to = listing.travel_date_to ?? listing.travel_date;
+  if (!from) return "—";
+  const fromLabel = formatLongDate(from);
+  if (!to || from === to) return fromLabel;
+  return `${fromLabel} → ${formatLongDate(to)}`;
 }
 
 function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
@@ -70,7 +68,7 @@ function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
       >
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
-      <Text style={styles.title}>Parcel details</Text>
+      <Text style={styles.title}>Partner details</Text>
     </View>
   );
 }
@@ -87,68 +85,41 @@ function StatusPill({ status }: Readonly<{ status: string }>) {
   );
 }
 
-function StatusAlert({ status }: Readonly<{ status: string }>) {
-  if (status === "delivered" || status === "completed") {
-    return (
-      <View style={styles.bannerSlot}>
-        <FormBanner variant="success" message="Payment released to carrier" />
-      </View>
-    );
-  }
-  if (status === "disputed") {
-    return (
-      <View style={styles.bannerSlot}>
-        <FormBanner
-          variant="error"
-          title="Payment under review"
-          message="A dispute is open on this parcel."
-        />
-      </View>
-    );
-  }
-  return null;
-}
-
-function ParcelCard({ parcel }: Readonly<{ parcel: Parcel }>) {
+function PartnerCard({ listing }: Readonly<{ listing: BuddyListing }>) {
   return (
     <Card style={styles.card}>
-      <RouteHeader fromCity={parcel.from_city} toCity={parcel.to_city} kind="parcel" />
+      <RouteHeader fromCity={listing.from_city} toCity={listing.to_city} kind="trip" />
       <View style={styles.metricsGrid}>
         <MetricRow>
-          <MetricTile label="DELIVERY BY" value={formatDeliveryDate(parcel.delivery_by)} />
-          <MetricTile label="WEIGHT" value={`${parcel.weight_kg} kg`} />
+          <MetricTile label="DATES" value={formatDateRange(listing)} />
+          <MetricTile label="AIRLINE" value={listing.airline?.trim() || "—"} />
         </MetricRow>
         <MetricRow>
-          <MetricTile label="FEE" value={formatFee(parcel)} highlight />
-          <MetricTile label="CATEGORY" value={parcel.category || "—"} />
+          <MetricTile label="AGE" value={listing.age != null ? `${listing.age}` : "—"} />
+          <MetricTile
+            label="LANGUAGES"
+            value={
+              listing.languages && listing.languages.length > 0
+                ? listing.languages.join(", ")
+                : "—"
+            }
+            highlight
+          />
         </MetricRow>
       </View>
-      <StatusPill status={parcel.status} />
+      <StatusPill status={listing.status} />
     </Card>
   );
 }
 
-function DescriptionCard({ description }: Readonly<{ description: string | null }>) {
+function BodyCard({
+  label,
+  value,
+}: Readonly<{ label: string; value: string | null | undefined }>) {
   return (
     <Card style={styles.bodyCard}>
-      <Text style={styles.bodyLabel}>DESCRIPTION</Text>
-      <Text style={styles.bodyText}>{description?.trim() || "No description provided."}</Text>
-    </Card>
-  );
-}
-
-function SenderCard({ sender }: Readonly<{ sender: NonNullable<Parcel["sender"]> }>) {
-  return (
-    <Card style={styles.senderCard}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{senderInitial(sender.name ?? "")}</Text>
-      </View>
-      <View style={styles.senderInfo}>
-        <Text style={styles.senderName} numberOfLines={2}>
-          {sender.name}
-        </Text>
-        <Text style={styles.senderRole}>Sender</Text>
-      </View>
+      <Text style={styles.bodyLabel}>{label}</Text>
+      <Text style={styles.bodyText}>{value?.trim() ? value : "Not provided."}</Text>
     </Card>
   );
 }
@@ -159,9 +130,9 @@ function NotFoundCard({
 }: Readonly<{ onBack: () => void; errorMessage?: string }>) {
   return (
     <Card style={styles.emptyCard}>
-      <Text style={styles.emptyTitle}>We couldn't find that parcel.</Text>
+      <Text style={styles.emptyTitle}>We couldn't find that listing.</Text>
       <Text style={styles.emptySubtitle}>
-        {errorMessage ?? "This parcel may have been cancelled or removed."}
+        {errorMessage ?? "This buddy listing may have been removed or cancelled."}
       </Text>
       <AppButton
         label="Back to my travels"
@@ -173,7 +144,7 @@ function NotFoundCard({
   );
 }
 
-function ParcelDetailsSkeleton() {
+function PartnerDetailsSkeleton() {
   return (
     <View>
       <Card style={styles.card}>
@@ -199,20 +170,19 @@ function ParcelDetailsSkeleton() {
         <SkeletonBlock style={styles.skeletonStatusPill} />
       </Card>
       <SkeletonBlock style={styles.skeletonBodyCard} />
-      <SkeletonBlock style={styles.skeletonSenderCard} />
-      <SkeletonBlock style={styles.skeletonMessageButton} />
+      <SkeletonBlock style={styles.skeletonBodyCardShort} />
       <SkeletonBlock style={styles.skeletonPrimaryButton} />
       <SkeletonBlock style={styles.skeletonCancelButton} />
     </View>
   );
 }
 
-export function ParcelDetailsScreen() {
+export function PartnerDetailsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const parcelId = route.params?.parcelId;
+  const listingId = route.params?.listingId;
 
-  const { parcel, error, refetch } = useParcelDetail(parcelId);
+  const { listing, error, refetch } = useBuddyListingDetail(listingId);
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -225,89 +195,91 @@ export function ParcelDetailsScreen() {
     else navigation.navigate("Parcels"); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
-  // Web's `Message Sender` link goes to `/customer/messages` (the inbox), not
-  // a specific conversation. Mobile parity: open the Inbox tab.
-  const handleMessageSender = useCallback(() => {
-    navigation.navigate("Buddies");
-  }, [navigation]);
-
   const handleEditOpen = useCallback(() => setEditOpen(true), []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
 
   const handleEditSubmit = useCallback(
-    async (values: EditParcelFormValues) => {
-      if (!parcelId || !parcel) return;
-      const data: Parameters<typeof parcelsApi.update>[1] = {};
+    async (values: EditBuddyListingFormValues) => {
+      if (!listingId || !listing) return;
 
-      const weightNum = Number(values.weight_kg);
-      if (
-        values.weight_kg !== "" &&
-        Number.isFinite(weightNum) &&
-        weightNum !== parcel.weight_kg
-      ) {
-        data.weight_kg = weightNum;
-      }
-      if (values.description !== (parcel.description ?? "")) {
-        data.description = values.description;
-      }
-
-      if (Object.keys(data).length === 0) {
-        setEditOpen(false);
+      const fromYmd = values.travel_date_from.trim();
+      if (!fromYmd) {
+        setNotice({
+          variant: "error",
+          title: "Pick a depart date",
+          message: "A travel date is required to update this listing.",
+        });
         return;
       }
+      const toYmd = values.travel_date_to.trim() || fromYmd;
+
+      // The buddy-handler PUT is a full upsert — it nulls any field omitted
+      // from the payload. We seed every field from the current listing and
+      // overlay only the ones exposed in the modal.
+      const payload = {
+        from_city: listing.from_city,
+        to_city: listing.to_city,
+        travel_date: fromYmd,
+        travel_date_from: fromYmd,
+        travel_date_to: toYmd,
+        airline: values.airline.trim(),
+        bio: values.bio.trim(),
+        age: listing.age ?? undefined,
+        languages: listing.languages ?? [],
+        interests: listing.interests ?? "",
+        layover: listing.layover ?? "",
+      };
 
       setEditPending(true);
       try {
-        await parcelsApi.update(parcelId, data);
+        await buddiesApi.update(listingId, payload);
         await refetch();
         setEditOpen(false);
         setNotice({
           variant: "success",
-          title: "Parcel updated",
+          title: "Listing updated",
           message: "Your changes are saved.",
         });
       } catch (err) {
         const message =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setNotice({ variant: "error", title: "Couldn't update parcel", message });
+        setNotice({ variant: "error", title: "Couldn't update listing", message });
       } finally {
         setEditPending(false);
       }
     },
-    [parcelId, parcel, refetch],
+    [listingId, listing, refetch],
   );
 
-  const handleCancelParcel = useCallback(async () => {
-    if (!parcelId) return;
+  const handleCancelListing = useCallback(async () => {
+    if (!listingId) return;
     setCancelPending(true);
     try {
-      await parcelsApi.delete(parcelId);
+      await buddiesApi.deleteListing(listingId);
       setCancelOpen(false);
       handleBack();
     } catch (err) {
       const message =
         err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
       setCancelOpen(false);
-      setNotice({ variant: "error", title: "Couldn't cancel parcel", message });
+      setNotice({ variant: "error", title: "Couldn't remove listing", message });
     } finally {
       setCancelPending(false);
     }
-  }, [parcelId, handleBack]);
+  }, [listingId, handleBack]);
 
-  // Avoids a "Parcel not found" flash between route.params arriving and the
-  // hook's first refetch firing.
-  if (!parcel && !error) {
+  if (!listing && !error) {
     return (
       <Screen onRefresh={refetch}>
         <DetailsHeader onBack={handleBack} />
-        <ParcelDetailsSkeleton />
+        <PartnerDetailsSkeleton />
       </Screen>
     );
   }
 
-  if (error || !parcel) {
+  if (error || !listing) {
     return (
       <Screen onRefresh={refetch}>
         <DetailsHeader onBack={handleBack} />
@@ -319,11 +291,16 @@ export function ParcelDetailsScreen() {
     );
   }
 
-  const canModify = !isTerminal(parcel.status);
+  const canModify = !isTerminal(listing.status);
 
-  const editInitial: EditParcelFormValues = {
-    weight_kg: `${parcel.weight_kg ?? ""}`,
-    description: parcel.description ?? "",
+  const editInitial: EditBuddyListingFormValues = {
+    travel_date_from: listing.travel_date_from ?? listing.travel_date ?? "",
+    travel_date_to:
+      listing.travel_date_to && listing.travel_date_to !== listing.travel_date_from
+        ? listing.travel_date_to
+        : "",
+    airline: listing.airline ?? "",
+    bio: listing.bio ?? "",
   };
 
   return (
@@ -341,28 +318,16 @@ export function ParcelDetailsScreen() {
         </View>
       ) : null}
 
-      <ParcelCard parcel={parcel} />
+      <PartnerCard listing={listing} />
 
-      <StatusAlert status={parcel.status} />
-
-      <DescriptionCard description={parcel.description} />
-
-      {parcel.sender ? <SenderCard sender={parcel.sender} /> : null}
-
-      <Pressable
-        style={styles.messageButton}
-        onPress={handleMessageSender}
-        accessibilityRole="button"
-        accessibilityLabel="Message Sender"
-      >
-        <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
-        <Text style={styles.messageButtonText}>Message Sender</Text>
-      </Pressable>
+      <BodyCard label="BIO" value={listing.bio} />
+      <BodyCard label="INTERESTS" value={listing.interests} />
+      {listing.layover ? <BodyCard label="LAYOVER" value={listing.layover} /> : null}
 
       {canModify ? (
         <>
           <AppButton
-            label="Edit parcel"
+            label="Edit listing"
             onPress={handleEditOpen}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.primaryActionButton}
@@ -372,14 +337,14 @@ export function ParcelDetailsScreen() {
             onPress={() => setCancelOpen(true)}
             style={styles.cancelButton}
             accessibilityRole="button"
-            accessibilityLabel="Cancel parcel"
+            accessibilityLabel="Remove listing"
           >
-            <Text style={styles.cancelButtonText}>Cancel parcel</Text>
+            <Text style={styles.cancelButtonText}>Remove listing</Text>
           </Pressable>
         </>
       ) : null}
 
-      <EditParcelModal
+      <EditBuddyListingModal
         open={editOpen}
         initial={editInitial}
         pending={editPending}
@@ -389,17 +354,17 @@ export function ParcelDetailsScreen() {
 
       <ConfirmActionModal
         open={cancelOpen}
-        title="Cancel this parcel?"
-        body="This action cannot be undone. Any pending carrier offers will be withdrawn."
-        confirmLabel="Yes, cancel parcel"
-        cancelLabel="Keep parcel"
+        title="Remove this listing?"
+        body="This action cannot be undone. Your travel buddy request will no longer appear in search."
+        confirmLabel="Yes, remove listing"
+        cancelLabel="Keep listing"
         tone="destructive"
         icon="alert-circle"
         pending={cancelPending}
         onCancel={() => {
           if (!cancelPending) setCancelOpen(false);
         }}
-        onConfirm={handleCancelParcel}
+        onConfirm={handleCancelListing}
       />
     </Screen>
   );
@@ -462,45 +427,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  senderCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 12,
-    marginBottom: 14,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceTintPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: colors.wordmark,
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  senderInfo: { flex: 1, minWidth: 0 },
-  senderName: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  senderRole: { color: colors.mutedText, fontSize: 12, fontWeight: "500", marginTop: 1 },
-
-  messageButton: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 14,
-  },
-  messageButtonText: { color: colors.text, fontSize: 14, fontWeight: "800" },
-
-  primaryActionButton: { alignSelf: "stretch", marginBottom: 12 },
+  primaryActionButton: { alignSelf: "stretch", marginBottom: 12, marginTop: 4 },
   cancelButton: {
     minHeight: 46,
     borderRadius: 12,
@@ -527,9 +454,8 @@ const styles = StyleSheet.create({
   skeletonTile: { flex: 1, height: 70, borderRadius: 14 },
   skeletonStatusPill: { width: 140, height: 20, borderRadius: 999 },
   skeletonBodyCard: { height: 88, borderRadius: 16, marginBottom: 12 },
-  skeletonSenderCard: { height: 64, borderRadius: 16, marginBottom: 14 },
-  skeletonMessageButton: { height: 46, borderRadius: 14, marginBottom: 14 },
-  skeletonPrimaryButton: { height: 48, borderRadius: 16, marginBottom: 12 },
+  skeletonBodyCardShort: { height: 64, borderRadius: 16, marginBottom: 12 },
+  skeletonPrimaryButton: { height: 48, borderRadius: 16, marginBottom: 12, marginTop: 4 },
   skeletonCancelButton: { height: 46, borderRadius: 12, marginBottom: 20 },
 
   emptyCard: {

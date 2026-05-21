@@ -79,6 +79,8 @@ export type MainTabParamList = {
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };
+  /** Owner-facing detail for a travel-partner listing. Sourced from `my_listings`. */
+  PartnerDetailsTab: { listingId: string };
   // New screens
   SearchTab: undefined;
   OpportunitiesTab: undefined;

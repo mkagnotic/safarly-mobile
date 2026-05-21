@@ -40,6 +40,7 @@ import { OfferChatScreen } from "@/features/messages/OfferChatScreen";
 import { MessagesScreen } from "@/features/messages/MessagesScreen";
 import { BuddyDetailsScreen } from "@/features/buddies/BuddyDetailsScreen";
 import { CreateBuddyScreen } from "@/features/buddies/CreateBuddyScreen";
+import { PartnerDetailsScreen } from "@/features/buddies/PartnerDetailsScreen";
 import { SplashScreen } from "@/features/splash/SplashScreen";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
@@ -125,6 +126,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   OffersTab: "list-outline",
   OfferChatTab: "chatbubble-outline",
   ParcelDetailsTab: "cube-outline",
+  PartnerDetailsTab: "people-outline",
   SearchTab: "search-outline",
   OpportunitiesTab: "flash-outline",
   BookingsTab: "receipt-outline",
@@ -290,6 +292,7 @@ function MainTabs() {
       <Tabs.Screen name="OffersTab" component={ParcelOffersScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OfferChatTab" component={OfferChatScreen} options={{ ...HIDDEN_TAB, tabBarHideOnKeyboard: true }} />
       <Tabs.Screen name="ParcelDetailsTab" component={ParcelDetailsScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="PartnerDetailsTab" component={PartnerDetailsScreen} options={HIDDEN_TAB} />
       {/* New screens */}
       <Tabs.Screen name="SearchTab" component={SearchScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OpportunitiesTab" component={OpportunitiesScreen} options={HIDDEN_TAB} />
