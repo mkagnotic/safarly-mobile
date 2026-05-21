@@ -3,6 +3,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Signup: undefined;
+  AuthBootstrap: undefined;
   ProfileSetup: undefined;
   MainTabs: undefined;
   OfferChatTab:

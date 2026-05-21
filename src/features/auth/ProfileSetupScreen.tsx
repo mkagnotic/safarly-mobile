@@ -254,7 +254,13 @@ function TermsStep({
 }: Readonly<TermsStepProps>) {
   const canContinue = termsAccepted && liabilityAccepted;
   return (
-    <ScrollView contentContainerStyle={styles.stepScroll} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.stepScroll}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets
+    >
       <View style={styles.stepHeader}>
         <View style={[styles.stepIcon, styles.stepIconPrimary]}>
           <Ionicons name="shield-checkmark-outline" size={26} color={colors.ctaAccent} />
@@ -351,7 +357,13 @@ function ProfileStep({
   onSkip,
 }: Readonly<ProfileStepProps>) {
   return (
-    <ScrollView contentContainerStyle={styles.stepScroll} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.stepScroll}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets
+    >
       <View style={styles.authHeaderRow}>
         <Pressable
           style={styles.authBackButton}

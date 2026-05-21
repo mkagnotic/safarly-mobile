@@ -3,6 +3,7 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { authApi } from "@/services/api/auth";
+import { usersApi } from "@/services/api/users";
 import { performGoogleOAuth } from "@/services/auth/googleOAuth";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -70,7 +71,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
   useEffect(() => {
     mountedRef.current = true;
 
-    const applySession = (next: Session | null) => {
+    const applySession = async (next: Session | null) => {
       if (!mountedRef.current) return;
       setSession(next);
       const store = useAppStore.getState();
@@ -85,6 +86,26 @@ export function AuthProvider({ children }: Readonly<Props>) {
         supabase.realtime.setAuth(next?.access_token ?? null);
       } catch {
         /* setAuth throws if the realtime socket isn't ready yet — harmless. */
+      }
+
+      // Server-authoritative ProfileSetup gating: ask the server whether the
+      // user has accepted terms (`terms_accepted_at`). Only run when we have
+      // a session AND the local cache hasn't already resolved setup — so
+      // returning users skip the round-trip on every cold start.
+      if (next && !useAppStore.getState().profileSetupDone) {
+        useAppStore.getState().setAuthBootstrapping(true);
+        try {
+          const { data } = await usersApi.getMyProfile();
+          if (!mountedRef.current) return;
+          if (data?.profile?.terms_accepted_at) {
+            useAppStore.getState().setProfileSetupDone(true);
+          }
+        } catch {
+          // Network/404 — leave profileSetupDone false so the user is taken
+          // through ProfileSetup. Safer to err on showing the flow.
+        } finally {
+          if (mountedRef.current) useAppStore.getState().setAuthBootstrapping(false);
+        }
       }
     };
 

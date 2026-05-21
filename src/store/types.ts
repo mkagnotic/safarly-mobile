@@ -63,6 +63,8 @@ export interface AppState {
   onboarded: boolean;
   profileSetupDone: boolean;
   authenticated: boolean;
+  /** Transient — true while AuthContext fetches the server profile after sign-in to decide whether to show ProfileSetup. */
+  authBootstrapping: boolean;
   showLiveData: boolean;
   userProfile: UserProfile;
   parcels: Parcel[];
@@ -90,6 +92,8 @@ export interface AppState {
   clearPendingNotice: () => void;
   finishOnboarding: () => void;
   finishProfileSetup: () => void;
+  setProfileSetupDone: (done: boolean) => void;
+  setAuthBootstrapping: (bootstrapping: boolean) => void;
   login: () => void;
   logout: () => void;
   toggleLiveDataVisibility: () => void;

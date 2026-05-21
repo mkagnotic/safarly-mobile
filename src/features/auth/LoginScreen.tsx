@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,6 +34,11 @@ type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
 type Mode = "choose" | "email";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Android hides the Apple button (see `showAppleSignIn`); the freed vertical
+// room flows into a larger hero illustration so the layout stays balanced.
+const HERO_SIZE = Platform.OS === "ios" ? 260 : 300;
+const HERO_MARGIN_TOP = Platform.OS === "ios" ? 32 : 40;
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
@@ -149,14 +155,13 @@ export function LoginScreen() {
   if (mode === "email") {
     return (
       <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
-        {/* Screen owns the KAV; ScrollView + flexGrow:1 keeps marginTop:auto
-            working while letting the form scroll past the keyboard. */}
         <ScrollView
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
         >
           <View style={styles.authContainer}>
             <View style={styles.headerRow}>
@@ -276,10 +281,17 @@ export function LoginScreen() {
     );
   }
 
+  // Sign in with Apple is iOS-only (App Store Guideline 4.8 requires it when
+  // other social logins are offered on iOS); on Android we hide the button
+  // entirely and reclaim its 58px (48 button + 10 top gap) from the reserved
+  // bottom area so the hero doesn't float.
+  const showAppleSignIn = Platform.OS === "ios";
+  const appleBlockHeight = showAppleSignIn ? 58 : 0;
+
   // Reserve room for the absolutely-positioned `actions` block; bump when a
   // banner is showing so the hero doesn't get overlapped.
   const hasWelcomeBanner = !!(formError || loginNotice);
-  const bottomBlockHeight = hasWelcomeBanner ? 290 + 80 : 290;
+  const bottomBlockHeight = 232 + appleBlockHeight + (hasWelcomeBanner ? 80 : 0);
   return (
     <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
       <View style={[styles.wrap, { paddingTop: 8 }]}>
@@ -346,15 +358,17 @@ export function LoginScreen() {
               )
             }
           />
-          {/* Apple sign-in not yet wired up. */}
-          <AppButton
-            label="Continue with Apple (coming soon)"
-            onPress={() => {}}
-            variant="dark"
-            disabled
-            style={[styles.ctaButton, styles.gap]}
-            leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
-          />
+          {showAppleSignIn ? (
+            // Apple sign-in not yet wired up; iOS only per App Store Guideline 4.8.
+            <AppButton
+              label="Continue with Apple (coming soon)"
+              onPress={() => {}}
+              variant="dark"
+              disabled
+              style={[styles.ctaButton, styles.gap]}
+              leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
+            />
+          ) : null}
           <View style={styles.switchRow}>
             <Text style={styles.switchText}>New to Safarly? </Text>
             <Pressable onPress={goToSignup} disabled={googleSubmitting} hitSlop={4}>
@@ -401,7 +415,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  heroImage: { width: 260, height: 260 },
+  heroImage: { width: HERO_SIZE, height: HERO_SIZE },
   title: { color: colors.wordmark, fontWeight: "800", fontSize: 30, textAlign: "center" },
   subtitleHero: {
     color: colors.mutedText,
@@ -410,7 +424,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-  illustration: { marginTop: 32, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
+  illustration: {
+    marginTop: HERO_MARGIN_TOP,
+    alignSelf: "stretch",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   actions: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 20 },
   welcomeBannerSlot: { marginBottom: 12 },
   ctaButton: { alignSelf: "stretch" },

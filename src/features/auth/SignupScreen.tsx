@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,13 +10,16 @@ import {
   View,
 } from "react-native";
 
+import { GoogleG } from "@/components/icons/GoogleG";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
-import { useAuth } from "@/context/AuthContext";
+import { AuthCancelledError, useAuth } from "@/context/AuthContext";
+import { getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
+import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 
@@ -34,7 +38,7 @@ interface FormErrors {
 }
 
 export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
-  const { signUpWithPassword } = useAuth();
+  const { signUpWithPassword, signInWithGoogle } = useAuth();
   const setPendingNotice = useAppStore((s) => s.setPendingNotice);
 
   const [fullName, setFullName] = useState("");
@@ -43,9 +47,14 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   /** Form-level (server) error — already-registered, network, etc. */
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Apple Sign In is iOS-only per App Store Guideline 4.8.
+  const showAppleSignIn = Platform.OS === "ios";
+  const busy = submitting || googleSubmitting;
 
   const fullNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
@@ -75,8 +84,27 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
     [fullName, password],
   );
 
+  const handleGoogleSignUp = useCallback(async () => {
+    if (busy) return;
+    setFormError(null);
+    setGoogleSubmitting(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      if (err instanceof AuthCancelledError) return;
+      const rawMessage = getErrorMessage(err);
+      const code = (err as { code?: unknown })?.code;
+      const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null);
+      setFormError(
+        oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signup").message,
+      );
+    } finally {
+      setGoogleSubmitting(false);
+    }
+  }, [busy, signInWithGoogle]);
+
   const handleSubmit = useCallback(async () => {
-    if (submitting) return;
+    if (busy) return;
     setFormError(null);
     const normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail !== email) setEmail(normalizedEmail);
@@ -114,29 +142,25 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
     } finally {
       setSubmitting(false);
     }
-  }, [submitting, validate, signUpWithPassword, email, password, fullName, phone, onSwitchToLogin]);
+  }, [busy, validate, signUpWithPassword, email, password, fullName, phone, onSwitchToLogin]);
 
   return (
     <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
-      {/* Screen already wraps in KeyboardAvoidingView; we add a ScrollView so
-          the form stays reachable when the keyboard opens. flexGrow: 1 keeps
-          marginTop:auto working (button pinned to bottom when there's room;
-          scrollable when the keyboard shrinks the view). */}
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.container}>
+      <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.headerRow}>
             <Pressable
               style={styles.backButton}
               onPress={onSwitchToLogin}
               accessibilityRole="button"
               accessibilityLabel="Go back"
-              disabled={submitting}
+              disabled={busy}
             >
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
@@ -166,7 +190,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               placeholder="Enter your full name"
               autoCapitalize="words"
               autoCorrect
-              editable={!submitting}
+              editable={!busy}
               error={errors.fullName}
               returnKeyType="next"
               onSubmitEditing={() => emailRef.current?.focus()}
@@ -185,7 +209,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="email"
-              editable={!submitting}
+              editable={!busy}
               error={errors.email}
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
@@ -196,7 +220,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               onChangeText={setPhone}
               placeholder="+1 234 567 8900"
               keyboardType="phone-pad"
-              editable={!submitting}
+              editable={!busy}
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
@@ -215,7 +239,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="password-new"
-                editable={!submitting}
+                editable={!busy}
                 error={errors.password}
                 returnKeyType="go"
                 onSubmitEditing={handleSubmit}
@@ -240,16 +264,43 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
             <AppButton
               label={submitting ? "Creating account…" : "Create account"}
               onPress={handleSubmit}
-              disabled={submitting}
+              disabled={busy}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               leftIcon={
                 submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
               }
             />
+            <View style={styles.separatorRow}>
+              <View style={styles.separator} />
+              <Text style={styles.or}>or</Text>
+              <View style={styles.separator} />
+            </View>
+            <AppButton
+              label={googleSubmitting ? "Connecting…" : "Continue with Google"}
+              onPress={handleGoogleSignUp}
+              variant="dark"
+              disabled={busy}
+              leftIcon={
+                googleSubmitting ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <GoogleG size={18} />
+                )
+              }
+            />
+            {showAppleSignIn ? (
+              <AppButton
+                label="Continue with Apple (coming soon)"
+                onPress={() => {}}
+                variant="dark"
+                disabled
+                leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
+              />
+            ) : null}
             <View style={styles.switchRow}>
               <Text style={styles.switchText}>Already have an account? </Text>
-              <Pressable onPress={onSwitchToLogin} disabled={submitting} hitSlop={4}>
-                <Text style={[styles.switchLink, submitting && styles.switchLinkDisabled]}>
+              <Pressable onPress={onSwitchToLogin} disabled={busy} hitSlop={4}>
+                <Text style={[styles.switchLink, busy && styles.switchLinkDisabled]}>
                   Sign in
                 </Text>
               </Pressable>
@@ -258,17 +309,14 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               By creating an account, you agree to our Terms of Service and Privacy Policy
             </Text>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  /** flexGrow:1 keeps the inner container filling the scroll viewport so
-   *  `marginTop: "auto"` on actions still pins the button to the bottom. */
-  scrollContent: { flexGrow: 1 },
+  scrollContent: { paddingBottom: 28 },
   // Shared visual structure with LoginScreen's email form (keep values in sync).
   container: { flex: 1, paddingHorizontal: 20, paddingTop: 8 },
   headerRow: {
@@ -290,6 +338,9 @@ const styles = StyleSheet.create({
   screenTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
   bannerSlot: { marginBottom: 18 },
+  separatorRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  separator: { flex: 1, height: 1, backgroundColor: colors.border },
+  or: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
   form: { gap: 16, marginBottom: 24 },
   // Anchored to the input box itself: `top` clears the field label + its 8px
   // marginBottom; `height` matches AppInput's input (paddingVertical 12 + 1px
@@ -303,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actions: { gap: 12, marginTop: "auto", paddingBottom: 28 },
+  actions: { gap: 12 },
   switchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
   switchText: { color: colors.mutedText, fontSize: 14 },
   switchLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },

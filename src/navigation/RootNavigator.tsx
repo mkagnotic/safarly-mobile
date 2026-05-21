@@ -41,6 +41,7 @@ import { MessagesScreen } from "@/features/messages/MessagesScreen";
 import { BuddyDetailsScreen } from "@/features/buddies/BuddyDetailsScreen";
 import { CreateBuddyScreen } from "@/features/buddies/CreateBuddyScreen";
 import { SplashScreen } from "@/features/splash/SplashScreen";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
 import { EarningsScreen } from "@/features/earnings/EarningsScreen";
 import { WalletScreen } from "@/features/wallet/WalletScreen";
@@ -81,6 +82,10 @@ const SHOW_DATA_TOGGLE = false;
  * stays presentational. Going back to Login pops the modal-style stack route
  * (configured with `slide_from_bottom`).
  */
+function AuthBootstrapScreen() {
+  return <LoadingScreen message="Setting things up…" />;
+}
+
 function SignupScreenWrapper() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, "Signup">>();
   const onSwitchToLogin = useCallback(() => {
@@ -309,12 +314,13 @@ export function RootNavigator() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const transitionBackground = colorScheme === "dark" ? "#0B0B0C" : screenCanvas;
-  const { splashDone, onboarded, profileSetupDone, authenticated, showLiveData, toggleLiveDataVisibility } = useAppStore(
+  const { splashDone, onboarded, profileSetupDone, authenticated, authBootstrapping, showLiveData, toggleLiveDataVisibility } = useAppStore(
     useShallow((s) => ({
       splashDone: s.splashDone,
       onboarded: s.onboarded,
       profileSetupDone: s.profileSetupDone,
       authenticated: s.authenticated,
+      authBootstrapping: s.authBootstrapping,
       showLiveData: s.showLiveData,
       toggleLiveDataVisibility: s.toggleLiveDataVisibility,
     }))
@@ -364,14 +370,17 @@ export function RootNavigator() {
             <Stack.Screen name="Signup" component={SignupScreenWrapper} options={{ headerShown: false, animation: "slide_from_bottom" }} />
           </>
         )}
-        {!showSplash && onboarded && authenticated && !profileSetupDone && (
+        {!showSplash && onboarded && authenticated && authBootstrapping && (
+          <Stack.Screen name="AuthBootstrap" component={AuthBootstrapScreen} options={{ headerShown: false }} />
+        )}
+        {!showSplash && onboarded && authenticated && !authBootstrapping && !profileSetupDone && (
           <>
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
           </>
         )}
-        {!showSplash && onboarded && authenticated && profileSetupDone && (
+        {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="Wallet" component={WalletScreen} options={{ headerShown: false }} />
