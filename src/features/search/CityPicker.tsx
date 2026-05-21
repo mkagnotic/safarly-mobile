@@ -22,13 +22,11 @@ interface Props {
   placeholder: string;
   disabled?: boolean;
   invalid?: boolean;
+  /** `compact` = slim pill (search filters); `card` = taller card (form layouts). */
+  variant?: "compact" | "card";
 }
 
-/**
- * Cross-platform city picker for the Search screen. Modeled on the existing
- * CountryPicker — Modal + FlatList + searchable. Includes the "ANY" sentinel
- * row so users can search "from anywhere" or "to anywhere".
- */
+/** Modal + searchable city list with an "ANY" sentinel row at the top. */
 export function CityPicker({
   value,
   onChange,
@@ -36,6 +34,7 @@ export function CityPicker({
   placeholder,
   disabled,
   invalid,
+  variant = "compact",
 }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -60,6 +59,8 @@ export function CityPicker({
   );
 
   const displayLabel = value === ANY_CITY ? "🌍 Any City" : value || "";
+  const isCard = variant === "card";
+  const isFilled = !!value;
 
   return (
     <View style={styles.flex}>
@@ -67,8 +68,8 @@ export function CityPicker({
         onPress={() => setOpen(true)}
         disabled={disabled}
         style={({ pressed }) => [
-          styles.field,
-          invalid ? styles.fieldError : null,
+          isCard ? styles.cardField : styles.field,
+          invalid ? (isCard ? styles.cardFieldError : styles.fieldError) : null,
           pressed && !disabled ? styles.fieldPressed : null,
           disabled ? styles.fieldDisabled : null,
         ]}
@@ -76,12 +77,24 @@ export function CityPicker({
         accessibilityLabel={displayLabel || placeholder}
       >
         <Text
-          style={[styles.fieldText, !displayLabel && styles.fieldPlaceholder]}
+          style={[
+            isCard ? styles.cardFieldText : styles.fieldText,
+            !displayLabel && (isCard ? styles.cardFieldPlaceholder : styles.fieldPlaceholder),
+          ]}
           numberOfLines={1}
         >
           {displayLabel || placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+        {isCard ? (
+          <View style={styles.cardRight}>
+            {isFilled ? (
+              <Ionicons name="checkmark-circle" size={20} color={colors.safe} />
+            ) : null}
+            <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+          </View>
+        ) : (
+          <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+        )}
       </Pressable>
 
       <Modal
@@ -169,17 +182,39 @@ const styles = StyleSheet.create({
     minHeight: 46,
     borderRadius: 12,
     backgroundColor: colors.input,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  fieldError: { borderWidth: 1, borderColor: colors.danger },
+  fieldError: { borderColor: colors.danger },
   fieldPressed: { opacity: 0.85 },
   fieldDisabled: { opacity: 0.5 },
   fieldText: { color: colors.text, fontSize: 14, fontWeight: "500", flex: 1 },
   fieldPlaceholder: { color: colors.mutedText, fontWeight: "400" },
+
+  cardField: {
+    minHeight: 56,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceTintPrimary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  cardFieldText: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700", flex: 1 },
+  cardFieldPlaceholder: { color: colors.mutedText, fontWeight: "500" },
+  cardFieldError: {
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: "rgba(220, 40, 40, 0.06)",
+  },
+  cardRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15, 15, 25, 0.4)" },
   sheet: {
     position: "absolute",
@@ -232,7 +267,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   rowPressed: { backgroundColor: "rgba(0,0,0,0.04)" },
-  rowSelected: { backgroundColor: "rgba(255, 122, 38, 0.08)" },
+  rowSelected: { backgroundColor: colors.surfaceTintPrimary },
   rowName: { color: colors.text, fontSize: 14, fontWeight: "500" },
   anyText: { color: colors.text, fontSize: 14, fontWeight: "700" },
   empty: { textAlign: "center", color: colors.mutedText, paddingVertical: 24 },

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { DeclineMatchModal } from "@/components/chat/DeclineMatchModal";
 import {
@@ -444,6 +445,7 @@ const ListHeader = memo(function ListHeader({
     <View>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Inbox</Text>
+        <PrimaryHeaderActions />
       </View>
 
       <View style={styles.headerCard}>
@@ -691,8 +693,15 @@ const styles = StyleSheet.create({
   listContentEmpty: { flexGrow: 1 },
 
   // Header
-  titleRow: { marginTop: 16, marginBottom: 14 },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 14,
+  },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
 
   // Web parity: filter chips + search wrapped in a single bordered card.
   headerCard: {

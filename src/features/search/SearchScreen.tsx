@@ -8,21 +8,24 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
+import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { FormBanner } from "@/components/ui/FormBanner";
+import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
 import { CityPicker } from "@/features/search/CityPicker";
 import {
   citiesForDirection,
   countryLabelForDirection,
   type Direction,
 } from "@/features/search/cityLists";
+import { DatePicker } from "@/features/search/DatePicker";
 import { RouteListingCard } from "@/features/search/RouteListingCard";
+import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useParcels } from "@/hooks/api/useParcels";
 import { useSearchMatches } from "@/hooks/api/useSearchMatches";
 import { useTrips } from "@/hooks/api/useTrips";
@@ -35,7 +38,7 @@ import {
   type SearchFilters,
   type Trip,
 } from "@/services/api";
-import { colors } from "@/theme/colors";
+import { colors, primaryTint } from "@/theme/colors";
 import { carrierTripMatchesParcel, parcelMatchesTrip } from "@/utils/routeMatch";
 
 type Nav = CompositeNavigationProp<
@@ -45,6 +48,14 @@ type Nav = CompositeNavigationProp<
 
 type LookingForType = "travel_buddy" | "carrier" | "receive_request";
 type ResultsTab = "package" | "buddy" | "receiver";
+
+type NoticeVariant = "error" | "info" | "success" | "warning";
+interface Notice {
+  message: string;
+  title?: string;
+  variant: NoticeVariant;
+}
+type SetNotice = (notice: Notice | null) => void;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -91,7 +102,6 @@ function getInitials(name?: string | null): string {
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
 
-  // Filter state
   const [direction, setDirection] = useState<Direction>("IN_TO_US");
   const [fromCity, setFromCity] = useState("");
   const [toCity, setToCity] = useState("");
@@ -99,16 +109,13 @@ export function SearchScreen() {
   const [dateTo, setDateTo] = useState("");
   const [lookingFor, setLookingFor] = useState<LookingForType[]>([]);
   const [activeTab, setActiveTab] = useState<ResultsTab>("package");
+  const [notice, setNotice] = useState<Notice | null>(null);
 
-  // Auto-match on mount: hook fires `{ per_page: 50, match_my_routes: true }`
-  // so the result tabs render with data before the user touches a filter.
+  // Auto-match on mount returns results before the user touches a filter.
   const { results, loading, error, hasAppliedFilters, search, refetch } = useSearchMatches();
 
-  // For auto-match, web groups search results by the user's own listings:
-  //   Packages tab    → one card per `my_parcels` (matched carriers nested)
-  //   Receivers tab   → one card per `my_trips` (matched receivers nested)
-  // We fetch both lists at high per_page to mirror that — `useTrips`/`useParcels`
-  // already cache their own state, so this isn't a duplicate fetch with `MyTravels`.
+  // In auto-match mode results are grouped under the user's own listings —
+  // one card per parcel/trip with matches nested inside (mirrors web).
   const myTripsState = useTrips({ filter: "my_trips", perPage: 100 });
   const myParcelsState = useParcels({ filter: "my_parcels", perPage: 100 });
 
@@ -127,7 +134,6 @@ export function SearchScreen() {
   );
   const buddyMatches = results?.buddy_matches ?? [];
 
-  // Web filters to active statuses + sorts by date — port both.
   const sortedMyParcels: Parcel[] = useMemo(
     () =>
       myParcelsState.parcels
@@ -143,6 +149,73 @@ export function SearchScreen() {
     [myTripsState.trips],
   );
 
+  // Pre-compute per-listing matches at the parent so the tab counts and the
+  // nested cards read from the same source (no auto-match drift).
+  const carrierTripsByParcelId = useMemo(() => {
+    const map = new Map<string, PackageMatch[]>();
+    if (loading) return map;
+    for (const parcel of sortedMyParcels) {
+      map.set(
+        parcel.id,
+        carrierTrips.filter((m) =>
+          carrierTripMatchesParcel(
+            {
+              from_city: m.from_city,
+              to_city: m.to_city,
+              any_from: m.any_from,
+              any_to: m.any_to,
+              travel_date: m.travel_date,
+            },
+            parcel,
+          ),
+        ),
+      );
+    }
+    return map;
+  }, [loading, carrierTrips, sortedMyParcels]);
+
+  const receiverRequestsByTripId = useMemo(() => {
+    const map = new Map<string, PackageMatch[]>();
+    if (loading) return map;
+    for (const trip of sortedMyTrips) {
+      map.set(
+        trip.id,
+        receiverRequests.filter(
+          (m) =>
+            m.delivery_by != null &&
+            parcelMatchesTrip(
+              {
+                from_city: m.from_city,
+                to_city: m.to_city,
+                any_from: m.any_from,
+                any_to: m.any_to,
+                delivery_by: m.delivery_by,
+              },
+              trip,
+            ),
+        ),
+      );
+    }
+    return map;
+  }, [loading, receiverRequests, sortedMyTrips]);
+
+  // Auto-match counts = sum of nested matches under user listings; manual
+  // filter counts = flat result length. Buddies is always flat.
+  const isAutoMatch = !hasAppliedFilters;
+  const packageTabCount = useMemo(() => {
+    if (!isAutoMatch) return carrierTrips.length;
+    let total = 0;
+    for (const list of carrierTripsByParcelId.values()) total += list.length;
+    return total;
+  }, [isAutoMatch, carrierTrips, carrierTripsByParcelId]);
+
+  const receiverTabCount = useMemo(() => {
+    if (!isAutoMatch) return receiverRequests.length;
+    let total = 0;
+    for (const list of receiverRequestsByTripId.values()) total += list.length;
+    return total;
+  }, [isAutoMatch, receiverRequests, receiverRequestsByTripId]);
+
   const handleSwapDirection = useCallback(() => {
     setDirection((d) => (d === "IN_TO_US" ? "US_TO_IN" : "IN_TO_US"));
     setFromCity("");
@@ -156,6 +229,7 @@ export function SearchScreen() {
   }, []);
 
   const handleApply = useCallback(async () => {
+    setNotice(null);
     const hasAtLeastOne =
       Boolean(fromCity) ||
       Boolean(toCity) ||
@@ -163,7 +237,7 @@ export function SearchScreen() {
       Boolean(dateTo) ||
       lookingFor.length > 0;
     if (!hasAtLeastOne) {
-      showToast({
+      setNotice({
         title: "Choose at least one filter",
         message: "Pick a city, date, or category before searching.",
         variant: "warning",
@@ -171,11 +245,11 @@ export function SearchScreen() {
       return;
     }
     if (dateFrom && !ISO_DATE.test(dateFrom)) {
-      showToast({ title: "Invalid date", message: "From date must be YYYY-MM-DD.", variant: "error" });
+      setNotice({ title: "Invalid date", message: "From date must be YYYY-MM-DD.", variant: "error" });
       return;
     }
     if (dateTo && !ISO_DATE.test(dateTo)) {
-      showToast({ title: "Invalid date", message: "To date must be YYYY-MM-DD.", variant: "error" });
+      setNotice({ title: "Invalid date", message: "To date must be YYYY-MM-DD.", variant: "error" });
       return;
     }
 
@@ -189,7 +263,7 @@ export function SearchScreen() {
     try {
       await search(filters);
     } catch {
-      // Errors are already surfaced via the hook's error state.
+      // Hook's error state below the tabs already surfaces this.
     }
   }, [fromCity, toCity, dateFrom, dateTo, lookingFor, search]);
 
@@ -200,17 +274,28 @@ export function SearchScreen() {
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ───────── Header ───────── */}
         <View style={styles.header}>
-          <Text style={styles.title}>Search & Discover</Text>
-          <Text style={styles.subtitle}>
-            Find carriers, parcels, or travel buddies for your journey
-          </Text>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.title}>Search & discover</Text>
+            <Text style={styles.subtitle}>
+              Find carriers, parcels, or travel buddies for your journey.
+            </Text>
+          </View>
+          <PrimaryHeaderActions />
         </View>
 
-        {/* ───────── Filters ───────── */}
+        {notice ? (
+          <View style={styles.bannerSlot}>
+            <FormBanner
+              title={notice.title ?? undefined}
+              message={notice.message}
+              variant={notice.variant}
+              onDismiss={() => setNotice(null)}
+            />
+          </View>
+        ) : null}
+
         <Card style={styles.filtersCard}>
-          {/* Route */}
           <Text style={styles.fieldLabel}>ROUTE</Text>
           <View style={styles.routeRow}>
             <CityPicker
@@ -227,7 +312,7 @@ export function SearchScreen() {
               accessibilityRole="button"
               accessibilityLabel="Swap direction"
             >
-              <Ionicons name="swap-vertical-outline" size={16} color={colors.primary} />
+              <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
             </Pressable>
             <CityPicker
               value={toCity}
@@ -238,35 +323,21 @@ export function SearchScreen() {
             />
           </View>
 
-          {/* Date Range */}
+          {/* Date Range — tappable fields that open a calendar sheet. */}
           <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>DATE RANGE</Text>
           <View style={styles.dateRow}>
-            <View style={styles.dateInputWrap}>
-              <TextInput
-                value={dateFrom}
-                onChangeText={setDateFrom}
-                style={styles.dateInput}
-                placeholder="From (YYYY-MM-DD)"
-                placeholderTextColor={colors.subtleText}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-                maxLength={10}
-              />
-            </View>
-            <View style={styles.dateInputWrap}>
-              <TextInput
-                value={dateTo}
-                onChangeText={setDateTo}
-                style={styles.dateInput}
-                placeholder="To (YYYY-MM-DD)"
-                placeholderTextColor={colors.subtleText}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-                maxLength={10}
-              />
-            </View>
+            <DatePicker
+              value={dateFrom}
+              onChange={setDateFrom}
+              placeholder="From date"
+              disabled={loading}
+            />
+            <DatePicker
+              value={dateTo}
+              onChange={setDateTo}
+              placeholder="To date"
+              disabled={loading}
+            />
           </View>
 
           {/* Looking For */}
@@ -284,42 +355,30 @@ export function SearchScreen() {
                   accessibilityState={{ checked }}
                 >
                   <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                    {checked ? <Ionicons name="checkmark" size={12} color={colors.white} /> : null}
+                    {checked ? (
+                      <Ionicons name="checkmark" size={14} color={colors.white} />
+                    ) : null}
                   </View>
-                  <Ionicons name={opt.icon} size={16} color={colors.primary} />
                   <Text style={styles.checkboxLabel}>{opt.label}</Text>
                 </Pressable>
               );
             })}
           </View>
 
-          {/* Apply */}
-          <Pressable
-            style={[styles.applyButton, loading && styles.applyButtonDisabled]}
+          {/* Apply — primary submit CTA, label-only (matches MyTravels' AppButton recipe). */}
+          <AppButton
+            label={loading ? "Searching…" : "Apply Filters & Search"}
             onPress={() => void handleApply()}
             disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Apply filters and search"
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <>
-                <Ionicons name="search-outline" size={16} color={colors.white} />
-                <Text style={styles.applyButtonText}>Apply Filters & Search</Text>
-              </>
-            )}
-          </Pressable>
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.applyButtonWrap}
+          />
 
-          <View style={styles.note}>
-            <Ionicons name="information-circle-outline" size={12} color={colors.mutedText} />
-            <Text style={styles.noteText}>
-              Max 3 searches per day. Use filters wisely for best results.
-            </Text>
-          </View>
+          <Text style={styles.noteText}>
+            Max 3 searches per day. Use filters wisely for best results.
+          </Text>
         </Card>
 
-        {/* ───────── Auto-match / applied-filters banner ───────── */}
         <SearchModeBanner
           hasAppliedFilters={hasAppliedFilters}
           activeTab={activeTab}
@@ -328,14 +387,13 @@ export function SearchScreen() {
           myBuddyCount={results?.my_buddy_route_targets_count ?? results?.my_buddy_listings_count ?? 0}
         />
 
-        {/* ───────── Result tabs (always visible, like web) ───────── */}
         <ResultTabs
           active={activeTab}
           onChange={setActiveTab}
           counts={{
-            package: carrierTrips.length,
+            package: packageTabCount,
             buddy: buddyMatches.length,
-            receiver: receiverRequests.length,
+            receiver: receiverTabCount,
           }}
           loading={loading}
         />
@@ -345,26 +403,31 @@ export function SearchScreen() {
         ) : activeTab === "package" ? (
           <PackageTabResults
             loading={loading}
-            isAutoMatch={!hasAppliedFilters}
+            isAutoMatch={isAutoMatch}
             myParcels={sortedMyParcels}
             myParcelsLoading={myParcelsState.loading}
             matches={carrierTrips}
+            matchesByParcelId={carrierTripsByParcelId}
             navigation={navigation}
+            setNotice={setNotice}
           />
         ) : activeTab === "buddy" ? (
           <BuddyTabResults
             loading={loading}
             matches={buddyMatches}
             navigation={navigation}
+            setNotice={setNotice}
           />
         ) : (
           <ReceiverTabResults
             loading={loading}
-            isAutoMatch={!hasAppliedFilters}
+            isAutoMatch={isAutoMatch}
             myTrips={sortedMyTrips}
             myTripsLoading={myTripsState.loading}
             matches={receiverRequests}
+            matchesByTripId={receiverRequestsByTripId}
             navigation={navigation}
+            setNotice={setNotice}
           />
         )}
       </ScrollView>
@@ -387,10 +450,10 @@ const ResultTabs = memo(function ResultTabs({
   counts,
   loading,
 }: Readonly<ResultTabsProps>) {
-  const tabs: readonly { key: ResultsTab; label: string; count: number; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
-    { key: "package", label: "Packages", count: counts.package, icon: "cube-outline", color: colors.primary },
-    { key: "buddy", label: "Buddies", count: counts.buddy, icon: "people-outline", color: colors.safe },
-    { key: "receiver", label: "Receivers", count: counts.receiver, icon: "mail-outline", color: colors.warning },
+  const tabs: readonly { key: ResultsTab; label: string; count: number }[] = [
+    { key: "package", label: "Packages", count: counts.package },
+    { key: "buddy", label: "Buddies", count: counts.buddy },
+    { key: "receiver", label: "Receivers", count: counts.receiver },
   ];
   return (
     <View style={styles.tabsRow}>
@@ -404,15 +467,14 @@ const ResultTabs = memo(function ResultTabs({
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
           >
-            <Ionicons name={tab.icon} size={14} color={tab.color} />
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-              {tab.label}
+            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]} numberOfLines={1}>
+              {tab.label}{" "}
+              {loading ? (
+                <Text style={styles.tabCount}>(…)</Text>
+              ) : (
+                <Text style={styles.tabCount}>({tab.count})</Text>
+              )}
             </Text>
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.mutedText} />
-            ) : (
-              <Text style={styles.tabCount}>({tab.count})</Text>
-            )}
           </Pressable>
         );
       })}
@@ -428,17 +490,20 @@ function PackageTabResults({
   myParcels,
   myParcelsLoading,
   matches,
+  matchesByParcelId,
   navigation,
+  setNotice,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
   myParcels: Parcel[];
   myParcelsLoading: boolean;
   matches: PackageMatch[];
+  /** Pre-filtered per-parcel match lists (same source as the tab count). */
+  matchesByParcelId: Map<string, PackageMatch[]>;
   navigation: Nav;
+  setNotice: SetNotice;
 }>) {
-  // Auto-match mode (web parity): one route card per user parcel, with
-  // matching carrier trips nested inside. Web's `sortedMyParcels.map(...)`.
   if (isAutoMatch) {
     if (myParcelsLoading && myParcels.length === 0)
       return <CenteredSpinner label="Loading your parcel requests…" />;
@@ -453,32 +518,25 @@ function PackageTabResults({
     return (
       <View>
         {myParcels.map((parcel) => {
-          const matched = loading
-            ? []
-            : matches.filter((m) =>
-                carrierTripMatchesParcel(
-                  {
-                    from_city: m.from_city,
-                    to_city: m.to_city,
-                    any_from: m.any_from,
-                    any_to: m.any_to,
-                    travel_date: m.travel_date,
-                  },
-                  parcel,
-                ),
-              );
+          const matched = matchesByParcelId.get(parcel.id) ?? [];
           return (
             <RouteListingCard
               key={parcel.id}
-              title={`${parcel.from_city} → ${parcel.to_city}`}
+              fromCity={parcel.from_city}
+              toCity={parcel.to_city}
+              kind="parcel"
               dateLabel={formatTripDateRange(parcel.delivery_by)}
-              metaRight={parcel.category ? `Parcel · ${parcel.category}` : "Parcel request"}
+              secondary={
+                parcel.category
+                  ? { label: "CATEGORY", value: parcel.category }
+                  : undefined
+              }
             >
               {loading ? (
                 <CenteredSpinner label="Searching carrier trips…" small />
               ) : matched.length === 0 ? (
                 <Text style={styles.nestedEmpty}>
-                  No matched carriers yet for this route/date.
+                  No matched carriers yet for this route or date.
                 </Text>
               ) : (
                 <View>
@@ -487,8 +545,8 @@ function PackageTabResults({
                     <PackageMatchCard
                       key={`${m.type}-${m.id}`}
                       match={m}
-                      metaRight="Carrier trip"
                       navigation={navigation}
+                      setNotice={setNotice}
                     />
                   ))}
                 </View>
@@ -500,7 +558,6 @@ function PackageTabResults({
     );
   }
 
-  // Manual filter mode — flat list of carrier trips (web also flat in this mode).
   if (loading && matches.length === 0)
     return <CenteredSpinner label="Searching carrier trips…" />;
   if (matches.length === 0)
@@ -517,8 +574,8 @@ function PackageTabResults({
         <PackageMatchCard
           key={`${m.type}-${m.id}`}
           match={m}
-          metaRight="Carrier trip"
           navigation={navigation}
+          setNotice={setNotice}
         />
       ))}
     </View>
@@ -529,10 +586,12 @@ function BuddyTabResults({
   loading,
   matches,
   navigation,
+  setNotice,
 }: Readonly<{
   loading: boolean;
   matches: BuddySearchMatch[];
   navigation: Nav;
+  setNotice: SetNotice;
 }>) {
   if (loading && matches.length === 0)
     return <CenteredSpinner label="Searching travel buddies…" />;
@@ -547,7 +606,7 @@ function BuddyTabResults({
   return (
     <View>
       {matches.map((b) => (
-        <BuddyMatchCard key={b.id} match={b} navigation={navigation} />
+        <BuddyMatchCard key={b.id} match={b} navigation={navigation} setNotice={setNotice} />
       ))}
     </View>
   );
@@ -559,17 +618,20 @@ function ReceiverTabResults({
   myTrips,
   myTripsLoading,
   matches,
+  matchesByTripId,
   navigation,
+  setNotice,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
   myTrips: Trip[];
   myTripsLoading: boolean;
   matches: PackageMatch[];
+  /** Pre-filtered per-trip match lists (same source as the tab count). */
+  matchesByTripId: Map<string, PackageMatch[]>;
   navigation: Nav;
+  setNotice: SetNotice;
 }>) {
-  // Auto-match mode (web parity): one route card per user trip, with
-  // matching receive_requests nested inside. Web's `sortedMyTrips.map(...)`.
   if (isAutoMatch) {
     if (myTripsLoading && myTrips.length === 0)
       return <CenteredSpinner label="Loading your trips…" />;
@@ -584,34 +646,23 @@ function ReceiverTabResults({
     return (
       <View>
         {myTrips.map((trip) => {
-          const matched = loading
-            ? []
-            : matches.filter((m) =>
-                m.delivery_by != null &&
-                parcelMatchesTrip(
-                  {
-                    from_city: m.from_city,
-                    to_city: m.to_city,
-                    any_from: m.any_from,
-                    any_to: m.any_to,
-                    delivery_by: m.delivery_by,
-                  },
-                  trip,
-                ),
-              );
+          const matched = matchesByTripId.get(trip.id) ?? [];
           return (
             <RouteListingCard
               key={trip.id}
-              title={`${trip.from_city} → ${trip.to_city}`}
+              fromCity={trip.from_city}
+              toCity={trip.to_city}
+              kind="trip"
               dateLabel={formatTripDateRange(trip.travel_date)}
-              airline={trip.airline}
-              metaRight="Your trip"
+              secondary={
+                trip.airline ? { label: "AIRLINE", value: trip.airline } : undefined
+              }
             >
               {loading ? (
                 <CenteredSpinner label="Searching receiver requests…" small />
               ) : matched.length === 0 ? (
                 <Text style={styles.nestedEmpty}>
-                  No receiver requests yet for this route/date.
+                  No receiver requests yet for this route or date.
                 </Text>
               ) : (
                 <View>
@@ -620,8 +671,8 @@ function ReceiverTabResults({
                     <PackageMatchCard
                       key={`${m.type}-${m.id}`}
                       match={m}
-                      metaRight="Receive request"
                       navigation={navigation}
+                      setNotice={setNotice}
                     />
                   ))}
                 </View>
@@ -633,7 +684,6 @@ function ReceiverTabResults({
     );
   }
 
-  // Manual filter mode — flat list (matches web).
   if (loading && matches.length === 0)
     return <CenteredSpinner label="Searching receiver requests…" />;
   if (matches.length === 0)
@@ -650,8 +700,8 @@ function ReceiverTabResults({
         <PackageMatchCard
           key={`${m.type}-${m.id}`}
           match={m}
-          metaRight="Receive request"
           navigation={navigation}
+          setNotice={setNotice}
         />
       ))}
     </View>
@@ -662,44 +712,67 @@ function ReceiverTabResults({
 
 function PackageMatchCard({
   match,
-  metaRight,
   navigation,
-}: Readonly<{ match: PackageMatch; metaRight: string; navigation: Nav }>) {
+  setNotice,
+}: Readonly<{ match: PackageMatch; navigation: Nav; setNotice: SetNotice }>) {
   const isTrip = match.type === "carrier_trip";
   const person = isTrip ? match.carrier : match.sender;
   const dateLabel = isTrip
     ? formatDateLabel(match.travel_date)
     : formatDateLabel(match.delivery_by);
 
+  const handleViewProfile = useCallback(() => {
+    setNotice({ message: "Profile pages are coming soon.", variant: "info" });
+  }, [setNotice]);
+
   const handleStartChat = useCallback(() => {
     if (!person?.id) {
-      showToast({ title: "User not available", variant: "error" });
+      setNotice({
+        title: "User unavailable",
+        message: "This person can't be messaged right now.",
+        variant: "error",
+      });
       return;
     }
-    // Navigate to messages — actual createConversation happens in the chat screen
-    // when MessagesScreen is wired in a follow-up.
     navigation.navigate("MessagesTab");
-  }, [person?.id, navigation]);
+  }, [person?.id, navigation, setNotice]);
+
+  const secondary = isTrip
+    ? {
+        label: "CAPACITY",
+        value:
+          match.luggage_capacity_kg != null
+            ? `${match.luggage_capacity_kg} kg`
+            : "—",
+      }
+    : {
+        label: "FEE",
+        value:
+          match.fee_offered != null ? `USD $${match.fee_offered}` : "—",
+      };
+
+  const inlineSubtitle = isTrip
+    ? match.airline
+      ? `Via ${match.airline}`
+      : null
+    : match.category?.trim() || null;
 
   return (
     <Card style={styles.matchCard}>
-      <View style={styles.matchTitleRow}>
-        <Text style={styles.matchRoute}>
-          {match.from_city} → {match.to_city}
-        </Text>
-        <Text style={styles.metaRight}>{metaRight}</Text>
-      </View>
-      <View style={styles.matchMeta}>
-        <Ionicons name="calendar-outline" size={13} color={colors.mutedText} />
-        <Text style={styles.matchMetaText}>{dateLabel}</Text>
-        {isTrip && match.airline ? (
-          <>
-            <Text style={styles.metaSep}>·</Text>
-            <Ionicons name="airplane-outline" size={13} color={colors.mutedText} />
-            <Text style={styles.matchMetaText}>{match.airline}</Text>
-          </>
-        ) : null}
-      </View>
+      <RouteHeader
+        fromCity={match.from_city}
+        toCity={match.to_city}
+        kind={isTrip ? "trip" : "parcel"}
+      />
+
+      <MetricRow>
+        <MetricTile label="DATE" value={dateLabel} />
+        <MetricTile label={secondary.label} value={secondary.value} highlight />
+      </MetricRow>
+
+      {inlineSubtitle ? (
+        <Text style={styles.matchSubtitle}>{inlineSubtitle}</Text>
+      ) : null}
 
       <View style={styles.divider} />
 
@@ -711,64 +784,27 @@ function PackageMatchCard({
           <Text style={styles.personName} numberOfLines={2}>
             {person?.name || "Unknown user"}
           </Text>
-          <View style={styles.ratingRow}>
-            <Ionicons name="star" size={12} color={colors.warning} />
-            <Text style={styles.ratingText}>
-              {person?.rating && person.rating > 0
-                ? `${person.rating.toFixed(1)} rating`
-                : "New"}
-            </Text>
-          </View>
+          <Text style={styles.ratingText}>
+            {person?.rating && person.rating > 0
+              ? `${person.rating.toFixed(1)} rating`
+              : "New member"}
+          </Text>
         </View>
       </View>
 
-      <View style={styles.matchSubmeta}>
-        {isTrip ? (
-          <View style={styles.submetaItem}>
-            <Ionicons name="cube-outline" size={13} color={colors.primary} />
-            <Text style={styles.submetaText}>
-              {match.luggage_capacity_kg != null
-                ? `${match.luggage_capacity_kg} kg capacity`
-                : "Carrier"}
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.submetaItem}>
-              <Ionicons name="cube-outline" size={13} color={colors.primary} />
-              <Text style={styles.submetaText}>{match.category?.trim() || "anything"}</Text>
-            </View>
-            <View style={styles.submetaItem}>
-              <Ionicons name="cash-outline" size={13} color={colors.safe} />
-              <Text style={styles.submetaText}>
-                USD ${match.fee_offered ?? "—"}
-              </Text>
-            </View>
-          </>
-        )}
-      </View>
-
       <View style={styles.actionsRow}>
-        <Pressable
-          style={[styles.actionButton, styles.secondaryAction]}
-          onPress={() => showToast({ title: "Profile coming soon", variant: "info" })}
-          accessibilityRole="button"
-          accessibilityLabel="View profile"
-        >
-          <Ionicons name="person-outline" size={13} color={colors.text} />
-          <Text style={styles.actionButtonText}>VIEW PROFILE</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.actionButton, styles.primaryAction]}
+        <AppButton
+          label="View profile"
+          variant="secondary"
+          onPress={handleViewProfile}
+          style={styles.actionButtonFlex}
+        />
+        <AppButton
+          label="Start chat"
           onPress={handleStartChat}
-          accessibilityRole="button"
-          accessibilityLabel="Start chat"
-        >
-          <Ionicons name="chatbubble-outline" size={13} color={colors.white} />
-          <Text style={[styles.actionButtonText, styles.primaryActionText]}>
-            START CHAT
-          </Text>
-        </Pressable>
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.actionButtonFlex}
+        />
       </View>
     </Card>
   );
@@ -777,7 +813,8 @@ function PackageMatchCard({
 function BuddyMatchCard({
   match,
   navigation,
-}: Readonly<{ match: BuddySearchMatch; navigation: Nav }>) {
+  setNotice,
+}: Readonly<{ match: BuddySearchMatch; navigation: Nav; setNotice: SetNotice }>) {
   const dateFrom = match.travel_date_from || match.travel_date;
   const dateTo = match.travel_date_to || match.travel_date;
   const dateLabel =
@@ -786,21 +823,28 @@ function BuddyMatchCard({
       : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`;
 
   const details: { label: string; value: string }[] = [
-    ...(match.airline ? [{ label: "Airline", value: match.airline }] : []),
-    ...(match.age != null ? [{ label: "Age", value: `${match.age} yrs` }] : []),
+    ...(match.age != null ? [{ label: "AGE", value: `${match.age} yrs` }] : []),
     ...(match.languages?.length
-      ? [{ label: "Languages", value: match.languages.slice(0, 3).join(", ") }]
+      ? [{ label: "LANGUAGES", value: match.languages.slice(0, 3).join(", ") }]
       : []),
-    ...(match.layover ? [{ label: "Layover", value: match.layover }] : []),
+    ...(match.layover ? [{ label: "LAYOVER", value: match.layover }] : []),
   ];
+
+  const handleViewProfile = useCallback(() => {
+    setNotice({ message: "Profile pages are coming soon.", variant: "info" });
+  }, [setNotice]);
 
   const handleStartChat = useCallback(() => {
     if (!match.user?.id) {
-      showToast({ title: "User not available", variant: "error" });
+      setNotice({
+        title: "User unavailable",
+        message: "This buddy can't be messaged right now.",
+        variant: "error",
+      });
       return;
     }
     navigation.navigate("MessagesTab");
-  }, [match.user?.id, navigation]);
+  }, [match.user?.id, navigation, setNotice]);
 
   return (
     <Card style={styles.matchCard}>
@@ -813,49 +857,30 @@ function BuddyMatchCard({
             <Text style={styles.personName} numberOfLines={2}>
               {match.user?.name || "Travel buddy"}
             </Text>
-            <View style={[styles.badge, styles.badgeSafe]}>
+            <View style={styles.badgeSafe}>
               <Text style={styles.badgeText}>BUDDY</Text>
             </View>
           </View>
-          <View style={styles.ratingRow}>
-            {match.user?.rating && match.user.rating > 0 ? (
-              <>
-                <Ionicons name="star" size={12} color={colors.warning} />
-                <Text style={styles.ratingText}>
-                  {match.user.rating.toFixed(1)} rating
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.ratingText}>⭐ New member</Text>
-            )}
-          </View>
+          <Text style={styles.ratingText}>
+            {match.user?.rating && match.user.rating > 0
+              ? `${match.user.rating.toFixed(1)} rating`
+              : "New member"}
+          </Text>
         </View>
       </View>
 
       <View style={styles.travelDetailsBlock}>
-        <View style={styles.travelLabelRow}>
-          <Ionicons name="airplane-outline" size={11} color={colors.primary} />
-          <Text style={styles.travelLabel}>TRAVEL DETAILS</Text>
-        </View>
-        <View style={styles.routeMetaRow}>
-          <Ionicons name="location-outline" size={13} color={colors.primary} />
-          <Text style={styles.routeMetaText} numberOfLines={2}>
-            {match.from_city}
-          </Text>
-          <Ionicons name="arrow-forward" size={12} color={colors.mutedText} />
-          <Text style={styles.routeMetaText} numberOfLines={2}>
-            {match.to_city}
-          </Text>
-        </View>
-        <View style={styles.routeMetaRow}>
-          <Ionicons name="calendar-outline" size={12} color={colors.mutedText} />
-          <Text style={styles.dateMetaText}>{dateLabel}</Text>
-        </View>
+        <Text style={styles.travelLabel}>TRAVEL DETAILS</Text>
+        <RouteHeader fromCity={match.from_city} toCity={match.to_city} kind="trip" />
+        <MetricRow>
+          <MetricTile label="DATE" value={dateLabel} />
+          <MetricTile label="AIRLINE" value={match.airline || "—"} highlight />
+        </MetricRow>
         {details.length > 0 ? (
           <View style={styles.detailsGrid}>
             {details.map((d) => (
               <View key={d.label} style={styles.detailItem}>
-                <Text style={styles.detailLabel}>{d.label.toUpperCase()}</Text>
+                <Text style={styles.detailLabel}>{d.label}</Text>
                 <Text style={styles.detailValue} numberOfLines={2}>
                   {d.value}
                 </Text>
@@ -871,26 +896,18 @@ function BuddyMatchCard({
       </View>
 
       <View style={styles.actionsRow}>
-        <Pressable
-          style={[styles.actionButton, styles.secondaryAction]}
-          onPress={() => showToast({ title: "Profile coming soon", variant: "info" })}
-          accessibilityRole="button"
-          accessibilityLabel="View profile"
-        >
-          <Ionicons name="person-outline" size={13} color={colors.text} />
-          <Text style={styles.actionButtonText}>VIEW PROFILE</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.actionButton, styles.primaryAction]}
+        <AppButton
+          label="View profile"
+          variant="secondary"
+          onPress={handleViewProfile}
+          style={styles.actionButtonFlex}
+        />
+        <AppButton
+          label="Start chat"
           onPress={handleStartChat}
-          accessibilityRole="button"
-          accessibilityLabel="Start chat"
-        >
-          <Ionicons name="chatbubble-outline" size={13} color={colors.white} />
-          <Text style={[styles.actionButtonText, styles.primaryActionText]}>
-            START CHAT
-          </Text>
-        </Pressable>
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.actionButtonFlex}
+        />
       </View>
     </Card>
   );
@@ -906,11 +923,6 @@ interface SearchModeBannerProps {
   myBuddyCount: number;
 }
 
-/**
- * Mirrors the small per-tab info paragraph web shows above each result tab
- * when in auto-match mode. Hidden once the user applies explicit filters
- * (handled elsewhere via the filter chips list — TODO when we add chips).
- */
 function SearchModeBanner({
   hasAppliedFilters,
   activeTab,
@@ -939,9 +951,8 @@ function SearchModeBanner({
   }
 
   return (
-    <View style={styles.banner}>
-      <Ionicons name="information-circle-outline" size={13} color={colors.mutedText} />
-      <Text style={styles.bannerText}>{body}</Text>
+    <View style={styles.modeBanner}>
+      <Text style={styles.modeBannerText}>{body}</Text>
     </View>
   );
 }
@@ -952,7 +963,7 @@ function CenteredSpinner({
 }: Readonly<{ label: string; small?: boolean }>) {
   return (
     <View style={[styles.centered, small && styles.centeredSmall]}>
-      <ActivityIndicator size={small ? "small" : "large"} color={colors.primary} />
+      <ActivityIndicator size={small ? "small" : "large"} color={colors.wordmark} />
       <Text style={styles.centeredText}>{label}</Text>
     </View>
   );
@@ -964,18 +975,15 @@ function ErrorBlock({
 }: Readonly<{ message: string; onRetry?: () => void }>) {
   return (
     <View style={styles.centered}>
-      <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
       <Text style={styles.errorTitle}>Search failed</Text>
       <Text style={styles.errorBody}>{message}</Text>
       {onRetry ? (
-        <Pressable
-          style={styles.retryButton}
+        <AppButton
+          label="Try again"
           onPress={onRetry}
-          accessibilityRole="button"
-          accessibilityLabel="Retry"
-        >
-          <Text style={styles.retryButtonText}>Try again</Text>
-        </Pressable>
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.retryButtonWrap}
+        />
       ) : null}
     </View>
   );
@@ -991,7 +999,7 @@ function EmptyResults({ icon, title, body }: Readonly<EmptyResultsProps>) {
   return (
     <View style={styles.emptyResults}>
       <View style={styles.emptyIconBox}>
-        <Ionicons name={icon} size={28} color={colors.primary} />
+        <Ionicons name={icon} size={28} color={colors.wordmark} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyBody}>{body}</Text>
@@ -1004,130 +1012,129 @@ function EmptyResults({ icon, title, body }: Readonly<EmptyResultsProps>) {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 },
 
-  header: { marginTop: 8, marginBottom: 16 },
-  title: { color: colors.text, fontSize: 24, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 13, marginTop: 4, fontWeight: "500" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  headerTextWrap: { flex: 1, minWidth: 0 },
+  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
+  subtitle: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  bannerSlot: { marginBottom: 14 },
 
   // Filters
-  filtersCard: { gap: 12, padding: 16, marginBottom: 20 },
+  filtersCard: { gap: 12, padding: 16, marginBottom: 18 },
   fieldLabel: {
     color: colors.mutedText,
     fontSize: 11,
+    lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  fieldLabelTopGap: { marginTop: 8 },
+  fieldLabelTopGap: { marginTop: 6 },
   routeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   swapButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(255, 122, 38, 0.10)",
+    backgroundColor: primaryTint.fill10,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke18,
     alignItems: "center",
     justifyContent: "center",
   },
   dateRow: { flexDirection: "row", gap: 8 },
-  dateInputWrap: { flex: 1 },
-  dateInput: {
-    minHeight: 46,
-    borderRadius: 12,
-    backgroundColor: colors.input,
-    color: colors.text,
-    fontSize: 14,
-    paddingHorizontal: 14,
-    fontWeight: "500",
-  },
-  lookingForCol: { gap: 10, marginTop: 2 },
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  lookingForCol: { gap: 14, marginTop: 4 },
+  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: colors.controlOutline,
     backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkboxLabel: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  applyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    minHeight: 50,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    marginTop: 12,
+  checkboxChecked: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
+  checkboxLabel: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  applyButtonWrap: { marginTop: 14 },
+  noteText: {
+    color: colors.mutedText,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    textAlign: "center",
+    marginTop: 4,
   },
-  applyButtonDisabled: { opacity: 0.7 },
-  applyButtonText: { color: colors.white, fontSize: 15, fontWeight: "800" },
-  note: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 4 },
-  noteText: { color: colors.mutedText, fontSize: 11, textAlign: "center" },
 
-  // Tabs
   tabsRow: {
     flexDirection: "row",
     backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   tab: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     borderRadius: 8,
   },
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  tabLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
+  tabLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   tabLabelActive: { color: colors.text },
-  tabCount: { color: colors.mutedText, fontSize: 11, fontWeight: "600" },
+  tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
 
-  // Auto-match info banner above the result tabs
-  banner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
-    paddingHorizontal: 4,
-    paddingBottom: 8,
-  },
-  bannerText: {
+  modeBanner: { paddingHorizontal: 4, paddingBottom: 10 },
+  modeBannerText: {
     color: colors.mutedText,
     fontSize: 12,
-    flex: 1,
-    lineHeight: 16,
+    lineHeight: 17,
+    fontWeight: "500",
   },
 
   // Loading / error / empty
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
   centeredSmall: { paddingVertical: 16 },
-  centeredText: { color: colors.mutedText, fontSize: 13, fontWeight: "500" },
+  centeredText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
 
   // Nested matches inside a RouteListingCard
-  nestedEmpty: { color: colors.mutedText, fontSize: 13, fontStyle: "italic", paddingVertical: 4 },
+  nestedEmpty: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
+    paddingVertical: 4,
+  },
   nestedHeading: {
     color: colors.mutedText,
     fontSize: 10,
+    lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  errorTitle: { color: colors.text, fontSize: 15, fontWeight: "800" },
-  errorBody: { color: colors.mutedText, fontSize: 12, textAlign: "center", maxWidth: 280 },
-  retryButton: {
-    marginTop: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
+  errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  errorBody: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
+    textAlign: "center",
+    maxWidth: 280,
   },
-  retryButtonText: { color: colors.white, fontSize: 13, fontWeight: "700" },
+  retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
   emptyResults: { alignItems: "center", paddingVertical: 36, gap: 8 },
   emptyIconBox: {
     width: 56,
@@ -1135,59 +1142,73 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surfaceWarm,
+    backgroundColor: colors.surfaceTintPrimary,
   },
-  emptyTitle: { color: colors.text, fontSize: 15, fontWeight: "800", marginTop: 4 },
-  emptyBody: { color: colors.mutedText, fontSize: 12, textAlign: "center", maxWidth: 300 },
+  emptyTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800", marginTop: 4 },
+  emptyBody: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
+    textAlign: "center",
+    maxWidth: 300,
+  },
 
   // Match card
-  matchCard: { padding: 14, marginBottom: 12, gap: 12 },
-  matchTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 },
-  matchRoute: { color: colors.text, fontSize: 15, fontWeight: "800", flex: 1 },
-  metaRight: { color: colors.mutedText, fontSize: 11, fontWeight: "700", letterSpacing: 0.4 },
-  matchMeta: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
-  matchMetaText: { color: colors.mutedText, fontSize: 13 },
-  metaSep: { color: colors.mutedText, fontSize: 13 },
+  matchCard: { padding: 16, marginBottom: 14, gap: 14 },
+  matchSubtitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
+    textAlign: "center",
+  },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  personRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  personRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 122, 38, 0.10)",
+    backgroundColor: colors.surfaceTintPrimary,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarLarger: { width: 48, height: 48, borderRadius: 24 },
-  avatarText: { color: colors.primary, fontSize: 14, fontWeight: "800" },
+  avatarText: { color: colors.wordmark, fontSize: 14, lineHeight: 18, fontWeight: "800" },
   personInfo: { flex: 1, minWidth: 0 },
-  personName: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  ratingText: { color: colors.mutedText, fontSize: 12, fontWeight: "500" },
-
-  matchSubmeta: { flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" },
-  submetaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  submetaText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  personName: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  ratingText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", marginTop: 2 },
 
   // Buddy card
-  buddyTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
-  badgeSafe: { backgroundColor: "rgba(34, 197, 94, 0.10)" },
-  badgeText: { color: colors.safe, fontSize: 9, fontWeight: "800", letterSpacing: 0.4 },
-  travelDetailsBlock: {
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
+  buddyTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
-  travelLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  travelLabel: { color: colors.mutedText, fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
-  routeMetaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  routeMetaText: { color: colors.text, fontSize: 13, fontWeight: "700", flexShrink: 1 },
-  dateMetaText: { color: colors.mutedText, fontSize: 12 },
+  badgeSafe: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(34, 197, 94, 0.12)",
+  },
+  badgeText: { color: colors.safe, fontSize: 9, lineHeight: 12, fontWeight: "800", letterSpacing: 0.4 },
+  travelDetailsBlock: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    gap: 10,
+  },
+  travelLabel: {
+    color: colors.subtleText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
   detailsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1197,33 +1218,30 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   detailItem: { width: "44%" },
-  detailLabel: { color: colors.mutedText, fontSize: 9, fontWeight: "700", letterSpacing: 0.4 },
-  detailValue: { color: colors.text, fontSize: 12, fontWeight: "700", marginTop: 2 },
+  detailLabel: {
+    color: colors.mutedText,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    marginTop: 2,
+  },
   bioText: {
     color: colors.mutedText,
     fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
 
-  // Actions
-  actionsRow: { flexDirection: "row", gap: 8 },
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  secondaryAction: {
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  primaryAction: { backgroundColor: colors.primary },
-  actionButtonText: { color: colors.text, fontSize: 11, fontWeight: "800", letterSpacing: 0.4 },
-  primaryActionText: { color: colors.white },
+  actionsRow: { flexDirection: "row", gap: 10 },
+  actionButtonFlex: { flex: 1 },
 });

@@ -1,8 +1,9 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
+  useFocusEffect,
   useNavigation,
 } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -19,13 +20,14 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { DateField, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, parcelsApi } from "@/services/api";
-import { colors } from "@/theme/colors";
+import { colors, primaryTint } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 
 type Nav = CompositeNavigationProp<
@@ -37,6 +39,9 @@ type Direction = "IN_TO_US" | "US_TO_IN";
 type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
 type Currency = "USD" | "INR";
+
+/** Keys for fields that can carry an inline validation error. */
+type FieldKey = "fromCity" | "toCity" | "weight" | "deliveryBy" | "feeOffered";
 
 /**
  * Server-side `category` enum is fixed — keep this map in sync with the
@@ -91,8 +96,8 @@ interface CalendarCell {
 function buildCalendar(monthDate: Date): CalendarCell[] {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
-  // Start week on Monday (matches web's date-fns default).
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-start week
+
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysInPrevMonth = new Date(year, month, 0).getDate();
   const cells: CalendarCell[] = [];
@@ -124,7 +129,6 @@ function sameDate(a: Date | null, b: Date): boolean {
 export function SendParcelScreen() {
   const navigation = useNavigation<Nav>();
 
-  // Hide the parent stack header — this screen has its own back row.
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
@@ -165,8 +169,10 @@ export function SendParcelScreen() {
 
   const fromCountry = direction === "IN_TO_US" ? "IN" : "US";
   const toCountry = direction === "IN_TO_US" ? "US" : "IN";
-  const fromLabel = direction === "IN_TO_US" ? "🇮🇳 IN, India" : "🇺🇸 US, USA";
-  const toLabel = direction === "IN_TO_US" ? "🇺🇸 US, USA" : "🇮🇳 IN, India";
+  const fromFlag = direction === "IN_TO_US" ? "🇮🇳" : "🇺🇸";
+  const toFlag = direction === "IN_TO_US" ? "🇺🇸" : "🇮🇳";
+  const fromCountryName = direction === "IN_TO_US" ? "India" : "United States";
+  const toCountryName = direction === "IN_TO_US" ? "United States" : "India";
   const fromCities = direction === "IN_TO_US" ? INDIA_CITIES : USA_CITIES;
   const toCities = direction === "IN_TO_US" ? USA_CITIES : INDIA_CITIES;
 
@@ -175,6 +181,53 @@ export function SendParcelScreen() {
     setFromCity("");
     setToCity("");
   }, []);
+
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+
+  // Section Y offsets tracked via `onLayout` on the section wrappers.
+  const scrollRef = useRef<ScrollView | null>(null);
+  const sectionYs = useRef<{
+    section1: number;
+    section2: number;
+    section3: number;
+    section4: number;
+  }>({ section1: 0, section2: 0, section3: 0, section4: 0 });
+  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3" | "section4"> = {
+    fromCity: "section1",
+    toCity: "section1",
+    weight: "section2",
+    deliveryBy: "section3",
+    feeOffered: "section4",
+  };
+
+  const clearFieldError = useCallback((key: FieldKey) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const scrollToField = useCallback((key: FieldKey) => {
+    const sectionKey = fieldToSection[key];
+    const y = sectionYs.current[sectionKey];
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+  }, [fieldToSection]);
+
+  const section1Complete = !!fromCity && !!toCity;
+  const section2Complete = Number(weight) > 0;
+  const section3Complete = !!deliveryBy;
+  const section4Complete = Number(feeOffered) > 0;
+
+  const requiredTotal = 5;
+  const requiredCompleted =
+    (fromCity ? 1 : 0) +
+    (toCity ? 1 : 0) +
+    (Number(weight) > 0 ? 1 : 0) +
+    (deliveryBy ? 1 : 0) +
+    (Number(feeOffered) > 0 ? 1 : 0);
+  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
   const maxLimits = sizeUnit === "cm" ? MAX_SIZE_CM : MAX_SIZE_IN;
   const sizeErrors = {
@@ -185,45 +238,42 @@ export function SendParcelScreen() {
   const hasSizeError = sizeErrors.l || sizeErrors.w || sizeErrors.h;
 
   const handleSubmit = useCallback(async () => {
-    setFormError(null);
-    if (!fromCity) {
-      setFormError("Origin city is required.");
-      return;
-    }
-    if (!toCity) {
-      setFormError("Destination city is required.");
-      return;
-    }
+    const errors: Partial<Record<FieldKey, string>> = {};
+    if (!fromCity) errors.fromCity = "Select an origin city";
+    if (!toCity) errors.toCity = "Select a destination city";
     const w = parseFloat(weight);
-    if (!w || w <= 0) {
-      setFormError("Enter a valid parcel weight.");
-      return;
-    }
-    if (hasSizeError) {
-      setFormError(
-        `Size exceeds airline carry-on limit (max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}).`,
-      );
-      return;
-    }
+    if (!w || w <= 0) errors.weight = "Enter a valid weight";
     if (!deliveryBy) {
-      setFormError("Pick a delivery-by date.");
-      return;
-    }
-    if (deliveryBy < today) {
-      setFormError("Delivery date can't be in the past.");
-      return;
-    }
-    if (deliveryBy > maxDate) {
-      setFormError("Delivery date must be within 12 months.");
-      return;
+      errors.deliveryBy = "Pick a delivery date";
+    } else if (deliveryBy < today) {
+      errors.deliveryBy = "Can't be in the past";
+    } else if (deliveryBy > maxDate) {
+      errors.deliveryBy = "Must be within 12 months";
     }
     const fee = parseFloat(feeOffered);
-    if (!fee || fee <= 0) {
-      setFormError("Enter a valid cost offered.");
+    if (!fee || fee <= 0) errors.feeOffered = "Enter a valid amount";
+
+    if (Object.keys(errors).length > 0 || hasSizeError) {
+      setFieldErrors(errors);
+      setFormError(
+        hasSizeError
+          ? `Size exceeds airline carry-on limit (max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Fix the highlighted fields.`
+          : "Please fix the highlighted fields before continuing.",
+      );
+      const order: FieldKey[] = ["fromCity", "toCity", "weight", "deliveryBy", "feeOffered"];
+      const firstKey = order.find((k) => errors[k]);
+      if (firstKey) scrollToField(firstKey);
+      else if (hasSizeError) scrollToField("weight"); // size lives in same section
       return;
     }
 
-    // Server contract: weight stored as kg internally; convert lb on the way in.
+    if (!deliveryBy) return; // narrow for TS — guarded above
+
+
+    setFieldErrors({});
+    setFormError(null);
+
+    // Server stores weight in kg; convert lb on the way in.
     const weightKg = weightUnit === "lb" ? w * 0.453592 : w;
     const isAnyFrom = fromCity === ANY_CITY;
     const isAnyTo = toCity === ANY_CITY;
@@ -281,7 +331,42 @@ export function SendParcelScreen() {
     description,
     currency,
     maxLimits,
+    scrollToField,
   ]);
+
+  const resetForm = useCallback(() => {
+    setDirection("IN_TO_US");
+    setFromCity("");
+    setToCity("");
+    setParcelType("");
+    setWeightUnit("kg");
+    setWeight("");
+    setSizeUnit("cm");
+    setSizeL("");
+    setSizeW("");
+    setSizeH("");
+    setDescription("");
+    setDeliveryBy(null);
+    setFeeOffered("");
+    setCurrency("USD");
+    setSubmitting(false);
+    setSubmitted(false);
+    setFormError(null);
+    setFieldErrors({});
+    setCalendarOpen(false);
+  }, []);
+
+  const submittedRef = useRef(submitted);
+  submittedRef.current = submitted;
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setFormError(null);
+        setFieldErrors({});
+        if (submittedRef.current) resetForm();
+      };
+    }, [resetForm]),
+  );
 
   // ───────── Success state ─────────
   if (submitted) {
@@ -327,219 +412,285 @@ export function SendParcelScreen() {
 
   // ───────── Form ─────────
   return (
-    <Screen>
-      <View style={styles.headerRow}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
+    <Screen scroll={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerRow}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title}>Your parcel details</Text>
+        </View>
+        <Text style={styles.subtitle}>
+          Tell us where your parcel needs to go and we'll find the perfect carrier.
+        </Text>
+
+        {/* Progress bar — % of required fields complete (5 required). */}
+        <View style={styles.progressBlock}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+          </View>
+          <Text style={styles.progressLabel}>
+            {requiredCompleted} of {requiredTotal} required fields complete
+          </Text>
+        </View>
+
+        {formError ? (
+          <View style={styles.bannerSlot}>
+            <FormBanner message={formError} onDismiss={() => setFormError(null)} />
+          </View>
+        ) : null}
+
+        {/* ───────── Section 1 — Where is it going? ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section1 = e.nativeEvent.layout.y;
+          }}
         >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>Your Parcel Details</Text>
-      </View>
-      <Text style={styles.subtitle}>
-        Tell us where your parcel needs to go and we'll find the perfect carrier for you.
-      </Text>
-
-      {formError ? (
-        <View style={styles.bannerSlot}>
-          <FormBanner message={formError} onDismiss={() => setFormError(null)} />
-        </View>
-      ) : null}
-
-      <View style={styles.card}>
-        {/* From location */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>From Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{fromLabel}</Text>
-            </View>
-          </View>
-          <CityPicker
-            value={fromCity}
-            onChange={setFromCity}
-            cities={fromCities}
-            placeholder="Select origin city"
-          />
-        </View>
-
-        {/* Swap direction */}
-        <View style={styles.swapRow}>
-          <Pressable
-            style={styles.swapButton}
-            onPress={handleSwapDirection}
-            accessibilityRole="button"
-            accessibilityLabel="Swap direction"
+          <SectionCard
+            index={1}
+            title="Where is it going?"
+            subtitle="Set the pickup and drop-off"
+            complete={section1Complete}
           >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
-            <Text style={styles.swapButtonText}>Swap Direction</Text>
-          </Pressable>
-        </View>
-
-        {/* To location */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>To Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{toLabel}</Text>
+            <Text style={styles.fieldLabel}>From</Text>
+            <LocationCard flag={fromFlag} label={fromCountryName} filled />
+            <View>
+              <CityPicker
+                value={fromCity}
+                onChange={(v) => {
+                  setFromCity(v);
+                  clearFieldError("fromCity");
+                }}
+                cities={fromCities}
+                placeholder="Select origin city"
+                variant="card"
+                invalid={!!fieldErrors.fromCity}
+              />
+              {fieldErrors.fromCity ? (
+                <Text style={styles.inlineError}>{fieldErrors.fromCity}</Text>
+              ) : null}
             </View>
-          </View>
-          <CityPicker
-            value={toCity}
-            onChange={setToCity}
-            cities={toCities}
-            placeholder="Select destination city"
-          />
+
+            <View style={styles.swapRow}>
+              <View style={styles.swapDividerLine} />
+              <Pressable
+                style={styles.swapCircleButton}
+                onPress={handleSwapDirection}
+                accessibilityRole="button"
+                accessibilityLabel="Swap direction"
+              >
+                <Ionicons name="swap-vertical-outline" size={18} color={colors.wordmark} />
+              </Pressable>
+              <View style={styles.swapDividerLine} />
+            </View>
+
+            <Text style={styles.fieldLabel}>To</Text>
+            <LocationCard flag={toFlag} label={toCountryName} filled />
+            <View>
+              <CityPicker
+                value={toCity}
+                onChange={(v) => {
+                  setToCity(v);
+                  clearFieldError("toCity");
+                }}
+                cities={toCities}
+                placeholder="Select destination city"
+                variant="card"
+                invalid={!!fieldErrors.toCity}
+              />
+              {fieldErrors.toCity ? (
+                <Text style={styles.inlineError}>{fieldErrors.toCity}</Text>
+              ) : null}
+            </View>
+          </SectionCard>
         </View>
 
-        {/* Type of Parcel */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Type of Parcel</Text>
-          <TextInput
-            value={parcelType}
-            onChangeText={setParcelType}
-            placeholder="e.g. Documents, Electronics, Clothing, Food"
-            placeholderTextColor={colors.subtleText}
-            style={styles.input}
-            autoCapitalize="words"
-          />
-        </View>
-
-        {/* Parcel Size */}
-        <View style={styles.field}>
-          <View style={styles.unitToggleRow}>
-            <UnitToggle<SizeUnit>
-              options={[
-                { value: "cm", label: "CM" },
-                { value: "in", label: "Inches" },
-              ]}
-              value={sizeUnit}
-              onChange={setSizeUnit}
+        {/* ───────── Section 2 — Parcel details ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section2 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={2}
+            title="What's in the parcel?"
+            subtitle="Help carriers understand what you're sending"
+            complete={section2Complete}
+          >
+            <Text style={styles.fieldLabel}>Type of parcel</Text>
+            <TextInput
+              value={parcelType}
+              onChangeText={setParcelType}
+              placeholder="e.g. Documents, Electronics, Clothing, Food"
+              placeholderTextColor={colors.subtleText}
+              style={styles.input}
+              autoCapitalize="words"
             />
-            <Text style={styles.fieldLabelInline}>
-              Parcel Size <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-            </Text>
-          </View>
-          <View style={styles.sizeRow}>
-            {(
-              [
-                { val: sizeL, set: setSizeL, label: `Length (${sizeUnit})`, ph: "L", err: sizeErrors.l },
-                { val: sizeW, set: setSizeW, label: `Width (${sizeUnit})`, ph: "W", err: sizeErrors.w },
-                { val: sizeH, set: setSizeH, label: `Height (${sizeUnit})`, ph: "H", err: sizeErrors.h },
-              ] as const
-            ).map(({ val, set, label, ph, err }) => (
-              <View key={label} style={styles.sizeCell}>
-                <Text style={styles.sizeCellLabel}>{label}</Text>
-                <TextInput
-                  value={val}
-                  onChangeText={(v) => set(sanitizeDecimalInput(v, 4, 1))}
-                  placeholder={ph}
-                  placeholderTextColor={colors.subtleText}
-                  keyboardType="decimal-pad"
-                  style={[styles.input, err && styles.inputError]}
-                />
+
+            <View style={styles.labelToggleRow}>
+              <Text style={styles.fieldLabel}>Parcel size</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
               </View>
-            ))}
-          </View>
-          <Text style={[styles.helperText, hasSizeError && styles.helperError]}>
-            {hasSizeError
-              ? `Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
-              : `Airline carry-on max: ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}`}
-          </Text>
-        </View>
-
-        {/* Weight */}
-        <View style={styles.field}>
-          <View style={styles.unitToggleRow}>
-            <UnitToggle<WeightUnit>
-              options={[
-                { value: "kg", label: "KG" },
-                { value: "lb", label: "LBS" },
-              ]}
-              value={weightUnit}
-              onChange={setWeightUnit}
-            />
-            <Text style={styles.fieldLabelInline}>Parcel Weight</Text>
-          </View>
-          <TextInput
-            value={weight}
-            onChangeText={(v) => setWeight(sanitizeDecimalInput(v, 4, 2))}
-            placeholder={`e.g. ${weightUnit === "kg" ? "2.5" : "5.5"}`}
-            placeholderTextColor={colors.subtleText}
-            keyboardType="decimal-pad"
-            style={styles.input}
-          />
-        </View>
-
-        {/* Description */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Description <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Describe your parcel briefly…"
-            placeholderTextColor={colors.subtleText}
-            style={[styles.input, styles.textarea]}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Delivery By */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Deliver By</Text>
-          <Pressable
-            style={[styles.input, styles.dateInput]}
-            onPress={() => setCalendarOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Pick delivery deadline"
-          >
-            <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-            <Text
-              style={[
-                styles.dateInputText,
-                !deliveryBy && { color: colors.subtleText },
-              ]}
-            >
-              {deliveryBy ? formatDateLabel(deliveryBy) : "Pick a delivery deadline"}
-            </Text>
-          </Pressable>
-          <Text style={styles.helperText}>
-            Select the latest date you need this delivered by.
-          </Text>
-        </View>
-
-        {/* Cost Offered */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Cost offered</Text>
-          <View style={styles.costRow}>
-            <CurrencyToggle value={currency} onChange={setCurrency} />
-            <View style={styles.costInputWrap}>
-              <Text style={styles.costSymbol}>
-                {currency === "USD" ? "$" : "₹"}
-              </Text>
-              <TextInput
-                value={feeOffered}
-                onChangeText={(v) => setFeeOffered(sanitizeDecimalInput(v, 6, 2))}
-                placeholder="e.g. 45"
-                placeholderTextColor={colors.subtleText}
-                keyboardType="decimal-pad"
-                style={[styles.input, styles.costInput]}
+              <View style={styles.flexSpacer} />
+              <UnitToggle<SizeUnit>
+                options={[
+                  { value: "cm", label: "CM" },
+                  { value: "in", label: "Inches" },
+                ]}
+                value={sizeUnit}
+                onChange={setSizeUnit}
               />
             </View>
-          </View>
-          <Text style={styles.helperText}>
-            The amount you're willing to pay the carrier for delivery.
-          </Text>
+            <View style={styles.sizeRow}>
+              {(
+                [
+                  { val: sizeL, set: setSizeL, label: "Length", ph: `0 ${sizeUnit}`, err: sizeErrors.l },
+                  { val: sizeW, set: setSizeW, label: "Width", ph: `0 ${sizeUnit}`, err: sizeErrors.w },
+                  { val: sizeH, set: setSizeH, label: "Height", ph: `0 ${sizeUnit}`, err: sizeErrors.h },
+                ] as const
+              ).map(({ val, set, label, ph, err }) => (
+                <View key={label} style={styles.sizeCell}>
+                  <Text style={styles.sizeCellLabel}>{label}</Text>
+                  <TextInput
+                    value={val}
+                    onChangeText={(v) => set(sanitizeDecimalInput(v, 4, 1))}
+                    placeholder={ph}
+                    placeholderTextColor={colors.subtleText}
+                    keyboardType="decimal-pad"
+                    style={[styles.input, err && styles.inputError]}
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.helperText, hasSizeError && styles.helperError]}>
+              {hasSizeError
+                ? `Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
+                : `Airline carry-on max: ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}`}
+            </Text>
+
+            <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>
+              <Text style={styles.fieldLabel}>Parcel weight</Text>
+              <View style={styles.flexSpacer} />
+              <UnitToggle<WeightUnit>
+                options={[
+                  { value: "kg", label: "KG" },
+                  { value: "lb", label: "LBS" },
+                ]}
+                value={weightUnit}
+                onChange={setWeightUnit}
+              />
+            </View>
+            <View>
+              <TextInput
+                value={weight}
+                onChangeText={(v) => {
+                  setWeight(sanitizeDecimalInput(v, 4, 2));
+                  clearFieldError("weight");
+                }}
+                placeholder={weightUnit === "kg" ? "0 kg" : "0 lb"}
+                placeholderTextColor={colors.subtleText}
+                keyboardType="decimal-pad"
+                style={[styles.input, fieldErrors.weight && styles.inputError]}
+              />
+              {fieldErrors.weight ? (
+                <Text style={styles.inlineError}>{fieldErrors.weight}</Text>
+              ) : null}
+            </View>
+
+            <Text style={[styles.fieldLabel, styles.labelTopGap]}>
+              Description <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+            </Text>
+            <TextInput
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Describe your parcel briefly…"
+              placeholderTextColor={colors.subtleText}
+              style={[styles.input, styles.textarea]}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </SectionCard>
         </View>
 
-        {/* Restricted items notice */}
+        {/* ───────── Section 3 — When does it need to arrive? ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section3 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={3}
+            title="When does it need to arrive?"
+            subtitle="Pick a delivery deadline"
+            complete={section3Complete}
+          >
+            <DateField
+              label="Deliver by"
+              value={deliveryBy ? formatDateLabel(deliveryBy) : null}
+              placeholder="Select date"
+              onPress={() => setCalendarOpen(true)}
+              error={fieldErrors.deliveryBy}
+            />
+            <Text style={styles.helperText}>
+              Select the latest date you need this delivered by.
+            </Text>
+          </SectionCard>
+        </View>
+
+        {/* ───────── Section 4 — How much will you pay? ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section4 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={4}
+            title="How much will you pay?"
+            subtitle="Set a fair carrier fee"
+            complete={section4Complete}
+          >
+            <View style={styles.costRow}>
+              <CurrencyToggle value={currency} onChange={setCurrency} />
+              <View style={styles.costInputWrap}>
+                <Text style={styles.costSymbol}>
+                  {currency === "USD" ? "$" : "₹"}
+                </Text>
+                <TextInput
+                  value={feeOffered}
+                  onChangeText={(v) => {
+                    setFeeOffered(sanitizeDecimalInput(v, 6, 2));
+                    clearFieldError("feeOffered");
+                  }}
+                  placeholder="e.g. 45"
+                  placeholderTextColor={colors.subtleText}
+                  keyboardType="decimal-pad"
+                  style={[styles.input, styles.costInput, fieldErrors.feeOffered && styles.inputError]}
+                />
+              </View>
+            </View>
+            {fieldErrors.feeOffered ? (
+              <Text style={styles.inlineError}>{fieldErrors.feeOffered}</Text>
+            ) : (
+              <Text style={styles.helperText}>
+                The amount you're willing to pay the carrier for delivery.
+              </Text>
+            )}
+          </SectionCard>
+        </View>
+
+        {/* Restricted items notice — non-field disclosure shown right before submit. */}
         <View style={styles.warningBox}>
           <Ionicons
             name="warning"
@@ -548,7 +699,7 @@ export function SendParcelScreen() {
             style={styles.warningIcon}
           />
           <View style={styles.warningBody}>
-            <Text style={styles.warningTitle}>Restricted Items Notice</Text>
+            <Text style={styles.warningTitle}>Restricted items notice</Text>
             <Text style={styles.warningText}>
               The following items are <Text style={styles.warningStrong}>not allowed</Text>:
               Liquids ({">"}100ml), Perishable food, Weapons, Illegal items, Live animals,
@@ -574,7 +725,7 @@ export function SendParcelScreen() {
             }
           />
         </View>
-      </View>
+      </ScrollView>
 
       {/* Inline calendar modal */}
       <CalendarModal
@@ -585,6 +736,7 @@ export function SendParcelScreen() {
         maxDate={maxDate}
         onSelect={(d) => {
           setDeliveryBy(d);
+          clearFieldError("deliveryBy");
           setCalendarOpen(false);
         }}
         onChangeMonth={setVisibleMonth}
@@ -713,7 +865,8 @@ function CalendarModal({
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.calendarBackdrop} onPress={onClose} />
-      <View style={styles.calendarSheet}>
+      <View style={styles.calendarCenterWrap} pointerEvents="box-none">
+        <View style={styles.calendarSheet}>
         <View style={styles.calendarHeader}>
           <Pressable
             onPress={goPrev}
@@ -780,6 +933,7 @@ function CalendarModal({
         <View style={styles.calendarFooter}>
           <AppButton label="Cancel" variant="secondary" onPress={onClose} />
         </View>
+        </View>
       </View>
     </Modal>
   );
@@ -788,6 +942,7 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 24 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -805,47 +960,66 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
   bannerSlot: { marginBottom: 14 },
 
-  card: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
-    padding: 16,
-    gap: 18,
-  },
-
-  field: { gap: 8 },
-  fieldLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
-  fieldLabelInline: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
-  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
-
-  countryChipRow: { flexDirection: "row" },
-  countryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceTintPrimary,
-    marginBottom: 6,
-  },
-  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
-
-  swapRow: { alignItems: "center" },
-  swapButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  // ───── Progress bar ─────
+  progressBlock: { gap: 8, marginBottom: 18 },
+  progressTrack: {
+    height: 8,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    overflow: "hidden",
+  },
+  progressFill: { height: "100%", borderRadius: 999, backgroundColor: colors.wordmark },
+  progressLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+
+  // ───── Common fields ─────
+  fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
+  labelTopGap: { marginTop: 8 },
+
+  flexSpacer: { flex: 1 },
+  optionalPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  optionalPillText: {
+    color: colors.subtleText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
 
+  // ───── Section 1: swap divider + circle button ─────
+  swapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 4,
+  },
+  swapDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  swapCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke25,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ───── Inputs ─────
   input: {
     backgroundColor: colors.input,
     borderColor: colors.inputBorder,
@@ -856,24 +1030,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
   },
-  inputError: { borderColor: colors.danger },
+  inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
   textarea: { minHeight: 84, paddingTop: 12 },
-  dateInput: { flexDirection: "row", alignItems: "center", gap: 10 },
-  dateInputText: { color: colors.text, fontSize: 15, lineHeight: 22 },
 
-  unitToggleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
+  inlineError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    marginTop: 6,
+  },
+
+  // ───── Per-row label + unit toggle ─────
+  labelToggleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  labelToggleRowGap: { marginTop: 12 },
   unitToggle: {
     flexDirection: "row",
     backgroundColor: colors.surfaceMuted,
-    borderRadius: 10,
-    padding: 2,
+    borderRadius: 999,
+    padding: 3,
     gap: 2,
   },
-  unitToggleButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
+  unitToggleButton: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
   unitToggleButtonActive: { backgroundColor: colors.wordmark },
   unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   unitToggleTextActive: { color: colors.white },
@@ -927,7 +1105,6 @@ const styles = StyleSheet.create({
 
   submitRow: { marginTop: 4 },
 
-  // Success state
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
   successIconBubble: {
     width: 80,
@@ -950,18 +1127,21 @@ const styles = StyleSheet.create({
   successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
   successButtonFlex: { flex: 1 },
 
-  // Calendar modal
   calendarBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
+  calendarCenterWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
   calendarSheet: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    top: "20%",
+    width: "100%",
+    maxWidth: 400,
     backgroundColor: colors.card,
     borderRadius: 22,
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
   calendarHeader: {
     flexDirection: "row",
@@ -1003,11 +1183,4 @@ const styles = StyleSheet.create({
   calendarCellTextDisabled: { color: colors.subtleText, opacity: 0.4 },
   calendarCellTextSelected: { color: colors.white, fontWeight: "800" },
   calendarFooter: { alignItems: "flex-end", marginTop: 4 },
-
-  // Suppress lint hint (referenced via JSX); ScrollView re-export kept for parity.
-  _spacer: { height: 0 },
 });
-
-// Re-export so the file's ScrollView import isn't tree-shaken under Metro.
-const _scrollViewKeepalive = ScrollView;
-void _scrollViewKeepalive;

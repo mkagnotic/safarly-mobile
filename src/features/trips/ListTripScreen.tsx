@@ -1,8 +1,9 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
+  useFocusEffect,
   useNavigation,
 } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -11,7 +12,9 @@ import {
   FlatList,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -19,6 +22,7 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
@@ -37,6 +41,9 @@ type Direction = "IN_TO_US" | "US_TO_IN";
 type DateMode = "single" | "range";
 type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
+
+/** Keys for fields that can carry an inline validation error. */
+type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "maxWeight";
 
 /** Web parity (`CustomerListTrip.tsx:41-46`). */
 const AIRLINES: readonly string[] = [
@@ -180,6 +187,84 @@ export function ListTripScreen() {
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+
+  // Section Y offsets tracked via `onLayout` on the section wrappers (direct
+  // children of the ScrollView) — avoids the Fabric measureLayout pitfall.
+  const scrollRef = useRef<ScrollView | null>(null);
+  const sectionYs = useRef<{ section1: number; section2: number; section3: number }>({
+    section1: 0,
+    section2: 0,
+    section3: 0,
+  });
+  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3"> = {
+    fromCity: "section1",
+    toCity: "section1",
+    departDate: "section2",
+    returnDate: "section2",
+    maxWeight: "section3",
+  };
+
+  const clearFieldError = useCallback((key: FieldKey) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setDirection("IN_TO_US");
+    setFromCity("");
+    setToCity("");
+    setAirline("");
+    setAirlineOpen(false);
+    setDateMode("single");
+    setDepartDate(null);
+    setReturnDate(null);
+    setCalendarOpen(null);
+    setSizeUnit("cm");
+    setSizeL("");
+    setSizeW("");
+    setSizeH("");
+    setWeightUnit("kg");
+    setMaxWeight("");
+    setOpenToBuddy(false);
+    setBuddyAge("");
+    setBuddyLanguages([]);
+    setLanguagePickerOpen(false);
+    setBuddyInterests("");
+    setBuddyLayover("");
+    setSubmitting(false);
+    setSubmitted(false);
+    setFormError(null);
+    setFieldErrors({});
+  }, []);
+
+  // Ref so the focus cleanup reads the latest `submitted` without re-binding.
+  const submittedRef = useRef(submitted);
+  submittedRef.current = submitted;
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // Validation feedback is transient; field values are preserved so
+        // drafts survive a tab switch. A completed submission wipes everything.
+        setFormError(null);
+        setFieldErrors({});
+        if (submittedRef.current) resetForm();
+      };
+    }, [resetForm]),
+  );
+
+  const scrollToField = useCallback((key: FieldKey) => {
+    const sectionKey = fieldToSection[key];
+    const y = sectionYs.current[sectionKey];
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+    // fieldToSection is module-scope-stable but TS demands ref/value deps
+    // here; including it adds no real cost.
+  }, [fieldToSection]);
+
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -193,8 +278,10 @@ export function ListTripScreen() {
 
   const fromCountry = direction === "IN_TO_US" ? "IN" : "US";
   const toCountry = direction === "IN_TO_US" ? "US" : "IN";
-  const fromLabel = direction === "IN_TO_US" ? "🇮🇳 IN, India" : "🇺🇸 US, USA";
-  const toLabel = direction === "IN_TO_US" ? "🇺🇸 US, USA" : "🇮🇳 IN, India";
+  const fromFlag = direction === "IN_TO_US" ? "🇮🇳" : "🇺🇸";
+  const toFlag = direction === "IN_TO_US" ? "🇺🇸" : "🇮🇳";
+  const fromCountryName = direction === "IN_TO_US" ? "India" : "United States";
+  const toCountryName = direction === "IN_TO_US" ? "United States" : "India";
   const fromCities = direction === "IN_TO_US" ? INDIA_CITIES : USA_CITIES;
   const toCities = direction === "IN_TO_US" ? USA_CITIES : INDIA_CITIES;
 
@@ -206,8 +293,8 @@ export function ListTripScreen() {
 
   const handleAddBuddyLanguage = useCallback(
     (lang: string) => {
-      // Defensive — the picker button is disabled at the cap.
-      if (buddyLanguages.length >= 3) return;
+      if (buddyLanguages.length >= 3) return; // picker button is disabled at the cap, but guard anyway
+
       if (!buddyLanguages.includes(lang)) {
         setBuddyLanguages([...buddyLanguages, lang]);
       }
@@ -219,42 +306,40 @@ export function ListTripScreen() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    setFormError(null);
-    if (!fromCity) {
-      setFormError("Departure city is required.");
-      return;
-    }
-    if (!toCity) {
-      setFormError("Arrival city is required.");
-      return;
-    }
+    const errors: Partial<Record<FieldKey, string>> = {};
+    if (!fromCity) errors.fromCity = "Select a departure city";
+    if (!toCity) errors.toCity = "Select an arrival city";
     if (!departDate) {
-      setFormError("Pick a travel date.");
-      return;
-    }
-    if (departDate < today) {
-      setFormError("Travel date can't be in the past.");
-      return;
-    }
-    if (departDate > maxDate) {
-      setFormError("Travel date must be within 12 months.");
-      return;
+      errors.departDate = "Pick a travel date";
+    } else if (departDate < today) {
+      errors.departDate = "Can't be in the past";
+    } else if (departDate > maxDate) {
+      errors.departDate = "Must be within 12 months";
     }
     if (dateMode === "range" && returnDate) {
       if (returnDate > maxDate) {
-        setFormError("Return date must be within 12 months.");
-        return;
-      }
-      if (returnDate < departDate) {
-        setFormError("Return date must be after departure.");
-        return;
+        errors.returnDate = "Must be within 12 months";
+      } else if (departDate && returnDate < departDate) {
+        errors.returnDate = "Must be after departure";
       }
     }
     const w = parseFloat(maxWeight);
-    if (!w || w <= 0) {
-      setFormError("Enter a valid maximum weight.");
+    if (!w || w <= 0) errors.maxWeight = "Enter a valid weight";
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFormError("Please fix the highlighted fields before continuing.");
+      const order: FieldKey[] = ["fromCity", "toCity", "departDate", "returnDate", "maxWeight"];
+      const firstKey = order.find((k) => errors[k]);
+      if (firstKey) scrollToField(firstKey);
       return;
     }
+
+    if (!departDate) return; // narrow for TS — guarded above
+
+
+    setFieldErrors({});
+    setFormError(null);
 
     const weightKg = weightUnit === "lb" ? w * 0.453592 : w;
     const isAnyFrom = fromCity === ANY_CITY;
@@ -320,9 +405,9 @@ export function ListTripScreen() {
     buddyLanguages,
     buddyInterests,
     buddyLayover,
+    scrollToField,
   ]);
 
-  // ───────── Success state ─────────
   if (submitted) {
     return (
       <Screen>
@@ -335,11 +420,11 @@ export function ListTripScreen() {
           >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
-          <Text style={styles.title}>Trip Posted</Text>
+          <Text style={styles.title}>Trip posted</Text>
         </View>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
-            <Ionicons name="airplane-outline" size={40} color={colors.safe} />
+            <Ionicons name="checkmark" size={36} color={colors.safe} />
           </View>
           <Text style={styles.successTitle}>You're all set</Text>
           <Text style={styles.successBody}>
@@ -367,23 +452,53 @@ export function ListTripScreen() {
     );
   }
 
-  // ───────── Form ─────────
+  const section1Complete = !!fromCity && !!toCity;
+  const section2Complete = !!departDate && (dateMode === "single" || !!returnDate);
+  const section3Complete = Number(maxWeight) > 0;
+  const section4Complete = openToBuddy;
+
+  // 4 required fields; date-range adds the return date as the 5th.
+  const requiredTotal = dateMode === "range" ? 5 : 4;
+  const requiredCompleted =
+    (fromCity ? 1 : 0) +
+    (toCity ? 1 : 0) +
+    (departDate ? 1 : 0) +
+    (dateMode === "range" && returnDate ? 1 : 0) +
+    (Number(maxWeight) > 0 ? 1 : 0);
+  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
+
   return (
-    <Screen>
-      <View style={styles.headerRow}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>Your Travel Details</Text>
+    <Screen scroll={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerRow}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title}>Your travel details</Text>
+        </View>
+        <Text style={styles.subtitle}>
+          Share your travel plans and we'll find the best parcel matches for you.
+        </Text>
+
+      {/* Progress bar — % of required fields complete (4 required, 5 in date-range mode). */}
+      <View style={styles.progressBlock}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+        </View>
+        <Text style={styles.progressLabel}>
+          {requiredCompleted} of {requiredTotal} required fields complete
+        </Text>
       </View>
-      <Text style={styles.subtitle}>
-        Share your travel plans and we'll find the best parcel matches for you.
-      </Text>
 
       {formError ? (
         <View style={styles.bannerSlot}>
@@ -391,240 +506,262 @@ export function ListTripScreen() {
         </View>
       ) : null}
 
-      <View style={styles.card}>
-        {/* From */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>From Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{fromLabel}</Text>
-            </View>
-          </View>
-          <CityPicker
-            value={fromCity}
-            onChange={setFromCity}
-            cities={fromCities}
-            placeholder="Select departure city"
-          />
-        </View>
-
-        {/* Swap */}
-        <View style={styles.swapRow}>
-          <Pressable
-            style={styles.swapButton}
-            onPress={handleSwapDirection}
-            accessibilityRole="button"
-            accessibilityLabel="Swap direction"
-          >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
-            <Text style={styles.swapButtonText}>Swap Direction</Text>
-          </Pressable>
-        </View>
-
-        {/* To */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>To Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{toLabel}</Text>
-            </View>
-          </View>
-          <CityPicker
-            value={toCity}
-            onChange={setToCity}
-            cities={toCities}
-            placeholder="Select arrival city"
-          />
-        </View>
-
-        {/* Airline */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <Pressable
-            style={[styles.input, styles.selectInput]}
-            onPress={() => setAirlineOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Pick airline"
-          >
-            <Text
-              style={[
-                styles.selectInputText,
-                !airline && { color: colors.subtleText },
-              ]}
-            >
-              {airline || "Select airline"}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-          </Pressable>
-          <Text style={styles.helperText}>
-            Helps match with Travel Buddies on the same flight.
-          </Text>
-        </View>
-
-        {/* Travel Date */}
-        <View style={styles.field}>
-          <View style={styles.unitToggleRow}>
-            <UnitToggle<DateMode>
-              options={[
-                { value: "single", label: "Single" },
-                { value: "range", label: "Range" },
-              ]}
-              value={dateMode}
-              onChange={(next) => {
-                setDateMode(next);
-                if (next === "single") setReturnDate(null);
-              }}
-            />
-            <Text style={styles.fieldLabelInline}>Travel Date</Text>
-          </View>
-
-          {dateMode === "single" ? (
-            <Pressable
-              style={[styles.input, styles.selectInput]}
-              onPress={() => setCalendarOpen("depart")}
-              accessibilityRole="button"
-              accessibilityLabel="Pick travel date"
-            >
-              <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-              <Text
-                style={[
-                  styles.selectInputText,
-                  !departDate && { color: colors.subtleText },
-                ]}
-              >
-                {departDate ? formatDateLabel(departDate) : "Pick a date"}
-              </Text>
-            </Pressable>
-          ) : (
-            <View style={styles.rangeRow}>
-              <Pressable
-                style={[styles.input, styles.selectInput, styles.rangeCell]}
-                onPress={() => setCalendarOpen("depart")}
-                accessibilityRole="button"
-                accessibilityLabel="Pick departure date"
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-                <Text
-                  style={[
-                    styles.selectInputText,
-                    !departDate && { color: colors.subtleText },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {departDate ? formatDateLabel(departDate) : "Departure"}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.input, styles.selectInput, styles.rangeCell]}
-                onPress={() => setCalendarOpen("return")}
-                accessibilityRole="button"
-                accessibilityLabel="Pick return date"
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-                <Text
-                  style={[
-                    styles.selectInputText,
-                    !returnDate && { color: colors.subtleText },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {returnDate ? formatDateLabel(returnDate) : "Return"}
-                </Text>
-              </Pressable>
-            </View>
-          )}
-          <Text style={styles.helperText}>
-            You can select dates up to 12 months from today.
-          </Text>
-        </View>
-
-        {/* Max parcel size */}
-        <View style={styles.field}>
-          <View style={styles.unitToggleRow}>
-            <UnitToggle<SizeUnit>
-              options={[
-                { value: "cm", label: "CM" },
-                { value: "in", label: "Inches" },
-              ]}
-              value={sizeUnit}
-              onChange={setSizeUnit}
-            />
-            <Text style={styles.fieldLabelInline}>Max Parcel Size I Can Carry</Text>
-          </View>
-          <View style={styles.sizeRow}>
-            {(
-              [
-                { val: sizeL, set: setSizeL, label: `Length (${sizeUnit})`, ph: "L" },
-                { val: sizeW, set: setSizeW, label: `Width (${sizeUnit})`, ph: "W" },
-                { val: sizeH, set: setSizeH, label: `Height (${sizeUnit})`, ph: "H" },
-              ] as const
-            ).map(({ val, set, label, ph }) => (
-              <View key={label} style={styles.sizeCell}>
-                <Text style={styles.sizeCellLabel}>{label}</Text>
-                <TextInput
-                  value={val}
-                  onChangeText={(v) => set(sanitizeDecimalInput(v, 4, 1))}
-                  placeholder={ph}
-                  placeholderTextColor={colors.subtleText}
-                  keyboardType="decimal-pad"
-                  style={styles.input}
-                />
-              </View>
-            ))}
-          </View>
-          <Text style={styles.helperText}>
-            Optional — helps senders know if their parcel fits.
-          </Text>
-        </View>
-
-        {/* Max weight */}
-        <View style={styles.field}>
-          <View style={styles.unitToggleRow}>
-            <UnitToggle<WeightUnit>
-              options={[
-                { value: "kg", label: "KG" },
-                { value: "lb", label: "LBS" },
-              ]}
-              value={weightUnit}
-              onChange={setWeightUnit}
-            />
-            <Text style={styles.fieldLabelInline}>Max Weight I Can Carry</Text>
-          </View>
-          <TextInput
-            value={maxWeight}
-            onChangeText={(v) => setMaxWeight(sanitizeDecimalInput(v, 4, 2))}
-            placeholder={weightUnit === "kg" ? "e.g. 5" : "e.g. 11"}
-            placeholderTextColor={colors.subtleText}
-            keyboardType="decimal-pad"
-            style={styles.input}
-          />
-        </View>
-
-        {/* Open to buddy opt-in */}
-        <Pressable
-          onPress={() => setOpenToBuddy((v) => !v)}
-          style={styles.buddyOptInRow}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: openToBuddy }}
+      {/* ───────── Section 1 — Where are you going? ───────── */}
+      <View
+        onLayout={(e) => {
+          sectionYs.current.section1 = e.nativeEvent.layout.y;
+        }}
+      >
+        <SectionCard
+          index={1}
+          title="Where are you going?"
+          subtitle="Set your departure and destination"
+          complete={section1Complete}
         >
-          <View style={[styles.checkbox, openToBuddy && styles.checkboxChecked]}>
-            {openToBuddy ? (
-              <Ionicons name="checkmark" size={14} color={colors.white} />
+          <Text style={styles.fieldLabel}>From</Text>
+          <LocationCard flag={fromFlag} label={fromCountryName} filled />
+          <View>
+            <CityPicker
+              value={fromCity}
+              onChange={(v) => {
+                setFromCity(v);
+                clearFieldError("fromCity");
+              }}
+              cities={fromCities}
+              placeholder="Select departure city"
+              variant="card"
+              invalid={!!fieldErrors.fromCity}
+            />
+            {fieldErrors.fromCity ? (
+              <Text style={styles.inlineError}>{fieldErrors.fromCity}</Text>
             ) : null}
           </View>
-          <View style={styles.buddyOptInText}>
-            <Text style={styles.buddyOptInTitle}>
-              I'm also open to being a Travel Buddy on this trip
-            </Text>
+
+          <View style={styles.swapRow}>
+            <View style={styles.swapDividerLine} />
+            <Pressable
+              style={styles.swapCircleButton}
+              onPress={handleSwapDirection}
+              accessibilityRole="button"
+              accessibilityLabel="Swap direction"
+            >
+              <Ionicons name="swap-vertical-outline" size={18} color={colors.wordmark} />
+            </Pressable>
+            <View style={styles.swapDividerLine} />
+          </View>
+
+          <Text style={styles.fieldLabel}>To</Text>
+          <LocationCard flag={toFlag} label={toCountryName} filled />
+          <View>
+            <CityPicker
+              value={toCity}
+              onChange={(v) => {
+                setToCity(v);
+                clearFieldError("toCity");
+              }}
+              cities={toCities}
+              placeholder="Select arrival city"
+              variant="card"
+              invalid={!!fieldErrors.toCity}
+            />
+            {fieldErrors.toCity ? (
+              <Text style={styles.inlineError}>{fieldErrors.toCity}</Text>
+            ) : null}
+          </View>
+        </SectionCard>
+      </View>
+
+      {/* ───────── Section 2 — When are you flying? ───────── */}
+      <View
+        onLayout={(e) => {
+          sectionYs.current.section2 = e.nativeEvent.layout.y;
+        }}
+      >
+        <SectionCard
+          index={2}
+          title="When are you flying?"
+          subtitle="Travel dates and flight info"
+          complete={section2Complete}
+        >
+          <DateModeToggle<DateMode>
+            options={[
+              { value: "single", label: "Single Date" },
+              { value: "range", label: "Date Range" },
+            ]}
+            value={dateMode}
+            onChange={(next) => {
+              setDateMode(next);
+              if (next === "single") setReturnDate(null);
+            }}
+          />
+
+          <View style={styles.dateRow}>
+            <View style={styles.dateRowCell}>
+              <DateField
+                label="Departure"
+                value={departDate ? formatDateLabel(departDate) : null}
+                placeholder="Select date"
+                onPress={() => setCalendarOpen("depart")}
+                error={fieldErrors.departDate}
+              />
+            </View>
+            <View style={styles.dateRowCell}>
+              <DateField
+                label="Return"
+                value={returnDate ? formatDateLabel(returnDate) : null}
+                placeholder="Select date"
+                onPress={() => setCalendarOpen("return")}
+                disabled={dateMode === "single"}
+                error={fieldErrors.returnDate}
+              />
+            </View>
+          </View>
+        <Text style={styles.helperText}>You can book up to 12 months ahead.</Text>
+
+        <View style={styles.airlineLabelRow}>
+          <Text style={styles.fieldLabel}>Airline</Text>
+          <View style={styles.optionalPill}>
+            <Text style={styles.optionalPillText}>Optional</Text>
+          </View>
+          <View style={styles.flexSpacer} />
+          <Ionicons name="help-circle-outline" size={16} color={colors.mutedText} />
+        </View>
+        <Pressable
+          style={[styles.input, styles.selectInput, styles.airlineSelect]}
+          onPress={() => setAirlineOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Pick airline"
+        >
+          <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
+          <Text
+            style={[
+              styles.selectInputText,
+              !airline && { color: colors.subtleText },
+            ]}
+          >
+            {airline || "Select airline"}
+          </Text>
+          <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+        </Pressable>
+        <Text style={styles.helperText}>
+          We'll match you with Travel Buddies on the same flight.
+        </Text>
+        </SectionCard>
+      </View>
+
+      {/* ───────── Section 3 — What can you carry? ───────── */}
+      <View
+        onLayout={(e) => {
+          sectionYs.current.section3 = e.nativeEvent.layout.y;
+        }}
+      >
+        <SectionCard
+          index={3}
+          title="What can you carry?"
+          subtitle="Help senders find the right match"
+          complete={section3Complete}
+        >
+        <View style={styles.labelToggleRow}>
+          <Text style={styles.fieldLabel}>Max Parcel Size</Text>
+          <View style={styles.optionalPill}>
+            <Text style={styles.optionalPillText}>Optional</Text>
+          </View>
+          <View style={styles.flexSpacer} />
+          <UnitToggle<SizeUnit>
+            options={[
+              { value: "cm", label: "CM" },
+              { value: "in", label: "Inches" },
+            ]}
+            value={sizeUnit}
+            onChange={setSizeUnit}
+          />
+        </View>
+        <View style={styles.sizeRow}>
+          {(
+            [
+              { val: sizeL, set: setSizeL, label: "Length", ph: `0 ${sizeUnit}` },
+              { val: sizeW, set: setSizeW, label: "Width", ph: `0 ${sizeUnit}` },
+              { val: sizeH, set: setSizeH, label: "Height", ph: `0 ${sizeUnit}` },
+            ] as const
+          ).map(({ val, set, label, ph }) => (
+            <View key={label} style={styles.sizeCell}>
+              <Text style={styles.sizeCellLabel}>{label}</Text>
+              <TextInput
+                value={val}
+                onChangeText={(v) => set(sanitizeDecimalInput(v, 4, 1))}
+                placeholder={ph}
+                placeholderTextColor={colors.subtleText}
+                keyboardType="decimal-pad"
+                style={styles.input}
+              />
+            </View>
+          ))}
+        </View>
+        <Text style={styles.helperText}>
+          Optional — helps senders know if their parcel will fit.
+        </Text>
+
+        <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>
+          <Text style={styles.fieldLabel}>Max Weight You Can Carry</Text>
+          <View style={styles.flexSpacer} />
+          <UnitToggle<WeightUnit>
+            options={[
+              { value: "kg", label: "KG" },
+              { value: "lb", label: "LBS" },
+            ]}
+            value={weightUnit}
+            onChange={setWeightUnit}
+          />
+        </View>
+        <View>
+          <TextInput
+            value={maxWeight}
+            onChangeText={(v) => {
+              setMaxWeight(sanitizeDecimalInput(v, 4, 2));
+              clearFieldError("maxWeight");
+            }}
+            placeholder={weightUnit === "kg" ? "0 kg" : "0 lb"}
+            placeholderTextColor={colors.subtleText}
+            keyboardType="decimal-pad"
+            style={[styles.input, fieldErrors.maxWeight && styles.inputError]}
+          />
+          {fieldErrors.maxWeight ? (
+            <Text style={styles.inlineError}>{fieldErrors.maxWeight}</Text>
+          ) : null}
+        </View>
+        <Text style={styles.helperText}>
+          Most travelers can carry 5–15 kg comfortably.
+        </Text>
+        </SectionCard>
+      </View>
+
+      {/* ───────── Section 4 — Looking for company? ───────── */}
+      <SectionCard
+        index={4}
+        title="Looking for company?"
+        subtitle="Travel Buddies are travelers going your way"
+        complete={section4Complete}
+      >
+        <View style={styles.buddyToggleCard}>
+          <View style={styles.buddyToggleText}>
+            <Text style={styles.buddyOptInTitle}>I'm open to being a Travel Buddy</Text>
             <Text style={styles.buddyOptInBody}>
-              This will create a separate Travel Buddy listing so other travelers can connect with you for companionship on this route.
+              Connect with travelers on the same route for companionship.
             </Text>
           </View>
-        </Pressable>
+          <Switch
+            value={openToBuddy}
+            onValueChange={setOpenToBuddy}
+            trackColor={{ false: colors.border, true: colors.wordmark }}
+            thumbColor={colors.white}
+            ios_backgroundColor={colors.border}
+            accessibilityLabel="Open to being a Travel Buddy"
+          />
+        </View>
+        <Text style={styles.helperText}>
+          You'll only see parcel-carrying matches.
+        </Text>
 
-        {/* Buddy companion fields */}
         {openToBuddy ? (
           <View style={styles.buddyPanel}>
             <Text style={styles.buddyPanelHeading}>Travel companion details</Text>
@@ -711,19 +848,20 @@ export function ListTripScreen() {
             </View>
           </View>
         ) : null}
+      </SectionCard>
 
-        <View style={styles.submitRow}>
-          <AppButton
-            label={submitting ? "Finding matches…" : "Submit & find matches"}
-            onPress={() => void handleSubmit()}
-            disabled={submitting}
-            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-            leftIcon={
-              submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
-            }
-          />
-        </View>
+      <View style={styles.submitRow}>
+        <AppButton
+          label={submitting ? "Finding matches…" : "Submit & find matches"}
+          onPress={() => void handleSubmit()}
+          disabled={submitting}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          leftIcon={
+            submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+          }
+        />
       </View>
+      </ScrollView>
 
       {/* Airline picker modal */}
       <ListPickerModal
@@ -760,8 +898,13 @@ export function ListTripScreen() {
         today={calendarOpen === "return" && departDate ? departDate : today}
         maxDate={maxDate}
         onSelect={(d) => {
-          if (calendarOpen === "return") setReturnDate(d);
-          else setDepartDate(d);
+          if (calendarOpen === "return") {
+            setReturnDate(d);
+            clearFieldError("returnDate");
+          } else {
+            setDepartDate(d);
+            clearFieldError("departDate");
+          }
           setCalendarOpen(null);
         }}
         onChangeMonth={setVisibleMonth}
@@ -770,6 +913,9 @@ export function ListTripScreen() {
     </Screen>
   );
 }
+
+// ───────────────────────── Section primitives ─────────────────────────
+
 
 // ───────────────────────── Sub-components ─────────────────────────
 
@@ -909,7 +1055,10 @@ function CalendarModal({
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.calendarSheet}>
+      {/* `pointerEvents="box-none"` lets taps outside the sheet fall through to
+          the backdrop above, while the centered sheet itself stays interactive. */}
+      <View style={styles.calendarCenterWrap} pointerEvents="box-none">
+        <View style={styles.calendarSheet}>
         <View style={styles.pickerHeader}>
           <Text style={styles.pickerTitle}>{title}</Text>
           <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
@@ -976,6 +1125,7 @@ function CalendarModal({
             );
           })}
         </View>
+        </View>
       </View>
     </Modal>
   );
@@ -984,6 +1134,7 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 24 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1001,57 +1152,65 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
   bannerSlot: { marginBottom: 14 },
 
-  card: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
-    padding: 16,
-    gap: 18,
+  progressBlock: { gap: 8, marginBottom: 18 },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.wordmark,
+  },
+  progressLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    textAlign: "right",
   },
 
   field: { gap: 8 },
   fieldLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  fieldLabelInline: {
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: "600",
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
   },
   fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
-  countryChipRow: { flexDirection: "row" },
-  countryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceTintPrimary,
-    marginBottom: 6,
-  },
-  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
-
-  swapRow: { alignItems: "center" },
-  swapButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  flexSpacer: { flex: 1 },
+  optionalPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  optionalPillText: { color: colors.subtleText, fontSize: 10, lineHeight: 14, fontWeight: "700", letterSpacing: 0.3 },
 
-  // Match AppInput's visual recipe: input bg + 1px wordmark-tinted border,
-  // 12 radius, paddingVertical 12, fontSize 15.
+  swapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 4,
+  },
+  swapDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  swapCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke25,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   input: {
     backgroundColor: colors.input,
     borderColor: colors.inputBorder,
@@ -1062,21 +1221,37 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
   },
+  inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
   selectInput: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   selectInputText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
+
+  inlineError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    marginTop: 6,
+  },
 
   rangeRow: { flexDirection: "row", gap: 8 },
   rangeCell: { flex: 1 },
 
-  unitToggleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
+  dateRow: { flexDirection: "row", gap: 10 },
+  dateRowCell: { flex: 1 },
+
+  airlineLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  airlineSelect: { paddingVertical: 14 },
+
+  labelToggleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  labelToggleRowGap: { marginTop: 12 },
   unitToggle: {
     flexDirection: "row",
     backgroundColor: colors.surfaceMuted,
-    borderRadius: 10,
-    padding: 2,
+    borderRadius: 999,
+    padding: 3,
     gap: 2,
   },
-  unitToggleButton: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  unitToggleButton: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
   unitToggleButtonActive: { backgroundColor: colors.wordmark },
   unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   unitToggleTextActive: { color: colors.white },
@@ -1087,32 +1262,17 @@ const styles = StyleSheet.create({
 
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
 
-  // Buddy opt-in
-  buddyOptInRow: {
+  buddyToggleCard: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "flex-start",
+    backgroundColor: colors.surfaceTintPrimary,
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 2,
-    borderColor: colors.ctaAccent,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 2,
-  },
-  checkboxChecked: { backgroundColor: colors.ctaAccent, borderColor: colors.ctaAccent },
-  buddyOptInText: { flex: 1, gap: 4 },
+  buddyToggleText: { flex: 1, minWidth: 0, gap: 4 },
   buddyOptInTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
-  buddyOptInBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500" },
+  buddyOptInBody: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
 
   buddyPanel: {
     borderRadius: 14,
@@ -1146,7 +1306,6 @@ const styles = StyleSheet.create({
 
   submitRow: { marginTop: 4 },
 
-  // Success
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
   successIconBubble: {
     width: 80,
@@ -1169,7 +1328,6 @@ const styles = StyleSheet.create({
   successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
   successButtonFlex: { flex: 1 },
 
-  // Modal sheets shared
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
   pickerSheet: {
     position: "absolute",
@@ -1204,17 +1362,21 @@ const styles = StyleSheet.create({
   pickerRowTextSelected: { color: colors.wordmark, fontWeight: "800" },
   pickerSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  // Calendar
+  // Wrapper centers the sheet; sheet width is capped so it nests inside.
+  calendarCenterWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
   calendarSheet: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    top: "12%",
+    width: "100%",
+    maxWidth: 400,
     backgroundColor: colors.card,
     borderRadius: 22,
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
   calendarHeader: {
     flexDirection: "row",

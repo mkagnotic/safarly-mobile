@@ -12,17 +12,17 @@ import { Animated, Image, Platform, StyleSheet, Text, View } from "react-native"
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
+import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
 import { useActivityFeed } from "@/hooks/api/useActivityFeed";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
-import { useUnreadNotificationsCount } from "@/hooks/api/useUnreadNotificationsCount";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Conversation, type FeedItem } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
-import { shadowCard, shadowSoft } from "@/theme/elevation";
+import { shadowCard } from "@/theme/elevation";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
@@ -68,7 +68,6 @@ export function HomeScreen() {
     refetch: refetchConvs,
   } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
   const { count: messagesUnread } = useUnreadInboxCount();
-  const { count: notificationsUnread } = useUnreadNotificationsCount();
 
   const firstError = profileError ?? activityError ?? convsError;
   const formError = firstError ? getErrorMessage(firstError) : null;
@@ -161,35 +160,7 @@ export function HomeScreen() {
             </Text>
           )}
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.iconBadge}
-            onPress={() => navigation.navigate("Notifications")}
-            accessibilityRole="button"
-            accessibilityLabel={
-              notificationsUnread > 0
-                ? `Notifications, ${notificationsUnread} unread`
-                : "Notifications"
-            }
-          >
-            <Ionicons name="notifications-outline" size={18} color={colors.text} />
-            {notificationsUnread > 0 ? <View style={styles.badgeDot} /> : null}
-          </Pressable>
-          <Pressable
-            style={styles.avatarBadge}
-            onPress={() => navigation.navigate("Profile")}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-          >
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-            ) : (
-              <View style={[styles.avatarImage, styles.avatarFallback]}>
-                <Text style={styles.avatarInitialsText}>{getInitials(profile?.name)}</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
+        <PrimaryHeaderActions />
       </View>
 
       {formError ? (
@@ -482,7 +453,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTextWrap: { flex: 1, minWidth: 0 },
-  headerActions: { flexDirection: "row", gap: 8 },
   muted: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   // `height` matches the title's lineHeight so swapping in the skeleton bar
@@ -496,39 +466,6 @@ const styles = StyleSheet.create({
   },
 
   bannerSlot: { marginBottom: 14 },
-  iconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    ...shadowSoft(),
-  },
-  avatarBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    ...shadowSoft(),
-  },
-  avatarImage: { width: "100%", height: "100%", borderRadius: 21 },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
-  avatarInitialsText: { color: colors.wordmark, fontSize: 13, fontWeight: "800" },
-  badgeDot: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.wordmark,
-    right: 11,
-    top: 11,
-  },
 
   // Hero
   heroCard: {

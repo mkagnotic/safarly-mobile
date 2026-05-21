@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
   RouteProp,
+  useFocusEffect,
   useNavigation,
   useRoute,
 } from "@react-navigation/native";
@@ -13,6 +14,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,6 +23,7 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
@@ -39,6 +42,9 @@ type Route = RouteProp<MainTabParamList, "CreateBuddyTab">;
 
 type Direction = "IN_TO_US" | "US_TO_IN";
 type DateMode = "single" | "range";
+
+/** Keys for fields that can carry an inline validation error. */
+type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "age";
 
 /** Web parity (`CustomerCreateBuddy.tsx:34-39`). */
 const AIRLINES: readonly string[] = [
@@ -147,7 +153,6 @@ export function CreateBuddyScreen() {
   const editId = route.params?.editId ?? null;
   const isEditMode = !!editId;
 
-  // Edit-mode hydrate: load this user's listings, find the one being edited.
   const { listings, loading: listingsLoading } = useBuddyListings({
     filter: isEditMode ? "my_listings" : undefined,
     perPage: 100,
@@ -199,7 +204,6 @@ export function CreateBuddyScreen() {
     return d;
   }, [today]);
 
-  // Hydrate form once when the listing arrives in edit mode.
   useEffect(() => {
     if (!isEditMode || hydratedFromEdit || !editListing) return;
     setFromCity(editListing.from_city);
@@ -227,8 +231,10 @@ export function CreateBuddyScreen() {
     setHydratedFromEdit(true);
   }, [isEditMode, hydratedFromEdit, editListing]);
 
-  const fromLabel = direction === "IN_TO_US" ? "🇮🇳 IN, India" : "🇺🇸 US, USA";
-  const toLabel = direction === "IN_TO_US" ? "🇺🇸 US, USA" : "🇮🇳 IN, India";
+  const fromFlag = direction === "IN_TO_US" ? "🇮🇳" : "🇺🇸";
+  const toFlag = direction === "IN_TO_US" ? "🇺🇸" : "🇮🇳";
+  const fromCountryName = direction === "IN_TO_US" ? "India" : "United States";
+  const toCountryName = direction === "IN_TO_US" ? "United States" : "India";
   const fromCities = direction === "IN_TO_US" ? INDIA_CITIES : USA_CITIES;
   const toCities = direction === "IN_TO_US" ? USA_CITIES : INDIA_CITIES;
 
@@ -238,10 +244,57 @@ export function CreateBuddyScreen() {
     setToCity("");
   }, []);
 
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+
+  // Section Y offsets tracked via `onLayout` on the section wrappers.
+  const scrollRef = useRef<ScrollView | null>(null);
+  const sectionYs = useRef<{
+    section1: number;
+    section2: number;
+    section3: number;
+    section4: number;
+  }>({ section1: 0, section2: 0, section3: 0, section4: 0 });
+  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3" | "section4"> = {
+    fromCity: "section1",
+    toCity: "section1",
+    departDate: "section2",
+    returnDate: "section2",
+    age: "section4",
+  };
+
+  const clearFieldError = useCallback((key: FieldKey) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const scrollToField = useCallback((key: FieldKey) => {
+    const sectionKey = fieldToSection[key];
+    const y = sectionYs.current[sectionKey];
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+  }, [fieldToSection]);
+
+  const section1Complete = !!fromCity && !!toCity;
+  const section2Complete = !!departDate && (dateMode === "single" || !!returnDate);
+  const section3Complete = !!airline || !!layover;
+  const section4Complete = !!age || languages.length > 0 || !!interests || !!bio;
+
+  // 3 required fields; date-range adds the return date as the 4th.
+  const requiredTotal = dateMode === "range" ? 4 : 3;
+  const requiredCompleted =
+    (fromCity ? 1 : 0) +
+    (toCity ? 1 : 0) +
+    (departDate ? 1 : 0) +
+    (dateMode === "range" && returnDate ? 1 : 0);
+  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
+
   const handleAddLanguage = useCallback(
     (lang: string) => {
-      // Defensive — the picker button is disabled at the cap.
-      if (languages.length >= 3) return;
+      if (languages.length >= 3) return; // picker button is disabled at the cap, but guard anyway
+
       if (!languages.includes(lang)) {
         setLanguages([...languages, lang]);
       }
@@ -253,46 +306,45 @@ export function CreateBuddyScreen() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    setFormError(null);
-    if (!fromCity) {
-      setFormError("Departure city is required.");
-      return;
+    const errors: Partial<Record<FieldKey, string>> = {};
+    if (!fromCity) errors.fromCity = "Select a departure city";
+    if (!toCity) errors.toCity = "Select a destination city";
+    if (!departDate) {
+      errors.departDate = dateMode === "range" ? "Pick a start date" : "Pick a travel date";
+    } else if (departDate < today) {
+      errors.departDate = "Can't be in the past";
+    } else if (departDate > maxDate) {
+      errors.departDate = "Must be within 12 months";
     }
-    if (!toCity) {
-      setFormError("Destination city is required.");
-      return;
-    }
-    if (dateMode === "single" && !departDate) {
-      setFormError("Pick a travel date.");
-      return;
-    }
-    if (dateMode === "range" && !departDate) {
-      setFormError("Pick a start date.");
-      return;
-    }
-    if (dateMode === "range" && !returnDate) {
-      setFormError("Pick an end date.");
-      return;
-    }
-    const effectiveFrom = departDate;
-    const effectiveTo = dateMode === "range" ? returnDate : departDate;
-    if (!effectiveFrom || !effectiveTo) {
-      setFormError("Pick your travel dates.");
-      return;
-    }
-    if (effectiveFrom < today) {
-      setFormError("Travel date can't be in the past.");
-      return;
-    }
-    if (effectiveTo > maxDate) {
-      setFormError("Travel dates must be within 12 months.");
-      return;
+    if (dateMode === "range") {
+      if (!returnDate) {
+        errors.returnDate = "Pick an end date";
+      } else if (departDate && returnDate < departDate) {
+        errors.returnDate = "Must be after start date";
+      } else if (returnDate > maxDate) {
+        errors.returnDate = "Must be within 12 months";
+      }
     }
     const ageNum = age ? parseInt(age, 10) : undefined;
     if (ageNum !== undefined && (ageNum < 18 || ageNum > 120)) {
-      setFormError("Age must be between 18 and 120.");
+      errors.age = "Age must be between 18 and 120";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFormError("Please fix the highlighted fields before continuing.");
+      const order: FieldKey[] = ["fromCity", "toCity", "departDate", "returnDate", "age"];
+      const firstKey = order.find((k) => errors[k]);
+      if (firstKey) scrollToField(firstKey);
       return;
     }
+
+    setFieldErrors({});
+    setFormError(null);
+
+    const effectiveFrom = departDate;
+    const effectiveTo = dateMode === "range" ? returnDate : departDate;
+    if (!effectiveFrom || !effectiveTo) return; // guarded by checks above
 
     const isAnyFrom = fromCity === ANY_CITY;
     const isAnyTo = toCity === ANY_CITY;
@@ -341,7 +393,42 @@ export function CreateBuddyScreen() {
     isEditMode,
     editId,
     navigation,
+    scrollToField,
   ]);
+
+  const resetForm = useCallback(() => {
+    setDirection("IN_TO_US");
+    setFromCity("");
+    setToCity("");
+    setAirline("");
+    setAirlineOpen(false);
+    setDateMode("single");
+    setDepartDate(null);
+    setReturnDate(null);
+    setCalendarOpen(null);
+    setAge("");
+    setLanguages([]);
+    setLanguagePickerOpen(false);
+    setInterests("");
+    setLayover("");
+    setBio("");
+    setSubmitting(false);
+    setSubmitted(false);
+    setFormError(null);
+    setFieldErrors({});
+  }, []);
+
+  const submittedRef = useRef(submitted);
+  submittedRef.current = submitted;
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setFormError(null);
+        setFieldErrors({});
+        if (submittedRef.current) resetForm();
+      };
+    }, [resetForm]),
+  );
 
   // ───────── Success state ─────────
   if (submitted) {
@@ -360,7 +447,7 @@ export function CreateBuddyScreen() {
         </View>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
-            <Ionicons name="people-outline" size={40} color={colors.safe} />
+            <Ionicons name="checkmark" size={36} color={colors.safe} />
           </View>
           <Text style={styles.successTitle}>Buddy listing created</Text>
           <Text style={styles.successBody}>
@@ -389,328 +476,345 @@ export function CreateBuddyScreen() {
   const editLoadingError = isEditMode && !listingsLoading && !editListing;
 
   return (
-    <Screen>
-      <View style={styles.headerRow}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>
-          {isEditMode ? "Edit travel buddy" : "Find a travel buddy"}
+    <Screen scroll={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerRow}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title}>
+            {isEditMode ? "Edit travel buddy" : "Find a travel buddy"}
+          </Text>
+        </View>
+        <Text style={styles.subtitle}>
+          {isEditMode
+            ? "Update your travel partner request so other travelers can find the latest details."
+            : "Share your travel plans and connect with fellow travelers on your route."}
         </Text>
-      </View>
-      <Text style={styles.subtitle}>
-        {isEditMode
-          ? "Update your travel partner request so other travelers can find the latest details."
-          : "Share your travel plans and connect with fellow travelers on your route."}
-      </Text>
 
-      {isEditMode && listingsLoading ? (
-        <View style={styles.editLoadingRow}>
-          <ActivityIndicator size="small" color={colors.wordmark} />
-          <Text style={styles.editLoadingText}>Loading your existing buddy request…</Text>
-        </View>
-      ) : null}
-      {editLoadingError ? (
-        <View style={styles.bannerSlot}>
-          <FormBanner
-            message="Buddy request not found. It may have been removed already."
-          />
-        </View>
-      ) : null}
-      {formError ? (
-        <View style={styles.bannerSlot}>
-          <FormBanner message={formError} onDismiss={() => setFormError(null)} />
-        </View>
-      ) : null}
-
-      <View style={styles.card}>
-        {/* From */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>From Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{fromLabel}</Text>
-            </View>
+        {/* Progress bar — % of required fields complete (3 required, 4 in date-range mode). */}
+        <View style={styles.progressBlock}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
           </View>
-          <CityPicker
-            value={fromCity}
-            onChange={setFromCity}
-            cities={fromCities}
-            placeholder="Select departure city"
-          />
-        </View>
-
-        {/* Swap */}
-        <View style={styles.swapRow}>
-          <Pressable
-            style={styles.swapButton}
-            onPress={handleSwapDirection}
-            accessibilityRole="button"
-            accessibilityLabel="Swap direction"
-          >
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
-            <Text style={styles.swapButtonText}>Swap Direction</Text>
-          </Pressable>
-        </View>
-
-        {/* To */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>To Location</Text>
-          <View style={styles.countryChipRow}>
-            <View style={styles.countryChip}>
-              <Text style={styles.countryChipText}>{toLabel}</Text>
-            </View>
-          </View>
-          <CityPicker
-            value={toCity}
-            onChange={setToCity}
-            cities={toCities}
-            placeholder="Select destination city"
-          />
-        </View>
-
-        {/* Airline */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+          <Text style={styles.progressLabel}>
+            {requiredCompleted} of {requiredTotal} required fields complete
           </Text>
-          <Pressable
-            style={[styles.input, styles.selectInput]}
-            onPress={() => setAirlineOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Pick airline"
+        </View>
+
+        {isEditMode && listingsLoading ? (
+          <View style={styles.editLoadingRow}>
+            <ActivityIndicator size="small" color={colors.wordmark} />
+            <Text style={styles.editLoadingText}>Loading your existing buddy request…</Text>
+          </View>
+        ) : null}
+        {editLoadingError ? (
+          <View style={styles.bannerSlot}>
+            <FormBanner
+              message="Buddy request not found. It may have been removed already."
+            />
+          </View>
+        ) : null}
+        {formError ? (
+          <View style={styles.bannerSlot}>
+            <FormBanner message={formError} onDismiss={() => setFormError(null)} />
+          </View>
+        ) : null}
+
+        {/* ───────── Section 1 — Where are you going? ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section1 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={1}
+            title="Where are you going?"
+            subtitle="Set your departure and destination"
+            complete={section1Complete}
           >
-            <Text
-              style={[
-                styles.selectInputText,
-                !airline && { color: colors.subtleText },
+            <Text style={styles.fieldLabel}>From</Text>
+            <LocationCard flag={fromFlag} label={fromCountryName} filled />
+            <View>
+              <CityPicker
+                value={fromCity}
+                onChange={(v) => {
+                  setFromCity(v);
+                  clearFieldError("fromCity");
+                }}
+                cities={fromCities}
+                placeholder="Select departure city"
+                variant="card"
+                invalid={!!fieldErrors.fromCity}
+              />
+              {fieldErrors.fromCity ? (
+                <Text style={styles.inlineError}>{fieldErrors.fromCity}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.swapRow}>
+              <View style={styles.swapDividerLine} />
+              <Pressable
+                style={styles.swapCircleButton}
+                onPress={handleSwapDirection}
+                accessibilityRole="button"
+                accessibilityLabel="Swap direction"
+              >
+                <Ionicons name="swap-vertical-outline" size={18} color={colors.wordmark} />
+              </Pressable>
+              <View style={styles.swapDividerLine} />
+            </View>
+
+            <Text style={styles.fieldLabel}>To</Text>
+            <LocationCard flag={toFlag} label={toCountryName} filled />
+            <View>
+              <CityPicker
+                value={toCity}
+                onChange={(v) => {
+                  setToCity(v);
+                  clearFieldError("toCity");
+                }}
+                cities={toCities}
+                placeholder="Select destination city"
+                variant="card"
+                invalid={!!fieldErrors.toCity}
+              />
+              {fieldErrors.toCity ? (
+                <Text style={styles.inlineError}>{fieldErrors.toCity}</Text>
+              ) : null}
+            </View>
+          </SectionCard>
+        </View>
+
+        {/* ───────── Section 2 — When are you traveling? ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section2 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={2}
+            title="When are you traveling?"
+            subtitle="Single date or a flexible range"
+            complete={section2Complete}
+          >
+            <DateModeToggle<DateMode>
+              options={[
+                { value: "single", label: "Single Date" },
+                { value: "range", label: "Date Range" },
               ]}
-            >
-              {airline || "Select airline"}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-          </Pressable>
-          <Text style={styles.helperText}>
-            Helps match with buddies on the same flight.
-          </Text>
-        </View>
-
-        {/* Travel Date */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Travel Date / Date Range</Text>
-          <View style={styles.unitToggle}>
-            <Pressable
-              onPress={() => {
-                setDateMode("single");
-                setReturnDate(null);
+              value={dateMode}
+              onChange={(next) => {
+                setDateMode(next);
+                if (next === "single") {
+                  setReturnDate(null);
+                  clearFieldError("returnDate");
+                }
               }}
-              style={[
-                styles.unitToggleButton,
-                dateMode === "single" && styles.unitToggleButtonActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: dateMode === "single" }}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  dateMode === "single" && styles.unitToggleTextActive,
-                ]}
-              >
-                Single date
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDateMode("range")}
-              style={[
-                styles.unitToggleButton,
-                dateMode === "range" && styles.unitToggleButtonActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: dateMode === "range" }}
-            >
-              <Text
-                style={[
-                  styles.unitToggleText,
-                  dateMode === "range" && styles.unitToggleTextActive,
-                ]}
-              >
-                Date range
-              </Text>
-            </Pressable>
-          </View>
+            />
 
-          {dateMode === "single" ? (
+            <View style={styles.dateRow}>
+              <View style={styles.dateRowCell}>
+                <DateField
+                  label={dateMode === "range" ? "Start" : "Travel date"}
+                  value={departDate ? formatDateLabel(departDate) : null}
+                  placeholder="Select date"
+                  onPress={() => setCalendarOpen("depart")}
+                  error={fieldErrors.departDate}
+                />
+              </View>
+              <View style={styles.dateRowCell}>
+                <DateField
+                  label="End"
+                  value={returnDate ? formatDateLabel(returnDate) : null}
+                  placeholder="Select date"
+                  onPress={() => setCalendarOpen("return")}
+                  disabled={dateMode === "single"}
+                  error={fieldErrors.returnDate}
+                />
+              </View>
+            </View>
+            <Text style={styles.helperText}>
+              Select a single date or a date range up to 12 months from today.
+            </Text>
+          </SectionCard>
+        </View>
+
+        {/* ───────── Section 3 — Your flight (optional) ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section3 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={3}
+            title="Your flight"
+            subtitle="Optional flight info to find buddies on the same plane"
+            complete={section3Complete}
+          >
+            <View style={styles.labelRow}>
+              <Text style={styles.fieldLabel}>Airline</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            </View>
             <Pressable
               style={[styles.input, styles.selectInput]}
-              onPress={() => setCalendarOpen("depart")}
+              onPress={() => setAirlineOpen(true)}
               accessibilityRole="button"
-              accessibilityLabel="Pick travel date"
+              accessibilityLabel="Pick airline"
             >
-              <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
+              <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
               <Text
                 style={[
                   styles.selectInputText,
-                  !departDate && { color: colors.subtleText },
+                  !airline && { color: colors.subtleText },
                 ]}
               >
-                {departDate ? formatDateLabel(departDate) : "Pick your travel date"}
+                {airline || "Select airline"}
               </Text>
+              <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
             </Pressable>
-          ) : (
-            <View style={styles.rangeRow}>
-              <Pressable
-                style={[styles.input, styles.selectInput, styles.rangeCell]}
-                onPress={() => setCalendarOpen("depart")}
-                accessibilityRole="button"
-                accessibilityLabel="Pick start date"
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-                <Text
-                  style={[
-                    styles.selectInputText,
-                    !departDate && { color: colors.subtleText },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {departDate ? formatDateLabel(departDate) : "Start"}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.input, styles.selectInput, styles.rangeCell]}
-                onPress={() => setCalendarOpen("return")}
-                accessibilityRole="button"
-                accessibilityLabel="Pick end date"
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.mutedText} />
-                <Text
-                  style={[
-                    styles.selectInputText,
-                    !returnDate && { color: colors.subtleText },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {returnDate ? formatDateLabel(returnDate) : "End"}
-                </Text>
-              </Pressable>
-            </View>
-          )}
-          <Text style={styles.helperText}>
-            Select a single date or a date range up to 12 months from today.
-          </Text>
-        </View>
-
-        {/* Age */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={age}
-            onChangeText={(v) => setAge(sanitizeDigitsOnly(v, 3))}
-            placeholder="e.g. 28"
-            placeholderTextColor={colors.subtleText}
-            keyboardType="number-pad"
-            style={styles.input}
-          />
-        </View>
-
-        {/* Languages */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Languages{" "}
-            <Text style={styles.fieldLabelMuted}>(Optional, up to 3)</Text>
-          </Text>
-          {languages.length > 0 ? (
-            <View style={styles.chipsRow}>
-              {languages.map((lang) => (
-                <View key={lang} style={styles.chip}>
-                  <Text style={styles.chipText}>{lang}</Text>
-                  <Pressable
-                    onPress={() => handleRemoveLanguage(lang)}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${lang}`}
-                  >
-                    <Ionicons name="close" size={12} color={colors.mutedText} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <Pressable
-            style={[styles.input, styles.selectInput]}
-            onPress={() => setLanguagePickerOpen(true)}
-            disabled={languages.length >= 3}
-            accessibilityRole="button"
-            accessibilityLabel="Add a language"
-          >
-            <Text
-              style={[
-                styles.selectInputText,
-                { color: colors.subtleText },
-              ]}
-            >
-              {languages.length >= 3 ? "Max 3 selected" : "Add a language"}
+            <Text style={styles.helperText}>
+              Helps match with buddies on the same flight.
             </Text>
-            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-          </Pressable>
+
+            <View style={[styles.labelRow, styles.labelRowTopGap]}>
+              <Text style={styles.fieldLabel}>Layover</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            </View>
+            <TextInput
+              value={layover}
+              onChangeText={setLayover}
+              placeholder="e.g. New York — 4h layover"
+              placeholderTextColor={colors.subtleText}
+              style={styles.input}
+            />
+            <Text style={styles.helperText}>
+              Share layover details to find buddies with the same connection.
+            </Text>
+          </SectionCard>
         </View>
 
-        {/* Interests */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={interests}
-            onChangeText={setInterests}
-            placeholder="e.g. Photography, Hiking, Food, Tech"
-            placeholderTextColor={colors.subtleText}
-            style={styles.input}
-          />
-          <Text style={styles.helperText}>
-            Comma-separated interests help find like-minded travelers.
-          </Text>
-        </View>
+        {/* ───────── Section 4 — About you (optional) ───────── */}
+        <View
+          onLayout={(e) => {
+            sectionYs.current.section4 = e.nativeEvent.layout.y;
+          }}
+        >
+          <SectionCard
+            index={4}
+            title="About you"
+            subtitle="Optional — help travelers get to know you"
+            complete={section4Complete}
+          >
+            <View style={styles.labelRow}>
+              <Text style={styles.fieldLabel}>Age</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            </View>
+            <View>
+              <TextInput
+                value={age}
+                onChangeText={(v) => {
+                  setAge(sanitizeDigitsOnly(v, 3));
+                  clearFieldError("age");
+                }}
+                placeholder="e.g. 28"
+                placeholderTextColor={colors.subtleText}
+                keyboardType="number-pad"
+                style={[styles.input, fieldErrors.age && styles.inputError]}
+              />
+              {fieldErrors.age ? (
+                <Text style={styles.inlineError}>{fieldErrors.age}</Text>
+              ) : null}
+            </View>
 
-        {/* Layover */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={layover}
-            onChangeText={setLayover}
-            placeholder="e.g. New York — 4h layover"
-            placeholderTextColor={colors.subtleText}
-            style={styles.input}
-          />
-          <Text style={styles.helperText}>
-            Share layover details to find buddies with the same connection.
-          </Text>
-        </View>
+            <View style={[styles.labelRow, styles.labelRowTopGap]}>
+              <Text style={styles.fieldLabel}>Languages</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Up to 3</Text>
+              </View>
+            </View>
+            {languages.length > 0 ? (
+              <View style={styles.chipsRow}>
+                {languages.map((lang) => (
+                  <View key={lang} style={styles.chip}>
+                    <Text style={styles.chipText}>{lang}</Text>
+                    <Pressable
+                      onPress={() => handleRemoveLanguage(lang)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${lang}`}
+                    >
+                      <Ionicons name="close" size={12} color={colors.mutedText} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            <Pressable
+              style={[styles.input, styles.selectInput]}
+              onPress={() => setLanguagePickerOpen(true)}
+              disabled={languages.length >= 3}
+              accessibilityRole="button"
+              accessibilityLabel="Add a language"
+            >
+              <Text
+                style={[styles.selectInputText, { color: colors.subtleText }]}
+              >
+                {languages.length >= 3 ? "Max 3 selected" : "Add a language"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+            </Pressable>
 
-        {/* Bio */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>
-            About You <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
-            placeholderTextColor={colors.subtleText}
-            style={[styles.input, styles.textarea]}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
+            <View style={[styles.labelRow, styles.labelRowTopGap]}>
+              <Text style={styles.fieldLabel}>Interests</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            </View>
+            <TextInput
+              value={interests}
+              onChangeText={setInterests}
+              placeholder="e.g. Photography, Hiking, Food, Tech"
+              placeholderTextColor={colors.subtleText}
+              style={styles.input}
+            />
+            <Text style={styles.helperText}>
+              Comma-separated interests help find like-minded travelers.
+            </Text>
+
+            <View style={[styles.labelRow, styles.labelRowTopGap]}>
+              <Text style={styles.fieldLabel}>About you</Text>
+              <View style={styles.optionalPill}>
+                <Text style={styles.optionalPillText}>Optional</Text>
+              </View>
+            </View>
+            <TextInput
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
+              placeholderTextColor={colors.subtleText}
+              style={[styles.input, styles.textarea]}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </SectionCard>
         </View>
 
         <View style={styles.submitRow}>
@@ -732,7 +836,7 @@ export function CreateBuddyScreen() {
             }
           />
         </View>
-      </View>
+      </ScrollView>
 
       {/* Airline picker modal */}
       <ListPickerModal
@@ -769,8 +873,13 @@ export function CreateBuddyScreen() {
         today={calendarOpen === "return" && departDate ? departDate : today}
         maxDate={maxDate}
         onSelect={(d) => {
-          if (calendarOpen === "return") setReturnDate(d);
-          else setDepartDate(d);
+          if (calendarOpen === "return") {
+            setReturnDate(d);
+            clearFieldError("returnDate");
+          } else {
+            setDepartDate(d);
+            clearFieldError("departDate");
+          }
           setCalendarOpen(null);
         }}
         onChangeMonth={setVisibleMonth}
@@ -882,14 +991,15 @@ function CalendarModal({
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.calendarSheet}>
-        <View style={styles.pickerHeader}>
-          <Text style={styles.pickerTitle}>{title}</Text>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
-            <Ionicons name="close" size={20} color={colors.mutedText} />
-          </Pressable>
-        </View>
-        <View style={styles.calendarHeader}>
+      <View style={styles.calendarCenterWrap} pointerEvents="box-none">
+        <View style={styles.calendarSheet}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
+              <Ionicons name="close" size={20} color={colors.mutedText} />
+            </Pressable>
+          </View>
+          <View style={styles.calendarHeader}>
           <Pressable
             onPress={goPrev}
             style={styles.calendarNavButton}
@@ -949,6 +1059,7 @@ function CalendarModal({
             );
           })}
         </View>
+        </View>
       </View>
     </Modal>
   );
@@ -957,6 +1068,7 @@ function CalendarModal({
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 24 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -974,8 +1086,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
   bannerSlot: { marginBottom: 14 },
+
+  // ───── Progress bar ─────
+  progressBlock: { gap: 8, marginBottom: 18 },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+    overflow: "hidden",
+  },
+  progressFill: { height: "100%", borderRadius: 999, backgroundColor: colors.wordmark },
+  progressLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    textAlign: "right",
+  },
 
   editLoadingRow: {
     flexDirection: "row",
@@ -985,43 +1114,50 @@ const styles = StyleSheet.create({
   },
   editLoadingText: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
 
-  card: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 22,
-    padding: 16,
-    gap: 18,
-  },
-
-  field: { gap: 8 },
-  fieldLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  // ───── Common fields ─────
+  fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
-  countryChipRow: { flexDirection: "row" },
-  countryChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceTintPrimary,
-    marginBottom: 6,
-  },
-  countryChipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
-
-  swapRow: { alignItems: "center" },
-  swapButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  labelRowTopGap: { marginTop: 8 },
+  optionalPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
   },
-  swapButtonText: { color: colors.wordmark, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  optionalPillText: {
+    color: colors.subtleText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
 
+  // ───── Section 1: swap divider + circle button ─────
+  swapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 4,
+  },
+  swapDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  swapCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke25,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ───── Section 2: date row ─────
+  dateRow: { flexDirection: "row", gap: 10 },
+  dateRowCell: { flex: 1 },
+
+  // ───── Inputs ─────
   input: {
     backgroundColor: colors.input,
     borderColor: colors.inputBorder,
@@ -1032,6 +1168,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
   },
+  inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
   selectInput: {
     flexDirection: "row",
     alignItems: "center",
@@ -1041,22 +1178,13 @@ const styles = StyleSheet.create({
   selectInputText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
   textarea: { minHeight: 84, paddingTop: 12 },
 
-  rangeRow: { flexDirection: "row", gap: 8 },
-  rangeCell: { flex: 1 },
-
-  unitToggle: {
-    flexDirection: "row",
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 10,
-    padding: 2,
-    gap: 2,
-    alignSelf: "flex-start",
-    marginBottom: 6,
+  inlineError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+    marginTop: 6,
   },
-  unitToggleButton: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  unitToggleButtonActive: { backgroundColor: colors.wordmark },
-  unitToggleText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
-  unitToggleTextActive: { color: colors.white },
 
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
 
@@ -1076,7 +1204,6 @@ const styles = StyleSheet.create({
 
   submitRow: { marginTop: 4 },
 
-  // Success state
   successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
   successIconBubble: {
     width: 80,
@@ -1099,7 +1226,6 @@ const styles = StyleSheet.create({
   successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
   successButtonFlex: { flex: 1 },
 
-  // Modal sheets shared
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15,15,25,0.4)",
@@ -1137,17 +1263,20 @@ const styles = StyleSheet.create({
   pickerRowTextSelected: { color: colors.wordmark, fontWeight: "800" },
   pickerSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
-  // Calendar
+  calendarCenterWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
   calendarSheet: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    top: "12%",
+    width: "100%",
+    maxWidth: 400,
     backgroundColor: colors.card,
     borderRadius: 22,
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 14,
   },
   calendarHeader: {
     flexDirection: "row",

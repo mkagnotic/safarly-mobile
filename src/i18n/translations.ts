@@ -71,11 +71,11 @@ export type TranslationKey =
 type Dict = Record<TranslationKey, string>;
 
 const enUS: Dict = {
-  "tabs.home": "HOME",
-  "tabs.parcels": "MY TRAVELS",
-  "tabs.trips": "SEARCH",
-  "tabs.buddies": "INBOX",
-  "tabs.profile": "PROFILE",
+  "tabs.home": "Home",
+  "tabs.parcels": "My travels",
+  "tabs.trips": "Search",
+  "tabs.buddies": "Inbox",
+  "tabs.profile": "Profile",
   "stack.sendParcel": "Send Parcel",
   "stack.listTrip": "List Trip",
   "stack.wallet": "Wallet",
@@ -140,11 +140,11 @@ const enUS: Dict = {
 };
 
 const frCA: Dict = {
-  "tabs.home": "ACCUEIL",
-  "tabs.parcels": "MES VOYAGES",
-  "tabs.trips": "RECHERCHE",
-  "tabs.buddies": "MESSAGES",
-  "tabs.profile": "PROFIL",
+  "tabs.home": "Accueil",
+  "tabs.parcels": "Mes voyages",
+  "tabs.trips": "Recherche",
+  "tabs.buddies": "Messages",
+  "tabs.profile": "Profil",
   "stack.sendParcel": "Envoyer un colis",
   "stack.listTrip": "Lister un voyage",
   "stack.wallet": "Portefeuille",
@@ -209,11 +209,11 @@ const frCA: Dict = {
 };
 
 const esUS: Dict = {
-  "tabs.home": "INICIO",
-  "tabs.parcels": "MIS VIAJES",
-  "tabs.trips": "BUSCAR",
-  "tabs.buddies": "MENSAJES",
-  "tabs.profile": "PERFIL",
+  "tabs.home": "Inicio",
+  "tabs.parcels": "Mis viajes",
+  "tabs.trips": "Buscar",
+  "tabs.buddies": "Mensajes",
+  "tabs.profile": "Perfil",
   "stack.sendParcel": "Enviar paquete",
   "stack.listTrip": "Publicar viaje",
   "stack.wallet": "Billetera",
