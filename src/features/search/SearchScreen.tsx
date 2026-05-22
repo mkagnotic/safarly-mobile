@@ -1028,7 +1028,8 @@ function ErrorBlock({
 }: Readonly<{ message: string; onRetry?: () => void }>) {
   return (
     <View style={styles.centered}>
-      <Text style={styles.errorTitle}>Search failed</Text>
+      <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
+      <Text style={styles.errorTitle}>Couldn't load results</Text>
       <Text style={styles.errorBody}>{message}</Text>
       {onRetry ? (
         <AppButton
