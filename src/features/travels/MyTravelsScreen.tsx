@@ -422,7 +422,10 @@ const Tabs = memo(function Tabs({ tabs, active, onChange }: Readonly<TabsProps>)
             accessibilityState={{ selected: isActive }}
           >
             <Text style={[styles.tabText, isActive && styles.tabTextActive]} numberOfLines={1}>
-              {tab.label} {typeof tab.count === "number" ? `(${tab.count})` : ""}
+              {tab.label}
+              {typeof tab.count === "number" ? (
+                <Text style={styles.tabCount}> ({tab.count})</Text>
+              ) : null}
             </Text>
           </Pressable>
         );
@@ -758,7 +761,7 @@ function EmptyBlock({
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 },
 
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 14 },
   titleBlock: { flex: 1, minWidth: 0 },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginTop: 4 },
@@ -785,6 +788,7 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   tabText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   tabTextActive: { color: colors.text },
+  tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
 
   // Sections within Packages
   section: { marginBottom: 18 },

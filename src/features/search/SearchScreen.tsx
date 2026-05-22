@@ -1070,7 +1070,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   headerTextWrap: { flex: 1, minWidth: 0 },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },

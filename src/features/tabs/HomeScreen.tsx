@@ -445,8 +445,8 @@ function SkeletonRows({ count }: Readonly<{ count: number }>) {
 const styles = StyleSheet.create({
   // Header
   headerRow: {
-    marginTop: 12,
-    marginBottom: 12,
+    marginTop: 16,
+    marginBottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
