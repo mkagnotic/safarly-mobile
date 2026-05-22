@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -104,13 +104,18 @@ export function EditBuddyListingModal({
     const initialDate = parseYmd(initial.travel_date_from) ?? new Date();
     return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
   });
+  const wasOpenRef = useRef(false);
 
+  // Re-seed only on the open transition — `initial` is a fresh object every
+  // parent render, so depending on it directly would clobber in-progress
+  // edits whenever the parent re-renders (e.g. a realtime refetch).
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setForm(initial);
       const d = parseYmd(initial.travel_date_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
+    wasOpenRef.current = open;
   }, [open, initial]);
 
   const today = useMemo(() => {
