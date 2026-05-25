@@ -106,9 +106,7 @@ export function EditBuddyListingModal({
   });
   const wasOpenRef = useRef(false);
 
-  // Re-seed only on the open transition — `initial` is a fresh object every
-  // parent render, so depending on it directly would clobber in-progress
-  // edits whenever the parent re-renders (e.g. a realtime refetch).
+  // Re-seed on open-transition only — `initial` is recreated every parent render.
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setForm(initial);
