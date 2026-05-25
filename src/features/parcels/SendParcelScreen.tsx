@@ -147,6 +147,14 @@ export function SendParcelScreen() {
   const [deliveryBy, setDeliveryBy] = useState<Date | null>(null);
   const [feeOffered, setFeeOffered] = useState("");
   const [currency, setCurrency] = useState<Currency>("USD");
+  // Online-order pre-declare — unlocks the post-possession return-waiver path
+  // server-side; captured here, sent through in PR2.
+  const [isOnlineOrder, setIsOnlineOrder] = useState(false);
+  const [returnEligible, setReturnEligible] = useState(false);
+  const [returnLine1, setReturnLine1] = useState("");
+  const [returnCity, setReturnCity] = useState("");
+  const [returnRegion, setReturnRegion] = useState("");
+  const [returnPostal, setReturnPostal] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -349,6 +357,12 @@ export function SendParcelScreen() {
     setDeliveryBy(null);
     setFeeOffered("");
     setCurrency("USD");
+    setIsOnlineOrder(false);
+    setReturnEligible(false);
+    setReturnLine1("");
+    setReturnCity("");
+    setReturnRegion("");
+    setReturnPostal("");
     setSubmitting(false);
     setSubmitted(false);
     setFormError(null);
@@ -688,6 +702,100 @@ export function SendParcelScreen() {
               </Text>
             )}
           </SectionCard>
+        </View>
+
+        {/* Online-order pre-declare — optional. When on, the sender flags the
+            parcel as an online order, which unlocks the carrier's return-eligibility
+            waiver path if they cancel mid-trip. */}
+        <View style={styles.onlineOrderCard}>
+          <Pressable
+            onPress={() => setIsOnlineOrder((v) => !v)}
+            style={styles.onlineOrderHeader}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: isOnlineOrder }}
+            accessibilityLabel="This is an online order"
+          >
+            <View style={styles.onlineOrderHeaderText}>
+              <Text style={styles.onlineOrderTitle}>This is an online order</Text>
+              <Text style={styles.onlineOrderSubtitle}>
+                If a carrier cancels mid-trip and the seller will accept the parcel back,
+                you can waive their penalty later. Optional.
+              </Text>
+            </View>
+            <View style={[styles.toggleTrack, isOnlineOrder && styles.toggleTrackOn]}>
+              <View style={[styles.toggleThumb, isOnlineOrder && styles.toggleThumbOn]} />
+            </View>
+          </Pressable>
+
+          {isOnlineOrder ? (
+            <View style={styles.onlineOrderBody}>
+              <Pressable
+                onPress={() => setReturnEligible((v) => !v)}
+                style={styles.checkRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: returnEligible }}
+                accessibilityLabel="Eligible for return to seller"
+              >
+                <View
+                  style={[
+                    styles.checkBox,
+                    returnEligible && styles.checkBoxOn,
+                  ]}
+                >
+                  {returnEligible ? (
+                    <Ionicons name="checkmark" size={14} color={colors.white} />
+                  ) : null}
+                </View>
+                <Text style={styles.checkLabel}>
+                  Eligible for return to the seller within their return window
+                </Text>
+              </Pressable>
+
+              {returnEligible ? (
+                <View style={styles.returnAddressBlock}>
+                  <Text style={styles.fieldLabel}>Return address</Text>
+                  <TextInput
+                    value={returnLine1}
+                    onChangeText={setReturnLine1}
+                    placeholder="Street address"
+                    placeholderTextColor={colors.subtleText}
+                    style={styles.input}
+                    autoCapitalize="words"
+                  />
+                  <View style={styles.returnAddressRow}>
+                    <TextInput
+                      value={returnCity}
+                      onChangeText={setReturnCity}
+                      placeholder="City"
+                      placeholderTextColor={colors.subtleText}
+                      style={[styles.input, styles.returnAddressCell]}
+                      autoCapitalize="words"
+                    />
+                    <TextInput
+                      value={returnRegion}
+                      onChangeText={setReturnRegion}
+                      placeholder="State / region"
+                      placeholderTextColor={colors.subtleText}
+                      style={[styles.input, styles.returnAddressCell]}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                  <TextInput
+                    value={returnPostal}
+                    onChangeText={setReturnPostal}
+                    placeholder="ZIP / postal code"
+                    placeholderTextColor={colors.subtleText}
+                    style={styles.input}
+                    autoCapitalize="characters"
+                  />
+                  <Text style={styles.helperText}>
+                    The carrier will only see this address if they need to return the parcel
+                    after cancelling mid-trip.
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         {/* Restricted items notice — non-field disclosure shown right before submit. */}
@@ -1087,6 +1195,73 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   costInput: { paddingLeft: 28 },
+
+  onlineOrderCard: {
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 14,
+    gap: 12,
+  },
+  onlineOrderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  onlineOrderHeaderText: { flex: 1, gap: 2 },
+  onlineOrderTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
+  onlineOrderSubtitle: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+  },
+  onlineOrderBody: { gap: 12, marginTop: 4 },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceMuted,
+    padding: 2,
+  },
+  toggleTrackOn: { backgroundColor: colors.wordmark },
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 1.5,
+    elevation: 2,
+  },
+  toggleThumbOn: { transform: [{ translateX: 18 }] },
+  checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  checkBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.controlOutline,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  checkBoxOn: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
+  checkLabel: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "600",
+    flex: 1,
+  },
+  returnAddressBlock: { gap: 8 },
+  returnAddressRow: { flexDirection: "row", gap: 8 },
+  returnAddressCell: { flex: 1 },
 
   warningBox: {
     flexDirection: "row",

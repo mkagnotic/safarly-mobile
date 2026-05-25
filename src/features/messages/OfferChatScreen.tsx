@@ -1130,6 +1130,148 @@ export function OfferChatScreen() {
 
 // ───────────────────────── Bubble ─────────────────────────
 
+// ───────────────────────── Typed message bubbles ─────────────────────────
+// Mirrors the server's `message_kind` discriminator (see
+// `MOBILE_IMPLEMENTATION_GUIDE.md` §10: chat is the source of truth for offer
+// state). Kinds are optional on the wire today — when missing we fall back to
+// a plain text bubble so older threads keep rendering.
+
+type ChatMessageKind =
+  | "text"
+  | "offer_card"
+  | "offer_accept"
+  | "offer_reject"
+  | "system_event";
+
+interface OfferCardPayload {
+  amount?: number;
+  currency?: string;
+  note?: string | null;
+  status?: "open" | "accepted" | "rejected" | "superseded" | "expired";
+  proposer_name?: string | null;
+}
+
+interface OfferStatusPayload {
+  amount?: number;
+  currency?: string;
+}
+
+interface SystemEventPayload {
+  event?: string;
+  detail?: string | null;
+}
+
+/** Read the optional typed-message fields the server may attach. */
+function readTypedMessage(message: DisplayMessage): {
+  kind: ChatMessageKind;
+  payload: unknown;
+} {
+  const raw = message as DisplayMessage & {
+    message_kind?: ChatMessageKind;
+    payload?: unknown;
+  };
+  return {
+    kind: raw.message_kind ?? "text",
+    payload: raw.payload ?? null,
+  };
+}
+
+function formatMoney(amount?: number, currency?: string): string {
+  if (typeof amount !== "number") return "";
+  const sym = currency === "INR" ? "₹" : "$";
+  return `${sym}${amount.toFixed(2)}`;
+}
+
+interface OfferCardBubbleProps {
+  payload: OfferCardPayload;
+  mine: boolean;
+  time: string;
+}
+
+function OfferCardBubble({ payload, mine, time }: Readonly<OfferCardBubbleProps>) {
+  const status = payload.status ?? "open";
+  const isClosed = status === "rejected" || status === "expired" || status === "superseded";
+  const isAccepted = status === "accepted";
+  const statusLabel =
+    status === "open"
+      ? "Open offer"
+      : status === "accepted"
+        ? "Accepted"
+        : status === "rejected"
+          ? "Declined"
+          : status === "expired"
+            ? "Expired"
+            : "Superseded";
+
+  return (
+    <View style={[styles.offerCardRow, mine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
+      <View
+        style={[
+          styles.offerCard,
+          isAccepted && styles.offerCardAccepted,
+          isClosed && styles.offerCardClosed,
+        ]}
+      >
+        <View style={styles.offerCardHeader}>
+          <Ionicons
+            name={
+              isAccepted
+                ? "checkmark-circle"
+                : status === "rejected"
+                  ? "close-circle"
+                  : status === "expired"
+                    ? "time-outline"
+                    : "pricetag"
+            }
+            size={14}
+            color={isAccepted ? colors.safe : isClosed ? colors.subtleText : colors.primary}
+          />
+          <Text
+            style={[
+              styles.offerCardStatusLabel,
+              isAccepted && { color: colors.safe },
+              isClosed && { color: colors.subtleText },
+            ]}
+          >
+            {statusLabel}
+          </Text>
+        </View>
+        <Text style={styles.offerCardAmount}>
+          {formatMoney(payload.amount, payload.currency)}
+        </Text>
+        {payload.note ? (
+          <Text style={styles.offerCardNote} numberOfLines={3}>
+            {payload.note}
+          </Text>
+        ) : null}
+        <Text style={styles.offerCardFooter}>
+          {payload.proposer_name ? `${payload.proposer_name} • ` : ""}
+          {time}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+interface SystemRowProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+  tone?: "neutral" | "good" | "bad";
+}
+
+function SystemRow({ icon, text, tone = "neutral" }: Readonly<SystemRowProps>) {
+  const toneColor =
+    tone === "good" ? colors.safe : tone === "bad" ? colors.danger : colors.subtleText;
+  return (
+    <View style={styles.systemRow}>
+      <View style={styles.systemPill}>
+        <Ionicons name={icon} size={12} color={toneColor} />
+        <Text style={[styles.systemPillText, { color: toneColor }]}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
 interface MessageBubbleProps {
   message: DisplayMessage;
   mine: boolean;
@@ -1147,10 +1289,34 @@ function MessageBubble({
   onOpenImage,
   onLongPress,
 }: Readonly<MessageBubbleProps>) {
+  const time = formatBubbleTime(message.created_at);
+  const { kind, payload } = readTypedMessage(message);
+
+  if (kind === "offer_card") {
+    return <OfferCardBubble payload={(payload as OfferCardPayload) ?? {}} mine={mine} time={time} />;
+  }
+  if (kind === "offer_accept") {
+    const p = (payload as OfferStatusPayload) ?? {};
+    const money = formatMoney(p.amount, p.currency);
+    return (
+      <SystemRow
+        icon="checkmark-circle"
+        tone="good"
+        text={money ? `Offer accepted at ${money}` : "Offer accepted"}
+      />
+    );
+  }
+  if (kind === "offer_reject") {
+    return <SystemRow icon="close-circle" tone="bad" text="Offer declined" />;
+  }
+  if (kind === "system_event") {
+    const p = (payload as SystemEventPayload) ?? {};
+    return <SystemRow icon="information-circle-outline" text={p.detail ?? p.event ?? "Update"} />;
+  }
+
   const failed = message._clientStatus === "failed";
   const pending = message._clientStatus === "pending";
   const showText = message.text && message.text !== "📎 Attachment";
-  const time = formatBubbleTime(message.created_at);
 
   return (
     <View style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
@@ -1598,4 +1764,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  // Typed bubbles — offer cards & system events
+  offerCardRow: { flexDirection: "row", paddingHorizontal: 14, marginBottom: 8 },
+  offerCard: {
+    maxWidth: "80%",
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 6,
+  },
+  offerCardAccepted: {
+    borderColor: "rgba(34,195,93,0.45)",
+    backgroundColor: "rgba(34,195,93,0.06)",
+  },
+  offerCardClosed: { opacity: 0.65 },
+  offerCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  offerCardStatusLabel: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  offerCardAmount: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  offerCardNote: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
+  },
+  offerCardFooter: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
+
+  systemRow: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginBottom: 8,
+  },
+  systemPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  systemPillText: { fontSize: 12, fontWeight: "700" },
 });

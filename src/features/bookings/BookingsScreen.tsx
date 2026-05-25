@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import * as Clipboard from "expo-clipboard";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -14,9 +15,9 @@ import {
 } from "react-native";
 
 import { Card } from "@/components/ui/Card";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
-import { showToast } from "@/feedback/appFeedback";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -43,19 +44,27 @@ const FILTERS: ReadonlyArray<{ label: string; status?: string }> = [
 
 const STATUS_TONES: Record<string, { bg: string; fg: string }> = {
   pending_payment: { bg: "rgba(245,159,10,0.12)", fg: colors.warning },
+  awaiting_handoff: { bg: primaryTint.fill12, fg: colors.primary },
   confirmed: { bg: primaryTint.fill12, fg: colors.primary },
   in_transit: { bg: "rgba(245,128,32,0.12)", fg: "#F08020" },
   delivered: { bg: "rgba(34,195,93,0.12)", fg: colors.safe },
+  handoff_rejected: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
   cancelled: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
+  cancelled_post_possession: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
+  expired_unpaid: { bg: "rgba(120,120,120,0.12)", fg: colors.mutedText },
   disputed: { bg: "rgba(220,40,40,0.15)", fg: colors.danger },
 };
 
 const STATUS_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   pending_payment: "time-outline",
+  awaiting_handoff: "hand-left-outline",
   confirmed: "checkmark-circle",
   in_transit: "car",
   delivered: "cube-outline",
+  handoff_rejected: "close-circle-outline",
   cancelled: "ban",
+  cancelled_post_possession: "ban",
+  expired_unpaid: "hourglass-outline",
   disputed: "alert-circle",
 };
 
@@ -175,6 +184,335 @@ function CancelBookingModal({
   );
 }
 
+// ─────────────── Reject handoff modal ───────────────
+
+interface RejectHandoffModalProps {
+  open: boolean;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}
+
+const REJECT_REASON_MIN = 10;
+
+function RejectHandoffModal({
+  open,
+  pending,
+  onCancel,
+  onConfirm,
+}: Readonly<RejectHandoffModalProps>) {
+  const [reason, setReason] = useState("");
+  const [photoSelected, setPhotoSelected] = useState(false);
+
+  const handleClose = () => {
+    if (pending) return;
+    setReason("");
+    setPhotoSelected(false);
+    onCancel();
+  };
+
+  const trimmed = reason.trim();
+  const reasonOk = trimmed.length >= REJECT_REASON_MIN;
+
+  const handleConfirm = () => {
+    if (!reasonOk) return;
+    onConfirm(trimmed);
+  };
+
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
+      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
+      <View style={styles.modalCenter} pointerEvents="box-none">
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderBubbleDanger}>
+              <Ionicons name="close-circle" size={18} color={colors.danger} />
+            </View>
+            <Text style={styles.modalTitle}>Reject handoff?</Text>
+            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+              <Ionicons name="close" size={20} color={colors.mutedText} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalBody}>
+            The sender gets a full refund and the parcel re-opens for other carriers.
+            Tell us what's wrong so we can keep records.
+          </Text>
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+            placeholderTextColor={colors.mutedText}
+            style={styles.modalInput}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            editable={!pending}
+            autoFocus
+          />
+          <Text style={styles.modalHelper}>
+            {trimmed.length}/{REJECT_REASON_MIN} characters minimum
+          </Text>
+
+          <Pressable
+            onPress={() => setPhotoSelected((v) => !v)}
+            disabled={pending}
+            style={[
+              styles.photoPickerButton,
+              photoSelected && styles.photoPickerButtonSelected,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={photoSelected ? "Photo selected" : "Add photo evidence"}
+          >
+            <Ionicons
+              name={photoSelected ? "checkmark-circle" : "camera-outline"}
+              size={16}
+              color={photoSelected ? colors.safe : colors.subtleText}
+            />
+            <Text
+              style={[
+                styles.photoPickerText,
+                photoSelected && styles.photoPickerTextSelected,
+              ]}
+            >
+              {photoSelected ? "Photo attached" : "Add photo evidence (optional)"}
+            </Text>
+          </Pressable>
+
+          <View style={styles.modalFooter}>
+            <Pressable
+              onPress={handleClose}
+              disabled={pending}
+              style={[styles.modalButton, styles.modalButtonSecondary]}
+              accessibilityRole="button"
+              accessibilityLabel="Keep handoff"
+            >
+              <Text style={styles.modalButtonSecondaryText}>Keep handoff</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleConfirm}
+              disabled={pending || !reasonOk}
+              style={[
+                styles.modalButton,
+                styles.modalButtonDanger,
+                (pending || !reasonOk) && styles.modalButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Reject handoff"
+            >
+              {pending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.modalButtonDangerText}>Reject handoff</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─────────────── Cancel post-possession modal (carrier mid-trip) ───────────────
+
+interface CancelPostPossessionModalProps {
+  open: boolean;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string, waiverEligible: boolean) => void;
+}
+
+interface WaiverQuestion {
+  key: "online_order" | "seller_will_accept_return" | "seller_will_refund";
+  label: string;
+}
+
+const WAIVER_QUESTIONS: ReadonlyArray<WaiverQuestion> = [
+  {
+    key: "online_order",
+    label: "Was this an online order the sender placed at a merchant?",
+  },
+  {
+    key: "seller_will_accept_return",
+    label: "Will the merchant accept a return of this parcel?",
+  },
+  {
+    key: "seller_will_refund",
+    label: "Will the merchant refund the sender after the return?",
+  },
+];
+
+function CancelPostPossessionModal({
+  open,
+  pending,
+  onCancel,
+  onConfirm,
+}: Readonly<CancelPostPossessionModalProps>) {
+  const [reason, setReason] = useState("");
+  const [answers, setAnswers] = useState<Record<WaiverQuestion["key"], "yes" | "no" | null>>({
+    online_order: null,
+    seller_will_accept_return: null,
+    seller_will_refund: null,
+  });
+
+  const handleClose = () => {
+    if (pending) return;
+    setReason("");
+    setAnswers({
+      online_order: null,
+      seller_will_accept_return: null,
+      seller_will_refund: null,
+    });
+    onCancel();
+  };
+
+  const trimmed = reason.trim();
+  const reasonOk = trimmed.length >= REJECT_REASON_MIN;
+  const allAnswered = WAIVER_QUESTIONS.every((q) => answers[q.key] !== null);
+  const allYes = WAIVER_QUESTIONS.every((q) => answers[q.key] === "yes");
+
+  const handleConfirm = () => {
+    if (!reasonOk || !allAnswered) return;
+    onConfirm(trimmed, allYes);
+  };
+
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
+      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
+      <View style={styles.modalCenter} pointerEvents="box-none">
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderBubbleDanger}>
+              <Ionicons name="alert-circle" size={18} color={colors.danger} />
+            </View>
+            <Text style={styles.modalTitle}>Cancel mid-trip?</Text>
+            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+              <Ionicons name="close" size={20} color={colors.mutedText} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalBody}>
+            You've already accepted the parcel. A penalty applies (5–25%) based on how close
+            you are to the delivery deadline. If this parcel is returnable to its merchant,
+            the sender can waive the cash penalty.
+          </Text>
+
+          <Text style={styles.modalFieldLabel}>Why are you cancelling?</Text>
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+            placeholderTextColor={colors.mutedText}
+            style={styles.modalInput}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            editable={!pending}
+          />
+          <Text style={styles.modalHelper}>
+            {trimmed.length}/{REJECT_REASON_MIN} characters minimum
+          </Text>
+
+          <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>
+            Return-eligibility check
+          </Text>
+          <View style={styles.waiverList}>
+            {WAIVER_QUESTIONS.map((q) => {
+              const current = answers[q.key];
+              return (
+                <View key={q.key} style={styles.waiverRow}>
+                  <Text style={styles.waiverLabel}>{q.label}</Text>
+                  <View style={styles.waiverChoices}>
+                    {(["yes", "no"] as const).map((choice) => {
+                      const selected = current === choice;
+                      const isYes = choice === "yes";
+                      return (
+                        <Pressable
+                          key={choice}
+                          onPress={() =>
+                            setAnswers((prev) => ({ ...prev, [q.key]: choice }))
+                          }
+                          disabled={pending}
+                          style={[
+                            styles.waiverChoice,
+                            selected &&
+                              (isYes ? styles.waiverChoiceYes : styles.waiverChoiceNo),
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected }}
+                        >
+                          <Text
+                            style={[
+                              styles.waiverChoiceText,
+                              selected &&
+                                (isYes
+                                  ? styles.waiverChoiceTextYes
+                                  : styles.waiverChoiceTextNo),
+                            ]}
+                          >
+                            {isYes ? "Yes" : "No"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+
+          {allAnswered ? (
+            <View style={allYes ? styles.waiverHintGood : styles.waiverHintNeutral}>
+              <Ionicons
+                name={allYes ? "shield-checkmark" : "information-circle-outline"}
+                size={14}
+                color={allYes ? colors.safe : colors.mutedText}
+              />
+              <Text
+                style={[
+                  styles.waiverHintText,
+                  allYes && { color: colors.safe },
+                ]}
+              >
+                {allYes
+                  ? "The sender can waive the cash penalty after reviewing — strike still applies."
+                  : "A cash penalty will be deducted from your wallet."}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.modalFooter}>
+            <Pressable
+              onPress={handleClose}
+              disabled={pending}
+              style={[styles.modalButton, styles.modalButtonSecondary]}
+              accessibilityRole="button"
+              accessibilityLabel="Don't cancel"
+            >
+              <Text style={styles.modalButtonSecondaryText}>Don't cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleConfirm}
+              disabled={pending || !reasonOk || !allAnswered}
+              style={[
+                styles.modalButton,
+                styles.modalButtonDanger,
+                (pending || !reasonOk || !allAnswered) && styles.modalButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel mid-trip"
+            >
+              {pending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.modalButtonDangerText}>Cancel mid-trip</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─────────────── Expanded section (mirrors web's expanded card body) ───────────────
 
 interface ExpandedBodyProps {
@@ -194,34 +532,87 @@ function ExpandedBody({
   const { booking, timeline, error, refetch } = useBookingDetail(bookingId);
 
   const [actionPending, setActionPending] = useState<
-    null | "pickup" | "cancel" | "generate-otp" | "confirm-otp"
+    | null
+    | "accept-handoff"
+    | "reject-handoff"
+    | "cancel"
+    | "cancel-post-possession"
+    | "generate-otp"
+    | "confirm-otp"
   >(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [rejectHandoffOpen, setRejectHandoffOpen] = useState(false);
+  const [cancelPostPossessionOpen, setCancelPostPossessionOpen] = useState(false);
   const [otpCode, setOtpCode] = useState("");
-  const [generatedOtpVisible, setGeneratedOtpVisible] = useState(false);
+  // The server returns the plaintext OTP exactly once on generate-otp; if we
+  // drop it here the sender can never see it again. Keep it in screen state.
+  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
+
+  // Inline action feedback — matches the rest of the app (see SendParcelScreen)
+  // by rendering `FormBanner` at the top of the affected card instead of toasts.
+  type BannerVariant = "success" | "error" | "info" | "warning";
+  const [actionBanner, setActionBanner] = useState<
+    { variant: BannerVariant; title?: string; message?: string } | null
+  >(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissBanner = useCallback(() => {
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+      bannerTimerRef.current = null;
+    }
+    setActionBanner(null);
+  }, []);
+
+  const showBanner = useCallback(
+    (next: { variant: BannerVariant; title?: string; message?: string }, autoDismissMs = 4000) => {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      setActionBanner(next);
+      if (autoDismissMs > 0) {
+        bannerTimerRef.current = setTimeout(() => {
+          setActionBanner(null);
+          bannerTimerRef.current = null;
+        }, autoDismissMs);
+      }
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    },
+    [],
+  );
 
   const runAction = useCallback(
-    async (
-      key: "pickup" | "cancel" | "generate-otp" | "confirm-otp",
-      task: () => Promise<unknown>,
+    async <T,>(
+      key:
+        | "accept-handoff"
+        | "reject-handoff"
+        | "cancel"
+        | "cancel-post-possession"
+        | "generate-otp"
+        | "confirm-otp",
+      task: () => Promise<T>,
       successMessage: string,
-    ) => {
+    ): Promise<T | null> => {
       setActionPending(key);
       try {
-        await task();
+        const result = await task();
         await refetch();
-        showToast({ title: successMessage, variant: "success" });
-        return true;
+        showBanner({ variant: "success", title: successMessage });
+        return result;
       } catch (err) {
         const message =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        showToast({ title: "Action failed", message, variant: "error" });
-        return false;
+        showBanner({ variant: "error", title: "Action failed", message }, 6000);
+        return null;
       } finally {
         setActionPending(null);
       }
     },
-    [refetch],
+    [refetch, showBanner],
   );
 
   if (!booking && !error) {
@@ -242,49 +633,99 @@ function ExpandedBody({
     );
   }
 
-  const handleMarkPickup = () =>
-    void runAction("pickup", () => bookingsApi.markPickup(booking.id), "Marked as picked up");
+  const handleAcceptHandoff = () =>
+    void runAction(
+      "accept-handoff",
+      () => bookingsApi.markPickup(booking.id),
+      "Handoff accepted",
+    );
+
+  const handleRejectHandoffConfirm = async (_reason: string) => {
+    // PR1 builds the UI; the dedicated `/handoff/reject` endpoint + photo
+    // upload land in PR2 alongside Idempotency-Key support.
+    showBanner({
+      variant: "info",
+      title: "Coming next update",
+      message: "Handoff rejection with photo evidence is shipping in the next release.",
+    });
+    setRejectHandoffOpen(false);
+  };
 
   const handleCancelConfirm = async (reason: string) => {
-    const ok = await runAction(
+    const result = await runAction(
       "cancel",
       () => bookingsApi.cancel(booking.id, reason),
       "Booking cancelled",
     );
-    if (ok) setCancelOpen(false);
+    if (result) setCancelOpen(false);
+  };
+
+  const handleCancelPostPossessionConfirm = async (
+    _reason: string,
+    _waiverEligible: boolean,
+  ) => {
+    // PR1 builds the UI; the dedicated `/cancel-post-possession` endpoint
+    // lands in PR2 (tiered penalty + strike + optional return waiver).
+    showBanner({
+      variant: "info",
+      title: "Coming next update",
+      message:
+        "Mid-trip cancellation with carrier penalties is shipping in the next release.",
+    });
+    setCancelPostPossessionOpen(false);
   };
 
   const handleGenerateOtp = async () => {
-    const ok = await runAction(
+    const result = await runAction(
       "generate-otp",
       () => bookingsApi.generateOtp(booking.id),
-      "Delivery code sent",
+      "Delivery code generated",
     );
-    if (ok) setGeneratedOtpVisible(true);
+    const otp = result?.data?.otp;
+    if (otp) setGeneratedOtp(otp);
+  };
+
+  const handleCopyOtp = async () => {
+    if (!generatedOtp) return;
+    await Clipboard.setStringAsync(generatedOtp);
+    showBanner({ variant: "success", title: "Code copied to clipboard" }, 2400);
   };
 
   const handleConfirmOtp = async () => {
     const trimmed = otpCode.trim();
     if (trimmed.length === 0) return;
-    const ok = await runAction(
+    const result = await runAction(
       "confirm-otp",
       () => bookingsApi.confirmOtp(booking.id, trimmed),
       "Delivery confirmed",
     );
-    if (ok) setOtpCode("");
+    if (result) setOtpCode("");
   };
 
   // Action gates — mirror web `CustomerBookings.tsx` expanded-card rules.
-  // Web has no "Report an issue" link here; disputes are filed from the
-  // dedicated `/customer/disputes` page.
-  const canCancel = booking.status === "pending_payment" || booking.status === "confirmed";
-  const canMarkPickup = booking.status === "confirmed" && role === "carrier";
+  // `confirmed` is kept for back-compat with bookings the server still labels
+  // that way; `awaiting_handoff` is the new post-payment status.
+  const isAwaitingHandoff =
+    booking.status === "awaiting_handoff" || booking.status === "confirmed";
+  const canCancel = booking.status === "pending_payment" || isAwaitingHandoff;
+  const canAcceptHandoff = isAwaitingHandoff && role === "carrier";
+  const canRejectHandoff = canAcceptHandoff;
   const canGenerateOtp = booking.status === "in_transit" && role === "sender";
   const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
+  const canCancelPostPossession = booking.status === "in_transit" && role === "carrier";
   const canRate = booking.status === "delivered";
 
   return (
     <View style={styles.expandedRoot}>
+      {actionBanner ? (
+        <FormBanner
+          variant={actionBanner.variant}
+          title={actionBanner.title ?? null}
+          message={actionBanner.message ?? null}
+          onDismiss={dismissBanner}
+        />
+      ) : null}
+
       {/* Parcel details */}
       {booking.parcel ? (
         <View style={styles.expandedSection}>
@@ -363,26 +804,39 @@ function ExpandedBody({
 
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
-        {canMarkPickup ? (
+        {canAcceptHandoff ? (
           <Pressable
             style={[styles.actionButton, styles.actionPrimary]}
-            onPress={handleMarkPickup}
+            onPress={handleAcceptHandoff}
             disabled={actionPending !== null}
             accessibilityRole="button"
-            accessibilityLabel="Mark as Picked Up"
+            accessibilityLabel="Accept Handoff"
           >
-            {actionPending === "pickup" ? (
+            {actionPending === "accept-handoff" ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
               <>
-                <Ionicons name="car" size={14} color={colors.white} />
-                <Text style={styles.actionPrimaryText}>Mark as Picked Up</Text>
+                <Ionicons name="checkmark-circle" size={14} color={colors.white} />
+                <Text style={styles.actionPrimaryText}>Accept Handoff</Text>
               </>
             )}
           </Pressable>
         ) : null}
 
-        {canCancel ? (
+        {canRejectHandoff ? (
+          <Pressable
+            style={[styles.actionButton, styles.actionDanger]}
+            onPress={() => setRejectHandoffOpen(true)}
+            disabled={actionPending !== null}
+            accessibilityRole="button"
+            accessibilityLabel="Reject Handoff"
+          >
+            <Ionicons name="close-circle" size={14} color={colors.danger} />
+            <Text style={styles.actionDangerText}>Reject Handoff</Text>
+          </Pressable>
+        ) : null}
+
+        {canCancel && !canAcceptHandoff ? (
           <Pressable
             style={[styles.actionButton, styles.actionDanger]}
             onPress={() => setCancelOpen(true)}
@@ -396,28 +850,65 @@ function ExpandedBody({
         ) : null}
 
         {canGenerateOtp ? (
-          <View>
-            <Pressable
-              style={[styles.actionButton, styles.actionSafe]}
-              onPress={handleGenerateOtp}
-              disabled={actionPending !== null}
-              accessibilityRole="button"
-              accessibilityLabel="Generate Delivery Code"
-            >
-              {actionPending === "generate-otp" ? (
-                <ActivityIndicator size="small" color={colors.safe} />
-              ) : (
-                <>
-                  <Ionicons name="key-outline" size={14} color={colors.safe} />
-                  <Text style={styles.actionSafeText}>Generate Delivery Code</Text>
-                </>
-              )}
-            </Pressable>
-            {generatedOtpVisible ? (
-              <Text style={styles.helperText}>
-                Delivery code has been sent. Share it with your carrier upon delivery.
-              </Text>
-            ) : null}
+          <View style={styles.fullWidthAction}>
+            {generatedOtp ? (
+              <View style={styles.otpDisplayCard}>
+                <View style={styles.otpDisplayHeader}>
+                  <Ionicons name="key" size={14} color={colors.safe} />
+                  <Text style={styles.otpDisplayHeaderText}>Your delivery code</Text>
+                </View>
+                <Text style={styles.otpDisplayCode} accessibilityLabel="Delivery code">
+                  {generatedOtp}
+                </Text>
+                <Text style={styles.otpDisplayHint}>
+                  Share this code with the carrier in person at handoff. It expires in 30 min.
+                </Text>
+                <View style={styles.otpDisplayActions}>
+                  <Pressable
+                    onPress={handleCopyOtp}
+                    style={[styles.actionButton, styles.actionSafe, styles.otpDisplayBtn]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy delivery code"
+                  >
+                    <Ionicons name="copy-outline" size={14} color={colors.safe} />
+                    <Text style={styles.actionSafeText}>Copy code</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleGenerateOtp}
+                    disabled={actionPending !== null}
+                    style={[styles.actionButton, styles.actionGhost, styles.otpDisplayBtn]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Generate a new code"
+                  >
+                    {actionPending === "generate-otp" ? (
+                      <ActivityIndicator size="small" color={colors.text} />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh-outline" size={14} color={colors.text} />
+                        <Text style={styles.actionGhostText}>Resend</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                style={[styles.actionButton, styles.actionSafe]}
+                onPress={handleGenerateOtp}
+                disabled={actionPending !== null}
+                accessibilityRole="button"
+                accessibilityLabel="Generate Delivery Code"
+              >
+                {actionPending === "generate-otp" ? (
+                  <ActivityIndicator size="small" color={colors.safe} />
+                ) : (
+                  <>
+                    <Ionicons name="key-outline" size={14} color={colors.safe} />
+                    <Text style={styles.actionSafeText}>Generate Delivery Code</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
           </View>
         ) : null}
 
@@ -455,6 +946,19 @@ function ExpandedBody({
           </View>
         ) : null}
 
+        {canCancelPostPossession ? (
+          <Pressable
+            style={[styles.actionButton, styles.actionDanger, styles.fullWidthAction]}
+            onPress={() => setCancelPostPossessionOpen(true)}
+            disabled={actionPending !== null}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel mid-trip"
+          >
+            <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
+            <Text style={styles.actionDangerText}>Cancel mid-trip</Text>
+          </Pressable>
+        ) : null}
+
         {canRate ? (
           <Pressable
             style={[styles.actionButton, styles.actionWarning]}
@@ -473,6 +977,20 @@ function ExpandedBody({
         pending={actionPending === "cancel"}
         onCancel={() => setCancelOpen(false)}
         onConfirm={handleCancelConfirm}
+      />
+
+      <RejectHandoffModal
+        open={rejectHandoffOpen}
+        pending={actionPending === "reject-handoff"}
+        onCancel={() => setRejectHandoffOpen(false)}
+        onConfirm={handleRejectHandoffConfirm}
+      />
+
+      <CancelPostPossessionModal
+        open={cancelPostPossessionOpen}
+        pending={actionPending === "cancel-post-possession"}
+        onCancel={() => setCancelPostPossessionOpen(false)}
+        onConfirm={handleCancelPostPossessionConfirm}
       />
     </View>
   );
@@ -943,8 +1461,54 @@ const styles = StyleSheet.create({
   actionSafeText: { color: colors.safe, fontSize: 13, fontWeight: "800" },
   actionWarning: { backgroundColor: "rgba(245,159,10,0.12)" },
   actionWarningText: { color: colors.warning, fontSize: 13, fontWeight: "800" },
+  actionGhost: {
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionGhostText: { color: colors.text, fontSize: 13, fontWeight: "800" },
   actionDisabled: { opacity: 0.5 },
+  fullWidthAction: { width: "100%" },
   helperText: { color: colors.safe, fontSize: 12, fontWeight: "500", marginTop: 6 },
+
+  // OTP display card — sacred per the implementation guide: the plaintext
+  // code is returned by the server exactly once, so we surface it big and
+  // copyable until the screen unmounts.
+  otpDisplayCard: {
+    backgroundColor: "rgba(34,195,93,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(34,195,93,0.30)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
+    width: "100%",
+  },
+  otpDisplayHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  otpDisplayHeaderText: {
+    color: colors.safe,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  otpDisplayCode: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: 8,
+    fontFamily: "Courier",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+  otpDisplayHint: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+  },
+  otpDisplayActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  otpDisplayBtn: { flex: 1 },
 
   // OTP entry
   otpRow: { flexDirection: "row", gap: 8, width: "100%" },
@@ -994,10 +1558,102 @@ const styles = StyleSheet.create({
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  modalHeaderBubbleDanger: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(220,40,40,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: "800", flex: 1 },
   modalBody: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
+  modalFieldLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  modalHelper: {
+    color: colors.subtleText,
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+
+  photoPickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+  },
+  photoPickerButtonSelected: {
+    backgroundColor: "rgba(34,195,93,0.08)",
+    borderColor: "rgba(34,195,93,0.40)",
+    borderStyle: "solid",
+  },
+  photoPickerText: { color: colors.subtleText, fontSize: 13, fontWeight: "700" },
+  photoPickerTextSelected: { color: colors.safe },
+
+  waiverList: { gap: 10 },
+  waiverRow: { gap: 6 },
+  waiverLabel: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  waiverChoices: { flexDirection: "row", gap: 8 },
+  waiverChoice: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  waiverChoiceYes: {
+    backgroundColor: "rgba(34,195,93,0.10)",
+    borderColor: "rgba(34,195,93,0.35)",
+  },
+  waiverChoiceNo: {
+    backgroundColor: "rgba(220,40,40,0.08)",
+    borderColor: "rgba(220,40,40,0.32)",
+  },
+  waiverChoiceText: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  waiverChoiceTextYes: { color: colors.safe },
+  waiverChoiceTextNo: { color: colors.danger },
+  waiverHintGood: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(34,195,93,0.08)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  waiverHintNeutral: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  waiverHintText: { color: colors.mutedText, fontSize: 12, fontWeight: "600", flex: 1 },
   modalInput: {
     backgroundColor: colors.surfaceMuted,
     color: colors.text,
