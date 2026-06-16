@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -11,14 +11,25 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { showAppAlert } from "@/feedback/appFeedback";
 import {
   EditBuddyListingModal,
   type EditBuddyListingFormValues,
 } from "@/features/buddies/EditBuddyListingModal";
+import { RateBuddyModal, type RateBuddyValues } from "@/features/buddies/RateBuddyModal";
+import {
+  EditParcelModal,
+  type EditParcelFormValues,
+} from "@/features/parcels/EditParcelModal";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
+import { isTerminal } from "@/features/travels/statusLabels";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
+import { useBookings } from "@/hooks/api/useBookings";
+import { useBuddyConnections } from "@/hooks/api/useBuddyConnections";
 import { useBuddyListings } from "@/hooks/api/useBuddyListings";
+import { useBuddyRequests } from "@/hooks/api/useBuddyRequests";
+import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useParcels } from "@/hooks/api/useParcels";
 import { useTrips } from "@/hooks/api/useTrips";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -26,8 +37,12 @@ import {
   buddiesApi,
   getErrorMessage,
   parcelsApi,
+  ratingsApi,
   tripsApi,
+  type Booking,
+  type BuddyConnection,
   type BuddyListing,
+  type BuddyRequest,
   type Parcel,
   type Trip,
 } from "@/services/api";
@@ -56,23 +71,48 @@ export function MyTravelsScreen() {
   const receiveParcels = useParcels({ filter: "my_parcels" });
   const partners = useBuddyListings({ filter: "my_listings" });
   const archive = useTrips({ filter: "my_archived" });
+  const delivered = useBookings({ status: "delivered", perPage: 50 });
+  const myProfile = useMyProfile();
+  const requests = useBuddyRequests();
+  const connections = useBuddyConnections();
+
+  // Terminal parcels move to Archive, not the active Send/Receive lists (§3.3 / §10.1).
+  const activeSend = sendParcels.parcels.filter((p) => !isTerminal(p.status));
+  const activeReceive = receiveParcels.parcels.filter((p) => !isTerminal(p.status));
+
+  // In-progress buddies stay in Partners; ratable ones move to Archive (§3.3 / §7.2).
+  const activeBuddies = connections.connections.filter(
+    (c) => !(c.can_rate || c.already_rated),
+  );
+  const completedBuddies = connections.connections.filter(
+    (c) => c.can_rate || c.already_rated,
+  );
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [editPending, setEditPending] = useState(false);
+  const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
+  const [editParcelPending, setEditParcelPending] = useState(false);
   const [editingBuddy, setEditingBuddy] = useState<BuddyListing | null>(null);
   const [editBuddyPending, setEditBuddyPending] = useState(false);
+  const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
+  const [ratePending, setRatePending] = useState(false);
 
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: flights.total },
     {
       key: "packages",
       label: "Packages",
-      count: sendParcels.total + receiveParcels.total,
+      count: activeSend.length + activeReceive.length,
     },
     { key: "partners", label: "Partners", count: partners.total },
-    { key: "archive", label: "Archive", count: archive.total },
+    {
+      key: "archive",
+      label: "Archive",
+      count: archive.total + delivered.bookings.length + completedBuddies.length,
+    },
   ];
 
   const goSendParcel = useCallback(
@@ -90,9 +130,25 @@ export function MyTravelsScreen() {
       await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
       return;
     }
-    if (activeTab === "partners") return partners.refetch();
-    if (activeTab === "archive") return archive.refetch();
-  }, [activeTab, flights, sendParcels, receiveParcels, partners, archive]);
+    if (activeTab === "partners") {
+      await Promise.all([partners.refetch(), requests.refetch(), connections.refetch()]);
+      return;
+    }
+    if (activeTab === "archive") {
+      await Promise.all([archive.refetch(), delivered.refetch(), connections.refetch()]);
+      return;
+    }
+  }, [
+    activeTab,
+    flights,
+    sendParcels,
+    receiveParcels,
+    partners,
+    archive,
+    delivered,
+    requests,
+    connections,
+  ]);
 
   const withDeleteFlow = useCallback(
     async (
@@ -203,6 +259,50 @@ export function MyTravelsScreen() {
     [editingBuddy, partners],
   );
 
+  const handleEditParcel = useCallback((parcel: Parcel) => {
+    setFormError(null);
+    setEditingParcel(parcel);
+  }, []);
+  const handleEditParcelCancel = useCallback(() => {
+    if (!editParcelPending) setEditingParcel(null);
+  }, [editParcelPending]);
+
+  const handleEditParcelSubmit = useCallback(
+    async (values: EditParcelFormValues) => {
+      if (!editingParcel) return;
+      const data: Parameters<typeof parcelsApi.update>[1] = {};
+      const weightNum = Number(values.weight_kg);
+      if (
+        values.weight_kg !== "" &&
+        Number.isFinite(weightNum) &&
+        weightNum !== editingParcel.weight_kg
+      ) {
+        data.weight_kg = weightNum;
+      }
+      if (values.description !== (editingParcel.description ?? "")) {
+        data.description = values.description;
+      }
+
+      if (Object.keys(data).length === 0) {
+        setEditingParcel(null);
+        return;
+      }
+
+      setEditParcelPending(true);
+      try {
+        await parcelsApi.update(editingParcel.id, data);
+        // The parcel lives in either Send or Receive — refresh both.
+        await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
+        setEditingParcel(null);
+      } catch (err) {
+        setFormError(`Couldn't update parcel. ${getErrorMessage(err)}`);
+      } finally {
+        setEditParcelPending(false);
+      }
+    },
+    [editingParcel, sendParcels, receiveParcels],
+  );
+
   const handleEditTrip = useCallback((trip: Trip) => {
     setFormError(null);
     setEditingTrip(trip);
@@ -255,8 +355,140 @@ export function MyTravelsScreen() {
     (activeTab === "packages" &&
       ((sendParcels.loading && sendParcels.parcels.length > 0) ||
         (receiveParcels.loading && receiveParcels.parcels.length > 0))) ||
-    (activeTab === "partners" && partners.loading && partners.listings.length > 0) ||
-    (activeTab === "archive" && archive.loading && archive.trips.length > 0);
+    (activeTab === "partners" &&
+      ((partners.loading && partners.listings.length > 0) ||
+        (connections.loading && connections.connections.length > 0))) ||
+    (activeTab === "archive" &&
+      ((archive.loading && archive.trips.length > 0) ||
+        (delivered.loading && delivered.bookings.length > 0) ||
+        (connections.loading && completedBuddies.length > 0)));
+
+  const handleRateDelivery = useCallback(
+    (bookingId: string) => navigation.navigate("DeliveryReviewTab", { bookingId }),
+    [navigation],
+  );
+
+  const handleAcceptRequest = useCallback(
+    async (id: string) => {
+      setActioningId(id);
+      setFormError(null);
+      try {
+        await buddiesApi.acceptRequest(id);
+        await Promise.all([requests.refetch(), connections.refetch()]);
+      } catch (err) {
+        setFormError(`Couldn't accept request. ${getErrorMessage(err)}`);
+      } finally {
+        setActioningId(null);
+      }
+    },
+    [requests, connections],
+  );
+
+  const handleRejectRequest = useCallback(
+    async (id: string) => {
+      setActioningId(id);
+      setFormError(null);
+      try {
+        await buddiesApi.rejectRequest(id);
+        await requests.refetch();
+      } catch (err) {
+        setFormError(`Couldn't reject request. ${getErrorMessage(err)}`);
+      } finally {
+        setActioningId(null);
+      }
+    },
+    [requests],
+  );
+
+  const handleCompleteConnection = useCallback(
+    async (id: string) => {
+      setActioningId(id);
+      setFormError(null);
+      try {
+        await buddiesApi.completeConnection(id);
+        await connections.refetch();
+      } catch (err) {
+        setFormError(`Couldn't confirm the journey. ${getErrorMessage(err)}`);
+      } finally {
+        setActioningId(null);
+      }
+    },
+    [connections],
+  );
+
+  const handleDisconnect = useCallback(
+    (conn: BuddyConnection) => {
+      showAppAlert({
+        title: "Disconnect buddy?",
+        message: `${conn.buddy?.name ?? "This buddy"} will be removed from your travel partners. You can reconnect by sending a new request.`,
+        actions: [
+          { text: "Keep", style: "cancel" },
+          {
+            text: "Disconnect",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                setActioningId(conn.id);
+                setFormError(null);
+                try {
+                  await buddiesApi.disconnect(conn.id);
+                  await connections.refetch();
+                } catch (err) {
+                  setFormError(`Couldn't disconnect. ${getErrorMessage(err)}`);
+                } finally {
+                  setActioningId(null);
+                }
+              })();
+            },
+          },
+        ],
+      });
+    },
+    [connections],
+  );
+
+  const handleChatConnection = useCallback(
+    (conn: BuddyConnection) => {
+      if (!conn.conversation_id) return;
+      navigation.navigate("OfferChatTab", {
+        conversationId: conn.conversation_id,
+        name: conn.buddy?.name ?? "Travel buddy",
+        source: "buddies",
+      });
+    },
+    [navigation],
+  );
+
+  const handleOpenRate = useCallback((conn: BuddyConnection) => {
+    setFormError(null);
+    setRatingConn(conn);
+  }, []);
+
+  const handleRateCancel = useCallback(() => {
+    if (!ratePending) setRatingConn(null);
+  }, [ratePending]);
+
+  const handleRateSubmit = useCallback(
+    async (values: RateBuddyValues) => {
+      if (!ratingConn?.buddy?.id) return;
+      setRatePending(true);
+      try {
+        await ratingsApi.rateBuddy({
+          connection_id: ratingConn.id,
+          rated_user_id: ratingConn.buddy.id,
+          score: values.score,
+          review: values.review || undefined,
+        });
+        await connections.refetch();
+        setRatingConn(null);
+      } catch (err) {
+        setFormError(`Couldn't submit rating. ${getErrorMessage(err)}`);
+      } finally {
+        setRatePending(false);
+      }
+    },
+    [ratingConn, connections],
+  );
 
   return (
     <Screen scroll={false}>
@@ -319,24 +551,34 @@ export function MyTravelsScreen() {
             onDelete={handleDeleteTrip}
             deletingId={deletingId}
             onListTrip={goListTrip}
+            hasMore={flights.hasMore}
+            loadingMore={flights.loadingMore}
+            onLoadMore={flights.loadMore}
           />
         ) : null}
 
         {activeTab === "packages" ? (
           <PackagesTab
             sendLoading={sendParcels.loading}
-            sendParcels={sendParcels.parcels}
+            sendParcels={activeSend}
             sendError={sendParcels.error}
             receiveLoading={receiveParcels.loading}
-            receiveParcels={receiveParcels.parcels}
+            receiveParcels={activeReceive}
             receiveError={receiveParcels.error}
             onOpen={handleOpenParcel}
+            onEdit={handleEditParcel}
             onDeleteSend={handleDeleteSendParcel}
             onDeleteReceive={handleDeleteReceiveParcel}
             deletingId={deletingId}
             onSendParcel={goSendParcel}
             onRetrySend={sendParcels.refetch}
             onRetryReceive={receiveParcels.refetch}
+            sendHasMore={sendParcels.hasMore}
+            sendLoadingMore={sendParcels.loadingMore}
+            onLoadMoreSend={sendParcels.loadMore}
+            receiveHasMore={receiveParcels.hasMore}
+            receiveLoadingMore={receiveParcels.loadingMore}
+            onLoadMoreReceive={receiveParcels.loadMore}
           />
         ) : null}
 
@@ -350,6 +592,17 @@ export function MyTravelsScreen() {
             onEdit={handleEditBuddy}
             onDelete={handleDeleteBuddy}
             deletingId={deletingId}
+            hasMore={partners.hasMore}
+            loadingMore={partners.loadingMore}
+            onLoadMore={partners.loadMore}
+            requests={requests.requests}
+            activeBuddies={activeBuddies}
+            actioningId={actioningId}
+            onAccept={handleAcceptRequest}
+            onReject={handleRejectRequest}
+            onChat={handleChatConnection}
+            onComplete={handleCompleteConnection}
+            onDisconnect={handleDisconnect}
           />
         ) : null}
 
@@ -360,6 +613,15 @@ export function MyTravelsScreen() {
             trips={archive.trips}
             onRetry={archive.refetch}
             onOpen={handleOpenTrip}
+            deliveredLoading={delivered.loading}
+            deliveredBookings={delivered.bookings}
+            myUserId={myProfile.profile?.id ?? null}
+            onRateDelivery={handleRateDelivery}
+            hasMore={archive.hasMore}
+            loadingMore={archive.loadingMore}
+            onLoadMore={archive.loadMore}
+            completedBuddies={completedBuddies}
+            onRateBuddy={handleOpenRate}
           />
         ) : null}
       </ScrollView>
@@ -375,6 +637,29 @@ export function MyTravelsScreen() {
           pending={editPending}
           onCancel={handleEditTripCancel}
           onSubmit={handleEditTripSubmit}
+        />
+      ) : null}
+
+      {ratingConn ? (
+        <RateBuddyModal
+          open
+          buddyName={ratingConn.buddy?.name ?? "your buddy"}
+          pending={ratePending}
+          onCancel={handleRateCancel}
+          onSubmit={handleRateSubmit}
+        />
+      ) : null}
+
+      {editingParcel ? (
+        <EditParcelModal
+          open
+          initial={{
+            weight_kg: `${editingParcel.weight_kg ?? ""}`,
+            description: editingParcel.description ?? "",
+          }}
+          pending={editParcelPending}
+          onCancel={handleEditParcelCancel}
+          onSubmit={handleEditParcelSubmit}
         />
       ) : null}
 
@@ -446,6 +731,9 @@ function FlightsTab({
   onDelete,
   deletingId,
   onListTrip,
+  hasMore,
+  loadingMore,
+  onLoadMore,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
@@ -456,6 +744,9 @@ function FlightsTab({
   onDelete: (trip: Trip) => void;
   deletingId: string | null;
   onListTrip: () => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
 }>) {
   if (loading && trips.length === 0) return <ListSkeleton />;
   if (error && trips.length === 0)
@@ -484,6 +775,7 @@ function FlightsTab({
           isDeleting={deletingId === t.id}
         />
       ))}
+      <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={onLoadMore} />
     </View>
   );
 }
@@ -496,12 +788,19 @@ function PackagesTab({
   receiveParcels,
   receiveError,
   onOpen,
+  onEdit,
   onDeleteSend,
   onDeleteReceive,
   deletingId,
   onSendParcel,
   onRetrySend,
   onRetryReceive,
+  sendHasMore,
+  sendLoadingMore,
+  onLoadMoreSend,
+  receiveHasMore,
+  receiveLoadingMore,
+  onLoadMoreReceive,
 }: Readonly<{
   sendLoading: boolean;
   sendParcels: Parcel[];
@@ -510,12 +809,19 @@ function PackagesTab({
   receiveParcels: Parcel[];
   receiveError: Error | null;
   onOpen: (id: string) => void;
+  onEdit: (parcel: Parcel) => void;
   onDeleteSend: (parcel: Parcel) => void;
   onDeleteReceive: (parcel: Parcel) => void;
   deletingId: string | null;
   onSendParcel: () => void;
   onRetrySend: () => Promise<void>;
   onRetryReceive: () => Promise<void>;
+  sendHasMore: boolean;
+  sendLoadingMore: boolean;
+  onLoadMoreSend: () => void;
+  receiveHasMore: boolean;
+  receiveLoadingMore: boolean;
+  onLoadMoreReceive: () => void;
 }>) {
   return (
     <View>
@@ -541,11 +847,17 @@ function PackagesTab({
               tag="PACKAGE DELIVERY"
               item={p}
               onPress={() => onOpen(p.id)}
+              onEdit={() => onEdit(p)}
               onDelete={() => onDeleteSend(p)}
               isDeleting={deletingId === p.id}
             />
           ))
         )}
+        <LoadMoreButton
+          hasMore={sendHasMore}
+          loading={sendLoadingMore}
+          onPress={onLoadMoreSend}
+        />
       </View>
 
       <View style={styles.section}>
@@ -575,11 +887,17 @@ function PackagesTab({
               tag="PARCEL REQUEST"
               item={p}
               onPress={() => onOpen(p.id)}
+              onEdit={() => onEdit(p)}
               onDelete={() => onDeleteReceive(p)}
               isDeleting={deletingId === p.id}
             />
           ))
         )}
+        <LoadMoreButton
+          hasMore={receiveHasMore}
+          loading={receiveLoadingMore}
+          onPress={onLoadMoreReceive}
+        />
       </View>
     </View>
   );
@@ -594,6 +912,17 @@ function PartnersTab({
   onEdit,
   onDelete,
   deletingId,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  requests,
+  activeBuddies,
+  actioningId,
+  onAccept,
+  onReject,
+  onChat,
+  onComplete,
+  onDisconnect,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
@@ -603,30 +932,219 @@ function PartnersTab({
   onEdit: (listing: BuddyListing) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  requests: BuddyRequest[];
+  activeBuddies: BuddyConnection[];
+  actioningId: string | null;
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+  onChat: (conn: BuddyConnection) => void;
+  onComplete: (id: string) => void;
+  onDisconnect: (conn: BuddyConnection) => void;
 }>) {
-  if (loading && listings.length === 0) return <ListSkeleton />;
-  if (error && listings.length === 0)
-    return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
-  if (listings.length === 0)
-    return (
+  const hasExtras = requests.length > 0 || activeBuddies.length > 0;
+
+  const listingsBody =
+    loading && listings.length === 0 ? (
+      <ListSkeleton />
+    ) : error && listings.length === 0 ? (
+      <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />
+    ) : listings.length === 0 ? (
       <EmptyBlock
         icon="people-outline"
         title="No travel partners"
         subtitle="Create a buddy listing to find travel companions."
       />
+    ) : (
+      <View>
+        {listings.map((b) => (
+          <BuddyPartnerCard
+            key={b.id}
+            item={b}
+            onPress={() => onOpen(b.id)}
+            onEdit={() => onEdit(b)}
+            onDelete={() => onDelete(b.id)}
+            isDeleting={deletingId === b.id}
+          />
+        ))}
+        <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={onLoadMore} />
+      </View>
     );
+
   return (
     <View>
-      {listings.map((b) => (
-        <BuddyPartnerCard
-          key={b.id}
-          item={b}
-          onPress={() => onOpen(b.id)}
-          onEdit={() => onEdit(b)}
-          onDelete={() => onDelete(b.id)}
-          isDeleting={deletingId === b.id}
+      {requests.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Ionicons name="mail-unread-outline" size={16} color={colors.warning} />
+            <Text style={styles.sectionTitle}>Requests received</Text>
+          </View>
+          {requests.map((r) => (
+            <BuddyRequestCard
+              key={r.id}
+              request={r}
+              pending={actioningId === r.id}
+              onAccept={() => onAccept(r.id)}
+              onReject={() => onReject(r.id)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {activeBuddies.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Ionicons name="people-outline" size={16} color={colors.safe} />
+            <Text style={styles.sectionTitle}>My buddies</Text>
+          </View>
+          {activeBuddies.map((c) => (
+            <BuddyConnectionCard
+              key={c.id}
+              connection={c}
+              pending={actioningId === c.id}
+              onChat={() => onChat(c)}
+              onComplete={() => onComplete(c.id)}
+              onDisconnect={() => onDisconnect(c)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.section}>
+        {hasExtras ? (
+          <View style={styles.sectionHeading}>
+            <Ionicons name="megaphone-outline" size={16} color={colors.wordmark} />
+            <Text style={styles.sectionTitle}>My listings</Text>
+          </View>
+        ) : null}
+        {listingsBody}
+      </View>
+    </View>
+  );
+}
+
+function BuddyRequestCard({
+  request,
+  pending,
+  onAccept,
+  onReject,
+}: Readonly<{ request: BuddyRequest; pending: boolean; onAccept: () => void; onReject: () => void }>) {
+  const sender = request.requester ?? request.user_profiles ?? null;
+  const message = request.message?.trim() || "wants to be your travel buddy";
+  return (
+    <View style={styles.lcCard}>
+      <View style={styles.lcPersonRow}>
+        <View style={styles.lcAvatar}>
+          <Text style={styles.lcAvatarText}>{getInitials(sender?.name)}</Text>
+        </View>
+        <View style={styles.lcPersonInfo}>
+          <Text style={styles.lcName} numberOfLines={1}>
+            {sender?.name || "Someone"}
+          </Text>
+          <Text style={styles.lcMessage} numberOfLines={2}>
+            {message}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.lcActions}>
+        <AppButton
+          label="Decline"
+          variant="secondary"
+          onPress={onReject}
+          disabled={pending}
+          style={styles.lcActionFlex}
         />
-      ))}
+        <AppButton
+          label={pending ? "…" : "Accept"}
+          onPress={onAccept}
+          disabled={pending}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.lcActionFlex}
+        />
+      </View>
+    </View>
+  );
+}
+
+function BuddyConnectionCard({
+  connection,
+  pending,
+  onChat,
+  onComplete,
+  onDisconnect,
+}: Readonly<{
+  connection: BuddyConnection;
+  pending: boolean;
+  onChat: () => void;
+  onComplete: () => void;
+  onDisconnect: () => void;
+}>) {
+  const c = connection;
+  const route = c.from_city && c.to_city ? `${c.from_city} → ${c.to_city}` : null;
+  const journeyStart = c.travel_date_from || c.travel_date;
+  const journeyStarted =
+    !journeyStart || journeyStart.slice(0, 10) <= new Date().toLocaleDateString("en-CA");
+  return (
+    <View style={styles.lcCard}>
+      <View style={styles.lcPersonRow}>
+        <View style={styles.lcAvatar}>
+          <Text style={styles.lcAvatarText}>{getInitials(c.buddy?.name)}</Text>
+        </View>
+        <View style={styles.lcPersonInfo}>
+          <Text style={styles.lcName} numberOfLines={1}>
+            {c.buddy?.name || "Travel buddy"}
+          </Text>
+          {route ? (
+            <Text style={styles.lcMessage} numberOfLines={1}>
+              {route}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={styles.lcActions}>
+        {c.conversation_id ? (
+          <AppButton
+            label="Chat"
+            onPress={onChat}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            leftIcon={
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.white} />
+            }
+            style={styles.lcChatBtn}
+          />
+        ) : null}
+        {c.i_confirmed_completion ? (
+          <View style={[styles.lcActionFlex, styles.lcChip]}>
+            <Text style={styles.lcChipText}>Awaiting buddy</Text>
+          </View>
+        ) : journeyStarted ? (
+          <AppButton
+            label={pending ? "…" : "Confirm journey"}
+            onPress={onComplete}
+            disabled={pending}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.lcActionFlex}
+          />
+        ) : (
+          <View style={[styles.lcActionFlex, styles.lcChip, styles.lcChipMuted]}>
+            <Text style={styles.lcChipMutedText}>Confirm after trip</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.lcDivider} />
+      <Pressable
+        onPress={onDisconnect}
+        disabled={pending}
+        style={styles.lcDisconnect}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Disconnect buddy"
+      >
+        <Ionicons name="unlink-outline" size={14} color={colors.danger} />
+        <Text style={styles.lcDisconnectText}>Disconnect</Text>
+      </Pressable>
     </View>
   );
 }
@@ -637,40 +1155,219 @@ function ArchiveTab({
   trips,
   onRetry,
   onOpen,
+  deliveredLoading,
+  deliveredBookings,
+  myUserId,
+  onRateDelivery,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  completedBuddies,
+  onRateBuddy,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
   trips: Trip[];
   onRetry: () => Promise<void>;
   onOpen: (id: string) => void;
+  deliveredLoading: boolean;
+  deliveredBookings: Booking[];
+  myUserId: string | null;
+  onRateDelivery: (bookingId: string) => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  completedBuddies: BuddyConnection[];
+  onRateBuddy: (conn: BuddyConnection) => void;
 }>) {
-  if (loading && trips.length === 0) return <ListSkeleton />;
-  if (error && trips.length === 0)
+  const nothing =
+    trips.length === 0 && deliveredBookings.length === 0 && completedBuddies.length === 0;
+  if ((loading || deliveredLoading) && nothing) return <ListSkeleton />;
+  if (error && nothing)
     return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
-  if (trips.length === 0)
+  if (nothing)
     return (
       <EmptyBlock
         icon="archive"
         title="No archived items"
-        subtitle="Completed, cancelled, or expired items will appear here."
+        subtitle="Completed deliveries, trips, and travel partners will appear here."
       />
     );
   return (
     <View>
-      {trips.map((t) => (
-        <TravelCard
-          key={t.id}
-          type="flight"
-          tag="ARCHIVED TRIP"
-          item={t}
-          onPress={() => onOpen(t.id)}
+      {deliveredBookings.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Ionicons name="checkmark-done-outline" size={16} color={colors.safe} />
+            <Text style={styles.sectionTitle}>Completed deliveries</Text>
+          </View>
+          {deliveredBookings.map((b) => (
+            <ArchiveBookingCard
+              key={b.id}
+              booking={b}
+              myUserId={myUserId}
+              onRate={() => onRateDelivery(b.id)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {completedBuddies.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Ionicons name="people-outline" size={16} color={colors.safe} />
+            <Text style={styles.sectionTitle}>Completed buddies</Text>
+          </View>
+          {completedBuddies.map((c) => (
+            <ArchiveBuddyCard key={c.id} connection={c} onRate={() => onRateBuddy(c)} />
+          ))}
+        </View>
+      ) : null}
+
+      {trips.length > 0 ? (
+        <View style={styles.section}>
+          {deliveredBookings.length > 0 ? (
+            <View style={styles.sectionHeading}>
+              <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
+              <Text style={styles.sectionTitle}>Flights</Text>
+            </View>
+          ) : null}
+          {trips.map((t) => (
+            <TravelCard
+              key={t.id}
+              type="flight"
+              tag="ARCHIVED TRIP"
+              item={t}
+              onPress={() => onOpen(t.id)}
+            />
+          ))}
+          <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={onLoadMore} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ArchiveBookingCard({
+  booking,
+  myUserId,
+  onRate,
+}: Readonly<{ booking: Booking; myUserId: string | null; onRate: () => void }>) {
+  const isSender = !!myUserId && booking.sender_id === myUserId;
+  const counterpart = isSender ? booking.carrier : booking.sender;
+  const roleLabel = isSender ? "Carrier" : "Sender";
+  const route = booking.parcel
+    ? `${booking.parcel.from_city} → ${booking.parcel.to_city}`
+    : "Delivery";
+  const deliveredOn = booking.delivered_at
+    ? new Date(booking.delivered_at).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+  return (
+    <View style={styles.archiveCard}>
+      <View style={styles.archiveTag}>
+        <Text style={styles.archiveTagText}>DELIVERED</Text>
+      </View>
+      <Text style={styles.archiveRoute} numberOfLines={2}>
+        {route}
+      </Text>
+      {deliveredOn ? (
+        <Text style={styles.archiveMeta}>Delivered · {deliveredOn}</Text>
+      ) : null}
+      <View style={styles.archiveFooter}>
+        <View style={styles.archivePersonCol}>
+          <Text style={styles.archiveRole}>{roleLabel}</Text>
+          <Text style={styles.archivePersonName} numberOfLines={1}>
+            {counterpart?.name || "Unknown user"}
+          </Text>
+        </View>
+        <AppButton
+          label={`Rate ${roleLabel}`}
+          onPress={onRate}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.archiveRateBtn}
         />
-      ))}
+      </View>
+    </View>
+  );
+}
+
+function ArchiveBuddyCard({
+  connection,
+  onRate,
+}: Readonly<{ connection: BuddyConnection; onRate: () => void }>) {
+  const c = connection;
+  const route = c.from_city && c.to_city ? `${c.from_city} → ${c.to_city}` : null;
+  return (
+    <View style={styles.archiveCard}>
+      <View style={[styles.archiveTag, styles.archiveTagBuddy]}>
+        <Text style={styles.archiveTagText}>TRAVEL BUDDY</Text>
+      </View>
+      <Text style={styles.archiveRoute} numberOfLines={1}>
+        {c.buddy?.name || "Travel buddy"}
+      </Text>
+      {route ? (
+        <Text style={styles.archiveMeta} numberOfLines={1}>
+          {route}
+        </Text>
+      ) : null}
+      <View style={styles.archiveFooter}>
+        <View style={styles.archivePersonCol} />
+        {c.already_rated ? (
+          <View style={styles.ratedBadge}>
+            <Ionicons name="star" size={12} color={colors.safe} />
+            <Text style={styles.ratedBadgeText}>Rated</Text>
+          </View>
+        ) : (
+          <AppButton
+            label="Rate buddy"
+            onPress={onRate}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.archiveRateBtn}
+          />
+        )}
+      </View>
     </View>
   );
 }
 
 // ───────────────────────── Reusable bits ─────────────────────────
+
+function getInitials(name?: string | null): string {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function LoadMoreButton({
+  hasMore,
+  loading,
+  onPress,
+}: Readonly<{ hasMore: boolean; loading: boolean; onPress: () => void }>) {
+  if (!hasMore) return null;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={loading}
+      style={[styles.loadMoreButton, loading && styles.loadMoreDisabled]}
+      accessibilityRole="button"
+      accessibilityLabel="Load more"
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Text style={styles.loadMoreText}>Load more</Text>
+      )}
+    </Pressable>
+  );
+}
 
 function TravelCardSkeleton() {
   return (
@@ -806,6 +1503,107 @@ const styles = StyleSheet.create({
   },
   dashedEmptyText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
 
+  // Archive — completed delivery card
+  archiveCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  archiveTag: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(34, 197, 94, 0.12)",
+    marginBottom: 10,
+  },
+  archiveTagText: {
+    color: colors.safe,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  archiveRoute: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  archiveMeta: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 4 },
+  archiveFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
+  archivePersonCol: { flex: 1, minWidth: 0 },
+  archiveRole: {
+    color: colors.subtleText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  archivePersonName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700", marginTop: 2 },
+  archiveRateBtn: { minWidth: 130 },
+  archiveTagBuddy: { backgroundColor: colors.surfaceTintPrimary },
+  ratedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "rgba(34, 197, 94, 0.12)",
+  },
+  ratedBadgeText: { color: colors.safe, fontSize: 13, lineHeight: 18, fontWeight: "800" },
+
+  // Buddy request / connection card
+  lcCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+    gap: 12,
+  },
+  lcPersonRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  lcAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lcAvatarText: { color: colors.wordmark, fontSize: 14, lineHeight: 18, fontWeight: "800" },
+  lcPersonInfo: { flex: 1, minWidth: 0 },
+  lcName: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "800" },
+  lcMessage: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
+  lcActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  lcActionFlex: { flex: 1 },
+  lcChatBtn: { paddingHorizontal: 18 },
+  lcChip: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  lcChipText: { color: colors.warning, fontSize: 13, lineHeight: 18, fontWeight: "800" },
+  lcChipMuted: { backgroundColor: colors.surfaceMuted },
+  lcChipMutedText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  lcDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  lcDisconnect: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  lcDisconnectText: { color: colors.danger, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+
   skeletonCard: {
     padding: 16,
     borderRadius: 16,
@@ -849,4 +1647,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   emptyCtaWrap: { marginTop: 12, alignSelf: "stretch", maxWidth: 240 },
+
+  loadMoreButton: {
+    marginTop: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreDisabled: { opacity: 0.6 },
+  loadMoreText: { color: colors.text, fontSize: 14, fontWeight: "700" },
 });

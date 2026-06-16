@@ -6,6 +6,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showAppAlert } from "@/feedback/appFeedback";
 import {
   isImplicitStatus,
+  isListingExpired,
   isTerminal,
   labelForStatus,
   toneForStatus,
@@ -50,7 +51,10 @@ export const TravelCard = memo(function TravelCard({
   const status = item.status ?? "";
   const tone = toneForStatus(status);
   const canModify = !isTerminal(status);
-  const showStatusPill = !!status && !isImplicitStatus(status);
+  const expiryDate =
+    type === "parcel" ? (item as Parcel).delivery_by : (item as FlightItem).travel_date;
+  const expired = isListingExpired(status, expiryDate);
+  const showStatusPill = !expired && !!status && !isImplicitStatus(status);
   const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
 
   const metaLine =
@@ -140,7 +144,12 @@ export const TravelCard = memo(function TravelCard({
         ) : null}
       </View>
 
-      {showStatusPill ? (
+      {expired ? (
+        <View style={styles.expiredPill}>
+          <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
+          <Text style={styles.expiredPillText}>EXPIRED</Text>
+        </View>
+      ) : showStatusPill ? (
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
             {labelForStatus(status)}
@@ -239,6 +248,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     marginTop: 10,
+  },
+  expiredPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginTop: 10,
+    backgroundColor: colors.surfaceMuted,
+  },
+  expiredPillText: {
+    color: colors.mutedText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
   statusPillText: {
     fontSize: 10,

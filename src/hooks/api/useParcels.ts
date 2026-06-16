@@ -21,8 +21,11 @@ export interface UseParcelsResult {
   parcels: Parcel[];
   total: number;
   loading: boolean;
+  loadingMore: boolean;
   error: ApiClientError | Error | null;
+  hasMore: boolean;
   refetch: () => Promise<void>;
+  loadMore: () => Promise<void>;
 }
 
 /**
@@ -41,7 +44,9 @@ export function useParcels({
 }: UseParcelsOptions = {}): UseParcelsResult {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
@@ -63,6 +68,7 @@ export function useParcels({
         if (!mountedRef.current) return;
         setParcels(res.data ?? []);
         setTotal(res.meta?.total ?? res.data?.length ?? 0);
+        setPage(1);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -75,6 +81,28 @@ export function useParcels({
     inFlightRef.current = promise;
     return promise;
   }, [filter, status, perPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loading || parcels.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await parcelsApi.list({ filter, status, page: next, per_page: perPage });
+      if (!mountedRef.current) return;
+      const rows = res.data ?? [];
+      setParcels((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+      });
+      setTotal(res.meta?.total ?? total);
+      setPage(next);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }, [loadingMore, loading, parcels.length, total, page, filter, status, perPage]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -89,5 +117,14 @@ export function useParcels({
   // a carrier just sent appears in the sender's "Receive" tab without refresh.
   useRealtimeBus("parcels", refetch);
 
-  return { parcels, total, loading, error, refetch };
+  return {
+    parcels,
+    total,
+    loading,
+    loadingMore,
+    error,
+    hasMore: parcels.length < total,
+    refetch,
+    loadMore,
+  };
 }

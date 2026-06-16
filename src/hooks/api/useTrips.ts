@@ -19,8 +19,11 @@ export interface UseTripsResult {
   trips: Trip[];
   total: number;
   loading: boolean;
+  loadingMore: boolean;
   error: ApiClientError | Error | null;
+  hasMore: boolean;
   refetch: () => Promise<void>;
+  loadMore: () => Promise<void>;
 }
 
 /**
@@ -31,7 +34,9 @@ export interface UseTripsResult {
 export function useTrips({ filter, perPage = 20 }: UseTripsOptions = {}): UseTripsResult {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
@@ -48,6 +53,7 @@ export function useTrips({ filter, perPage = 20 }: UseTripsOptions = {}): UseTri
         if (!mountedRef.current) return;
         setTrips(res.data ?? []);
         setTotal(res.meta?.total ?? res.data?.length ?? 0);
+        setPage(1);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -61,6 +67,28 @@ export function useTrips({ filter, perPage = 20 }: UseTripsOptions = {}): UseTri
     return promise;
   }, [filter, perPage]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || loading || trips.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await tripsApi.list({ filter, page: next, per_page: perPage });
+      if (!mountedRef.current) return;
+      const rows = res.data ?? [];
+      setTrips((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+      });
+      setTotal(res.meta?.total ?? total);
+      setPage(next);
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }, [loadingMore, loading, trips.length, total, page, filter, perPage]);
+
   useEffect(() => {
     mountedRef.current = true;
     void refetch();
@@ -72,5 +100,14 @@ export function useTrips({ filter, perPage = 20 }: UseTripsOptions = {}): UseTri
   // Realtime: any change to a `travel_listings` row this user owns refetches.
   useRealtimeBus("trips", refetch);
 
-  return { trips, total, loading, error, refetch };
+  return {
+    trips,
+    total,
+    loading,
+    loadingMore,
+    error,
+    hasMore: trips.length < total,
+    refetch,
+    loadMore,
+  };
 }

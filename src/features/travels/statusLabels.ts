@@ -69,3 +69,25 @@ const IMPLICIT_STATUSES: ReadonlySet<string> = new Set(["active", "can_carry"]);
 export function isImplicitStatus(status: string): boolean {
   return IMPLICIT_STATUSES.has(status);
 }
+
+/** Parcel statuses that belong in Archive, not the active Send/Receive lists. */
+export const TERMINAL_PARCEL_STATUSES = TERMINAL_STATUSES;
+
+/** Statuses where a passed date is irrelevant (in motion / closed) — never expired. */
+const EXPIRY_IMMUNE_STATUSES: ReadonlySet<string> = new Set([
+  "in_transit",
+  "delivered",
+  "completed",
+  "cancelled",
+  "expired",
+]);
+
+/**
+ * A still-waiting listing whose date has passed reads as "expired" — derived
+ * client-side (local yyyy-MM-dd) so stale rows surface without a backend sweep.
+ */
+export function isListingExpired(status: string, date: string | null | undefined): boolean {
+  if (EXPIRY_IMMUNE_STATUSES.has(status)) return false;
+  if (!date) return false;
+  return date.slice(0, 10) < new Date().toLocaleDateString("en-CA");
+}

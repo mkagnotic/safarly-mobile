@@ -33,19 +33,34 @@ export interface BuddyListing {
 export interface BuddyRequest {
   id: string;
   listing_id: string;
-  requester_id: string;
+  requester_id?: string;
+  sender_id?: string;
+  receiver_id?: string;
   message: string | null;
   status: string;
   created_at: string;
   requester?: { id: string; name: string; avatar_url: string | null };
+  /** Server joins the sender profile under this key on the list response. */
+  user_profiles?: { id?: string; name: string; avatar_url: string | null } | null;
 }
 
 export interface BuddyConnection {
   id: string;
   user_a_id: string;
   user_b_id: string;
+  conversation_id: string | null;
   created_at: string;
-  buddy?: { id: string; name: string; avatar_url: string | null; rating: number };
+  buddy?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  from_city?: string | null;
+  to_city?: string | null;
+  travel_date?: string | null;
+  travel_date_from?: string | null;
+  travel_date_to?: string | null;
+  completed?: boolean;
+  i_confirmed_completion?: boolean;
+  awaiting_my_completion?: boolean;
+  already_rated?: boolean;
+  can_rate?: boolean;
 }
 
 export interface BuddyMatch {
@@ -100,6 +115,12 @@ export const buddiesApi = {
     api.put<{ status: string }>(`/buddy-handler/requests/${requestId}/reject`),
 
   getConnections: () => api.get<BuddyConnection[]>("/buddy-handler/connections"),
+
+  /** Two-tap completion handshake — each buddy confirms once. */
+  completeConnection: (connectionId: string) =>
+    api.post<{ status: "awaiting_confirmation" | "completed" }>(
+      `/buddy-handler/connections/${connectionId}/complete`,
+    ),
 
   disconnect: (connectionId: string) =>
     api.delete<{ disconnected: boolean }>(`/buddy-handler/connections/${connectionId}`),
