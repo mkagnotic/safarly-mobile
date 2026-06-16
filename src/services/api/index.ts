@@ -61,7 +61,14 @@ export { notificationsApi } from "./notifications";
 export type { Notification } from "./notifications";
 
 export { kycApi } from "./kyc";
-export type { KycSubmission } from "./kyc";
+export type {
+  KycSubmission,
+  KycSubmissionFile,
+  KycDocType,
+  KycFileType,
+  KycUploadFile,
+  KycSubmitInput,
+} from "./kyc";
 
 export { ratingsApi } from "./ratings";
 export type { Rating, UserRatings } from "./ratings";

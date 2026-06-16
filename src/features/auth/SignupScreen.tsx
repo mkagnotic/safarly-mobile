@@ -40,6 +40,7 @@ interface FormErrors {
 export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const { signUpWithPassword, signInWithGoogle } = useAuth();
   const setPendingNotice = useAppStore((s) => s.setPendingNotice);
+  const setKycWelcomePending = useAppStore((s) => s.setKycWelcomePending);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -116,7 +117,9 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
         phone,
       });
       if (hasSession) {
-        // AuthContext fires SIGNED_IN → RootNavigator swaps to ProfileSetup.
+        // Fresh registration → arm the one-shot KYC welcome prompt; Home consumes
+        // it after ProfileSetup. AuthContext fires SIGNED_IN → ProfileSetup.
+        setKycWelcomePending(true);
         return;
       }
       // Email confirmation required — hand the notice to LoginScreen so it
@@ -142,7 +145,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
     } finally {
       setSubmitting(false);
     }
-  }, [busy, validate, signUpWithPassword, email, password, fullName, phone, onSwitchToLogin]);
+  }, [busy, validate, signUpWithPassword, email, password, fullName, phone, onSwitchToLogin, setKycWelcomePending]);
 
   return (
     <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>

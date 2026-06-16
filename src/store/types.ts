@@ -85,11 +85,18 @@ export interface AppState {
   timeZone: AppTimeZone;
   /** Transient — not persisted. See `PendingNotice`. */
   pendingNotice: PendingNotice | null;
+  /**
+   * One-shot flag set at registration and consumed on the first Home render to
+   * show the KYC welcome prompt exactly once. Persisted so it survives the
+   * ProfileSetup hop before Home mounts.
+   */
+  kycWelcomePending: boolean;
 
   // Actions
   setSplashDone: () => void;
   setPendingNotice: (notice: PendingNotice | null) => void;
   clearPendingNotice: () => void;
+  setKycWelcomePending: (pending: boolean) => void;
   finishOnboarding: () => void;
   finishProfileSetup: () => void;
   setProfileSetupDone: (done: boolean) => void;
