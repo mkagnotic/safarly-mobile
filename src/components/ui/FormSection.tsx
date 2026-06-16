@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -12,6 +12,8 @@ interface SectionCardProps {
   complete: boolean;
   /** Defaults to collapsed so long forms read less overwhelming on first paint. */
   defaultExpanded?: boolean;
+  /** Force-expands the card when an error lands in it, so the highlight is visible. */
+  hasError?: boolean;
   children: ReactNode;
 }
 
@@ -21,9 +23,14 @@ export function SectionCard({
   subtitle,
   complete,
   defaultExpanded = false,
+  hasError = false,
   children,
 }: Readonly<SectionCardProps>) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (hasError) setExpanded(true);
+  }, [hasError]);
   return (
     <View style={styles.sectionCard}>
       <Pressable

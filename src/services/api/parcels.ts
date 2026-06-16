@@ -73,6 +73,8 @@ export const parcelsApi = {
     weight_kg: number;
     description?: string;
     delivery_by: string;
+    delivery_by_from?: string;
+    delivery_by_to?: string;
     fee_offered: number;
     fee_currency?: string;
     any_from?: boolean;

@@ -189,7 +189,7 @@ export function HomeScreen() {
       <View style={styles.actionGrid}>
         <ActionCard
           chip="Earn on your route"
-          title="Send (Carrier)"
+          title="Carrier"
           subtitle="I'm traveling and can deliver parcels"
           icon="airplane-outline"
           iconStyle={airplaneStyle}

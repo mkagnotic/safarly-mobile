@@ -293,13 +293,13 @@ export function MyTravelsScreen() {
             primary/secondary button pair across the app. */}
         <View style={styles.actionsRow}>
           <AppButton
-            label="List trip"
+            label="Carry a Parcel"
             variant="secondary"
             onPress={goListTrip}
             style={styles.actionButtonFlex}
           />
           <AppButton
-            label="Send parcel"
+            label="Send a Parcel"
             onPress={goSendParcel}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.actionButtonFlex}
@@ -466,7 +466,7 @@ function FlightsTab({
         icon="airplane-outline"
         title="No flights listed"
         subtitle="List a trip to start receiving parcel delivery offers."
-        actionLabel="List a Trip"
+        actionLabel="Carry a Parcel"
         onAction={onListTrip}
       />
     );
@@ -563,7 +563,7 @@ function PackagesTab({
             icon="cube-outline"
             title="No receive requests"
             subtitle="Send a parcel request to find a carrier."
-            actionLabel="Send Parcel"
+            actionLabel="Send a Parcel"
             onAction={onSendParcel}
             compact
           />

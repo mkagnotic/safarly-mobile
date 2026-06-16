@@ -43,7 +43,7 @@ type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
 
 /** Keys for fields that can carry an inline validation error. */
-type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "maxWeight";
+type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "maxWeight" | "age";
 
 /** Web parity (`CustomerListTrip.tsx:41-46`). */
 const AIRLINES: readonly string[] = [
@@ -87,6 +87,13 @@ const LANGUAGE_OPTIONS: readonly string[] = [
   "Portuguese",
   "Russian",
 ];
+
+/** Airline carry-on limits — same numbers web uses (`airlineLimits.ts`). */
+const MAX_SIZE_CM = { l: 55, w: 40, h: 20 } as const;
+const MAX_SIZE_IN = { l: 22, w: 16, h: 8 } as const;
+const MAX_WEIGHT_KG = 23;
+const MAX_WEIGHT_LB = 50;
+const WEIGHT_LIMIT_LABEL = `${MAX_WEIGHT_KG} kg (${MAX_WEIGHT_LB} lb)`;
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
 
@@ -192,17 +199,24 @@ export function ListTripScreen() {
   // Section Y offsets tracked via `onLayout` on the section wrappers (direct
   // children of the ScrollView) — avoids the Fabric measureLayout pitfall.
   const scrollRef = useRef<ScrollView | null>(null);
-  const sectionYs = useRef<{ section1: number; section2: number; section3: number }>({
+  const sectionYs = useRef<{
+    section1: number;
+    section2: number;
+    section3: number;
+    section4: number;
+  }>({
     section1: 0,
     section2: 0,
     section3: 0,
+    section4: 0,
   });
-  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3"> = {
+  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3" | "section4"> = {
     fromCity: "section1",
     toCity: "section1",
     departDate: "section2",
     returnDate: "section2",
     maxWeight: "section3",
+    age: "section4",
   };
 
   const clearFieldError = useCallback((key: FieldKey) => {
@@ -305,6 +319,15 @@ export function ListTripScreen() {
     setBuddyLanguages((prev) => prev.filter((l) => l !== lang));
   }, []);
 
+  // Live size check — flags any over-limit dimension and blocks submit (web §3.2).
+  const maxLimits = sizeUnit === "cm" ? MAX_SIZE_CM : MAX_SIZE_IN;
+  const sizeErrors = {
+    l: !!sizeL && parseFloat(sizeL) > maxLimits.l,
+    w: !!sizeW && parseFloat(sizeW) > maxLimits.w,
+    h: !!sizeH && parseFloat(sizeH) > maxLimits.h,
+  };
+  const hasSizeError = sizeErrors.l || sizeErrors.w || sizeErrors.h;
+
   const handleSubmit = useCallback(async () => {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
@@ -324,14 +347,37 @@ export function ListTripScreen() {
       }
     }
     const w = parseFloat(maxWeight);
-    if (!w || w <= 0) errors.maxWeight = "Enter a valid weight";
+    if (!w || w <= 0) {
+      errors.maxWeight = "Enter a valid weight";
+    } else if (w > (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) {
+      errors.maxWeight = `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
+    }
 
-    if (Object.keys(errors).length > 0) {
+    if (openToBuddy && buddyAge !== "") {
+      const n = Number(buddyAge);
+      if (!Number.isInteger(n) || n < 18 || n > 120) {
+        errors.age = "Age must be between 18 and 120";
+      }
+    }
+
+    if (Object.keys(errors).length > 0 || hasSizeError) {
       setFieldErrors(errors);
-      setFormError("Please fix the highlighted fields before continuing.");
-      const order: FieldKey[] = ["fromCity", "toCity", "departDate", "returnDate", "maxWeight"];
+      setFormError(
+        hasSizeError
+          ? `Size exceeds airline carry-on limit (max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Fix the highlighted fields.`
+          : "Please fix the highlighted fields before continuing.",
+      );
+      const order: FieldKey[] = [
+        "fromCity",
+        "toCity",
+        "departDate",
+        "returnDate",
+        "maxWeight",
+        "age",
+      ];
       const firstKey = order.find((k) => errors[k]);
       if (firstKey) scrollToField(firstKey);
+      else if (hasSizeError) scrollToField("maxWeight"); // size lives in same section
       return;
     }
 
@@ -393,6 +439,8 @@ export function ListTripScreen() {
     maxDate,
     maxWeight,
     weightUnit,
+    hasSizeError,
+    maxLimits,
     sizeL,
     sizeW,
     sizeH,
@@ -517,6 +565,7 @@ export function ListTripScreen() {
           title="Where are you going?"
           subtitle="Set your departure and destination"
           complete={section1Complete}
+          hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
         >
           <Text style={styles.fieldLabel}>From</Text>
           <LocationCard flag={fromFlag} label={fromCountryName} filled />
@@ -582,6 +631,7 @@ export function ListTripScreen() {
           title="When are you flying?"
           subtitle="Travel dates and flight info"
           complete={section2Complete}
+          hasError={!!fieldErrors.departDate || !!fieldErrors.returnDate}
         >
           <DateModeToggle<DateMode>
             options={[
@@ -660,6 +710,7 @@ export function ListTripScreen() {
           title="What can you carry?"
           subtitle="Help senders find the right match"
           complete={section3Complete}
+          hasError={!!fieldErrors.maxWeight || hasSizeError}
         >
         <View style={styles.labelToggleRow}>
           <Text style={styles.fieldLabel}>Max Parcel Size</Text>
@@ -679,11 +730,11 @@ export function ListTripScreen() {
         <View style={styles.sizeRow}>
           {(
             [
-              { val: sizeL, set: setSizeL, label: "Length", ph: `0 ${sizeUnit}` },
-              { val: sizeW, set: setSizeW, label: "Width", ph: `0 ${sizeUnit}` },
-              { val: sizeH, set: setSizeH, label: "Height", ph: `0 ${sizeUnit}` },
+              { val: sizeL, set: setSizeL, label: "Length", ph: `0 ${sizeUnit}`, err: sizeErrors.l },
+              { val: sizeW, set: setSizeW, label: "Width", ph: `0 ${sizeUnit}`, err: sizeErrors.w },
+              { val: sizeH, set: setSizeH, label: "Height", ph: `0 ${sizeUnit}`, err: sizeErrors.h },
             ] as const
-          ).map(({ val, set, label, ph }) => (
+          ).map(({ val, set, label, ph, err }) => (
             <View key={label} style={styles.sizeCell}>
               <Text style={styles.sizeCellLabel}>{label}</Text>
               <TextInput
@@ -692,13 +743,15 @@ export function ListTripScreen() {
                 placeholder={ph}
                 placeholderTextColor={colors.subtleText}
                 keyboardType="decimal-pad"
-                style={styles.input}
+                style={[styles.input, err && styles.inputError]}
               />
             </View>
           ))}
         </View>
-        <Text style={styles.helperText}>
-          Optional — helps senders know if their parcel will fit.
+        <Text style={[styles.helperText, hasSizeError && styles.helperError]}>
+          {hasSizeError
+            ? `Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
+            : "Optional — helps senders know if their parcel will fit."}
         </Text>
 
         <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>
@@ -736,11 +789,17 @@ export function ListTripScreen() {
       </View>
 
       {/* ───────── Section 4 — Looking for company? ───────── */}
+      <View
+        onLayout={(e) => {
+          sectionYs.current.section4 = e.nativeEvent.layout.y;
+        }}
+      >
       <SectionCard
         index={4}
         title="Looking for company?"
         subtitle="Travel Buddies are travelers going your way"
         complete={section4Complete}
+        hasError={!!fieldErrors.age}
       >
         <View style={styles.buddyToggleCard}>
           <View style={styles.buddyToggleText}>
@@ -772,12 +831,18 @@ export function ListTripScreen() {
               </Text>
               <TextInput
                 value={buddyAge}
-                onChangeText={(v) => setBuddyAge(sanitizeDigitsOnly(v, 3))}
+                onChangeText={(v) => {
+                  setBuddyAge(sanitizeDigitsOnly(v, 3));
+                  clearFieldError("age");
+                }}
                 placeholder="e.g. 28"
                 placeholderTextColor={colors.subtleText}
                 keyboardType="number-pad"
-                style={styles.input}
+                style={[styles.input, fieldErrors.age && styles.inputError]}
               />
+              {fieldErrors.age ? (
+                <Text style={styles.inlineError}>{fieldErrors.age}</Text>
+              ) : null}
             </View>
 
             <View style={styles.field}>
@@ -849,6 +914,7 @@ export function ListTripScreen() {
           </View>
         ) : null}
       </SectionCard>
+      </View>
 
       <View style={styles.submitRow}>
         <AppButton
@@ -1261,6 +1327,7 @@ const styles = StyleSheet.create({
   sizeCellLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
 
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
+  helperError: { color: colors.danger, fontWeight: "700" },
 
   buddyToggleCard: {
     flexDirection: "row",

@@ -542,6 +542,7 @@ export function CreateBuddyScreen() {
             title="Where are you going?"
             subtitle="Set your departure and destination"
             complete={section1Complete}
+            hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
           >
             <Text style={styles.fieldLabel}>From</Text>
             <LocationCard flag={fromFlag} label={fromCountryName} filled />
@@ -607,6 +608,7 @@ export function CreateBuddyScreen() {
             title="When are you traveling?"
             subtitle="Single date or a flexible range"
             complete={section2Complete}
+            hasError={!!fieldErrors.departDate || !!fieldErrors.returnDate}
           >
             <DateModeToggle<DateMode>
               options={[
@@ -719,6 +721,7 @@ export function CreateBuddyScreen() {
             title="About you"
             subtitle="Optional — help travelers get to know you"
             complete={section4Complete}
+            hasError={!!fieldErrors.age}
           >
             <View style={styles.labelRow}>
               <Text style={styles.fieldLabel}>Age</Text>

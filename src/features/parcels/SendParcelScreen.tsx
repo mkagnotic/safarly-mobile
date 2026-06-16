@@ -20,7 +20,7 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { DateField, LocationCard, SectionCard } from "@/components/ui/FormSection";
+import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
@@ -36,12 +36,13 @@ type Nav = CompositeNavigationProp<
 >;
 
 type Direction = "IN_TO_US" | "US_TO_IN";
+type DateMode = "single" | "range";
 type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
 type Currency = "USD" | "INR";
 
 /** Keys for fields that can carry an inline validation error. */
-type FieldKey = "fromCity" | "toCity" | "weight" | "deliveryBy" | "feeOffered";
+type FieldKey = "fromCity" | "toCity" | "weight" | "deliveryBy" | "deliveryTo" | "feeOffered";
 
 /**
  * Server-side `category` enum is fixed — keep this map in sync with the
@@ -63,6 +64,11 @@ const CATEGORY_MAP: Readonly<
 /** Airline carry-on guidelines — same numbers web uses (lines 38-39). */
 const MAX_SIZE_CM = { l: 55, w: 40, h: 20 } as const;
 const MAX_SIZE_IN = { l: 22, w: 16, h: 8 } as const;
+
+/** Per-item weight ceiling — matches web `airlineLimits.ts` (23 kg / 50 lb). */
+const MAX_WEIGHT_KG = 23;
+const MAX_WEIGHT_LB = 50;
+const WEIGHT_LIMIT_LABEL = `${MAX_WEIGHT_KG} kg (${MAX_WEIGHT_LB} lb)`;
 
 /** Format a `Date` as `YYYY-MM-DD` for the server's `delivery_by` field. */
 function formatYmd(d: Date): string {
@@ -144,7 +150,9 @@ export function SendParcelScreen() {
   const [sizeW, setSizeW] = useState("");
   const [sizeH, setSizeH] = useState("");
   const [description, setDescription] = useState("");
+  const [dateMode, setDateMode] = useState<DateMode>("single");
   const [deliveryBy, setDeliveryBy] = useState<Date | null>(null);
+  const [deliveryTo, setDeliveryTo] = useState<Date | null>(null);
   const [feeOffered, setFeeOffered] = useState("");
   const [currency, setCurrency] = useState<Currency>("USD");
   // Online-order pre-declare — unlocks the post-possession return-waiver path
@@ -158,7 +166,7 @@ export function SendParcelScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState<"from" | "to" | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -205,6 +213,7 @@ export function SendParcelScreen() {
     toCity: "section1",
     weight: "section2",
     deliveryBy: "section3",
+    deliveryTo: "section3",
     feeOffered: "section4",
   };
 
@@ -225,15 +234,17 @@ export function SendParcelScreen() {
 
   const section1Complete = !!fromCity && !!toCity;
   const section2Complete = Number(weight) > 0;
-  const section3Complete = !!deliveryBy;
+  const section3Complete = !!deliveryBy && (dateMode === "single" || !!deliveryTo);
   const section4Complete = Number(feeOffered) > 0;
 
-  const requiredTotal = 5;
+  // 5 required fields; date-range adds the latest date as the 6th.
+  const requiredTotal = dateMode === "range" ? 6 : 5;
   const requiredCompleted =
     (fromCity ? 1 : 0) +
     (toCity ? 1 : 0) +
     (Number(weight) > 0 ? 1 : 0) +
     (deliveryBy ? 1 : 0) +
+    (dateMode === "range" && deliveryTo ? 1 : 0) +
     (Number(feeOffered) > 0 ? 1 : 0);
   const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
@@ -250,13 +261,26 @@ export function SendParcelScreen() {
     if (!fromCity) errors.fromCity = "Select an origin city";
     if (!toCity) errors.toCity = "Select a destination city";
     const w = parseFloat(weight);
-    if (!w || w <= 0) errors.weight = "Enter a valid weight";
+    if (!w || w <= 0) {
+      errors.weight = "Enter a valid weight";
+    } else if (w > (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) {
+      errors.weight = `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
+    }
     if (!deliveryBy) {
-      errors.deliveryBy = "Pick a delivery date";
+      errors.deliveryBy = dateMode === "range" ? "Pick the earliest date" : "Pick a delivery date";
     } else if (deliveryBy < today) {
       errors.deliveryBy = "Can't be in the past";
     } else if (deliveryBy > maxDate) {
       errors.deliveryBy = "Must be within 12 months";
+    }
+    if (dateMode === "range") {
+      if (!deliveryTo) {
+        errors.deliveryTo = "Pick the latest date";
+      } else if (deliveryBy && deliveryTo < deliveryBy) {
+        errors.deliveryTo = "Must be after the earliest";
+      } else if (deliveryTo > maxDate) {
+        errors.deliveryTo = "Must be within 12 months";
+      }
     }
     const fee = parseFloat(feeOffered);
     if (!fee || fee <= 0) errors.feeOffered = "Enter a valid amount";
@@ -268,7 +292,14 @@ export function SendParcelScreen() {
           ? `Size exceeds airline carry-on limit (max ${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Fix the highlighted fields.`
           : "Please fix the highlighted fields before continuing.",
       );
-      const order: FieldKey[] = ["fromCity", "toCity", "weight", "deliveryBy", "feeOffered"];
+      const order: FieldKey[] = [
+        "fromCity",
+        "toCity",
+        "weight",
+        "deliveryBy",
+        "deliveryTo",
+        "feeOffered",
+      ];
       const firstKey = order.find((k) => errors[k]);
       if (firstKey) scrollToField(firstKey);
       else if (hasSizeError) scrollToField("weight"); // size lives in same section
@@ -276,6 +307,8 @@ export function SendParcelScreen() {
     }
 
     if (!deliveryBy) return; // narrow for TS — guarded above
+
+    const deliveryDeadline = dateMode === "range" && deliveryTo ? deliveryTo : deliveryBy;
 
 
     setFieldErrors({});
@@ -307,7 +340,10 @@ export function SendParcelScreen() {
           ]
             .filter(Boolean)
             .join(" | ") || undefined,
-        delivery_by: formatYmd(deliveryBy),
+        // Spec §6.3: delivery_by is the deadline (latest); from/to bound the window.
+        delivery_by: formatYmd(deliveryDeadline),
+        delivery_by_from: formatYmd(deliveryBy),
+        delivery_by_to: formatYmd(deliveryDeadline),
         fee_offered: fee,
         fee_currency: currency,
         any_from: isAnyFrom,
@@ -329,7 +365,9 @@ export function SendParcelScreen() {
     sizeL,
     sizeW,
     sizeH,
+    dateMode,
     deliveryBy,
+    deliveryTo,
     today,
     maxDate,
     feeOffered,
@@ -354,7 +392,9 @@ export function SendParcelScreen() {
     setSizeW("");
     setSizeH("");
     setDescription("");
+    setDateMode("single");
     setDeliveryBy(null);
+    setDeliveryTo(null);
     setFeeOffered("");
     setCurrency("USD");
     setIsOnlineOrder(false);
@@ -367,7 +407,7 @@ export function SendParcelScreen() {
     setSubmitted(false);
     setFormError(null);
     setFieldErrors({});
-    setCalendarOpen(false);
+    setCalendarOpen(null);
   }, []);
 
   const submittedRef = useRef(submitted);
@@ -475,6 +515,7 @@ export function SendParcelScreen() {
             title="Where is it going?"
             subtitle="Set the pickup and drop-off"
             complete={section1Complete}
+            hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
           >
             <Text style={styles.fieldLabel}>From</Text>
             <LocationCard flag={fromFlag} label={fromCountryName} filled />
@@ -540,6 +581,7 @@ export function SendParcelScreen() {
             title="What's in the parcel?"
             subtitle="Help carriers understand what you're sending"
             complete={section2Complete}
+            hasError={!!fieldErrors.weight || hasSizeError}
           >
             <Text style={styles.fieldLabel}>Type of parcel</Text>
             <TextInput
@@ -649,16 +691,48 @@ export function SendParcelScreen() {
             title="When does it need to arrive?"
             subtitle="Pick a delivery deadline"
             complete={section3Complete}
+            hasError={!!fieldErrors.deliveryBy || !!fieldErrors.deliveryTo}
           >
-            <DateField
-              label="Deliver by"
-              value={deliveryBy ? formatDateLabel(deliveryBy) : null}
-              placeholder="Select date"
-              onPress={() => setCalendarOpen(true)}
-              error={fieldErrors.deliveryBy}
+            <DateModeToggle<DateMode>
+              options={[
+                { value: "single", label: "Single Date" },
+                { value: "range", label: "Date Range" },
+              ]}
+              value={dateMode}
+              onChange={(next) => {
+                setDateMode(next);
+                if (next === "single") {
+                  setDeliveryTo(null);
+                  clearFieldError("deliveryTo");
+                }
+              }}
             />
+
+            <View style={styles.dateRow}>
+              <View style={styles.dateRowCell}>
+                <DateField
+                  label={dateMode === "range" ? "Earliest" : "Deliver by"}
+                  value={deliveryBy ? formatDateLabel(deliveryBy) : null}
+                  placeholder="Select date"
+                  onPress={() => setCalendarOpen("from")}
+                  error={fieldErrors.deliveryBy}
+                />
+              </View>
+              <View style={styles.dateRowCell}>
+                <DateField
+                  label="Latest"
+                  value={deliveryTo ? formatDateLabel(deliveryTo) : null}
+                  placeholder="Select date"
+                  onPress={() => setCalendarOpen("to")}
+                  disabled={dateMode === "single"}
+                  error={fieldErrors.deliveryTo}
+                />
+              </View>
+            </View>
             <Text style={styles.helperText}>
-              Select the latest date you need this delivered by.
+              {dateMode === "range"
+                ? "Pick the earliest and latest dates you can accept delivery."
+                : "Select the latest date you need this delivered by."}
             </Text>
           </SectionCard>
         </View>
@@ -674,6 +748,7 @@ export function SendParcelScreen() {
             title="How much will you pay?"
             subtitle="Set a fair carrier fee"
             complete={section4Complete}
+            hasError={!!fieldErrors.feeOffered}
           >
             <View style={styles.costRow}>
               <CurrencyToggle value={currency} onChange={setCurrency} />
@@ -837,18 +912,23 @@ export function SendParcelScreen() {
 
       {/* Inline calendar modal */}
       <CalendarModal
-        open={calendarOpen}
-        selected={deliveryBy}
+        open={calendarOpen !== null}
+        selected={calendarOpen === "to" ? deliveryTo : deliveryBy}
         visibleMonth={visibleMonth}
-        today={today}
+        today={calendarOpen === "to" && deliveryBy ? deliveryBy : today}
         maxDate={maxDate}
         onSelect={(d) => {
-          setDeliveryBy(d);
-          clearFieldError("deliveryBy");
-          setCalendarOpen(false);
+          if (calendarOpen === "to") {
+            setDeliveryTo(d);
+            clearFieldError("deliveryTo");
+          } else {
+            setDeliveryBy(d);
+            clearFieldError("deliveryBy");
+          }
+          setCalendarOpen(null);
         }}
         onChangeMonth={setVisibleMonth}
-        onClose={() => setCalendarOpen(false)}
+        onClose={() => setCalendarOpen(null)}
       />
     </Screen>
   );
@@ -1170,6 +1250,9 @@ const styles = StyleSheet.create({
 
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
   helperError: { color: colors.danger, fontWeight: "700" },
+
+  dateRow: { flexDirection: "row", gap: 10 },
+  dateRowCell: { flex: 1 },
 
   costRow: { flexDirection: "row", gap: 8, alignItems: "stretch" },
   currencyToggle: {
