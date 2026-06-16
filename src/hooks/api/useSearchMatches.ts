@@ -27,6 +27,8 @@ export interface UseSearchMatchesResult {
   search: (filters: SearchFilters) => Promise<void>;
   /** Re-run the most recent successful query. Useful for pull-to-refresh. */
   refetch: () => Promise<void>;
+  /** Drop applied filters and reload the free auto-match results. */
+  resetToAutoMatch: () => Promise<void>;
 }
 
 /**
@@ -53,6 +55,8 @@ export function useSearchMatches({
   const mountedRef = useRef(true);
   const requestSeqRef = useRef(0);
   const lastFiltersRef = useRef<SearchFilters | null>(defaultInitial);
+  // Captured once so "Clear" can always restore the free auto-match query.
+  const autoMatchFiltersRef = useRef<SearchFilters | null>(defaultInitial);
 
   const runSearch = useCallback(async (filters: SearchFilters) => {
     const myToken = ++requestSeqRef.current;
@@ -102,5 +106,12 @@ export function useSearchMatches({
     }
   }, [runSearch]);
 
-  return { results, loading, error, hasAppliedFilters, search, refetch };
+  const resetToAutoMatch = useCallback(async () => {
+    setHasAppliedFilters(false);
+    if (autoMatchFiltersRef.current) {
+      await runSearch(autoMatchFiltersRef.current);
+    }
+  }, [runSearch]);
+
+  return { results, loading, error, hasAppliedFilters, search, refetch, resetToAutoMatch };
 }

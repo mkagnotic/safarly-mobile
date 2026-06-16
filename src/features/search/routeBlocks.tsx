@@ -58,7 +58,7 @@ export function MetricTile({
           compact && styles.metricValueCompact,
           highlight ? styles.metricValueHighlight : null,
         ]}
-        numberOfLines={1}
+        numberOfLines={2}
       >
         {value}
       </Text>
@@ -97,6 +97,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surfaceMuted,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 14,
     minHeight: 70,

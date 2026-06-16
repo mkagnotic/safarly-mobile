@@ -86,6 +86,7 @@ export type {
   SearchFilters,
   SearchResults,
   SearchMeta,
+  SearchQuota,
   PackageMatch,
   BuddySearchMatch,
 } from "./search";

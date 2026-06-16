@@ -10,6 +10,17 @@ export interface SearchFilters {
   match_my_routes?: boolean;
   page?: number;
   per_page?: number;
+  /** Independent per-list pages; each falls back to `page` server-side. */
+  carrier_page?: number;
+  receive_page?: number;
+  buddy_page?: number;
+}
+
+/** Daily search budget, enforced server-side per account (shared web + mobile). */
+export interface SearchQuota {
+  limit: number;
+  used: number;
+  remaining: number;
 }
 
 export interface PackageMatch {
@@ -54,11 +65,18 @@ export interface BuddySearchMatch {
 export interface SearchResults {
   package_matches: PackageMatch[];
   buddy_matches: BuddySearchMatch[];
+  /** Pre-pagination totals — drive per-tab page counts. */
+  package_total?: number;
+  carrier_total?: number;
+  receive_total?: number;
+  buddy_total?: number;
   /** Present when `match_my_routes` is set. */
   my_trips_count?: number;
   my_parcels_count?: number;
   my_buddy_listings_count?: number;
   my_buddy_route_targets_count?: number;
+  /** Fresh quota snapshot returned with every search response. */
+  search_quota?: SearchQuota;
 }
 
 export interface SearchMeta {
@@ -70,4 +88,7 @@ export interface SearchMeta {
 
 export const searchApi = {
   search: (filters: SearchFilters) => api.get<SearchResults>("/search-handler/", filters),
+
+  /** Consumes one daily unit. Throws `ApiClientError` (429 `RATE_LIMITED`) at the cap. */
+  consumeSearchQuota: () => api.post<SearchQuota>("/search-handler/usage"),
 };
