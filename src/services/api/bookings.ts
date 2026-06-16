@@ -1,4 +1,5 @@
-import { api } from "./client";
+import { api, newIdempotencyKey } from "./client";
+import type { RNUploadFile } from "./messages";
 
 /**
  * Server response shapes — booking-handler returns Postgres-join-typed keys
@@ -39,11 +40,21 @@ export interface Booking {
   sender_id: string;
   carrier_id: string;
   status: string;
+  /** ISO deadline (~72h after creation) for paying a `pending_payment` booking. */
+  payment_expires_at?: string | null;
   pickup_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
   delivery_proof_url: string | null;
+  // ── Part 4 fulfillment fields ──
+  cancellation_phase?: string | null;
+  penalty_amount?: number | null;
+  penalty_waived?: boolean | null;
+  handoff_accepted_at?: string | null;
+  handoff_rejected_at?: string | null;
+  handoff_rejection_reason?: string | null;
+  handoff_rejection_proof_url?: string | null;
   created_at: string;
   updated_at: string;
   parcel?: {
@@ -87,8 +98,63 @@ export const bookingsApi = {
 
   markPickup: (id: string) => api.put<{ status: string }>(`/booking-handler/${id}/pickup`),
 
+  /** Carrier takes possession at inspection: awaiting_handoff → in_transit. */
+  acceptHandoff: (id: string, idempotencyKey = newIdempotencyKey()) =>
+    api.post<{ status: string; handoff_accepted_at: string }>(
+      `/booking-handler/${id}/handoff/accept`,
+      {},
+      { idempotencyKey },
+    ),
+
+  /** Carrier rejects at inspection: refunds the sender, reopens the parcel, no penalty. */
+  rejectHandoff: (
+    id: string,
+    body: { reason: string; photo_path?: string },
+    idempotencyKey = newIdempotencyKey(),
+  ) =>
+    api.post<{
+      status: string;
+      handoff_rejected_at: string;
+      refunded: boolean;
+      refund_amount: number;
+    }>(`/booking-handler/${id}/handoff/reject`, body, { idempotencyKey }),
+
+  /** Upload reject evidence (carrier-only, ≤10MB image); pass the returned `path` as `photo_path`. */
+  uploadHandoffEvidence: async (id: string, file: RNUploadFile) => {
+    const formData = new FormData();
+    formData.append("file", file as unknown as Blob);
+    const res = await api.upload<{ path: string; url: string }>(
+      `/booking-handler/${id}/handoff/upload-evidence`,
+      formData,
+    );
+    return res.data;
+  },
+
   cancel: (id: string, reason: string) =>
     api.put<{ status: string }>(`/booking-handler/${id}/cancel`, { reason }),
+
+  /** Carrier cancels mid-transit: full refund to sender + tiered penalty + strike. */
+  cancelPostPossession: (
+    id: string,
+    body: {
+      reason: string;
+      return_answers?: {
+        will_return: boolean;
+        was_online_order: boolean;
+        free_return_eligible: boolean;
+      };
+    },
+    idempotencyKey = newIdempotencyKey(),
+  ) =>
+    api.post<{
+      status: string;
+      tier: string;
+      penalty_amount: number;
+      refund_amount: number;
+      strike_id: string | null;
+      dispute_id: string | null;
+      waiver_eligible: boolean;
+    }>(`/booking-handler/${id}/cancel-post-possession`, body, { idempotencyKey }),
 
   generateOtp: (id: string) =>
     api.post<{ otp_sent: boolean; expires_in: number; otp?: string }>(

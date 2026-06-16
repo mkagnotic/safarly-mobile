@@ -66,15 +66,17 @@ function StarRow({
 
 function HeaderRow({ onBack }: Readonly<{ onBack: () => void }>) {
   return (
-    <Pressable
-      onPress={onBack}
-      style={styles.backRow}
-      accessibilityRole="button"
-      accessibilityLabel="Back"
-    >
-      <Ionicons name="chevron-back" size={16} color={colors.subtleText} />
-      <Text style={styles.backText}>Back</Text>
-    </Pressable>
+    <View style={styles.headerRow}>
+      <Pressable
+        onPress={onBack}
+        style={styles.backButton}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+      >
+        <Ionicons name="chevron-back" size={18} color={colors.text} />
+      </Pressable>
+      <Text style={styles.title}>Reviews</Text>
+    </View>
   );
 }
 
@@ -217,7 +219,6 @@ export function ReviewsScreen() {
   return (
     <Screen onRefresh={refetch}>
       <HeaderRow onBack={handleBack} />
-      <Text style={styles.title}>Reviews</Text>
 
       {loading && reviews.length === 0 ? (
         <LoadingState />
@@ -261,22 +262,27 @@ export function ReviewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Header / title
-  backRow: {
+  // Header / title — standard app pattern: circular icon back button + title.
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
+    gap: 12,
     marginTop: 8,
-    marginBottom: 4,
+    marginBottom: 14,
   },
-  backText: { color: colors.subtleText, fontSize: 13, fontWeight: "600" },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
     color: colors.text,
     fontSize: 20,
     lineHeight: 26,
     fontWeight: "800",
-    marginBottom: 14,
   },
 
   // Summary card

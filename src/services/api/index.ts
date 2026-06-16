@@ -3,6 +3,7 @@ export {
   ApiClientError,
   getErrorMessage,
   isAbortError,
+  newIdempotencyKey,
 } from "./client";
 export type { ApiResponse, ApiError, QueryParams, QueryParamValue } from "./client";
 
@@ -25,7 +26,7 @@ export { bookingsApi } from "./bookings";
 export type { Booking, BookingDetailResponse } from "./bookings";
 
 export { paymentsApi } from "./payments";
-export type { Transaction } from "./payments";
+export type { Transaction, CreateIntentResult, ConfirmPaymentResult } from "./payments";
 
 export { walletApi } from "./wallet";
 export type { Wallet, SavedCard, Earnings } from "./wallet";
@@ -34,9 +35,27 @@ export { messagesApi } from "./messages";
 export type {
   Conversation,
   Message,
+  MessageKind,
+  MessagePayload,
+  OfferStatus,
+  OfferCardPayload,
+  OfferAcceptPayload,
+  OfferRejectPayload,
+  SystemEventName,
+  SystemEventPayload,
   DeliveryHistoryItem,
   RNUploadFile,
 } from "./messages";
+
+export { offersApi } from "./offers";
+export type {
+  SeedOfferInput,
+  SeedOfferResult,
+  CounterOfferInput,
+  CounterOfferResult,
+  AcceptOfferResult,
+  RejectOfferResult,
+} from "./offers";
 
 export { notificationsApi } from "./notifications";
 export type { Notification } from "./notifications";

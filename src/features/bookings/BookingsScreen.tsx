@@ -3,6 +3,7 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,6 +27,7 @@ import {
   bookingsApi,
   getErrorMessage,
   type Booking,
+  type RNUploadFile,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 
@@ -144,6 +146,7 @@ function CancelBookingModal({
             placeholder="Reason for cancellation..."
             placeholderTextColor={colors.mutedText}
             style={styles.modalInput}
+            maxLength={1000}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -190,10 +193,11 @@ interface RejectHandoffModalProps {
   open: boolean;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, file?: RNUploadFile) => void;
 }
 
 const REJECT_REASON_MIN = 10;
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
 
 function RejectHandoffModal({
   open,
@@ -202,13 +206,31 @@ function RejectHandoffModal({
   onConfirm,
 }: Readonly<RejectHandoffModalProps>) {
   const [reason, setReason] = useState("");
-  const [photoSelected, setPhotoSelected] = useState(false);
+  const [photo, setPhoto] = useState<RNUploadFile | null>(null);
 
   const handleClose = () => {
     if (pending) return;
     setReason("");
-    setPhotoSelected(false);
+    setPhoto(null);
     onCancel();
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== "granted") return;
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_EVIDENCE_BYTES) return;
+      setPhoto({
+        uri: asset.uri,
+        name: asset.fileName ?? `evidence-${Date.now()}.jpg`,
+        type: asset.mimeType ?? "image/jpeg",
+      });
+    } catch {
+      /* ignore pick failures */
+    }
   };
 
   const trimmed = reason.trim();
@@ -216,7 +238,7 @@ function RejectHandoffModal({
 
   const handleConfirm = () => {
     if (!reasonOk) return;
-    onConfirm(trimmed);
+    onConfirm(trimmed, photo ?? undefined);
   };
 
   return (
@@ -243,6 +265,7 @@ function RejectHandoffModal({
             placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
             placeholderTextColor={colors.mutedText}
             style={styles.modalInput}
+            maxLength={1000}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -254,27 +277,19 @@ function RejectHandoffModal({
           </Text>
 
           <Pressable
-            onPress={() => setPhotoSelected((v) => !v)}
+            onPress={() => void pickPhoto()}
             disabled={pending}
-            style={[
-              styles.photoPickerButton,
-              photoSelected && styles.photoPickerButtonSelected,
-            ]}
+            style={[styles.photoPickerButton, photo && styles.photoPickerButtonSelected]}
             accessibilityRole="button"
-            accessibilityLabel={photoSelected ? "Photo selected" : "Add photo evidence"}
+            accessibilityLabel={photo ? "Photo selected" : "Add photo evidence"}
           >
             <Ionicons
-              name={photoSelected ? "checkmark-circle" : "camera-outline"}
+              name={photo ? "checkmark-circle" : "camera-outline"}
               size={16}
-              color={photoSelected ? colors.safe : colors.subtleText}
+              color={photo ? colors.safe : colors.subtleText}
             />
-            <Text
-              style={[
-                styles.photoPickerText,
-                photoSelected && styles.photoPickerTextSelected,
-              ]}
-            >
-              {photoSelected ? "Photo attached" : "Add photo evidence (optional)"}
+            <Text style={[styles.photoPickerText, photo && styles.photoPickerTextSelected]} numberOfLines={1}>
+              {photo ? photo.name : "Add photo evidence (optional)"}
             </Text>
           </Pressable>
 
@@ -318,7 +333,10 @@ interface CancelPostPossessionModalProps {
   open: boolean;
   pending: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string, waiverEligible: boolean) => void;
+  onConfirm: (
+    reason: string,
+    answers: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
+  ) => void;
 }
 
 interface WaiverQuestion {
@@ -372,7 +390,11 @@ function CancelPostPossessionModal({
 
   const handleConfirm = () => {
     if (!reasonOk || !allAnswered) return;
-    onConfirm(trimmed, allYes);
+    onConfirm(trimmed, {
+      was_online_order: answers.online_order === "yes",
+      free_return_eligible: answers.seller_will_accept_return === "yes",
+      will_return: answers.seller_will_refund === "yes",
+    });
   };
 
   return (
@@ -402,6 +424,7 @@ function CancelPostPossessionModal({
             placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
             placeholderTextColor={colors.mutedText}
             style={styles.modalInput}
+            maxLength={1000}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -519,12 +542,14 @@ interface ExpandedBodyProps {
   bookingId: string;
   role: "sender" | "carrier" | "unknown";
   onNavigateRate: (bookingId: string) => void;
+  onNavigatePay: (bookingId: string) => void;
 }
 
 function ExpandedBody({
   bookingId,
   role,
   onNavigateRate,
+  onNavigatePay,
 }: Readonly<ExpandedBodyProps>) {
   // Detail fetch only fires when this row is expanded — so the list remains
   // light. Mirrors web's TanStack `useBookingDetail` enabled-on-mount of the
@@ -596,6 +621,8 @@ function ExpandedBody({
         | "confirm-otp",
       task: () => Promise<T>,
       successMessage: string,
+      /** Optional per-action mapper for friendlier copy on specific error codes. */
+      formatError?: (code: string, message: string) => string,
     ): Promise<T | null> => {
       setActionPending(key);
       try {
@@ -604,9 +631,13 @@ function ExpandedBody({
         showBanner({ variant: "success", title: successMessage });
         return result;
       } catch (err) {
-        const message =
+        const code = err instanceof ApiClientError ? err.code : "";
+        const base =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
+        const message = formatError ? formatError(code, base) : base;
         showBanner({ variant: "error", title: "Action failed", message }, 6000);
+        // The guard may have rejected because the state moved — re-derive actions.
+        void refetch();
         return null;
       } finally {
         setActionPending(null);
@@ -636,19 +667,25 @@ function ExpandedBody({
   const handleAcceptHandoff = () =>
     void runAction(
       "accept-handoff",
-      () => bookingsApi.markPickup(booking.id),
-      "Handoff accepted",
+      () => bookingsApi.acceptHandoff(booking.id),
+      "Parcel accepted — trip started",
     );
 
-  const handleRejectHandoffConfirm = async (_reason: string) => {
-    // PR1 builds the UI; the dedicated `/handoff/reject` endpoint + photo
-    // upload land in PR2 alongside Idempotency-Key support.
-    showBanner({
-      variant: "info",
-      title: "Coming next update",
-      message: "Handoff rejection with photo evidence is shipping in the next release.",
-    });
-    setRejectHandoffOpen(false);
+  const handleRejectHandoffConfirm = async (reason: string, file?: RNUploadFile) => {
+    const result = await runAction(
+      "reject-handoff",
+      async () => {
+        // Upload evidence first (if attached), then pass its path on reject.
+        let photo_path: string | undefined;
+        if (file) {
+          const up = await bookingsApi.uploadHandoffEvidence(booking.id, file);
+          photo_path = up.path;
+        }
+        return bookingsApi.rejectHandoff(booking.id, { reason, photo_path });
+      },
+      "Handoff rejected — sender refunded",
+    );
+    if (result) setRejectHandoffOpen(false);
   };
 
   const handleCancelConfirm = async (reason: string) => {
@@ -661,18 +698,44 @@ function ExpandedBody({
   };
 
   const handleCancelPostPossessionConfirm = async (
-    _reason: string,
-    _waiverEligible: boolean,
+    reason: string,
+    answers: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
   ) => {
-    // PR1 builds the UI; the dedicated `/cancel-post-possession` endpoint
-    // lands in PR2 (tiered penalty + strike + optional return waiver).
-    showBanner({
-      variant: "info",
-      title: "Coming next update",
-      message:
-        "Mid-trip cancellation with carrier penalties is shipping in the next release.",
-    });
+    const result = await runAction(
+      "cancel-post-possession",
+      () => bookingsApi.cancelPostPossession(booking.id, { reason, return_answers: answers }),
+      "Cancelled mid-trip",
+      (code, base) => {
+        if (code === "RETURN_ADDRESS_REQUIRED")
+          return "The sender has no return address on file — a returnable cancellation needs one first.";
+        if (code === "STRIKE_LIMIT_REACHED")
+          return "You’ve hit the cancellation strike limit and can’t cancel mid-trip.";
+        return base;
+      },
+    );
+    if (!result) return;
     setCancelPostPossessionOpen(false);
+    // Tier/penalty are server-driven — surface whatever the response reports.
+    const data = result.data;
+    if (data?.waiver_eligible) {
+      showBanner(
+        {
+          variant: "info",
+          title: "Return waiver opened",
+          message: "The sender can waive the cash penalty — your strike still applies.",
+        },
+        7000,
+      );
+    } else if (typeof data?.penalty_amount === "number") {
+      showBanner(
+        {
+          variant: "warning",
+          title: `Penalty applied: $${data.penalty_amount}`,
+          message: `Tier: ${data.tier}. The sender has been refunded in full.`,
+        },
+        7000,
+      );
+    }
   };
 
   const handleGenerateOtp = async () => {
@@ -698,6 +761,15 @@ function ExpandedBody({
       "confirm-otp",
       () => bookingsApi.confirmOtp(booking.id, trimmed),
       "Delivery confirmed",
+      (code, base) => {
+        if (code === "RATE_LIMITED")
+          return "Too many wrong codes. Ask the sender to tap Resend for a fresh code.";
+        if (code === "UNAUTHENTICATED")
+          return "That delivery code has expired. Ask the sender to resend a new one.";
+        if (code === "CONFLICT")
+          return "No delivery code has been generated yet. Ask the sender to generate one.";
+        return base;
+      },
     );
     if (result) setOtpCode("");
   };
@@ -707,10 +779,13 @@ function ExpandedBody({
   // that way; `awaiting_handoff` is the new post-payment status.
   const isAwaitingHandoff =
     booking.status === "awaiting_handoff" || booking.status === "confirmed";
+  const canPay = booking.status === "pending_payment" && role === "sender";
   const canCancel = booking.status === "pending_payment" || isAwaitingHandoff;
   const canAcceptHandoff = isAwaitingHandoff && role === "carrier";
   const canRejectHandoff = canAcceptHandoff;
-  const canGenerateOtp = booking.status === "in_transit" && role === "sender";
+  // Sender may pre-generate the delivery code from awaiting_handoff onward.
+  const canGenerateOtp =
+    (booking.status === "in_transit" || isAwaitingHandoff) && role === "sender";
   const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
   const canCancelPostPossession = booking.status === "in_transit" && role === "carrier";
   const canRate = booking.status === "delivered";
@@ -804,6 +879,18 @@ function ExpandedBody({
 
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
+        {canPay ? (
+          <Pressable
+            style={[styles.actionButton, styles.actionPrimary, styles.fullWidthAction]}
+            onPress={() => onNavigatePay(booking.id)}
+            accessibilityRole="button"
+            accessibilityLabel="Pay now"
+          >
+            <Ionicons name="card" size={14} color={colors.white} />
+            <Text style={styles.actionPrimaryText}>Pay now · ${booking.parcel?.fee_offered ?? ""}</Text>
+          </Pressable>
+        ) : null}
+
         {canAcceptHandoff ? (
           <Pressable
             style={[styles.actionButton, styles.actionPrimary]}
@@ -1004,6 +1091,7 @@ interface BookingRowProps {
   expanded: boolean;
   onToggle: () => void;
   onNavigateRate: (bookingId: string) => void;
+  onNavigatePay: (bookingId: string) => void;
 }
 
 function BookingRow({
@@ -1012,9 +1100,11 @@ function BookingRow({
   expanded,
   onToggle,
   onNavigateRate,
+  onNavigatePay,
 }: Readonly<BookingRowProps>) {
   const tone = STATUS_TONES[booking.status] ?? { bg: "#E5E7EB", fg: colors.subtleText };
   const icon = STATUS_ICONS[booking.status] ?? "ellipse";
+  const roleColor = role === "sender" ? colors.primary : "#F08020";
 
   return (
     <Card style={styles.bookingCard}>
@@ -1025,68 +1115,52 @@ function BookingRow({
         accessibilityLabel={`${expanded ? "Collapse" : "Expand"} booking ${booking.id}`}
         accessibilityState={{ expanded }}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.cardTopLeft}>
-            <Text style={styles.bookingId} numberOfLines={1}>
-              {booking.id.slice(0, 8)}…
+        {/* Header: route headline + chevron */}
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderMain}>
+            <Text style={styles.routeText} numberOfLines={2}>
+              {booking.parcel
+                ? `${booking.parcel.from_city}  →  ${booking.parcel.to_city}`
+                : "Booking"}
             </Text>
-            {role !== "unknown" ? (
-              <View
-                style={[
-                  styles.roleChip,
-                  role === "sender" ? styles.roleChipSender : styles.roleChipCarrier,
-                ]}
-              >
-                <Ionicons
-                  name={role === "sender" ? "person-outline" : "car"}
-                  size={10}
-                  color={role === "sender" ? colors.primary : "#F08020"}
-                />
-                <Text
-                  style={[
-                    styles.roleChipText,
-                    role === "sender"
-                      ? { color: colors.primary }
-                      : { color: "#F08020" },
-                  ]}
-                >
-                  {role === "sender" ? "Sender" : "Carrier"}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.cardTopRight}>
-            <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
-              <Ionicons name={icon} size={10} color={tone.fg} />
-              <Text style={[styles.statusBadgeText, { color: tone.fg }]}>
-                {booking.status.replace(/_/g, " ").toUpperCase()}
+            <View style={styles.subRow}>
+              {role !== "unknown" ? (
+                <>
+                  <Ionicons
+                    name={role === "sender" ? "person" : "car"}
+                    size={12}
+                    color={roleColor}
+                  />
+                  <Text style={[styles.roleText, { color: roleColor }]}>
+                    {role === "sender" ? "Sender" : "Carrier"}
+                  </Text>
+                  <Text style={styles.subDot}>·</Text>
+                </>
+              ) : null}
+              <Ionicons name="calendar-outline" size={12} color={colors.subtleText} />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {formatDate(booking.created_at)}
+              </Text>
+              <Text style={styles.subDot}>·</Text>
+              <Text style={styles.bookingId} numberOfLines={1}>
+                #{booking.id.slice(0, 6)}
               </Text>
             </View>
-            <Ionicons
-              name={expanded ? "chevron-up" : "chevron-down"}
-              size={16}
-              color={colors.mutedText}
-            />
           </View>
+          <Ionicons
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={18}
+            color={colors.mutedText}
+          />
         </View>
 
-        {booking.parcel ? (
-          <View style={styles.routeRow}>
-            <Ionicons name="location-outline" size={14} color={colors.primary} />
-            <Text style={styles.routeText} numberOfLines={2}>
-              {booking.parcel.from_city}
+        {/* Footer: status + fee */}
+        <View style={styles.cardFooter}>
+          <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
+            <Ionicons name={icon} size={11} color={tone.fg} />
+            <Text style={[styles.statusBadgeText, { color: tone.fg }]} numberOfLines={1}>
+              {booking.status.replace(/_/g, " ").toUpperCase()}
             </Text>
-            <Ionicons name="arrow-forward" size={14} color={colors.subtleText} />
-            <Text style={styles.routeText} numberOfLines={2}>
-              {booking.parcel.to_city}
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
-            <Ionicons name="calendar-outline" size={12} color={colors.subtleText} />
-            <Text style={styles.metaText}>{formatDate(booking.created_at)}</Text>
           </View>
           {booking.parcel ? (
             <Text style={styles.feeText}>${booking.parcel.fee_offered}</Text>
@@ -1100,6 +1174,7 @@ function BookingRow({
             bookingId={booking.id}
             role={role}
             onNavigateRate={onNavigateRate}
+            onNavigatePay={onNavigatePay}
           />
         </View>
       ) : null}
@@ -1155,6 +1230,11 @@ export function BookingsScreen() {
 
   const handleNavigateRate = useCallback(
     (id: string) => navigation.navigate("DeliveryReviewTab", { bookingId: id }),
+    [navigation],
+  );
+
+  const handleNavigatePay = useCallback(
+    (id: string) => navigation.navigate("PayBookingTab", { bookingId: id }),
     [navigation],
   );
 
@@ -1254,6 +1334,7 @@ export function BookingsScreen() {
               expanded={expandedId === booking.id}
               onToggle={() => handleToggle(booking.id)}
               onNavigateRate={handleNavigateRate}
+              onNavigatePay={handleNavigatePay}
             />
           ))}
         </View>
@@ -1320,68 +1401,49 @@ const styles = StyleSheet.create({
 
   // Cards
   bookingCard: { borderRadius: 16, marginBottom: 12, overflow: "hidden" },
-  cardSummary: { paddingHorizontal: 16, paddingVertical: 16 },
-  cardTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-    gap: 8,
-  },
-  cardTopLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexShrink: 1,
-  },
-  cardTopRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  bookingId: {
-    color: colors.subtleText,
-    fontSize: 11,
+  cardSummary: { padding: 14 },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cardHeaderMain: { flex: 1, minWidth: 0, gap: 5 },
+  routeText: {
+    color: colors.text,
+    fontSize: 16,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    lineHeight: 21,
   },
-  roleChip: {
+  subRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
+    gap: 5,
+    flexWrap: "wrap",
+    rowGap: 2,
   },
-  roleChipSender: { backgroundColor: primaryTint.fill10 },
-  roleChipCarrier: { backgroundColor: "rgba(245,128,32,0.10)" },
-  roleChipText: { fontSize: 10, fontWeight: "700" },
+  bookingId: { color: colors.subtleText, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  subDot: { color: colors.subtleText, fontSize: 12, fontWeight: "700" },
+  roleText: { fontSize: 12, fontWeight: "800" },
+  metaText: { color: colors.subtleText, fontSize: 12, fontWeight: "500" },
+
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusBadgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
-
-  routeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    marginBottom: 8,
-  },
-  routeText: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: "800",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
     flexShrink: 1,
+    minWidth: 0,
   },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText: { color: colors.subtleText, fontSize: 12, fontWeight: "500" },
-  feeText: { color: colors.primary, fontSize: 13, fontWeight: "800", marginLeft: "auto" },
+  statusBadgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
+  feeText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
 
   // Expanded body
   expandedDivider: {

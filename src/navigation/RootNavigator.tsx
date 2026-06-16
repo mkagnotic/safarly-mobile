@@ -56,6 +56,7 @@ import { ChangeEmailScreen } from "@/features/profile/ChangeEmailScreen";
 // New screens
 import { OpportunitiesScreen } from "@/features/opportunities/OpportunitiesScreen";
 import { BookingsScreen } from "@/features/bookings/BookingsScreen";
+import { PayBookingScreen } from "@/features/bookings/PayBookingScreen";
 import { OtpVerificationScreen } from "@/features/bookings/OtpVerificationScreen";
 import { DeliveryReviewScreen } from "@/features/bookings/DeliveryReviewScreen";
 import { DisputesScreen } from "@/features/disputes/DisputesScreen";
@@ -130,6 +131,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   SearchTab: "search-outline",
   OpportunitiesTab: "flash-outline",
   BookingsTab: "receipt-outline",
+  PayBookingTab: "card-outline",
   OtpVerificationTab: "key-outline",
   DeliveryReviewTab: "star-outline",
   DisputesTab: "alert-circle",
@@ -297,6 +299,7 @@ function MainTabs() {
       <Tabs.Screen name="SearchTab" component={SearchScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OpportunitiesTab" component={OpportunitiesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="BookingsTab" component={BookingsScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="PayBookingTab" component={PayBookingScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OtpVerificationTab" component={OtpVerificationScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DeliveryReviewTab" component={DeliveryReviewScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DisputesTab" component={DisputesScreen} options={HIDDEN_TAB} />

@@ -108,7 +108,9 @@ function flagsForConversation(c: Conversation, currentUserId: string | null): Co
     awaitingTheirs: isPending && matchedByMe,
     isDeclined: status === "declined",
     isBlocked: status === "blocked",
-    wasUnmatched: isPending && !c.matched_by && (!!c.matched_at || !!c.last_message_at),
+    // `matched_at` (the permanent marker) distinguishes wasUnmatched from a
+    // never-matched fresh conversation.
+    wasUnmatched: isPending && !c.matched_by && !!c.matched_at,
   };
 }
 

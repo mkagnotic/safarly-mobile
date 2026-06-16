@@ -27,6 +27,62 @@ export interface Conversation {
   };
 }
 
+export type MessageKind =
+  | "text"
+  | "offer_card"
+  | "offer_accept"
+  | "offer_reject"
+  | "system_event";
+
+export type OfferStatus = "open" | "accepted" | "superseded" | "expired" | "rejected";
+
+export interface OfferCardPayload {
+  offer_id: string;
+  carrier_request_id?: string;
+  parcel_id?: string;
+  parcel_from_city?: string | null;
+  parcel_to_city?: string | null;
+  parcel_category?: string | null;
+  amount: number;
+  currency: string;
+  note?: string | null;
+  status: OfferStatus;
+  /** Optional display helper some server responses attach. */
+  proposer_name?: string | null;
+}
+
+export interface OfferAcceptPayload {
+  accepted_offer_id: string;
+  booking_id: string;
+  amount: number;
+  currency: string;
+}
+
+export interface OfferRejectPayload {
+  rejected_offer_id: string;
+  note?: string | null;
+}
+
+export type SystemEventName =
+  | "match_confirmed"
+  | "payment_received"
+  | "handoff_accepted"
+  | "handoff_rejected"
+  | "cancelled"
+  | "delivered";
+
+export interface SystemEventPayload {
+  event: SystemEventName | string;
+  booking_id?: string;
+  details?: Record<string, unknown>;
+}
+
+export type MessagePayload =
+  | OfferCardPayload
+  | OfferAcceptPayload
+  | OfferRejectPayload
+  | SystemEventPayload;
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -39,6 +95,9 @@ export interface Message {
   attachment_url?: string | null;
   attachment_type?: string | null;
   sender?: { id: string; name: string; avatar_url: string | null };
+  /** Discriminates typed offer/system messages; absent on legacy text rows. */
+  message_kind?: MessageKind;
+  payload?: MessagePayload | null;
 }
 
 export interface DeliveryHistoryItem {

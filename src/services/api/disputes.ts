@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, newIdempotencyKey } from "./client";
 
 export interface Dispute {
   id: string;
@@ -30,6 +30,18 @@ export const disputesApi = {
 
   addMessage: (id: string, text: string) =>
     api.post<{ message: unknown }>(`/dispute-handler/${id}/messages`, { text }),
+
+  /**
+   * Sender waives the CASH penalty after a return-eligible post-possession
+   * cancel — the carrier is refunded the penalty but the strike remains.
+   */
+  confirmReturnWaiver: (disputeId: string, idempotencyKey = newIdempotencyKey()) =>
+    api.post<{
+      waived: boolean;
+      refunded_amount: number;
+      booking_status: string;
+      strike_remains: boolean;
+    }>(`/dispute-handler/${disputeId}/confirm-return-waiver`, {}, { idempotencyKey }),
 
   // --- Admin endpoints ---
   adminList: (params?: { page?: number; per_page?: number }) =>

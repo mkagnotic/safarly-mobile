@@ -52,3 +52,9 @@ Thumbs.db
 
 # Local AI assistant config
 .claude/
+
+# E2E exploratory scripts + screenshots (local only)
+e2e/
+
+# Web export output
+dist/

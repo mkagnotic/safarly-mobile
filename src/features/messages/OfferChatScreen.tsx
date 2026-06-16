@@ -25,6 +25,7 @@ import {
 import EmojiPicker from "rn-emoji-keyboard";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
 import { DeclineMatchModal } from "@/components/chat/DeclineMatchModal";
@@ -33,14 +34,30 @@ import {
   MatchConfirmationModal,
   type MatchUserRole,
 } from "@/components/chat/MatchConfirmationModal";
+import { OfferComposerModal, type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useChatMessages, type DisplayMessage } from "@/hooks/api/useChatMessages";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
+import { useOffers } from "@/hooks/api/useOffers";
+import {
+  resolveOffers,
+  type OfferCardActions,
+  type OfferRenderState,
+} from "@/features/messages/offerResolution";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { MainTabParamList } from "@/navigation/types";
-import { getErrorMessage, messagesApi, type Conversation, type RNUploadFile } from "@/services/api";
+import {
+  getErrorMessage,
+  messagesApi,
+  type Conversation,
+  type OfferAcceptPayload,
+  type OfferCardPayload,
+  type OfferStatus,
+  type RNUploadFile,
+  type SystemEventPayload,
+} from "@/services/api";
 import { colors } from "@/theme/colors";
 
 type ChatNav = BottomTabNavigationProp<MainTabParamList, "OfferChatTab">;
@@ -103,7 +120,12 @@ export function OfferChatScreen() {
   const source = route.params?.source ?? "offers";
   const fallbackBackTarget = getBackTarget(source);
 
-  const { conversations, acceptMatch, declineMatch } = useMyConversations({
+  const {
+    conversations,
+    acceptMatch,
+    declineMatch,
+    refetch: refetchConversations,
+  } = useMyConversations({
     currentUserId: user?.id ?? null,
   });
   const conversation = useMemo<Conversation | null>(
@@ -125,10 +147,12 @@ export function OfferChatScreen() {
     matchStatus === "pending" &&
     !!conversation?.matched_by &&
     conversation.matched_by === user?.id;
+  // `matched_at` persists across unmatch, so its presence while pending (with no
+  // current `matched_by`) marks a dissolved match vs a never-matched thread.
   const wasUnmatched =
     matchStatus === "pending" &&
     !conversation?.matched_by &&
-    (!!conversation?.matched_at || !!conversation?.last_message_at);
+    !!conversation?.matched_at;
   const isDeclined = matchStatus === "declined";
   // Web parity: "ever matched" is the union of currently-matched + previously-
   // matched-and-now-something-else. Drives the "Delivery history" affordance
@@ -162,6 +186,24 @@ export function OfferChatScreen() {
     participantId,
   );
 
+  // ───────── In-chat offers ─────────
+  const {
+    pending: offerPending,
+    seedOffer,
+    postOffer,
+    acceptOffer,
+    rejectOffer,
+  } = useOffers(conversationId);
+  const offerState = useMemo(
+    () => resolveOffers(messages, user?.id ?? null),
+    [messages, user?.id],
+  );
+  const liveOffer = offerState.live;
+  const isMatched = matchStatus === "matched";
+  // Delivery offers only exist in a booking context, never for buddy matches.
+  const supportsOffers = isMatched && conversation?.context_type !== "buddy";
+  const offerCurrencySymbol = liveOffer?.currency === "INR" ? "₹" : "$";
+
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<RNUploadFile | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
@@ -181,6 +223,12 @@ export function OfferChatScreen() {
   const [reportTarget, setReportTarget] = useState<DisplayMessage | null>(null);
   const [reportPending, setReportPending] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<DisplayMessage | null>(null);
+  const [offerComposer, setOfferComposer] = useState<{ mode: "seed" | "counter" } | null>(null);
+  const [offerBanner, setOfferBanner] = useState<{
+    variant: "success" | "error" | "info" | "warning";
+    title: string;
+    message?: string;
+  } | null>(null);
   // Two destructive-confirm states reuse one ConfirmActionModal — `null` when
   // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
   // pattern in `ChatActionDropdown.tsx:46`.
@@ -468,8 +516,11 @@ export function OfferChatScreen() {
         showToast({ title: "Unmatched", variant: "info" });
       }
       setConfirmAction(null);
-      void refetch();
+      // Flip the match-state banner instantly instead of waiting on realtime.
+      void refetchConversations();
     } catch (err) {
+      // Guard may reject if the state moved (e.g. already unmatched). Resync.
+      void refetchConversations();
       showToast({
         title: confirmAction === "block" ? "Couldn't block" : "Couldn't unmatch",
         message: getErrorMessage(err),
@@ -478,7 +529,7 @@ export function OfferChatScreen() {
     } finally {
       setConfirmPending(false);
     }
-  }, [conversationId, confirmAction, refetch]);
+  }, [conversationId, confirmAction, refetchConversations]);
 
   const handleUnblock = useCallback(async () => {
     if (!conversationId) return;
@@ -486,15 +537,16 @@ export function OfferChatScreen() {
     try {
       await messagesApi.unblockUser(conversationId);
       showToast({ title: "Unblocked", variant: "info" });
-      void refetch();
+      void refetchConversations();
     } catch (err) {
+      void refetchConversations();
       showToast({
         title: "Couldn't unblock",
         message: getErrorMessage(err),
         variant: "error",
       });
     }
-  }, [conversationId, refetch]);
+  }, [conversationId, refetchConversations]);
 
   const handleDeliveryHistory = useCallback(() => {
     setActionMenuOpen(false);
@@ -561,21 +613,136 @@ export function OfferChatScreen() {
     [reportTarget],
   );
 
+  // ───────── Offer handlers ─────────
+
+  const handleOpenOfferComposer = useCallback(() => {
+    setActionMenuOpen(false);
+    setOfferBanner(null);
+    // Counter the live offer when one exists (reuses its carrier_request);
+    // otherwise seed a brand-new offer.
+    setOfferComposer({ mode: liveOffer?.carrierRequestId ? "counter" : "seed" });
+  }, [liveOffer]);
+
+  const handleSubmitOffer = useCallback(
+    async ({ amount, note }: OfferComposerSubmit) => {
+      if (!offerComposer) return;
+      try {
+        if (offerComposer.mode === "counter" && liveOffer?.carrierRequestId) {
+          await postOffer({ carrier_request_id: liveOffer.carrierRequestId, amount, note });
+        } else {
+          await seedOffer({ amount, note });
+        }
+        setOfferComposer(null);
+        setOfferBanner({
+          variant: "success",
+          title: offerComposer.mode === "counter" ? "Counter sent" : "Offer sent",
+        });
+      } catch (err) {
+        setOfferComposer(null);
+        setOfferBanner({
+          variant: "error",
+          title: "Couldn't send offer",
+          message: getErrorMessage(err),
+        });
+      }
+    },
+    [offerComposer, liveOffer, postOffer, seedOffer],
+  );
+
+  const handleAcceptOffer = useCallback(
+    async (offerId: string) => {
+      setOfferBanner(null);
+      try {
+        const result = await acceptOffer(offerId);
+        setOfferBanner({ variant: "success", title: "Offer accepted — match confirmed!" });
+        // Only the parcel sender is routed onward to pay (Part 3); the carrier stays here.
+        const booking = result.booking;
+        if (booking?.id && booking.sender_id === user?.id) {
+          navigation.navigate("PayBookingTab", { bookingId: booking.id });
+        }
+      } catch (err) {
+        setOfferBanner({
+          variant: "error",
+          title: "Couldn't accept offer",
+          message: getErrorMessage(err),
+        });
+      }
+    },
+    [acceptOffer, navigation, user?.id],
+  );
+
+  const handleDeclineOffer = useCallback(
+    async (offerId: string) => {
+      setOfferBanner(null);
+      try {
+        await rejectOffer(offerId);
+        setOfferBanner({ variant: "info", title: "Offer declined" });
+      } catch (err) {
+        setOfferBanner({
+          variant: "error",
+          title: "Couldn't decline offer",
+          message: getErrorMessage(err),
+        });
+      }
+    },
+    [rejectOffer],
+  );
+
+  const handleSystemPress = useCallback(
+    (bookingId: string) => {
+      navigation.navigate("BookingsTab", { expandId: bookingId });
+    },
+    [navigation],
+  );
+
   const renderMessage = useCallback(
     ({ item }: ListRenderItemInfo<DisplayMessage>) => {
       const mine = item.sender_id === user?.id || item.from_user_id === user?.id;
+      let offer: OfferRenderState | undefined;
+      if ((item.message_kind ?? "text") === "offer_card") {
+        const status = offerState.statusById.get(item.id) ?? "open";
+        const live = offerState.live;
+        const actionable = !!live && live.messageId === item.id && !mine && supportsOffers;
+        offer = {
+          status,
+          actions:
+            actionable && live
+              ? {
+                  acceptPending: offerPending === `accept:${live.offerId}`,
+                  rejectPending: offerPending === `reject:${live.offerId}`,
+                  onAccept: () => void handleAcceptOffer(live.offerId),
+                  onCounter: handleOpenOfferComposer,
+                  onDecline: () => void handleDeclineOffer(live.offerId),
+                }
+              : undefined,
+        };
+      }
       return (
         <MessageBubble
           message={item}
           mine={mine}
+          offer={offer}
           onRetry={() => void retry(item._clientId ?? item.id)}
           onDiscard={() => discard(item._clientId ?? item.id)}
           onOpenImage={(url) => setExpandedImageUrl(url)}
           onLongPress={handleBubbleLongPress}
+          onSystemPress={handleSystemPress}
         />
       );
     },
-    [user?.id, retry, discard, handleBubbleLongPress],
+    [
+      user?.id,
+      retry,
+      discard,
+      handleBubbleLongPress,
+      offerState,
+      supportsOffers,
+      offerPending,
+      handleAcceptOffer,
+      handleDeclineOffer,
+      handleOpenOfferComposer,
+      handleSystemPress,
+    ],
   );
 
   const keyExtractor = useCallback((item: DisplayMessage) => item.id, []);
@@ -756,6 +923,18 @@ export function OfferChatScreen() {
           </View>
         ) : null}
 
+        {/* ───────── Offer action feedback ───────── */}
+        {offerBanner ? (
+          <View style={styles.offerBannerWrap}>
+            <FormBanner
+              variant={offerBanner.variant}
+              title={offerBanner.title}
+              message={offerBanner.message}
+              onDismiss={() => setOfferBanner(null)}
+            />
+          </View>
+        ) : null}
+
         {/* ───────── Messages list ───────── */}
         <View style={styles.flex}>
           {loading && messages.length === 0 ? (
@@ -818,6 +997,66 @@ export function OfferChatScreen() {
           )}
         </View>
 
+        {/* ───────── Offer bar ───────── */}
+        {supportsOffers && liveOffer ? (
+          <View style={styles.offerBar}>
+            <View style={styles.offerBarInfo}>
+              <Ionicons name="pricetag" size={16} color={colors.primary} />
+              <View style={styles.flex}>
+                <Text style={styles.offerBarLabel}>
+                  {liveOffer.mine
+                    ? "Your offer"
+                    : `${participantName.split(" ")[0]}'s offer`}
+                </Text>
+                <Text style={styles.offerBarAmount} numberOfLines={1}>
+                  {formatMoney(liveOffer.amount, liveOffer.currency)}
+                </Text>
+              </View>
+            </View>
+            {liveOffer.mine ? (
+              <Text style={styles.offerBarWaiting}>Waiting…</Text>
+            ) : (
+              <View style={styles.offerBarActions}>
+                <Pressable
+                  onPress={() => void handleDeclineOffer(liveOffer.offerId)}
+                  disabled={!!offerPending}
+                  style={[styles.offerBarBtn, styles.offerBarBtnGhost]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decline offer"
+                >
+                  {offerPending === `reject:${liveOffer.offerId}` ? (
+                    <ActivityIndicator size="small" color={colors.danger} />
+                  ) : (
+                    <Text style={styles.offerBarBtnGhostText}>Decline</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={handleOpenOfferComposer}
+                  disabled={!!offerPending}
+                  style={[styles.offerBarBtn, styles.offerBarBtnOutline]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Counter offer"
+                >
+                  <Text style={styles.offerBarBtnOutlineText}>Counter</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void handleAcceptOffer(liveOffer.offerId)}
+                  disabled={!!offerPending}
+                  style={[styles.offerBarBtn, styles.offerBarBtnPrimary]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Accept offer"
+                >
+                  {offerPending === `accept:${liveOffer.offerId}` ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.offerBarBtnPrimaryText}>Accept</Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
+          </View>
+        ) : null}
+
         {/* ───────── Composer ───────── */}
         {canSend && !matchedByOther ? (
           <View style={styles.composerWrap}>
@@ -873,6 +1112,17 @@ export function OfferChatScreen() {
               </View>
             ) : null}
             <View style={styles.composerRow}>
+              {supportsOffers ? (
+                <Pressable
+                  onPress={handleOpenOfferComposer}
+                  style={styles.composerIconButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Make an offer"
+                  disabled={uploading || !!offerPending}
+                >
+                  <Ionicons name="pricetag" size={20} color={colors.primary} />
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => setActionMenuOpen(true)}
                 style={styles.composerIconButton}
@@ -1118,6 +1368,19 @@ export function OfferChatScreen() {
         onConfirm={() => void handleAccept()}
       />
 
+      {/* ───────── Offer composer modal ───────── */}
+      <OfferComposerModal
+        open={!!offerComposer}
+        mode={offerComposer?.mode ?? "seed"}
+        pending={offerPending === "seed" || offerPending === "counter"}
+        currentAmount={offerComposer?.mode === "counter" ? liveOffer?.amount ?? null : null}
+        currencySymbol={offerCurrencySymbol}
+        onCancel={() => {
+          if (offerPending !== "seed" && offerPending !== "counter") setOfferComposer(null);
+        }}
+        onSubmit={(input) => void handleSubmitOffer(input)}
+      />
+
       {/* ───────── Emoji picker ───────── */}
       <EmojiPicker
         open={emojiOpen}
@@ -1136,46 +1399,6 @@ export function OfferChatScreen() {
 // state). Kinds are optional on the wire today — when missing we fall back to
 // a plain text bubble so older threads keep rendering.
 
-type ChatMessageKind =
-  | "text"
-  | "offer_card"
-  | "offer_accept"
-  | "offer_reject"
-  | "system_event";
-
-interface OfferCardPayload {
-  amount?: number;
-  currency?: string;
-  note?: string | null;
-  status?: "open" | "accepted" | "rejected" | "superseded" | "expired";
-  proposer_name?: string | null;
-}
-
-interface OfferStatusPayload {
-  amount?: number;
-  currency?: string;
-}
-
-interface SystemEventPayload {
-  event?: string;
-  detail?: string | null;
-}
-
-/** Read the optional typed-message fields the server may attach. */
-function readTypedMessage(message: DisplayMessage): {
-  kind: ChatMessageKind;
-  payload: unknown;
-} {
-  const raw = message as DisplayMessage & {
-    message_kind?: ChatMessageKind;
-    payload?: unknown;
-  };
-  return {
-    kind: raw.message_kind ?? "text",
-    payload: raw.payload ?? null,
-  };
-}
-
 function formatMoney(amount?: number, currency?: string): string {
   if (typeof amount !== "number") return "";
   const sym = currency === "INR" ? "₹" : "$";
@@ -1186,10 +1409,11 @@ interface OfferCardBubbleProps {
   payload: OfferCardPayload;
   mine: boolean;
   time: string;
+  status: OfferStatus;
+  actions?: OfferCardActions;
 }
 
-function OfferCardBubble({ payload, mine, time }: Readonly<OfferCardBubbleProps>) {
-  const status = payload.status ?? "open";
+function OfferCardBubble({ payload, mine, time, status, actions }: Readonly<OfferCardBubbleProps>) {
   const isClosed = status === "rejected" || status === "expired" || status === "superseded";
   const isAccepted = status === "accepted";
   const statusLabel =
@@ -1202,6 +1426,7 @@ function OfferCardBubble({ payload, mine, time }: Readonly<OfferCardBubbleProps>
           : status === "expired"
             ? "Expired"
             : "Superseded";
+  const busy = !!actions && (actions.acceptPending || actions.rejectPending);
 
   return (
     <View style={[styles.offerCardRow, mine ? styles.bubbleRowMine : styles.bubbleRowTheirs]}>
@@ -1248,6 +1473,45 @@ function OfferCardBubble({ payload, mine, time }: Readonly<OfferCardBubbleProps>
           {payload.proposer_name ? `${payload.proposer_name} • ` : ""}
           {time}
         </Text>
+        {actions ? (
+          <View style={styles.offerCardActions}>
+            <Pressable
+              onPress={actions.onDecline}
+              disabled={busy}
+              style={[styles.offerCardBtn, styles.offerCardBtnGhost]}
+              accessibilityRole="button"
+              accessibilityLabel="Decline offer"
+            >
+              {actions.rejectPending ? (
+                <ActivityIndicator size="small" color={colors.danger} />
+              ) : (
+                <Text style={styles.offerCardBtnGhostText}>Decline</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={actions.onCounter}
+              disabled={busy}
+              style={[styles.offerCardBtn, styles.offerCardBtnOutline]}
+              accessibilityRole="button"
+              accessibilityLabel="Counter offer"
+            >
+              <Text style={styles.offerCardBtnOutlineText}>Counter</Text>
+            </Pressable>
+            <Pressable
+              onPress={actions.onAccept}
+              disabled={busy}
+              style={[styles.offerCardBtn, styles.offerCardBtnPrimary]}
+              accessibilityRole="button"
+              accessibilityLabel="Accept offer"
+            >
+              {actions.acceptPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.offerCardBtnPrimaryText}>Accept</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -1257,17 +1521,24 @@ interface SystemRowProps {
   icon: keyof typeof Ionicons.glyphMap;
   text: string;
   tone?: "neutral" | "good" | "bad";
+  onPress?: () => void;
 }
 
-function SystemRow({ icon, text, tone = "neutral" }: Readonly<SystemRowProps>) {
+function SystemRow({ icon, text, tone = "neutral", onPress }: Readonly<SystemRowProps>) {
   const toneColor =
     tone === "good" ? colors.safe : tone === "bad" ? colors.danger : colors.subtleText;
   return (
     <View style={styles.systemRow}>
-      <View style={styles.systemPill}>
+      <Pressable
+        style={styles.systemPill}
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole={onPress ? "button" : "text"}
+      >
         <Ionicons name={icon} size={12} color={toneColor} />
         <Text style={[styles.systemPillText, { color: toneColor }]}>{text}</Text>
-      </View>
+        {onPress ? <Ionicons name="chevron-forward" size={12} color={toneColor} /> : null}
+      </Pressable>
     </View>
   );
 }
@@ -1275,29 +1546,53 @@ function SystemRow({ icon, text, tone = "neutral" }: Readonly<SystemRowProps>) {
 interface MessageBubbleProps {
   message: DisplayMessage;
   mine: boolean;
+  offer?: OfferRenderState;
   onRetry: () => void;
   onDiscard: () => void;
   onOpenImage: (url: string) => void;
   onLongPress: (message: DisplayMessage) => void;
+  onSystemPress: (bookingId: string) => void;
 }
+
+const SYSTEM_EVENT_LABELS: Record<string, string> = {
+  match_confirmed: "Match confirmed",
+  payment_received: "Payment received",
+  payment_pending: "Payment pending",
+  handoff_accepted: "Handoff accepted",
+  handoff_rejected: "Handoff rejected",
+  cancelled: "Booking cancelled",
+  delivered: "Delivered",
+};
 
 function MessageBubble({
   message,
   mine,
+  offer,
   onRetry,
   onDiscard,
   onOpenImage,
   onLongPress,
+  onSystemPress,
 }: Readonly<MessageBubbleProps>) {
   const time = formatBubbleTime(message.created_at);
-  const { kind, payload } = readTypedMessage(message);
+  const kind = message.message_kind ?? "text";
+  const payload = message.payload ?? null;
 
   if (kind === "offer_card") {
-    return <OfferCardBubble payload={(payload as OfferCardPayload) ?? {}} mine={mine} time={time} />;
+    const p = (payload as OfferCardPayload | null) ?? ({} as OfferCardPayload);
+    return (
+      <OfferCardBubble
+        payload={p}
+        mine={mine}
+        time={time}
+        status={offer?.status ?? p.status ?? "open"}
+        actions={offer?.actions}
+      />
+    );
   }
   if (kind === "offer_accept") {
-    const p = (payload as OfferStatusPayload) ?? {};
-    const money = formatMoney(p.amount, p.currency);
+    const p = (payload as OfferAcceptPayload | null) ?? null;
+    const money = formatMoney(p?.amount, p?.currency);
     return (
       <SystemRow
         icon="checkmark-circle"
@@ -1310,8 +1605,24 @@ function MessageBubble({
     return <SystemRow icon="close-circle" tone="bad" text="Offer declined" />;
   }
   if (kind === "system_event") {
-    const p = (payload as SystemEventPayload) ?? {};
-    return <SystemRow icon="information-circle-outline" text={p.detail ?? p.event ?? "Update"} />;
+    const p = (payload as SystemEventPayload | null) ?? null;
+    // Concise label for known events; else the server's human text, else "Update".
+    const mapped = p?.event ? SYSTEM_EVENT_LABELS[p.event] : undefined;
+    const label = mapped ?? (message.text?.trim() || p?.event || "Update");
+    const tone: SystemRowProps["tone"] =
+      p?.event === "delivered" || p?.event === "payment_received" || p?.event === "match_confirmed"
+        ? "good"
+        : p?.event === "cancelled" || p?.event === "handoff_rejected"
+          ? "bad"
+          : "neutral";
+    return (
+      <SystemRow
+        icon="information-circle-outline"
+        tone={tone}
+        text={label}
+        onPress={p?.booking_id ? () => onSystemPress(p.booking_id as string) : undefined}
+      />
+    );
   }
 
   const failed = message._clientStatus === "failed";
@@ -1802,6 +2113,61 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   offerCardFooter: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
+  offerCardActions: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  offerCardBtn: {
+    flex: 1,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  offerCardBtnGhost: { backgroundColor: "rgba(220, 40, 40, 0.08)" },
+  offerCardBtnGhostText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
+  offerCardBtnOutline: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  offerCardBtnOutlineText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  offerCardBtnPrimary: { backgroundColor: colors.safe },
+  offerCardBtnPrimaryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+
+  // Offer bar (above the composer)
+  offerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.surfaceTintPrimary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  offerBarInfo: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  offerBarLabel: { color: colors.mutedText, fontSize: 11, fontWeight: "700" },
+  offerBarAmount: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  offerBarWaiting: { color: colors.mutedText, fontSize: 12, fontWeight: "700", fontStyle: "italic" },
+  offerBarActions: { flexDirection: "row", gap: 6 },
+  offerBarBtn: {
+    paddingHorizontal: 12,
+    minWidth: 64,
+    height: 32,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  offerBarBtnGhost: { backgroundColor: "transparent" },
+  offerBarBtnGhostText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
+  offerBarBtnOutline: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  offerBarBtnOutlineText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  offerBarBtnPrimary: { backgroundColor: colors.safe },
+  offerBarBtnPrimaryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+
+  // Offer feedback banner wrap
+  offerBannerWrap: { paddingHorizontal: 14, paddingTop: 10 },
 
   systemRow: {
     alignItems: "center",

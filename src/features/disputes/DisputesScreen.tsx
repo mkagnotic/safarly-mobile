@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { MainTabParamList } from "@/navigation/types";
+import { disputesApi, getErrorMessage } from "@/services/api";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 import type { Dispute } from "@/types/models";
@@ -75,18 +76,26 @@ export function DisputesScreen() {
 
   const handleConfirmWaiver = useCallback(async (disputeId: string) => {
     setWaiverPendingId(disputeId);
-    // PR1 builds the UI; the dedicated `/dispute/:id/confirm-return-waiver`
-    // call lands in PR2 alongside Idempotency-Key support.
-    setTimeout(() => {
-      setWaiverPendingId(null);
+    try {
+      const res = await disputesApi.confirmReturnWaiver(disputeId);
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      const refunded = res.data?.refunded_amount;
       setActionBanner({
-        variant: "info",
-        title: "Coming next update",
-        message: "Waiver confirmation is shipping in the next release.",
+        variant: "success",
+        title: "Penalty waived — carrier refunded",
+        message:
+          typeof refunded === "number"
+            ? `$${refunded} returned to the carrier. The strike record stays.`
+            : "The cash penalty was waived; the strike record stays.",
       });
-      bannerTimerRef.current = setTimeout(() => setActionBanner(null), 4000);
-    }, 300);
+      bannerTimerRef.current = setTimeout(() => setActionBanner(null), 5000);
+    } catch (err) {
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      setActionBanner({ variant: "error", title: "Couldn't confirm waiver", message: getErrorMessage(err) });
+      bannerTimerRef.current = setTimeout(() => setActionBanner(null), 6000);
+    } finally {
+      setWaiverPendingId(null);
+    }
   }, []);
 
   return (

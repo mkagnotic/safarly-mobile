@@ -109,6 +109,8 @@ async function parseError(response: Response): Promise<never> {
 
 interface RequestOptions {
   signal?: AbortSignal;
+  /** Sent as the `Idempotency-Key` header — reuse the same key across retries. */
+  idempotencyKey?: string;
 }
 
 async function send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
@@ -142,7 +144,10 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
   const url = `${SUPABASE_FUNCTIONS_URL}${path}${buildQuery(params)}`;
-  const headers = await authHeaders({ "Content-Type": "application/json" });
+  const headers = await authHeaders({
+    "Content-Type": "application/json",
+    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+  });
   const init: RequestInit = { method, headers };
   if (body !== undefined && method !== "GET") {
     init.body = JSON.stringify(body);
@@ -183,6 +188,15 @@ export const api = {
   upload: <T>(path: string, formData: FormData, options?: RequestOptions) =>
     requestMultipart<T>("POST", path, formData, options),
 };
+
+/** v4-style id for `Idempotency-Key` — unique per action, not cryptographic. */
+export function newIdempotencyKey(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) return error.message;

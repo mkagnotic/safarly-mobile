@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, newIdempotencyKey } from "./client";
 
 export interface Transaction {
   id: string;
@@ -18,15 +18,32 @@ export interface Transaction {
   payee?: { id: string; name: string };
 }
 
+export interface CreateIntentResult {
+  client_secret: string;
+  payment_intent_id: string;
+  amount: number;
+  platform_fee: number;
+  total: number;
+  /** Server returns the existing pending intent for a booking instead of a dup. */
+  reused?: boolean;
+}
+
+export interface ConfirmPaymentResult {
+  status: string; // "held"
+  booking_status?: string; // "awaiting_handoff"
+}
+
 export const paymentsApi = {
   createIntent: (booking_id: string) =>
-    api.post<{ client_secret: string; amount: number; total: number }>(
-      "/payment-handler/create-intent",
-      { booking_id },
-    ),
+    api.post<CreateIntentResult>("/payment-handler/create-intent", { booking_id }),
 
-  confirmPayment: (payment_intent_id: string) =>
-    api.post<{ status: string }>("/payment-handler/confirm", { payment_intent_id }),
+  /** Confirm = escrow settlement; idempotency-keyed against double charges. */
+  confirmPayment: (payment_intent_id: string, idempotencyKey = newIdempotencyKey()) =>
+    api.post<ConfirmPaymentResult>(
+      "/payment-handler/confirm",
+      { payment_intent_id },
+      { idempotencyKey },
+    ),
 
   releasePayment: (id: string) =>
     api.post<{ status: string }>(`/payment-handler/${id}/release`),

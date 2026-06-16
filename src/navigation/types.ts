@@ -89,6 +89,8 @@ export type MainTabParamList = {
    *  `/customer/bookings/:id` does not exist as a route in web; the equivalent
    *  is opening the list and revealing the row inline. */
   BookingsTab: { expandId?: string } | undefined;
+  /** Escrow payment screen for a booking in `pending_payment` (sender-only). */
+  PayBookingTab: { bookingId: string };
   OtpVerificationTab: { bookingId: string };
   DeliveryReviewTab: { bookingId: string };
   DisputesTab: undefined;

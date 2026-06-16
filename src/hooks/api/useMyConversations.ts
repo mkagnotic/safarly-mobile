@@ -165,13 +165,17 @@ export function useMyConversations({
           patch(conversationId, () => res.data);
         }
       } catch (err) {
-        if (snapshot && mountedRef.current) setRawConversations(snapshot);
+        if (mountedRef.current) {
+          if (snapshot) setRawConversations(snapshot);
+          // Resync if a guard rejected because the other side acted first.
+          void refetch();
+        }
         throw err;
       } finally {
         if (mountedRef.current) setMutating(false);
       }
     },
-    [patch, currentUserId],
+    [patch, currentUserId, refetch],
   );
 
   const markConversationRead = useCallback((conversationId: string) => {
@@ -203,13 +207,17 @@ export function useMyConversations({
           patch(conversationId, () => res.data);
         }
       } catch (err) {
-        if (snapshot && mountedRef.current) setRawConversations(snapshot);
+        if (mountedRef.current) {
+          if (snapshot) setRawConversations(snapshot);
+          // Decline only works from `pending`; resync if the state moved.
+          void refetch();
+        }
         throw err;
       } finally {
         if (mountedRef.current) setMutating(false);
       }
     },
-    [patch],
+    [patch, refetch],
   );
 
   return {
