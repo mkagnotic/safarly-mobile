@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -9,6 +9,7 @@ import {
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Animated, Image, Platform, StyleSheet, Text, View } from "react-native";
 
+import { KycPromptDialog } from "@/components/kyc/KycPromptDialog";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -21,6 +22,7 @@ import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Conversation, type FeedItem } from "@/services/api";
+import { useAppStore } from "@/store/useAppStore";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
 
@@ -68,6 +70,16 @@ export function HomeScreen() {
     refetch: refetchConvs,
   } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
   const { count: messagesUnread } = useUnreadInboxCount();
+
+  // One-shot KYC welcome prompt: consume the flag immediately so it shows once.
+  const kycWelcomePending = useAppStore((s) => s.kycWelcomePending);
+  const setKycWelcomePending = useAppStore((s) => s.setKycWelcomePending);
+  const [showKycWelcome, setShowKycWelcome] = useState(false);
+  useEffect(() => {
+    if (!kycWelcomePending) return;
+    setShowKycWelcome(true);
+    setKycWelcomePending(false);
+  }, [kycWelcomePending, setKycWelcomePending]);
 
   const firstError = profileError ?? activityError ?? convsError;
   const formError = firstError ? getErrorMessage(firstError) : null;
@@ -302,6 +314,16 @@ export function HomeScreen() {
           </View>
         )}
       </Card>
+
+      <KycPromptDialog
+        open={showKycWelcome}
+        variant="welcome"
+        onClose={() => setShowKycWelcome(false)}
+        onVerify={() => {
+          setShowKycWelcome(false);
+          navigation.navigate("KycVerificationTab");
+        }}
+      />
     </Screen>
   );
 }

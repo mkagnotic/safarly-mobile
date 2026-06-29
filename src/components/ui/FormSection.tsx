@@ -71,18 +71,45 @@ export function LocationCard({
   flag,
   label,
   filled,
-}: Readonly<{ flag: string; label: string; filled: boolean }>) {
-  return (
-    <View style={styles.locationCard}>
+  onToggle,
+}: Readonly<{
+  flag: string;
+  label: string;
+  filled: boolean;
+  /** When provided the card becomes a tappable country switch (IN ⇄ US). */
+  onToggle?: () => void;
+}>) {
+  const content = (
+    <>
       <Text style={styles.locationFlag}>{flag}</Text>
       <Text style={styles.locationLabel} numberOfLines={1}>
         {label}
       </Text>
-      {filled ? (
+      {onToggle ? (
+        <View style={styles.locationToggleHint}>
+          <Ionicons name="swap-horizontal" size={16} color={colors.wordmark} />
+          <Text style={styles.locationToggleHintText}>Switch</Text>
+        </View>
+      ) : filled ? (
         <Ionicons name="checkmark-circle" size={20} color={colors.safe} />
       ) : null}
-    </View>
+    </>
   );
+
+  if (onToggle) {
+    return (
+      <Pressable
+        style={styles.locationCard}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`Country: ${label}. Tap to switch.`}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={styles.locationCard}>{content}</View>;
 }
 
 export function DateModeToggle<T extends string>({
@@ -205,6 +232,21 @@ const styles = StyleSheet.create({
   },
   locationFlag: { fontSize: 20, lineHeight: 24 },
   locationLabel: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "700", flex: 1 },
+  locationToggleHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+  },
+  locationToggleHintText: {
+    color: colors.wordmark,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
 
   dateModeToggle: {
     flexDirection: "row",

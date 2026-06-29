@@ -40,7 +40,7 @@ type Nav = CompositeNavigationProp<
 >;
 type Route = RouteProp<MainTabParamList, "CreateBuddyTab">;
 
-type Direction = "IN_TO_US" | "US_TO_IN";
+type Country = "IN" | "US";
 type DateMode = "single" | "range";
 
 /** Keys for fields that can carry an inline validation error. */
@@ -167,7 +167,8 @@ export function CreateBuddyScreen() {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const [direction, setDirection] = useState<Direction>("IN_TO_US");
+  const [fromCountry, setFromCountry] = useState<Country>("IN");
+  const [toCountry, setToCountry] = useState<Country>("US");
   const [fromCity, setFromCity] = useState("");
   const [toCity, setToCity] = useState("");
   const [airline, setAirline] = useState("");
@@ -208,9 +209,8 @@ export function CreateBuddyScreen() {
     if (!isEditMode || hydratedFromEdit || !editListing) return;
     setFromCity(editListing.from_city);
     setToCity(editListing.to_city);
-    setDirection(
-      INDIA_CITIES.includes(editListing.from_city) ? "IN_TO_US" : "US_TO_IN",
-    );
+    setFromCountry(INDIA_CITIES.includes(editListing.from_city) ? "IN" : "US");
+    setToCountry(INDIA_CITIES.includes(editListing.to_city) ? "IN" : "US");
     setAirline(editListing.airline ?? "");
     const persistedFrom = editListing.travel_date_from || editListing.travel_date;
     const persistedTo = editListing.travel_date_to || editListing.travel_date;
@@ -231,18 +231,12 @@ export function CreateBuddyScreen() {
     setHydratedFromEdit(true);
   }, [isEditMode, hydratedFromEdit, editListing]);
 
-  const fromFlag = direction === "IN_TO_US" ? "🇮🇳" : "🇺🇸";
-  const toFlag = direction === "IN_TO_US" ? "🇺🇸" : "🇮🇳";
-  const fromCountryName = direction === "IN_TO_US" ? "India" : "United States";
-  const toCountryName = direction === "IN_TO_US" ? "United States" : "India";
-  const fromCities = direction === "IN_TO_US" ? INDIA_CITIES : USA_CITIES;
-  const toCities = direction === "IN_TO_US" ? USA_CITIES : INDIA_CITIES;
-
-  const handleSwapDirection = useCallback(() => {
-    setDirection((d) => (d === "IN_TO_US" ? "US_TO_IN" : "IN_TO_US"));
-    setFromCity("");
-    setToCity("");
-  }, []);
+  const fromFlag = fromCountry === "IN" ? "🇮🇳" : "🇺🇸";
+  const toFlag = toCountry === "IN" ? "🇮🇳" : "🇺🇸";
+  const fromCountryName = fromCountry === "IN" ? "India" : "United States";
+  const toCountryName = toCountry === "IN" ? "India" : "United States";
+  const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
+  const toCities = toCountry === "IN" ? INDIA_CITIES : USA_CITIES;
 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
 
@@ -270,6 +264,18 @@ export function CreateBuddyScreen() {
       return next;
     });
   }, []);
+
+  const toggleFromCountry = useCallback(() => {
+    setFromCountry((c) => (c === "IN" ? "US" : "IN"));
+    setFromCity("");
+    clearFieldError("fromCity");
+  }, [clearFieldError]);
+
+  const toggleToCountry = useCallback(() => {
+    setToCountry((c) => (c === "IN" ? "US" : "IN"));
+    setToCity("");
+    clearFieldError("toCity");
+  }, [clearFieldError]);
 
   const scrollToField = useCallback((key: FieldKey) => {
     const sectionKey = fieldToSection[key];
@@ -397,7 +403,8 @@ export function CreateBuddyScreen() {
   ]);
 
   const resetForm = useCallback(() => {
-    setDirection("IN_TO_US");
+    setFromCountry("IN");
+    setToCountry("US");
     setFromCity("");
     setToCity("");
     setAirline("");
@@ -545,7 +552,12 @@ export function CreateBuddyScreen() {
             hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
           >
             <Text style={styles.fieldLabel}>From</Text>
-            <LocationCard flag={fromFlag} label={fromCountryName} filled />
+            <LocationCard
+              flag={fromFlag}
+              label={fromCountryName}
+              filled
+              onToggle={toggleFromCountry}
+            />
             <View>
               <CityPicker
                 value={fromCity}
@@ -563,21 +575,13 @@ export function CreateBuddyScreen() {
               ) : null}
             </View>
 
-            <View style={styles.swapRow}>
-              <View style={styles.swapDividerLine} />
-              <Pressable
-                style={styles.swapCircleButton}
-                onPress={handleSwapDirection}
-                accessibilityRole="button"
-                accessibilityLabel="Swap direction"
-              >
-                <Ionicons name="swap-vertical-outline" size={18} color={colors.wordmark} />
-              </Pressable>
-              <View style={styles.swapDividerLine} />
-            </View>
-
             <Text style={styles.fieldLabel}>To</Text>
-            <LocationCard flag={toFlag} label={toCountryName} filled />
+            <LocationCard
+              flag={toFlag}
+              label={toCountryName}
+              filled
+              onToggle={toggleToCountry}
+            />
             <View>
               <CityPicker
                 value={toCity}
@@ -1135,25 +1139,6 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.3,
-  },
-
-  // ───── Section 1: swap divider + circle button ─────
-  swapRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginVertical: 4,
-  },
-  swapDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  swapCircleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: primaryTint.stroke25,
-    backgroundColor: colors.surfaceTintPrimary,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   // ───── Section 2: date row ─────

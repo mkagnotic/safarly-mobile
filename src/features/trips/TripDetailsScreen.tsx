@@ -10,11 +10,13 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { ANY_CITY } from "@/features/search/CityPicker";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, tripsApi, type Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatTravelDateRange } from "@/utils/travelDate";
 import { EditTripModal, type EditTripFormValues } from "./EditTripModal";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
@@ -26,13 +28,6 @@ interface Notice {
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "TripDetailsTab">;
 type Route = RouteProp<MainTabParamList, "TripDetailsTab">;
-
-function formatTravelDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
   return (
@@ -56,7 +51,7 @@ function TripCard({ trip }: Readonly<{ trip: Trip }>) {
       <RouteHeader fromCity={trip.from_city} toCity={trip.to_city} kind="trip" />
       <View style={styles.metricsGrid}>
         <MetricRow>
-          <MetricTile label="DATE" value={formatTravelDate(trip.travel_date)} />
+          <MetricTile label="DATE" value={formatTravelDateRange(trip, { year: true })} />
           <MetricTile label="CAPACITY" value={`${trip.luggage_capacity_kg} kg`} />
         </MetricRow>
         <MetricRow>
@@ -145,8 +140,41 @@ export function TripDetailsScreen() {
     async (values: EditTripFormValues) => {
       if (!tripId || !trip) return;
       const data: Parameters<typeof tripsApi.update>[1] = {};
-      if (values.travel_date && values.travel_date !== trip.travel_date) {
-        data.travel_date = values.travel_date;
+
+      if (!values.from_city) {
+        setNotice({ variant: "error", title: "Departure city required", message: "Select a departure city." });
+        return;
+      }
+      if (!values.to_city) {
+        setNotice({ variant: "error", title: "Arrival city required", message: "Select an arrival city." });
+        return;
+      }
+      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
+      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
+      const curFromCity = trip.any_from ? "Any" : trip.from_city;
+      const curToCity = trip.any_to ? "Any" : trip.to_city;
+      const curFromCountry = (trip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      const curToCountry = (trip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
+        data.from_city = fromCity;
+        data.from_country = values.from_country;
+        data.any_from = values.from_city === ANY_CITY;
+      }
+      if (toCity !== curToCity || values.to_country !== curToCountry) {
+        data.to_city = toCity;
+        data.to_country = values.to_country;
+        data.any_to = values.to_city === ANY_CITY;
+      }
+
+      const from = values.travel_date_from;
+      const to = values.travel_date_to || from; // empty Return ⇒ single date
+      if (
+        from &&
+        (from !== trip.travel_date_from || to !== trip.travel_date_to || from !== trip.travel_date)
+      ) {
+        data.travel_date = from;
+        data.travel_date_from = from;
+        data.travel_date_to = to;
       }
       const capacityNum = Number(values.luggage_capacity_kg);
       if (
@@ -223,8 +251,16 @@ export function TripDetailsScreen() {
     );
   }
 
+  const editFrom = trip.travel_date_from ?? trip.travel_date ?? "";
+  const editTo = trip.travel_date_to ?? "";
   const editInitial: EditTripFormValues = {
-    travel_date: trip.travel_date ?? "",
+    from_city: trip.any_from ? ANY_CITY : (trip.from_city ?? ""),
+    from_country: (trip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+    to_city: trip.any_to ? ANY_CITY : (trip.to_city ?? ""),
+    to_country: (trip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+    travel_date_from: editFrom,
+    // Only treat it as a range (prefill Return) when "to" differs from "from".
+    travel_date_to: editTo && editTo !== editFrom ? editTo : "",
     luggage_capacity_kg: `${trip.luggage_capacity_kg ?? ""}`,
     notes: trip.notes ?? "",
   };

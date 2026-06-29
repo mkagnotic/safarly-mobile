@@ -5,14 +5,20 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 
+import { LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
+import { CityPicker } from "@/features/search/CityPicker";
+import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { colors } from "@/theme/colors";
+
+type Country = "IN" | "US";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
 
@@ -20,6 +26,8 @@ interface CalendarCell {
   date: Date;
   inMonth: boolean;
 }
+
+type CalendarTarget = "from" | "to";
 
 function formatYmd(d: Date): string {
   const y = d.getFullYear();
@@ -75,7 +83,15 @@ function formatDateLabel(d: Date): string {
 }
 
 export interface EditTripFormValues {
-  travel_date: string;
+  /** `ANY_CITY` sentinel ⇒ "Any city" (any_from). */
+  from_city: string;
+  from_country: Country;
+  to_city: string;
+  to_country: Country;
+  /** Departure date (= travel_date_from). `YYYY-MM-DD`. */
+  travel_date_from: string;
+  /** Return date (= travel_date_to). Empty string ⇒ single date (same day). */
+  travel_date_to: string;
   luggage_capacity_kg: string;
   notes: string;
 }
@@ -96,9 +112,9 @@ export function EditTripModal({
   onSubmit,
 }: Readonly<EditTripModalProps>) {
   const [form, setForm] = useState<EditTripFormValues>(initial);
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
-    const initialDate = parseYmd(initial.travel_date) ?? new Date();
+    const initialDate = parseYmd(initial.travel_date_from) ?? new Date();
     return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
   });
   const wasOpenRef = useRef(false);
@@ -107,7 +123,7 @@ export function EditTripModal({
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setForm(initial);
-      const d = parseYmd(initial.travel_date) ?? new Date();
+      const d = parseYmd(initial.travel_date_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
     wasOpenRef.current = open;
@@ -124,17 +140,60 @@ export function EditTripModal({
     return d;
   }, [today]);
 
-  const selectedDate = useMemo(() => parseYmd(form.travel_date), [form.travel_date]);
+  const selectedFrom = useMemo(() => parseYmd(form.travel_date_from), [form.travel_date_from]);
+  const selectedTo = useMemo(() => parseYmd(form.travel_date_to), [form.travel_date_to]);
+
+  const openCalendar = (target: CalendarTarget) => {
+    const seed =
+      target === "from"
+        ? parseYmd(form.travel_date_from) ?? new Date()
+        : parseYmd(form.travel_date_to) ?? parseYmd(form.travel_date_from) ?? new Date();
+    setVisibleMonth(new Date(seed.getFullYear(), seed.getMonth(), 1));
+    setCalendarTarget(target);
+  };
 
   const handleSelectDate = (d: Date) => {
-    setForm((prev) => ({ ...prev, travel_date: formatYmd(d) }));
-    setCalendarOpen(false);
+    if (!calendarTarget) return;
+    const ymd = formatYmd(d);
+    setForm((prev) => {
+      if (calendarTarget === "from") {
+        // A "to" earlier than the new "from" no longer makes sense — clear it.
+        const next = { ...prev, travel_date_from: ymd };
+        const prevTo = parseYmd(prev.travel_date_to);
+        if (prevTo && prevTo < d) next.travel_date_to = "";
+        return next;
+      }
+      return { ...prev, travel_date_to: ymd };
+    });
+    setCalendarTarget(null);
   };
 
   const handleSubmit = () => onSubmit(form);
 
-  const dateLabel = selectedDate ? formatDateLabel(selectedDate) : "Select date";
+  const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
+  const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
+  const fromCountryName = form.from_country === "IN" ? "India" : "United States";
+  const toCountryName = form.to_country === "IN" ? "India" : "United States";
+  const fromCities = form.from_country === "IN" ? INDIA_CITIES : USA_CITIES;
+  const toCities = form.to_country === "IN" ? INDIA_CITIES : USA_CITIES;
+
+  const toggleFromCountry = () =>
+    setForm((prev) => ({
+      ...prev,
+      from_country: prev.from_country === "IN" ? "US" : "IN",
+      from_city: "",
+    }));
+  const toggleToCountry = () =>
+    setForm((prev) => ({
+      ...prev,
+      to_country: prev.to_country === "IN" ? "US" : "IN",
+      to_city: "",
+    }));
+
+  const fromLabel = selectedFrom ? formatDateLabel(selectedFrom) : "Select date";
+  const toLabel = selectedTo ? formatDateLabel(selectedTo) : selectedFrom ? "Same day" : "Select date";
   const calendarCells = buildCalendar(visibleMonth);
+  const calendarMin = calendarTarget === "to" && selectedFrom ? selectedFrom : today;
 
   return (
     <Modal
@@ -168,25 +227,88 @@ export function EditTripModal({
             </Pressable>
           </View>
 
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Travel date</Text>
-            <Pressable
-              onPress={() => setCalendarOpen(true)}
-              style={styles.input}
-              accessibilityRole="button"
-              accessibilityLabel="Pick travel date"
+            <Text style={styles.fieldLabel}>From</Text>
+            <LocationCard
+              flag={fromFlag}
+              label={fromCountryName}
+              filled
+              onToggle={toggleFromCountry}
+            />
+            <CityPicker
+              value={form.from_city}
+              onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
+              cities={fromCities}
+              placeholder="Select departure city"
+              variant="card"
               disabled={pending}
-            >
-              <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-              <Text
-                style={[
-                  styles.inputText,
-                  !selectedDate && styles.inputPlaceholder,
-                ]}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>To</Text>
+            <LocationCard
+              flag={toFlag}
+              label={toCountryName}
+              filled
+              onToggle={toggleToCountry}
+            />
+            <CityPicker
+              value={form.to_city}
+              onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
+              cities={toCities}
+              placeholder="Select arrival city"
+              variant="card"
+              disabled={pending}
+            />
+          </View>
+
+          <View style={styles.dateRow}>
+            <View style={[styles.field, styles.dateField]}>
+              <Text style={styles.fieldLabel}>Depart</Text>
+              <Pressable
+                onPress={() => openCalendar("from")}
+                style={styles.input}
+                accessibilityRole="button"
+                accessibilityLabel="Pick depart date"
+                disabled={pending}
               >
-                {dateLabel}
+                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                <Text
+                  style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
+                  numberOfLines={1}
+                >
+                  {fromLabel}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={[styles.field, styles.dateField]}>
+              <Text style={styles.fieldLabel}>
+                Return <Text style={styles.fieldLabelMuted}>(Optional)</Text>
               </Text>
-            </Pressable>
+              <Pressable
+                onPress={() => openCalendar("to")}
+                style={styles.input}
+                accessibilityRole="button"
+                accessibilityLabel="Pick return date"
+                disabled={pending}
+              >
+                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                <Text
+                  style={[styles.inputText, !selectedTo && styles.inputPlaceholder]}
+                  numberOfLines={1}
+                >
+                  {toLabel}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.field}>
@@ -218,6 +340,7 @@ export function EditTripModal({
               editable={!pending}
             />
           </View>
+          </ScrollView>
 
           <View style={styles.footer}>
             <AppButton
@@ -241,14 +364,14 @@ export function EditTripModal({
         </View>
       </View>
 
-      {/* Calendar sub-modal */}
+      {/* Calendar sub-modal — shared between Depart + Return */}
       <Modal
-        visible={calendarOpen}
+        visible={calendarTarget !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setCalendarOpen(false)}
+        onRequestClose={() => setCalendarTarget(null)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setCalendarOpen(false)} />
+        <Pressable style={styles.backdrop} onPress={() => setCalendarTarget(null)} />
         <View style={styles.calendarCenter} pointerEvents="box-none">
           <View style={styles.calendarSheet}>
             <View style={styles.calendarHeaderRow}>
@@ -287,10 +410,13 @@ export function EditTripModal({
             </View>
             <View style={styles.grid}>
               {calendarCells.map((cell, i) => {
-                const isPast = cell.date < today;
+                const isPast = cell.date < calendarMin;
                 const isFuture = cell.date > maxDate;
                 const disabled = isPast || isFuture;
-                const isSelected = sameDate(selectedDate, cell.date);
+                const isSelected =
+                  calendarTarget === "from"
+                    ? sameDate(selectedFrom, cell.date)
+                    : sameDate(selectedTo, cell.date);
                 return (
                   <Pressable
                     key={i}
@@ -338,6 +464,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 440,
+    maxHeight: "88%",
     borderRadius: 22,
     backgroundColor: colors.card,
     padding: 20,
@@ -350,7 +477,12 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
 
+  scroll: { flexGrow: 0 },
+  scrollContent: { gap: 16 },
+
   field: { gap: 8 },
+  dateRow: { flexDirection: "row", gap: 12 },
+  dateField: { flex: 1 },
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 

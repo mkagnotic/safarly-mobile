@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { ANY_CITY } from "@/features/search/CityPicker";
+import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
@@ -215,12 +217,21 @@ export function PartnerDetailsScreen() {
       }
       const toYmd = values.travel_date_to.trim() || fromYmd;
 
+      if (!values.from_city) {
+        setNotice({ variant: "error", title: "Departure city required", message: "Select a departure city." });
+        return;
+      }
+      if (!values.to_city) {
+        setNotice({ variant: "error", title: "Destination city required", message: "Select a destination city." });
+        return;
+      }
+
       // The buddy-handler PUT is a full upsert — it nulls any field omitted
       // from the payload. We seed every field from the current listing and
       // overlay only the ones exposed in the modal.
       const payload = {
-        from_city: listing.from_city,
-        to_city: listing.to_city,
+        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
+        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
         travel_date: fromYmd,
         travel_date_from: fromYmd,
         travel_date_to: toYmd,
@@ -294,6 +305,10 @@ export function PartnerDetailsScreen() {
   const canModify = !isTerminal(listing.status);
 
   const editInitial: EditBuddyListingFormValues = {
+    from_city: listing.from_city === "Any" ? ANY_CITY : listing.from_city,
+    from_country: USA_CITIES.includes(listing.from_city) ? "US" : "IN",
+    to_city: listing.to_city === "Any" ? ANY_CITY : listing.to_city,
+    to_country: INDIA_CITIES.includes(listing.to_city) ? "IN" : "US",
     travel_date_from: listing.travel_date_from ?? listing.travel_date ?? "",
     travel_date_to:
       listing.travel_date_to && listing.travel_date_to !== listing.travel_date_from
