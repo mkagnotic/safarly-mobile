@@ -81,6 +81,8 @@ export type MainTabParamList = {
   ParcelDetailsTab: { parcelId: string };
   /** Owner-facing detail for a travel-partner listing. Sourced from `my_listings`. */
   PartnerDetailsTab: { listingId: string };
+  /** Read-only public profile of another user (carrier / sender / buddy). */
+  PublicProfileTab: { userId: string; name?: string };
   // New screens
   SearchTab: undefined;
   OpportunitiesTab: undefined;

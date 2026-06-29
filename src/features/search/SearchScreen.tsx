@@ -60,6 +60,9 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /** Web parity: 3/day cap, 10 per manual page (auto-match uses 50). */
 const DAILY_SEARCH_LIMIT = 3;
 const MANUAL_PER_PAGE = 10;
+/** Client-side page sizes for auto-match lists (mirrors web). */
+const AUTO_PER_PAGE = 5;
+const AUTO_BUDDY_PER_PAGE = 10;
 
 interface LookingForOption {
   value: LookingForType;
@@ -98,6 +101,34 @@ function getInitials(name?: string | null): string {
     .slice(0, 2);
 }
 
+/**
+ * Collapse matches so each carrier/sender shows once (mirrors web). A single
+ * person can list several trips on the same route + date, which otherwise
+ * renders as duplicate profile cards all leading to the same chat. Keeps the
+ * first (most relevant per backend ordering) match per person.
+ */
+function dedupePackageMatchesByPerson(matches: PackageMatch[]): PackageMatch[] {
+  const seen = new Set<string>();
+  return matches.filter((m) => {
+    const person = m.type === "carrier_trip" ? m.carrier : m.sender;
+    const key = person?.id ?? `match-${m.type}-${m.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Same idea for buddy matches — one card per user. */
+function dedupeBuddyMatchesByUser(matches: BuddySearchMatch[]): BuddySearchMatch[] {
+  const seen = new Set<string>();
+  return matches.filter((m) => {
+    const key = m.user?.id ?? `buddy-${m.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
 
@@ -115,6 +146,10 @@ export function SearchScreen() {
   const [pkgPage, setPkgPage] = useState(1);
   const [rcvPage, setRcvPage] = useState(1);
   const [buddyPage, setBuddyPage] = useState(1);
+  // Auto-match lists are fetched in bulk and paged client-side.
+  const [autoPkgPage, setAutoPkgPage] = useState(1);
+  const [autoRcvPage, setAutoRcvPage] = useState(1);
+  const [autoBuddyPage, setAutoBuddyPage] = useState(1);
   const [quota, setQuota] = useState<SearchQuota | null>(null);
   const [consuming, setConsuming] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -160,6 +195,22 @@ export function SearchScreen() {
   );
   const buddyMatches = results?.buddy_matches ?? [];
 
+  // Manual (filtered) lists render one card per listing, so the same person can
+  // repeat when they have several listings — collapse to one card per person
+  // (mirrors web). Auto-match dedupes per-listing inside the maps above.
+  const displayCarrierTrips = useMemo(
+    () => dedupePackageMatchesByPerson(carrierTrips),
+    [carrierTrips],
+  );
+  const displayReceiverRequests = useMemo(
+    () => dedupePackageMatchesByPerson(receiverRequests),
+    [receiverRequests],
+  );
+  const dedupedBuddyMatches = useMemo(
+    () => dedupeBuddyMatchesByUser(buddyMatches),
+    [buddyMatches],
+  );
+
   const sortedMyParcels: Parcel[] = useMemo(
     () =>
       myParcelsState.parcels
@@ -183,16 +234,18 @@ export function SearchScreen() {
     for (const parcel of sortedMyParcels) {
       map.set(
         parcel.id,
-        carrierTrips.filter((m) =>
-          carrierTripMatchesParcel(
-            {
-              from_city: m.from_city,
-              to_city: m.to_city,
-              any_from: m.any_from,
-              any_to: m.any_to,
-              travel_date: m.travel_date,
-            },
-            parcel,
+        dedupePackageMatchesByPerson(
+          carrierTrips.filter((m) =>
+            carrierTripMatchesParcel(
+              {
+                from_city: m.from_city,
+                to_city: m.to_city,
+                any_from: m.any_from,
+                any_to: m.any_to,
+                travel_date: m.travel_date,
+              },
+              parcel,
+            ),
           ),
         ),
       );
@@ -206,19 +259,21 @@ export function SearchScreen() {
     for (const trip of sortedMyTrips) {
       map.set(
         trip.id,
-        receiverRequests.filter(
-          (m) =>
-            m.delivery_by != null &&
-            parcelMatchesTrip(
-              {
-                from_city: m.from_city,
-                to_city: m.to_city,
-                any_from: m.any_from,
-                any_to: m.any_to,
-                delivery_by: m.delivery_by,
-              },
-              trip,
-            ),
+        dedupePackageMatchesByPerson(
+          receiverRequests.filter(
+            (m) =>
+              m.delivery_by != null &&
+              parcelMatchesTrip(
+                {
+                  from_city: m.from_city,
+                  to_city: m.to_city,
+                  any_from: m.any_from,
+                  any_to: m.any_to,
+                  delivery_by: m.delivery_by,
+                },
+                trip,
+              ),
+          ),
         ),
       );
     }
@@ -243,13 +298,49 @@ export function SearchScreen() {
   }, [isAutoMatch, results?.receive_total, receiverRequests, receiverRequestsByTripId]);
 
   const buddyTabCount = isAutoMatch
-    ? buddyMatches.length
-    : results?.buddy_total ?? buddyMatches.length;
+    ? dedupedBuddyMatches.length
+    : results?.buddy_total ?? dedupedBuddyMatches.length;
 
   // Total pages per list (manual mode only). One-based, min 1.
   const carrierPages = Math.max(1, Math.ceil(packageTabCount / MANUAL_PER_PAGE));
   const receiverPages = Math.max(1, Math.ceil(receiverTabCount / MANUAL_PER_PAGE));
   const buddyPages = Math.max(1, Math.ceil(buddyTabCount / MANUAL_PER_PAGE));
+
+  // Auto-match lists come back in bulk, so slice them client-side — a handful
+  // of cards at a time instead of one endless scroll (mirrors web). Clamp the
+  // page in case the underlying list shrank since it was last set.
+  const autoPkgPages = Math.max(1, Math.ceil(sortedMyParcels.length / AUTO_PER_PAGE));
+  const safeAutoPkgPage = Math.min(autoPkgPage, autoPkgPages);
+  const pagedMyParcels = useMemo(
+    () =>
+      sortedMyParcels.slice(
+        (safeAutoPkgPage - 1) * AUTO_PER_PAGE,
+        safeAutoPkgPage * AUTO_PER_PAGE,
+      ),
+    [sortedMyParcels, safeAutoPkgPage],
+  );
+
+  const autoRcvPages = Math.max(1, Math.ceil(sortedMyTrips.length / AUTO_PER_PAGE));
+  const safeAutoRcvPage = Math.min(autoRcvPage, autoRcvPages);
+  const pagedMyTrips = useMemo(
+    () =>
+      sortedMyTrips.slice(
+        (safeAutoRcvPage - 1) * AUTO_PER_PAGE,
+        safeAutoRcvPage * AUTO_PER_PAGE,
+      ),
+    [sortedMyTrips, safeAutoRcvPage],
+  );
+
+  const autoBuddyPages = Math.max(1, Math.ceil(dedupedBuddyMatches.length / AUTO_BUDDY_PER_PAGE));
+  const safeAutoBuddyPage = Math.min(autoBuddyPage, autoBuddyPages);
+  const pagedBuddyMatches = useMemo(
+    () =>
+      dedupedBuddyMatches.slice(
+        (safeAutoBuddyPage - 1) * AUTO_BUDDY_PER_PAGE,
+        safeAutoBuddyPage * AUTO_BUDDY_PER_PAGE,
+      ),
+    [dedupedBuddyMatches, safeAutoBuddyPage],
+  );
 
   const handleSwapDirection = useCallback(() => {
     setDirection((d) => (d === "IN_TO_US" ? "US_TO_IN" : "IN_TO_US"));
@@ -321,6 +412,9 @@ export function SearchScreen() {
     setPkgPage(1);
     setRcvPage(1);
     setBuddyPage(1);
+    setAutoPkgPage(1);
+    setAutoRcvPage(1);
+    setAutoBuddyPage(1);
     setNotice(null);
     void resetToAutoMatch();
   }, [resetToAutoMatch]);
@@ -478,6 +572,10 @@ export function SearchScreen() {
           <Text style={[styles.noteText, atLimit && styles.noteTextError]}>{quotaText}</Text>
         </Card>
 
+        {hasAppliedFilters && appliedFilters ? (
+          <AppliedFilterChips filters={appliedFilters} />
+        ) : null}
+
         <SearchModeBanner
           hasAppliedFilters={hasAppliedFilters}
           activeTab={activeTab}
@@ -503,9 +601,9 @@ export function SearchScreen() {
           <PackageTabResults
             loading={loading}
             isAutoMatch={isAutoMatch}
-            myParcels={sortedMyParcels}
+            myParcels={isAutoMatch ? pagedMyParcels : sortedMyParcels}
             myParcelsLoading={myParcelsState.loading}
-            matches={carrierTrips}
+            matches={displayCarrierTrips}
             matchesByParcelId={carrierTripsByParcelId}
             navigation={navigation}
             setNotice={setNotice}
@@ -513,7 +611,7 @@ export function SearchScreen() {
         ) : activeTab === "buddy" ? (
           <BuddyTabResults
             loading={loading}
-            matches={buddyMatches}
+            matches={isAutoMatch ? pagedBuddyMatches : dedupedBuddyMatches}
             navigation={navigation}
             setNotice={setNotice}
           />
@@ -521,28 +619,50 @@ export function SearchScreen() {
           <ReceiverTabResults
             loading={loading}
             isAutoMatch={isAutoMatch}
-            myTrips={sortedMyTrips}
+            myTrips={isAutoMatch ? pagedMyTrips : sortedMyTrips}
             myTripsLoading={myTripsState.loading}
-            matches={receiverRequests}
+            matches={displayReceiverRequests}
             matchesByTripId={receiverRequestsByTripId}
             navigation={navigation}
             setNotice={setNotice}
           />
         )}
 
-        {!error && !isAutoMatch ? (
+        {!error ? (
           <Pagination
-            page={activeTab === "package" ? pkgPage : activeTab === "buddy" ? buddyPage : rcvPage}
+            page={
+              isAutoMatch
+                ? activeTab === "package"
+                  ? safeAutoPkgPage
+                  : activeTab === "buddy"
+                    ? safeAutoBuddyPage
+                    : safeAutoRcvPage
+                : activeTab === "package"
+                  ? pkgPage
+                  : activeTab === "buddy"
+                    ? buddyPage
+                    : rcvPage
+            }
             totalPages={
-              activeTab === "package"
-                ? carrierPages
-                : activeTab === "buddy"
-                  ? buddyPages
-                  : receiverPages
+              isAutoMatch
+                ? activeTab === "package"
+                  ? autoPkgPages
+                  : activeTab === "buddy"
+                    ? autoBuddyPages
+                    : autoRcvPages
+                : activeTab === "package"
+                  ? carrierPages
+                  : activeTab === "buddy"
+                    ? buddyPages
+                    : receiverPages
             }
             loading={searchBusy}
             onChange={(next) => {
-              if (activeTab === "package") setPkgPage(next);
+              if (isAutoMatch) {
+                if (activeTab === "package") setAutoPkgPage(next);
+                else if (activeTab === "buddy") setAutoBuddyPage(next);
+                else setAutoRcvPage(next);
+              } else if (activeTab === "package") setPkgPage(next);
               else if (activeTab === "buddy") setBuddyPage(next);
               else setRcvPage(next);
             }}
@@ -906,8 +1026,19 @@ function PackageMatchCard({
   const [chatStarting, setChatStarting] = useState(false);
 
   const handleViewProfile = useCallback(() => {
-    setNotice({ message: "Profile pages are coming soon.", variant: "info" });
-  }, [setNotice]);
+    if (!person?.id) {
+      setNotice({
+        title: "User unavailable",
+        message: "Unable to open profile — user not available.",
+        variant: "error",
+      });
+      return;
+    }
+    navigation.navigate("PublicProfileTab", {
+      userId: person.id,
+      name: person.name ?? undefined,
+    });
+  }, [person?.id, person?.name, navigation, setNotice]);
 
   const handleStartChat = useCallback(async () => {
     if (!person?.id) {
@@ -1056,8 +1187,19 @@ function BuddyMatchCard({
   const [chatStarting, setChatStarting] = useState(false);
 
   const handleViewProfile = useCallback(() => {
-    setNotice({ message: "Profile pages are coming soon.", variant: "info" });
-  }, [setNotice]);
+    if (!match.user?.id) {
+      setNotice({
+        title: "User unavailable",
+        message: "Unable to open profile — user not available.",
+        variant: "error",
+      });
+      return;
+    }
+    navigation.navigate("PublicProfileTab", {
+      userId: match.user.id,
+      name: match.user.name ?? undefined,
+    });
+  }, [match.user?.id, match.user?.name, navigation, setNotice]);
 
   const handleStartChat = useCallback(async () => {
     if (!match.user?.id) {
@@ -1152,6 +1294,34 @@ function BuddyMatchCard({
 }
 
 // ───────────────────────── Reusable bits ─────────────────────────
+
+/** Chip summary of the active manual-search filters (mirrors web). */
+function AppliedFilterChips({ filters }: Readonly<{ filters: SearchFilters }>) {
+  const chips: string[] = [];
+  if (filters.from_city) {
+    chips.push(`From: ${filters.from_city === "ANY" ? "Any City" : filters.from_city}`);
+  }
+  if (filters.to_city) {
+    chips.push(`To: ${filters.to_city === "ANY" ? "Any City" : filters.to_city}`);
+  }
+  if (filters.date_from) chips.push(`From: ${filters.date_from}`);
+  if (filters.date_to) chips.push(`To: ${filters.date_to}`);
+  for (const l of filters.looking_for?.split(",").filter(Boolean) ?? []) {
+    chips.push(capitalize(l.replace(/_/g, " ")));
+  }
+  if (chips.length === 0) chips.push("All results (no filters)");
+
+  return (
+    <View style={styles.filterChipsRow}>
+      <Text style={styles.filterChipsLabel}>FILTERS:</Text>
+      {chips.map((c) => (
+        <View key={c} style={styles.filterChip}>
+          <Text style={styles.filterChipText}>{c}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 interface SearchModeBannerProps {
   hasAppliedFilters: boolean;
@@ -1386,6 +1556,34 @@ const styles = StyleSheet.create({
   tabLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
   tabLabelActive: { color: colors.text },
   tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
+
+  filterChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  filterChipsLabel: {
+    color: colors.mutedText,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  filterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: primaryTint.fill10,
+  },
+  filterChipText: {
+    color: colors.wordmark,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
 
   modeBanner: { paddingHorizontal: 4, paddingBottom: 10 },
   modeBannerText: {

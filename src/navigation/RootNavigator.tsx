@@ -44,6 +44,7 @@ import { PartnerDetailsScreen } from "@/features/buddies/PartnerDetailsScreen";
 import { SplashScreen } from "@/features/splash/SplashScreen";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
+import { PublicProfileScreen } from "@/features/profile/PublicProfileScreen";
 import { EarningsScreen } from "@/features/earnings/EarningsScreen";
 import { WalletScreen } from "@/features/wallet/WalletScreen";
 import { AddCardScreen } from "@/features/wallet/AddCardScreen";
@@ -295,6 +296,7 @@ function MainTabs() {
       <Tabs.Screen name="OfferChatTab" component={OfferChatScreen} options={{ ...HIDDEN_TAB, tabBarHideOnKeyboard: true }} />
       <Tabs.Screen name="ParcelDetailsTab" component={ParcelDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PartnerDetailsTab" component={PartnerDetailsScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="PublicProfileTab" component={PublicProfileScreen} options={HIDDEN_TAB} />
       {/* New screens */}
       <Tabs.Screen name="SearchTab" component={SearchScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OpportunitiesTab" component={OpportunitiesScreen} options={HIDDEN_TAB} />
