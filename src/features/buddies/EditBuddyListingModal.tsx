@@ -5,14 +5,20 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 
+import { LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
+import { CityPicker } from "@/features/search/CityPicker";
+import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { colors } from "@/theme/colors";
+
+type Country = "IN" | "US";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
 
@@ -77,6 +83,11 @@ function formatDateLabel(d: Date): string {
 }
 
 export interface EditBuddyListingFormValues {
+  /** `ANY_CITY` sentinel ⇒ "Any city". */
+  from_city: string;
+  from_country: Country;
+  to_city: string;
+  to_country: Country;
   travel_date_from: string;
   travel_date_to: string;
   airline: string;
@@ -158,6 +169,26 @@ export function EditBuddyListingModal({
 
   const handleSubmit = () => onSubmit(form);
 
+  const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
+  const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
+  const fromCountryName = form.from_country === "IN" ? "India" : "United States";
+  const toCountryName = form.to_country === "IN" ? "India" : "United States";
+  const fromCities = form.from_country === "IN" ? INDIA_CITIES : USA_CITIES;
+  const toCities = form.to_country === "IN" ? INDIA_CITIES : USA_CITIES;
+
+  const toggleFromCountry = () =>
+    setForm((prev) => ({
+      ...prev,
+      from_country: prev.from_country === "IN" ? "US" : "IN",
+      from_city: "",
+    }));
+  const toggleToCountry = () =>
+    setForm((prev) => ({
+      ...prev,
+      to_country: prev.to_country === "IN" ? "US" : "IN",
+      to_city: "",
+    }));
+
   const fromLabel = selectedFrom ? formatDateLabel(selectedFrom) : "Select date";
   const toLabel = selectedTo
     ? formatDateLabel(selectedTo)
@@ -198,6 +229,48 @@ export function EditBuddyListingModal({
             >
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
+          </View>
+
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>From</Text>
+            <LocationCard
+              flag={fromFlag}
+              label={fromCountryName}
+              filled
+              onToggle={toggleFromCountry}
+            />
+            <CityPicker
+              value={form.from_city}
+              onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
+              cities={fromCities}
+              placeholder="Select departure city"
+              variant="card"
+              disabled={pending}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>To</Text>
+            <LocationCard
+              flag={toFlag}
+              label={toCountryName}
+              filled
+              onToggle={toggleToCountry}
+            />
+            <CityPicker
+              value={form.to_city}
+              onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
+              cities={toCities}
+              placeholder="Select destination city"
+              variant="card"
+              disabled={pending}
+            />
           </View>
 
           <View style={styles.dateRow}>
@@ -272,6 +345,7 @@ export function EditBuddyListingModal({
               editable={!pending}
             />
           </View>
+          </ScrollView>
 
           <View style={styles.footer}>
             <AppButton
@@ -392,6 +466,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 440,
+    maxHeight: "88%",
     borderRadius: 22,
     backgroundColor: colors.card,
     padding: 20,
@@ -403,6 +478,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
+
+  scroll: { flexGrow: 0 },
+  scrollContent: { gap: 16 },
 
   field: { gap: 8 },
   dateRow: { flexDirection: "row", gap: 10 },

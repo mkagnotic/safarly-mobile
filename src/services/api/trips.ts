@@ -32,6 +32,8 @@ export interface Trip {
   any_from: boolean;
   any_to: boolean;
   travel_date: string;
+  travel_date_from: string | null;
+  travel_date_to: string | null;
   luggage_capacity_kg: number;
   airline: string | null;
   notes: string | null;
@@ -58,6 +60,8 @@ export const tripsApi = {
     to_city: string;
     to_country?: string;
     travel_date: string;
+    travel_date_from?: string;
+    travel_date_to?: string;
     luggage_capacity_kg: number;
     notes?: string;
     open_to_buddy?: boolean;
@@ -93,7 +97,13 @@ export const tripsApi = {
   update: (
     id: string,
     data: {
+      from_city?: string;
+      from_country?: string;
+      to_city?: string;
+      to_country?: string;
       travel_date?: string;
+      travel_date_from?: string;
+      travel_date_to?: string;
       luggage_capacity_kg?: number;
       notes?: string;
       any_from?: boolean;

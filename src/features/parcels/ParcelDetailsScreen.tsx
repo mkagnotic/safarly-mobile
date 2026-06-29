@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { ANY_CITY } from "@/features/search/CityPicker";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
@@ -241,6 +242,31 @@ export function ParcelDetailsScreen() {
       if (!parcelId || !parcel) return;
       const data: Parameters<typeof parcelsApi.update>[1] = {};
 
+      if (!values.from_city) {
+        setNotice({ variant: "error", title: "Origin city required", message: "Select an origin city." });
+        return;
+      }
+      if (!values.to_city) {
+        setNotice({ variant: "error", title: "Destination city required", message: "Select a destination city." });
+        return;
+      }
+      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
+      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
+      const curFromCity = parcel.any_from ? "Any" : parcel.from_city;
+      const curToCity = parcel.any_to ? "Any" : parcel.to_city;
+      const curFromCountry = (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      const curToCountry = (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
+        data.from_city = fromCity;
+        data.from_country = values.from_country;
+        data.any_from = values.from_city === ANY_CITY;
+      }
+      if (toCity !== curToCity || values.to_country !== curToCountry) {
+        data.to_city = toCity;
+        data.to_country = values.to_country;
+        data.any_to = values.to_city === ANY_CITY;
+      }
+
       const weightNum = Number(values.weight_kg);
       if (
         values.weight_kg !== "" &&
@@ -322,6 +348,10 @@ export function ParcelDetailsScreen() {
   const canModify = !isTerminal(parcel.status);
 
   const editInitial: EditParcelFormValues = {
+    from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
+    from_country: (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+    to_city: parcel.any_to ? ANY_CITY : (parcel.to_city ?? ""),
+    to_country: (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
     weight_kg: `${parcel.weight_kg ?? ""}`,
     description: parcel.description ?? "",
   };

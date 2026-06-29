@@ -101,8 +101,17 @@ export const parcelsApi = {
   update: (
     id: string,
     data: {
+      from_city?: string;
+      from_country?: string;
+      to_city?: string;
+      to_country?: string;
+      category?: string;
       description?: string;
       weight_kg?: number;
+      fee_offered?: number;
+      delivery_by?: string;
+      delivery_by_from?: string;
+      delivery_by_to?: string;
       any_from?: boolean;
       any_to?: boolean;
       status?: string;

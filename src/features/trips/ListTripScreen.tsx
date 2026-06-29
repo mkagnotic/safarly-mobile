@@ -37,7 +37,7 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-type Direction = "IN_TO_US" | "US_TO_IN";
+type Country = "IN" | "US";
 type DateMode = "single" | "range";
 type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
@@ -160,7 +160,8 @@ export function ListTripScreen() {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const [direction, setDirection] = useState<Direction>("IN_TO_US");
+  const [fromCountry, setFromCountry] = useState<Country>("IN");
+  const [toCountry, setToCountry] = useState<Country>("US");
   const [fromCity, setFromCity] = useState("");
   const [toCity, setToCity] = useState("");
   const [airline, setAirline] = useState("");
@@ -229,7 +230,8 @@ export function ListTripScreen() {
   }, []);
 
   const resetForm = useCallback(() => {
-    setDirection("IN_TO_US");
+    setFromCountry("IN");
+    setToCountry("US");
     setFromCity("");
     setToCity("");
     setAirline("");
@@ -290,20 +292,24 @@ export function ListTripScreen() {
     return d;
   }, [today]);
 
-  const fromCountry = direction === "IN_TO_US" ? "IN" : "US";
-  const toCountry = direction === "IN_TO_US" ? "US" : "IN";
-  const fromFlag = direction === "IN_TO_US" ? "🇮🇳" : "🇺🇸";
-  const toFlag = direction === "IN_TO_US" ? "🇺🇸" : "🇮🇳";
-  const fromCountryName = direction === "IN_TO_US" ? "India" : "United States";
-  const toCountryName = direction === "IN_TO_US" ? "United States" : "India";
-  const fromCities = direction === "IN_TO_US" ? INDIA_CITIES : USA_CITIES;
-  const toCities = direction === "IN_TO_US" ? USA_CITIES : INDIA_CITIES;
+  const fromFlag = fromCountry === "IN" ? "🇮🇳" : "🇺🇸";
+  const toFlag = toCountry === "IN" ? "🇮🇳" : "🇺🇸";
+  const fromCountryName = fromCountry === "IN" ? "India" : "United States";
+  const toCountryName = toCountry === "IN" ? "India" : "United States";
+  const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
+  const toCities = toCountry === "IN" ? INDIA_CITIES : USA_CITIES;
 
-  const handleSwapDirection = useCallback(() => {
-    setDirection((d) => (d === "IN_TO_US" ? "US_TO_IN" : "IN_TO_US"));
+  const toggleFromCountry = useCallback(() => {
+    setFromCountry((c) => (c === "IN" ? "US" : "IN"));
     setFromCity("");
+    clearFieldError("fromCity");
+  }, [clearFieldError]);
+
+  const toggleToCountry = useCallback(() => {
+    setToCountry((c) => (c === "IN" ? "US" : "IN"));
     setToCity("");
-  }, []);
+    clearFieldError("toCity");
+  }, [clearFieldError]);
 
   const handleAddBuddyLanguage = useCallback(
     (lang: string) => {
@@ -403,6 +409,8 @@ export function ListTripScreen() {
         any_from: isAnyFrom,
         any_to: isAnyTo,
         travel_date: formatYmd(departDate),
+        travel_date_from: formatYmd(departDate),
+        travel_date_to: endDateStr ?? formatYmd(departDate),
         luggage_capacity_kg: Math.round(weightKg * 100) / 100,
         open_to_buddy: openToBuddy,
         airline: airline || undefined,
@@ -568,7 +576,12 @@ export function ListTripScreen() {
           hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
         >
           <Text style={styles.fieldLabel}>From</Text>
-          <LocationCard flag={fromFlag} label={fromCountryName} filled />
+          <LocationCard
+            flag={fromFlag}
+            label={fromCountryName}
+            filled
+            onToggle={toggleFromCountry}
+          />
           <View>
             <CityPicker
               value={fromCity}
@@ -586,21 +599,13 @@ export function ListTripScreen() {
             ) : null}
           </View>
 
-          <View style={styles.swapRow}>
-            <View style={styles.swapDividerLine} />
-            <Pressable
-              style={styles.swapCircleButton}
-              onPress={handleSwapDirection}
-              accessibilityRole="button"
-              accessibilityLabel="Swap direction"
-            >
-              <Ionicons name="swap-vertical-outline" size={18} color={colors.wordmark} />
-            </Pressable>
-            <View style={styles.swapDividerLine} />
-          </View>
-
           <Text style={styles.fieldLabel}>To</Text>
-          <LocationCard flag={toFlag} label={toCountryName} filled />
+          <LocationCard
+            flag={toFlag}
+            label={toCountryName}
+            filled
+            onToggle={toggleToCountry}
+          />
           <View>
             <CityPicker
               value={toCity}
@@ -1258,24 +1263,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   optionalPillText: { color: colors.subtleText, fontSize: 10, lineHeight: 14, fontWeight: "700", letterSpacing: 0.3 },
-
-  swapRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginVertical: 4,
-  },
-  swapDividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  swapCircleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: primaryTint.stroke25,
-    backgroundColor: colors.surfaceTintPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
   input: {
     backgroundColor: colors.input,

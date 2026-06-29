@@ -12,6 +12,8 @@ import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { showAppAlert } from "@/feedback/appFeedback";
+import { ANY_CITY } from "@/features/search/CityPicker";
+import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import {
   EditBuddyListingModal,
   type EditBuddyListingFormValues,
@@ -229,11 +231,20 @@ export function MyTravelsScreen() {
       }
       const toYmd = values.travel_date_to.trim() || fromYmd;
 
+      if (!values.from_city) {
+        setFormError("Select a departure city to update this listing.");
+        return;
+      }
+      if (!values.to_city) {
+        setFormError("Select a destination city to update this listing.");
+        return;
+      }
+
       // buddy-handler PUT is a full upsert — fields omitted get nulled, so we
       // seed every field from the source listing and overlay just the edits.
       const payload = {
-        from_city: editingBuddy.from_city,
-        to_city: editingBuddy.to_city,
+        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
+        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
         travel_date: fromYmd,
         travel_date_from: fromYmd,
         travel_date_to: toYmd,
@@ -271,6 +282,32 @@ export function MyTravelsScreen() {
     async (values: EditParcelFormValues) => {
       if (!editingParcel) return;
       const data: Parameters<typeof parcelsApi.update>[1] = {};
+
+      if (!values.from_city) {
+        setFormError("Select an origin city to update this parcel.");
+        return;
+      }
+      if (!values.to_city) {
+        setFormError("Select a destination city to update this parcel.");
+        return;
+      }
+      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
+      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
+      const curFromCity = editingParcel.any_from ? "Any" : editingParcel.from_city;
+      const curToCity = editingParcel.any_to ? "Any" : editingParcel.to_city;
+      const curFromCountry = (editingParcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      const curToCountry = (editingParcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
+        data.from_city = fromCity;
+        data.from_country = values.from_country;
+        data.any_from = values.from_city === ANY_CITY;
+      }
+      if (toCity !== curToCity || values.to_country !== curToCountry) {
+        data.to_city = toCity;
+        data.to_country = values.to_country;
+        data.any_to = values.to_city === ANY_CITY;
+      }
+
       const weightNum = Number(values.weight_kg);
       if (
         values.weight_kg !== "" &&
@@ -316,8 +353,43 @@ export function MyTravelsScreen() {
     async (values: EditTripFormValues) => {
       if (!editingTrip) return;
       const data: Parameters<typeof tripsApi.update>[1] = {};
-      if (values.travel_date && values.travel_date !== editingTrip.travel_date) {
-        data.travel_date = values.travel_date;
+
+      if (!values.from_city) {
+        setFormError("Select a departure city to update this trip.");
+        return;
+      }
+      if (!values.to_city) {
+        setFormError("Select an arrival city to update this trip.");
+        return;
+      }
+      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
+      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
+      const curFromCity = editingTrip.any_from ? "Any" : editingTrip.from_city;
+      const curToCity = editingTrip.any_to ? "Any" : editingTrip.to_city;
+      const curFromCountry = (editingTrip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      const curToCountry = (editingTrip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
+      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
+        data.from_city = fromCity;
+        data.from_country = values.from_country;
+        data.any_from = values.from_city === ANY_CITY;
+      }
+      if (toCity !== curToCity || values.to_country !== curToCountry) {
+        data.to_city = toCity;
+        data.to_country = values.to_country;
+        data.any_to = values.to_city === ANY_CITY;
+      }
+
+      const from = values.travel_date_from;
+      const to = values.travel_date_to || from; // empty Return ⇒ single date
+      if (
+        from &&
+        (from !== editingTrip.travel_date_from ||
+          to !== editingTrip.travel_date_to ||
+          from !== editingTrip.travel_date)
+      ) {
+        data.travel_date = from;
+        data.travel_date_from = from;
+        data.travel_date_to = to;
       }
       const capacityNum = Number(values.luggage_capacity_kg);
       if (
@@ -630,7 +702,16 @@ export function MyTravelsScreen() {
         <EditTripModal
           open
           initial={{
-            travel_date: editingTrip.travel_date ?? "",
+            from_city: editingTrip.any_from ? ANY_CITY : (editingTrip.from_city ?? ""),
+            from_country: (editingTrip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+            to_city: editingTrip.any_to ? ANY_CITY : (editingTrip.to_city ?? ""),
+            to_country: (editingTrip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+            travel_date_from: editingTrip.travel_date_from ?? editingTrip.travel_date ?? "",
+            travel_date_to:
+              editingTrip.travel_date_to &&
+              editingTrip.travel_date_to !== (editingTrip.travel_date_from ?? editingTrip.travel_date)
+                ? editingTrip.travel_date_to
+                : "",
             luggage_capacity_kg: `${editingTrip.luggage_capacity_kg ?? ""}`,
             notes: editingTrip.notes ?? "",
           }}
@@ -654,6 +735,10 @@ export function MyTravelsScreen() {
         <EditParcelModal
           open
           initial={{
+            from_city: editingParcel.any_from ? ANY_CITY : (editingParcel.from_city ?? ""),
+            from_country: (editingParcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
+            to_city: editingParcel.any_to ? ANY_CITY : (editingParcel.to_city ?? ""),
+            to_country: (editingParcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
             weight_kg: `${editingParcel.weight_kg ?? ""}`,
             description: editingParcel.description ?? "",
           }}
@@ -667,6 +752,10 @@ export function MyTravelsScreen() {
         <EditBuddyListingModal
           open
           initial={{
+            from_city: editingBuddy.from_city === "Any" ? ANY_CITY : editingBuddy.from_city,
+            from_country: USA_CITIES.includes(editingBuddy.from_city) ? "US" : "IN",
+            to_city: editingBuddy.to_city === "Any" ? ANY_CITY : editingBuddy.to_city,
+            to_country: INDIA_CITIES.includes(editingBuddy.to_city) ? "IN" : "US",
             travel_date_from: editingBuddy.travel_date_from ?? editingBuddy.travel_date ?? "",
             travel_date_to:
               editingBuddy.travel_date_to &&

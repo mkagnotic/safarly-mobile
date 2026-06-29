@@ -14,6 +14,7 @@ import {
 import type { Parcel, Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
+import { formatTravelDateRange } from "@/utils/travelDate";
 
 export type TravelCardType = "flight" | "parcel";
 
@@ -161,7 +162,7 @@ export const TravelCard = memo(function TravelCard({
 });
 
 function renderFlightMeta(trip: FlightItem): string {
-  const date = formatLongDate(trip.travel_date);
+  const date = formatTravelDateRange(trip, { year: true });
   const airline = trip.airline?.trim();
   const cap = trip.luggage_capacity_kg ?? trip.luggage_capacity;
   const offers = trip.offers_count;
