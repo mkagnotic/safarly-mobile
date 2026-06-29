@@ -38,6 +38,7 @@ import {
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { carrierTripMatchesParcel, parcelMatchesTrip } from "@/utils/routeMatch";
+import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -814,7 +815,7 @@ function PackageTabResults({
               fromCity={parcel.from_city}
               toCity={parcel.to_city}
               kind="parcel"
-              dateLabel={formatDateLabel(parcel.delivery_by)}
+              dateLabel={formatDeliveryWindow(parcel, { year: true })}
               secondary={
                 parcel.category
                   ? { label: "CATEGORY", value: parcel.category }
@@ -950,7 +951,7 @@ function ReceiverTabResults({
               fromCity={trip.from_city}
               toCity={trip.to_city}
               kind="trip"
-              dateLabel={formatDateLabel(trip.travel_date)}
+              dateLabel={formatTravelDateRange(trip, { year: true })}
               secondary={
                 trip.airline ? { label: "AIRLINE", value: trip.airline } : undefined
               }

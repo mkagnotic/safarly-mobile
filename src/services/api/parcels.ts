@@ -45,6 +45,9 @@ export interface Parcel {
   weight_kg: number;
   description: string | null;
   delivery_by: string;
+  /** Delivery window start/end. Present when the sender picked a date range. */
+  delivery_by_from?: string | null;
+  delivery_by_to?: string | null;
   fee_offered: number;
   fee_currency: string;
   status: string;
@@ -52,6 +55,22 @@ export interface Parcel {
   created_at: string;
   updated_at: string;
   sender?: { id: string; name: string; avatar_url: string | null; rating: number };
+}
+
+/** A carrier trip that can deliver a parcel — from `/parcel-handler/matches`. */
+export interface ParcelCarrierMatch {
+  trip_id: string;
+  carrier_id: string;
+  carrier_name: string;
+  from_city: string;
+  to_city: string;
+  travel_date: string;
+  luggage_capacity?: number;
+  luggage_capacity_kg?: number;
+  airline: string | null;
+  open_to_buddy?: boolean;
+  match_score?: number;
+  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
 }
 
 export interface ParcelListParams {
@@ -126,7 +145,8 @@ export const parcelsApi = {
   delete: (id: string) => api.delete<{ deleted: boolean }>(`/parcel-handler/${id}`),
 
   /** DB matching function (route + ANY origin/destination support). */
-  findMatches: (parcel_id: string) => api.get<unknown[]>("/parcel-handler/matches", { parcel_id }),
+  findMatches: (parcel_id: string) =>
+    api.get<ParcelCarrierMatch[]>("/parcel-handler/matches", { parcel_id }),
 
   findOpportunities: async (params?: { page?: number; per_page?: number }) => {
     const res = await api.get<Parcel[]>("/parcel-handler/opportunities", params);

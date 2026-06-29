@@ -45,6 +45,22 @@ export interface Trip {
   carrier?: { id: string; name: string; avatar_url: string | null; rating: number };
 }
 
+/** A parcel that matches a trip — from `/trip-handler/find-parcels`. */
+export interface TripParcelMatch {
+  parcel_id: string;
+  sender_id: string;
+  sender_name: string;
+  from_city: string;
+  to_city: string;
+  delivery_by: string;
+  weight?: number;
+  weight_kg?: number;
+  fee_offered: number;
+  category: string;
+  match_score?: number;
+  sender?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+}
+
 export interface TripListParams {
   filter?: string;
   from?: string;
@@ -123,5 +139,5 @@ export const tripsApi = {
   findMatches: (parcel_id: string) => api.get<Trip[]>("/trip-handler/matches", { parcel_id }),
 
   findParcels: (trip_id: string) =>
-    api.get<unknown[]>("/trip-handler/find-parcels", { trip_id }),
+    api.get<TripParcelMatch[]>("/trip-handler/find-parcels", { trip_id }),
 };

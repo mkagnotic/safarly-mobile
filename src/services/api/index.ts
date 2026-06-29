@@ -14,10 +14,10 @@ export { usersApi } from "./users";
 export type { UserProfile, UserPreferences, UserStats } from "./users";
 
 export { parcelsApi } from "./parcels";
-export type { Parcel, ParcelListParams } from "./parcels";
+export type { Parcel, ParcelListParams, ParcelCarrierMatch } from "./parcels";
 
 export { tripsApi } from "./trips";
-export type { Trip, TripListParams } from "./trips";
+export type { Trip, TripListParams, TripParcelMatch } from "./trips";
 
 export { carriersApi } from "./carriers";
 export type { CarrierRequest } from "./carriers";

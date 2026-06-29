@@ -25,6 +25,7 @@ import {
 } from "@/features/parcels/EditParcelModal";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { isTerminal } from "@/features/travels/statusLabels";
+import { MatchesModal, type MatchesSource } from "@/features/travels/MatchesModal";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
 import { useBookings } from "@/hooks/api/useBookings";
@@ -101,6 +102,26 @@ export function MyTravelsScreen() {
   const [editBuddyPending, setEditBuddyPending] = useState(false);
   const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
   const [ratePending, setRatePending] = useState(false);
+  const [matchSource, setMatchSource] = useState<MatchesSource | null>(null);
+
+  const handleViewTripMatches = useCallback(
+    (trip: Trip) =>
+      setMatchSource({
+        kind: "trip",
+        id: trip.id,
+        routeLabel: `${trip.from_city} → ${trip.to_city}`,
+      }),
+    [],
+  );
+  const handleViewParcelMatches = useCallback(
+    (parcel: Parcel) =>
+      setMatchSource({
+        kind: "parcel",
+        id: parcel.id,
+        routeLabel: `${parcel.from_city} → ${parcel.to_city}`,
+      }),
+    [],
+  );
 
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: flights.total },
@@ -621,6 +642,7 @@ export function MyTravelsScreen() {
             onOpen={handleOpenTrip}
             onEdit={handleEditTrip}
             onDelete={handleDeleteTrip}
+            onViewMatches={handleViewTripMatches}
             deletingId={deletingId}
             onListTrip={goListTrip}
             hasMore={flights.hasMore}
@@ -641,6 +663,7 @@ export function MyTravelsScreen() {
             onEdit={handleEditParcel}
             onDeleteSend={handleDeleteSendParcel}
             onDeleteReceive={handleDeleteReceiveParcel}
+            onViewMatches={handleViewParcelMatches}
             deletingId={deletingId}
             onSendParcel={goSendParcel}
             onRetrySend={sendParcels.refetch}
@@ -697,6 +720,12 @@ export function MyTravelsScreen() {
           />
         ) : null}
       </ScrollView>
+
+      <MatchesModal
+        open={!!matchSource}
+        source={matchSource}
+        onClose={() => setMatchSource(null)}
+      />
 
       {editingTrip ? (
         <EditTripModal
@@ -818,6 +847,7 @@ function FlightsTab({
   onOpen,
   onEdit,
   onDelete,
+  onViewMatches,
   deletingId,
   onListTrip,
   hasMore,
@@ -831,6 +861,7 @@ function FlightsTab({
   onOpen: (id: string) => void;
   onEdit: (trip: Trip) => void;
   onDelete: (trip: Trip) => void;
+  onViewMatches: (trip: Trip) => void;
   deletingId: string | null;
   onListTrip: () => void;
   hasMore: boolean;
@@ -861,6 +892,7 @@ function FlightsTab({
           onPress={() => onOpen(t.id)}
           onEdit={() => onEdit(t)}
           onDelete={() => onDelete(t)}
+          onViewMatches={() => onViewMatches(t)}
           isDeleting={deletingId === t.id}
         />
       ))}
@@ -880,6 +912,7 @@ function PackagesTab({
   onEdit,
   onDeleteSend,
   onDeleteReceive,
+  onViewMatches,
   deletingId,
   onSendParcel,
   onRetrySend,
@@ -901,6 +934,7 @@ function PackagesTab({
   onEdit: (parcel: Parcel) => void;
   onDeleteSend: (parcel: Parcel) => void;
   onDeleteReceive: (parcel: Parcel) => void;
+  onViewMatches: (parcel: Parcel) => void;
   deletingId: string | null;
   onSendParcel: () => void;
   onRetrySend: () => Promise<void>;
@@ -938,6 +972,7 @@ function PackagesTab({
               onPress={() => onOpen(p.id)}
               onEdit={() => onEdit(p)}
               onDelete={() => onDeleteSend(p)}
+              onViewMatches={() => onViewMatches(p)}
               isDeleting={deletingId === p.id}
             />
           ))
@@ -978,6 +1013,7 @@ function PackagesTab({
               onPress={() => onOpen(p.id)}
               onEdit={() => onEdit(p)}
               onDelete={() => onDeleteReceive(p)}
+              onViewMatches={() => onViewMatches(p)}
               isDeleting={deletingId === p.id}
             />
           ))
@@ -1198,9 +1234,6 @@ function BuddyConnectionCard({
             label="Chat"
             onPress={onChat}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-            leftIcon={
-              <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.white} />
-            }
             style={styles.lcChatBtn}
           />
         ) : null}
@@ -1671,7 +1704,7 @@ const styles = StyleSheet.create({
   lcMessage: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
   lcActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   lcActionFlex: { flex: 1 },
-  lcChatBtn: { paddingHorizontal: 18 },
+  lcChatBtn: { flex: 1 },
   lcChip: {
     minHeight: 48,
     borderRadius: 16,

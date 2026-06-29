@@ -46,3 +46,35 @@ export function formatTravelDateRange(
   const toDate = parseLocalDate(to);
   return toDate ? `${fromLabel} – ${fmt(toDate)}` : fromLabel;
 }
+
+interface DeliveryWindowLike {
+  delivery_by?: string | null;
+  delivery_by_from?: string | null;
+  delivery_by_to?: string | null;
+}
+
+/**
+ * Parcel delivery window: "10 Sept – 18 Sept" when a range was set, otherwise
+ * the single `delivery_by` date. Mirrors web's `formatDeliveryWindow`.
+ */
+export function formatDeliveryWindow(
+  parcel: DeliveryWindowLike,
+  opts?: { year?: boolean },
+): string {
+  const from = parcel.delivery_by_from || null;
+  const to = parcel.delivery_by_to || null;
+  const fmt = (d: Date) =>
+    d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      ...(opts?.year ? { year: "numeric" } : {}),
+    });
+
+  const fromDate = parseLocalDate(from);
+  const toDate = parseLocalDate(to);
+  if (fromDate && toDate && from !== to) {
+    return `${fmt(fromDate)} – ${fmt(toDate)}`;
+  }
+  const single = parseLocalDate(parcel.delivery_by);
+  return single ? fmt(single) : "—";
+}

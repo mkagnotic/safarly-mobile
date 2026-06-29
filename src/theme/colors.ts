@@ -3,8 +3,8 @@
  * `primary` matches web `primary-deep` (icons, chrome, CTAs); `primarySoft` matches web `primary` (lavender fills).
  */
 export const colors = {
-  /** Fallback / flat surfaces — warm midpoint of `heroBackgroundGradient` (peach → pink → purple) */
-  background: "#FBEDF1",
+  /** Fallback / flat surfaces — warm midpoint of `heroBackgroundGradient` (peach → pink → purple). Slightly deeper so white content cards stand out. */
+  background: "#ECDBE4",
   /** Near-black — strong contrast on glass gradients + white cards */
   foreground: "#08070D",
   /** Web `--card` — crisp white for elevated surfaces */
@@ -100,7 +100,7 @@ export const primaryTint = {
  * Root + stack + tab scene background in light mode — warm midpoint of the hero
  * wash so flashes during transitions match `heroBackgroundGradient` (no cool flash).
  */
-export const screenCanvas = "#FBEDF1" as const;
+export const screenCanvas = "#ECDBE4" as const;
 
 /**
  * Warm hero wash — mirrors web `.gradient-bg-hero`: a peach→pink→purple diagonal
@@ -110,29 +110,32 @@ export const screenCanvas = "#FBEDF1" as const;
  */
 export const heroBackgroundGradient = {
   base: {
-    colors: ["#FFF4EB", "#FBEAF0", "#F1E0F5"] as const,
+    // Deeper than the original near-white wash so white content cards read with
+    // clearer separation across every page (still a soft peach→lavender pastel).
+    colors: ["#F3E6DA", "#ECDBE4", "#E4D2ED"] as const,
     locations: [0, 0.55, 1] as const,
     start: { x: 0, y: 0 },
     end: { x: 1, y: 1 },
   },
   glows: [
     {
-      colors: ["rgba(255, 220, 194, 0.95)", "rgba(255, 220, 194, 0)"] as const,
+      // Glows dialed back so the corners don't wash the wash back toward white.
+      colors: ["rgba(255, 220, 194, 0.6)", "rgba(255, 220, 194, 0)"] as const,
       start: { x: 0, y: 0 },
       end: { x: 0.78, y: 0.72 },
     },
     {
-      colors: ["rgba(250, 209, 226, 0.85)", "rgba(250, 209, 226, 0)"] as const,
+      colors: ["rgba(250, 209, 226, 0.55)", "rgba(250, 209, 226, 0)"] as const,
       start: { x: 1, y: 0.06 },
       end: { x: 0.28, y: 0.74 },
     },
     {
-      colors: ["rgba(229, 192, 237, 0.85)", "rgba(229, 192, 237, 0)"] as const,
+      colors: ["rgba(229, 192, 237, 0.55)", "rgba(229, 192, 237, 0)"] as const,
       start: { x: 1, y: 1 },
       end: { x: 0.2, y: 0.2 },
     },
     {
-      colors: ["rgba(243, 206, 237, 0.55)", "rgba(243, 206, 237, 0)"] as const,
+      colors: ["rgba(243, 206, 237, 0.38)", "rgba(243, 206, 237, 0)"] as const,
       start: { x: 0.38, y: 1 },
       end: { x: 0.46, y: 0.42 },
     },
@@ -146,4 +149,4 @@ export const glassBlurIntensity = {
 } as const;
 
 /** Tab bar fill when blur/CSS blur isn’t used — frosted pastel aligned with the warm hero wash */
-export const glassTabBarFallback = "rgba(251, 237, 241, 0.93)" as const;
+export const glassTabBarFallback = "rgba(236, 219, 228, 0.93)" as const;

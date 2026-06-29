@@ -14,7 +14,7 @@ import {
 import type { Parcel, Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
-import { formatTravelDateRange } from "@/utils/travelDate";
+import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 
 export type TravelCardType = "flight" | "parcel";
 
@@ -31,13 +31,8 @@ interface Props {
   onEdit?: () => void;
   onDelete?: () => void;
   isDeleting?: boolean;
-}
-
-function formatLongDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  /** When set and the listing is matched/accepted, the status pill opens the matches view. */
+  onViewMatches?: () => void;
 }
 
 export const TravelCard = memo(function TravelCard({
@@ -48,6 +43,7 @@ export const TravelCard = memo(function TravelCard({
   onEdit,
   onDelete,
   isDeleting,
+  onViewMatches,
 }: Readonly<Props>) {
   const status = item.status ?? "";
   const tone = toneForStatus(status);
@@ -56,6 +52,9 @@ export const TravelCard = memo(function TravelCard({
     type === "parcel" ? (item as Parcel).delivery_by : (item as FlightItem).travel_date;
   const expired = isListingExpired(status, expiryDate);
   const showStatusPill = !expired && !!status && !isImplicitStatus(status);
+  // A matched/accepted listing's badge opens the list of matching counterparts.
+  const matchClickable =
+    showStatusPill && !!onViewMatches && (status === "matched" || status === "accepted");
   const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
 
   const metaLine =
@@ -150,6 +149,18 @@ export const TravelCard = memo(function TravelCard({
           <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
           <Text style={styles.expiredPillText}>EXPIRED</Text>
         </View>
+      ) : matchClickable ? (
+        <Pressable
+          onPress={onViewMatches}
+          style={[styles.statusPill, styles.statusPillRow, { backgroundColor: tone.bg }]}
+          accessibilityRole="button"
+          accessibilityLabel={`${labelForStatus(status)} — view matches`}
+        >
+          <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
+            {labelForStatus(status)}
+          </Text>
+          <Ionicons name="people" size={11} color={tone.fg} />
+        </Pressable>
       ) : showStatusPill ? (
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
@@ -177,7 +188,7 @@ function renderFlightMeta(trip: FlightItem): string {
 }
 
 function renderParcelMeta(parcel: Parcel): string {
-  const date = formatLongDate(parcel.delivery_by);
+  const date = formatDeliveryWindow(parcel, { year: true });
   const category = parcel.category?.trim();
   const weight = parcel.weight_kg != null ? `${parcel.weight_kg}kg` : "";
   const fee =
@@ -250,6 +261,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     marginTop: 10,
   },
+  statusPillRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   expiredPill: {
     alignSelf: "flex-start",
     flexDirection: "row",

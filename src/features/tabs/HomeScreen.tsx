@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import {
-  CompositeNavigationProp,
-  useFocusEffect,
-  useNavigation,
-} from "@react-navigation/native";
+import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Animated, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Animated, Platform, StyleSheet, Text, View } from "react-native";
 
 import { KycPromptDialog } from "@/components/kyc/KycPromptDialog";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -15,61 +12,74 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
-import { useAuth } from "@/context/AuthContext";
-import { useActivityFeed } from "@/hooks/api/useActivityFeed";
-import { useMyConversations } from "@/hooks/api/useMyConversations";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
-import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { getErrorMessage, type Conversation, type FeedItem } from "@/services/api";
+import { getErrorMessage } from "@/services/api";
 import { useAppStore } from "@/store/useAppStore";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
+
+// ── Activity + Messages sections are temporarily hidden. The data hooks,
+//    helpers and JSX for them are kept (commented) so they can be re-enabled.
+// import { useFocusEffect } from "@react-navigation/native";
+// import { Image } from "react-native";
+// import { useAuth } from "@/context/AuthContext";
+// import { useActivityFeed } from "@/hooks/api/useActivityFeed";
+// import { useMyConversations } from "@/hooks/api/useMyConversations";
+// import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
+// import { type Conversation, type FeedItem } from "@/services/api";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Home">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-function getInitials(name?: string | null): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
+/** Gradient pairs per pillar — match the web home's colour-tinted icon tiles. */
+const CARRIER_GRADIENT = ["#A74EFF", "#7C3AED"] as const;
+const RECEIVE_GRADIENT = ["#22C35D", "#16A34A"] as const;
+const BUDDY_GRADIENT = ["#F59F0A", "#EA8C0B"] as const;
 
-/** "Mar 30" — same shape web uses on the activity card. */
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+// function getInitials(name?: string | null): string {
+//   if (!name) return "?";
+//   return name
+//     .split(" ")
+//     .map((w) => w[0])
+//     .join("")
+//     .toUpperCase()
+//     .slice(0, 2);
+// }
+
+// /** "Mar 30" — same shape web uses on the activity card. */
+// function formatShortDate(iso: string): string {
+//   const d = new Date(iso);
+//   if (Number.isNaN(d.getTime())) return "";
+//   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+// }
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { user } = useAuth();
   const {
     profile,
     loading: profileLoading,
     error: profileError,
     refetch: refetchProfile,
   } = useMyProfile();
-  const {
-    items: activity,
-    loading: activityLoading,
-    error: activityError,
-    refetch: refetchActivity,
-  } = useActivityFeed({ perPage: 4 });
-  const {
-    conversations,
-    loading: convsLoading,
-    error: convsError,
-    refetch: refetchConvs,
-  } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
-  const { count: messagesUnread } = useUnreadInboxCount();
+
+  // ── Activity + Messages data (temporarily hidden) ──
+  // const { user } = useAuth();
+  // const {
+  //   items: activity,
+  //   loading: activityLoading,
+  //   error: activityError,
+  //   refetch: refetchActivity,
+  // } = useActivityFeed({ perPage: 4 });
+  // const {
+  //   conversations,
+  //   loading: convsLoading,
+  //   error: convsError,
+  //   refetch: refetchConvs,
+  // } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
+  // const { count: messagesUnread } = useUnreadInboxCount();
 
   // One-shot KYC welcome prompt: consume the flag immediately so it shows once.
   const kycWelcomePending = useAppStore((s) => s.kycWelcomePending);
@@ -81,22 +91,21 @@ export function HomeScreen() {
     setKycWelcomePending(false);
   }, [kycWelcomePending, setKycWelcomePending]);
 
-  const firstError = profileError ?? activityError ?? convsError;
-  const formError = firstError ? getErrorMessage(firstError) : null;
+  const formError = profileError ? getErrorMessage(profileError) : null;
 
   const airplaneStyle = Platform.OS === "ios" ? styles.airplaneTiltIos : styles.airplaneTilt;
 
   // Web parity (`CustomerHome.tsx:46-50`): drop self-conversations + only
   // ones the dedupe layer recognises as a real participant.
-  const visibleConversations = useMemo(
-    () =>
-      conversations.filter(
-        (c) =>
-          c.participant_1 !== c.participant_2 &&
-          c.participant?.id !== user?.id,
-      ),
-    [conversations, user?.id],
-  );
+  // const visibleConversations = useMemo(
+  //   () =>
+  //     conversations.filter(
+  //       (c) =>
+  //         c.participant_1 !== c.participant_2 &&
+  //         c.participant?.id !== user?.id,
+  //     ),
+  //   [conversations, user?.id],
+  // );
 
   // `&& !profile` keeps the name stable across realtime refetches that flip
   // `loading` after the first paint — otherwise the skeleton would flash back
@@ -106,51 +115,51 @@ export function HomeScreen() {
 
   const handleRefresh = useCallback(() => {
     void refetchProfile();
-    void refetchActivity();
-    void refetchConvs();
-  }, [refetchProfile, refetchActivity, refetchConvs]);
+    // void refetchActivity();
+    // void refetchConvs();
+  }, [refetchProfile]);
 
   // Refetch every time Home regains focus — covers the case where realtime
   // didn't fire while the user was elsewhere (e.g. in Settings).
-  useFocusEffect(
-    useCallback(() => {
-      void refetchActivity();
-      void refetchConvs();
-    }, [refetchActivity, refetchConvs]),
-  );
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     void refetchActivity();
+  //     void refetchConvs();
+  //   }, [refetchActivity, refetchConvs]),
+  // );
 
-  const openConversation = useCallback(
-    (c: Conversation) => {
-      navigation.navigate("OfferChatTab", {
-        conversationId: c.id,
-        name: c.participant?.name ?? "Conversation",
-        source: "home",
-      });
-    },
-    [navigation],
-  );
+  // const openConversation = useCallback(
+  //   (c: Conversation) => {
+  //     navigation.navigate("OfferChatTab", {
+  //       conversationId: c.id,
+  //       name: c.participant?.name ?? "Conversation",
+  //       source: "home",
+  //     });
+  //   },
+  //   [navigation],
+  // );
 
-  const renderActivityRow = (item: FeedItem) => (
-    <Pressable
-      key={item.id}
-      onPress={() => navigation.navigate("Parcels")}
-      style={styles.activityRow}
-      accessibilityRole="button"
-      accessibilityLabel={item.title}
-    >
-      <Text style={styles.activityTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-      {item.description ? (
-        <Text style={styles.activityDescription} numberOfLines={2}>
-          {item.description}
-        </Text>
-      ) : null}
-      <Text style={styles.activityDate}>
-        {formatShortDate(item.created_at).toUpperCase()}
-      </Text>
-    </Pressable>
-  );
+  // const renderActivityRow = (item: FeedItem) => (
+  //   <Pressable
+  //     key={item.id}
+  //     onPress={() => navigation.navigate("Parcels")}
+  //     style={styles.activityRow}
+  //     accessibilityRole="button"
+  //     accessibilityLabel={item.title}
+  //   >
+  //     <Text style={styles.activityTitle} numberOfLines={2}>
+  //       {item.title}
+  //     </Text>
+  //     {item.description ? (
+  //       <Text style={styles.activityDescription} numberOfLines={2}>
+  //         {item.description}
+  //       </Text>
+  //     ) : null}
+  //     <Text style={styles.activityDate}>
+  //       {formatShortDate(item.created_at).toUpperCase()}
+  //     </Text>
+  //   </Pressable>
+  // );
 
   return (
     <Screen onRefresh={handleRefresh}>
@@ -207,6 +216,7 @@ export function HomeScreen() {
           iconStyle={airplaneStyle}
           tint={colors.wordmark}
           tintBg={colors.surfaceTintPrimary}
+          gradient={CARRIER_GRADIENT}
           onPress={() => navigation.navigate("ListTripTab")}
         />
         <ActionCard
@@ -216,6 +226,7 @@ export function HomeScreen() {
           icon="download"
           tint={colors.safe}
           tintBg="rgba(34, 195, 93, 0.12)"
+          gradient={RECEIVE_GRADIENT}
           onPress={() => navigation.navigate("SendParcelTab")}
         />
         <ActionCard
@@ -225,11 +236,12 @@ export function HomeScreen() {
           icon="people-outline"
           tint={colors.warning}
           tintBg="rgba(245, 159, 10, 0.14)"
+          gradient={BUDDY_GRADIENT}
           onPress={() => navigation.navigate("CreateBuddyTab")}
         />
       </View>
 
-      {/* ───────── Activity ───────── */}
+      {/* ───────── Activity + Messages — temporarily hidden ─────────
       <View style={styles.sectionHeaderRow}>
         <View style={styles.sectionHeaderLeft}>
           <View style={[styles.sectionIcon, { backgroundColor: colors.surfaceTintPrimary }]}>
@@ -265,7 +277,6 @@ export function HomeScreen() {
         )}
       </Card>
 
-      {/* ───────── Messages ───────── */}
       <View style={styles.sectionHeaderRow}>
         <View style={styles.sectionHeaderLeft}>
           <View style={[styles.sectionIcon, { backgroundColor: "rgba(34, 195, 93, 0.12)" }]}>
@@ -280,9 +291,7 @@ export function HomeScreen() {
           onPress={() => navigation.navigate("MessagesTab")}
           accessibilityRole="button"
           accessibilityLabel={
-            messagesUnread > 0
-              ? `Open inbox, ${messagesUnread} unread`
-              : "Open inbox"
+            messagesUnread > 0 ? `Open inbox, ${messagesUnread} unread` : "Open inbox"
           }
           hitSlop={8}
         >
@@ -305,15 +314,12 @@ export function HomeScreen() {
         ) : (
           <View style={styles.sectionList}>
             {visibleConversations.slice(0, 3).map((c) => (
-              <ConversationRow
-                key={c.id}
-                conversation={c}
-                onPress={() => openConversation(c)}
-              />
+              <ConversationRow key={c.id} conversation={c} onPress={() => openConversation(c)} />
             ))}
           </View>
         )}
       </Card>
+      ───────── end Activity + Messages ───────── */}
 
       <KycPromptDialog
         open={showKycWelcome}
@@ -338,6 +344,8 @@ interface ActionCardProps {
   iconStyle?: ReturnType<typeof StyleSheet.create>[string];
   tint: string;
   tintBg: string;
+  /** Two-stop gradient for the icon tile (matches web's colour-tinted pillars). */
+  gradient: readonly [string, string];
   onPress: () => void;
 }
 
@@ -349,83 +357,87 @@ function ActionCard({
   iconStyle,
   tint,
   tintBg,
+  gradient,
   onPress,
 }: Readonly<ActionCardProps>) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.actionCard, shadowCard()]}
+      style={[styles.actionCard, { backgroundColor: tintBg }, shadowCard()]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
       <View style={styles.actionTopRow}>
-        <View style={[styles.actionIconBox, { backgroundColor: tintBg }]}>
-          <Ionicons name={icon} size={22} color={tint} style={iconStyle} />
-        </View>
+        <LinearGradient
+          colors={gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.actionIconBox}
+        >
+          <Ionicons name={icon} size={24} color={colors.white} style={iconStyle} />
+        </LinearGradient>
         <View style={styles.actionChevronCircle}>
           <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
         </View>
       </View>
-      <Text style={styles.actionChip}>{chip.toUpperCase()}</Text>
+      <Text style={[styles.actionChip, { color: tint }]}>{chip.toUpperCase()}</Text>
       <Text style={styles.actionTitle}>{title}</Text>
       <Text style={styles.actionSubtitle}>{subtitle}</Text>
     </Pressable>
   );
 }
 
-interface ConversationRowProps {
-  conversation: Conversation;
-  onPress: () => void;
-}
+// interface ConversationRowProps {
+//   conversation: Conversation;
+//   onPress: () => void;
+// }
 
-function ConversationRow({ conversation, onPress }: Readonly<ConversationRowProps>) {
-  const name = conversation.participant?.name ?? "Unknown";
-  const initials = getInitials(name);
-  const avatarUrl = conversation.participant?.avatar_url ?? null;
-  const date = conversation.last_message_at
-    ? formatShortDate(conversation.last_message_at)
-    : "";
-  // Server returns `last_message` on some paths and `last_message_text` on
-  // others — same fallback chain MessagesScreen uses (line 507).
-  const preview =
-    conversation.last_message ?? conversation.last_message_text ?? "No messages yet";
-  const unread = conversation.unread_count ?? 0;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={styles.conversationRow}
-      accessibilityRole="button"
-      accessibilityLabel={`Open chat with ${name}`}
-    >
-      {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.conversationAvatar} />
-      ) : (
-        <View style={[styles.conversationAvatar, styles.conversationAvatarFallback]}>
-          <Text style={styles.conversationInitials}>{initials}</Text>
-        </View>
-      )}
-      <View style={styles.conversationBody}>
-        <View style={styles.conversationTopRow}>
-          <Text style={styles.conversationName} numberOfLines={1}>
-            {name}
-          </Text>
-          {date ? <Text style={styles.conversationDate}>{date}</Text> : null}
-        </View>
-        <Text style={styles.conversationPreview} numberOfLines={1}>
-          {preview}
-        </Text>
-      </View>
-      {unread > 0 ? (
-        <View style={styles.conversationBadge}>
-          <Text style={styles.conversationBadgeText}>{unread > 9 ? "9+" : unread}</Text>
-        </View>
-      ) : (
-        <Ionicons name="chatbubble-outline" size={16} color={colors.subtleText} />
-      )}
-    </Pressable>
-  );
-}
+// function ConversationRow({ conversation, onPress }: Readonly<ConversationRowProps>) {
+//   const name = conversation.participant?.name ?? "Unknown";
+//   const initials = getInitials(name);
+//   const avatarUrl = conversation.participant?.avatar_url ?? null;
+//   const date = conversation.last_message_at
+//     ? formatShortDate(conversation.last_message_at)
+//     : "";
+//   const preview =
+//     conversation.last_message ?? conversation.last_message_text ?? "No messages yet";
+//   const unread = conversation.unread_count ?? 0;
+//
+//   return (
+//     <Pressable
+//       onPress={onPress}
+//       style={styles.conversationRow}
+//       accessibilityRole="button"
+//       accessibilityLabel={`Open chat with ${name}`}
+//     >
+//       {avatarUrl ? (
+//         <Image source={{ uri: avatarUrl }} style={styles.conversationAvatar} />
+//       ) : (
+//         <View style={[styles.conversationAvatar, styles.conversationAvatarFallback]}>
+//           <Text style={styles.conversationInitials}>{initials}</Text>
+//         </View>
+//       )}
+//       <View style={styles.conversationBody}>
+//         <View style={styles.conversationTopRow}>
+//           <Text style={styles.conversationName} numberOfLines={1}>
+//             {name}
+//           </Text>
+//           {date ? <Text style={styles.conversationDate}>{date}</Text> : null}
+//         </View>
+//         <Text style={styles.conversationPreview} numberOfLines={1}>
+//           {preview}
+//         </Text>
+//       </View>
+//       {unread > 0 ? (
+//         <View style={styles.conversationBadge}>
+//           <Text style={styles.conversationBadgeText}>{unread > 9 ? "9+" : unread}</Text>
+//         </View>
+//       ) : (
+//         <Ionicons name="chatbubble-outline" size={16} color={colors.subtleText} />
+//       )}
+//     </Pressable>
+//   );
+// }
 
 function PulseBar({ style }: Readonly<{ style?: View["props"]["style"] }>) {
   const opacity = useRef(new Animated.Value(0.45)).current;
@@ -446,21 +458,21 @@ function PulseBar({ style }: Readonly<{ style?: View["props"]["style"] }>) {
   return <Animated.View style={[style, { opacity }]} />;
 }
 
-function SkeletonRows({ count }: Readonly<{ count: number }>) {
-  return (
-    <View style={styles.sectionList}>
-      {Array.from({ length: count }).map((_, i) => (
-        <View key={i} style={styles.skeletonRow}>
-          <View style={styles.skeletonAvatar} />
-          <View style={styles.skeletonBody}>
-            <View style={styles.skeletonNameBar} />
-            <View style={styles.skeletonPreviewBar} />
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
+// function SkeletonRows({ count }: Readonly<{ count: number }>) {
+//   return (
+//     <View style={styles.sectionList}>
+//       {Array.from({ length: count }).map((_, i) => (
+//         <View key={i} style={styles.skeletonRow}>
+//           <View style={styles.skeletonAvatar} />
+//           <View style={styles.skeletonBody}>
+//             <View style={styles.skeletonNameBar} />
+//             <View style={styles.skeletonPreviewBar} />
+//           </View>
+//         </View>
+//       ))}
+//     </View>
+//   );
+// }
 
 // ───────────────────────── Styles ─────────────────────────
 
@@ -517,50 +529,51 @@ const styles = StyleSheet.create({
   heroBody: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500" },
 
   // Action grid (3 cards stacked)
-  actionGrid: { gap: 10, marginBottom: 18 },
+  actionGrid: { gap: 12, marginBottom: 18 },
   actionCard: {
-    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     gap: 4,
   },
   actionTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   actionIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   actionChevronCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceMuted,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   actionChip: {
-    color: colors.subtleText,
     fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
     marginBottom: 2,
   },
-  actionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  actionTitle: { color: colors.text, fontSize: 17, lineHeight: 23, fontWeight: "800" },
   actionSubtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
   airplaneTilt: { transform: [{ rotate: "-42deg" }] },
   airplaneTiltIos: { transform: [{ rotate: "-42deg" }] },
 
-  // Section headers
+  // Section headers (used by the hidden Activity + Messages sections)
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
