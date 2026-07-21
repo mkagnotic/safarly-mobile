@@ -22,7 +22,7 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
+import { DateField, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
@@ -38,12 +38,11 @@ type Nav = CompositeNavigationProp<
 >;
 
 type Country = "IN" | "US";
-type DateMode = "single" | "range";
 type WeightUnit = "kg" | "lb";
 type SizeUnit = "cm" | "in";
 
 /** Keys for fields that can carry an inline validation error. */
-type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "maxWeight" | "age";
+type FieldKey = "fromCity" | "toCity" | "departDate" | "maxWeight" | "age";
 
 /** Web parity (`CustomerListTrip.tsx:41-46`). */
 const AIRLINES: readonly string[] = [
@@ -96,6 +95,9 @@ const MAX_WEIGHT_LB = 50;
 const WEIGHT_LIMIT_LABEL = `${MAX_WEIGHT_KG} kg (${MAX_WEIGHT_LB} lb)`;
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
+
+/** Web parity (`CustomerListTrip.tsx` sameRouteMsg). */
+const SAME_ROUTE_MSG = "Arrival city must be different from departure";
 
 function formatYmd(d: Date): string {
   const yyyy = d.getFullYear();
@@ -167,10 +169,8 @@ export function ListTripScreen() {
   const [airline, setAirline] = useState("");
   const [airlineOpen, setAirlineOpen] = useState(false);
 
-  const [dateMode, setDateMode] = useState<DateMode>("single");
   const [departDate, setDepartDate] = useState<Date | null>(null);
-  const [returnDate, setReturnDate] = useState<Date | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState<"depart" | "return" | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -215,7 +215,6 @@ export function ListTripScreen() {
     fromCity: "section1",
     toCity: "section1",
     departDate: "section2",
-    returnDate: "section2",
     maxWeight: "section3",
     age: "section4",
   };
@@ -236,10 +235,8 @@ export function ListTripScreen() {
     setToCity("");
     setAirline("");
     setAirlineOpen(false);
-    setDateMode("single");
     setDepartDate(null);
-    setReturnDate(null);
-    setCalendarOpen(null);
+    setCalendarOpen(false);
     setSizeUnit("cm");
     setSizeL("");
     setSizeW("");
@@ -334,23 +331,29 @@ export function ListTripScreen() {
   };
   const hasSizeError = sizeErrors.l || sizeErrors.w || sizeErrors.h;
 
+  /**
+   * Live same-route check (web parity) — surfaces the moment both cities match
+   * rather than waiting for submit. "Any city" is exempt: it's a wildcard, so
+   * Any -> Any is a legitimately broad listing, not a same-city mistake.
+   */
+  const isSameRoute =
+    !!fromCity &&
+    !!toCity &&
+    fromCity !== ANY_CITY &&
+    fromCountry === toCountry &&
+    fromCity === toCity;
+
   const handleSubmit = useCallback(async () => {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
     if (!toCity) errors.toCity = "Select an arrival city";
+    if (isSameRoute) errors.toCity = SAME_ROUTE_MSG;
     if (!departDate) {
       errors.departDate = "Pick a travel date";
     } else if (departDate < today) {
       errors.departDate = "Can't be in the past";
     } else if (departDate > maxDate) {
       errors.departDate = "Must be within 12 months";
-    }
-    if (dateMode === "range" && returnDate) {
-      if (returnDate > maxDate) {
-        errors.returnDate = "Must be within 12 months";
-      } else if (departDate && returnDate < departDate) {
-        errors.returnDate = "Must be after departure";
-      }
     }
     const w = parseFloat(maxWeight);
     if (!w || w <= 0) {
@@ -377,7 +380,6 @@ export function ListTripScreen() {
         "fromCity",
         "toCity",
         "departDate",
-        "returnDate",
         "maxWeight",
         "age",
       ];
@@ -397,7 +399,6 @@ export function ListTripScreen() {
     const isAnyFrom = fromCity === ANY_CITY;
     const isAnyTo = toCity === ANY_CITY;
     const sizeStr = sizeL && sizeW && sizeH ? `${sizeL}×${sizeW}×${sizeH} ${sizeUnit}` : null;
-    const endDateStr = dateMode === "range" && returnDate ? formatYmd(returnDate) : null;
 
     setSubmitting(true);
     try {
@@ -410,7 +411,8 @@ export function ListTripScreen() {
         any_to: isAnyTo,
         travel_date: formatYmd(departDate),
         travel_date_from: formatYmd(departDate),
-        travel_date_to: endDateStr ?? formatYmd(departDate),
+        // Single date: from and to collapse to the same day, as web posts it.
+        travel_date_to: formatYmd(departDate),
         luggage_capacity_kg: Math.round(weightKg * 100) / 100,
         open_to_buddy: openToBuddy,
         airline: airline || undefined,
@@ -424,7 +426,6 @@ export function ListTripScreen() {
         notes:
           [
             sizeStr ? `Max parcel size: ${sizeStr}` : null,
-            endDateStr ? `Return date: ${endDateStr}` : null,
             weightUnit === "lb" ? `Original weight: ${maxWeight} lbs` : null,
             sizeUnit === "in" ? `Size unit: inches` : null,
           ]
@@ -440,9 +441,8 @@ export function ListTripScreen() {
   }, [
     fromCity,
     toCity,
+    isSameRoute,
     departDate,
-    returnDate,
-    dateMode,
     today,
     maxDate,
     maxWeight,
@@ -466,7 +466,8 @@ export function ListTripScreen() {
 
   if (submitted) {
     return (
-      <Screen>
+      // Terminal state — nothing to pull-to-refresh.
+      <Screen contentContainerStyle={styles.successContent} refreshEnabled={false}>
         <View style={styles.headerRow}>
           <Pressable
             style={styles.backButton}
@@ -509,17 +510,19 @@ export function ListTripScreen() {
   }
 
   const section1Complete = !!fromCity && !!toCity;
-  const section2Complete = !!departDate && (dateMode === "single" || !!returnDate);
+  /** Live same-route error wins over the stale submit-time one. */
+  const toCityError = isSameRoute ? SAME_ROUTE_MSG : fieldErrors.toCity;
+
+  const section2Complete = !!departDate;
   const section3Complete = Number(maxWeight) > 0;
   const section4Complete = openToBuddy;
 
-  // 4 required fields; date-range adds the return date as the 5th.
-  const requiredTotal = dateMode === "range" ? 5 : 4;
+  /** From city, to city, travel date, max weight. */
+  const requiredTotal = 4;
   const requiredCompleted =
     (fromCity ? 1 : 0) +
     (toCity ? 1 : 0) +
     (departDate ? 1 : 0) +
-    (dateMode === "range" && returnDate ? 1 : 0) +
     (Number(maxWeight) > 0 ? 1 : 0);
   const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
@@ -573,7 +576,7 @@ export function ListTripScreen() {
           title="Where are you going?"
           subtitle="Set your departure and destination"
           complete={section1Complete}
-          hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
+          hasError={!!fieldErrors.fromCity || !!toCityError}
         >
           <Text style={styles.fieldLabel}>From</Text>
           <LocationCard
@@ -616,10 +619,10 @@ export function ListTripScreen() {
               cities={toCities}
               placeholder="Select arrival city"
               variant="card"
-              invalid={!!fieldErrors.toCity}
+              invalid={!!toCityError}
             />
-            {fieldErrors.toCity ? (
-              <Text style={styles.inlineError}>{fieldErrors.toCity}</Text>
+            {toCityError ? (
+              <Text style={styles.inlineError}>{toCityError}</Text>
             ) : null}
           </View>
         </SectionCard>
@@ -636,41 +639,18 @@ export function ListTripScreen() {
           title="When are you flying?"
           subtitle="Travel dates and flight info"
           complete={section2Complete}
-          hasError={!!fieldErrors.departDate || !!fieldErrors.returnDate}
+          hasError={!!fieldErrors.departDate}
         >
-          <DateModeToggle<DateMode>
-            options={[
-              { value: "single", label: "Single Date" },
-              { value: "range", label: "Date Range" },
-            ]}
-            value={dateMode}
-            onChange={(next) => {
-              setDateMode(next);
-              if (next === "single") setReturnDate(null);
-            }}
+          {/* Single travel date only — matches web, where the Range option is
+              deliberately disabled for Your Travel Details. A carrier flies on
+              one date; a range belongs to the parcel's delivery window. */}
+          <DateField
+            label="Departure"
+            value={departDate ? formatDateLabel(departDate) : null}
+            placeholder="Select date"
+            onPress={() => setCalendarOpen(true)}
+            error={fieldErrors.departDate}
           />
-
-          <View style={styles.dateRow}>
-            <View style={styles.dateRowCell}>
-              <DateField
-                label="Departure"
-                value={departDate ? formatDateLabel(departDate) : null}
-                placeholder="Select date"
-                onPress={() => setCalendarOpen("depart")}
-                error={fieldErrors.departDate}
-              />
-            </View>
-            <View style={styles.dateRowCell}>
-              <DateField
-                label="Return"
-                value={returnDate ? formatDateLabel(returnDate) : null}
-                placeholder="Select date"
-                onPress={() => setCalendarOpen("return")}
-                disabled={dateMode === "single"}
-                error={fieldErrors.returnDate}
-              />
-            </View>
-          </View>
         <Text style={styles.helperText}>You can book up to 12 months ahead.</Text>
 
         <View style={styles.airlineLabelRow}>
@@ -962,24 +942,19 @@ export function ListTripScreen() {
 
       {/* Calendar */}
       <CalendarModal
-        open={calendarOpen !== null}
-        title={calendarOpen === "return" ? "Pick return date" : "Pick travel date"}
-        selected={calendarOpen === "return" ? returnDate : departDate}
+        open={calendarOpen}
+        title="Pick travel date"
+        selected={departDate}
         visibleMonth={visibleMonth}
-        today={calendarOpen === "return" && departDate ? departDate : today}
+        today={today}
         maxDate={maxDate}
         onSelect={(d) => {
-          if (calendarOpen === "return") {
-            setReturnDate(d);
-            clearFieldError("returnDate");
-          } else {
-            setDepartDate(d);
-            clearFieldError("departDate");
-          }
-          setCalendarOpen(null);
+          setDepartDate(d);
+          clearFieldError("departDate");
+          setCalendarOpen(false);
         }}
         onChangeMonth={setVisibleMonth}
-        onClose={() => setCalendarOpen(null)}
+        onClose={() => setCalendarOpen(false)}
       />
     </Screen>
   );
@@ -1360,7 +1335,22 @@ const styles = StyleSheet.create({
 
   submitRow: { marginTop: 4 },
 
-  successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
+  /**
+   * `flexGrow` on the scroll content + `flex: 1` here is what actually centres
+   * this: Screen's default content style has no flexGrow, so without it the
+   * children only occupy their natural height and sit at the top.
+   *
+   * Deliberately not `scroll={false}` — this keeps the block centred when there
+   * is room but still scrollable at large font scales on short devices.
+   */
+  successContent: { flexGrow: 1 },
+  successWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingBottom: 24,
+  },
   successIconBubble: {
     width: 80,
     height: 80,

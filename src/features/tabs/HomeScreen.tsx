@@ -225,7 +225,7 @@ export function HomeScreen() {
           subtitle="I need someone to bring me a package"
           icon="download"
           tint={colors.safe}
-          tintBg="rgba(34, 195, 93, 0.12)"
+          tintBg={colors.surfaceTintSafe}
           gradient={RECEIVE_GRADIENT}
           onPress={() => navigation.navigate("SendParcelTab")}
         />
@@ -235,7 +235,7 @@ export function HomeScreen() {
           subtitle="Find companions for safe travel"
           icon="people-outline"
           tint={colors.warning}
-          tintBg="rgba(245, 159, 10, 0.14)"
+          tintBg={colors.surfaceTintWarning}
           gradient={BUDDY_GRADIENT}
           onPress={() => navigation.navigate("CreateBuddyTab")}
         />
@@ -343,6 +343,11 @@ interface ActionCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   iconStyle?: ReturnType<typeof StyleSheet.create>[string];
   tint: string;
+  /**
+   * Card surface. Must be OPAQUE — the card is elevated, and a translucent
+   * background lets the shadow bleed through as a grey rectangle instead of
+   * being clipped to the corner radius. Use the `surfaceTint*` theme tokens.
+   */
   tintBg: string;
   /** Two-stop gradient for the icon tile (matches web's colour-tinted pillars). */
   gradient: readonly [string, string];

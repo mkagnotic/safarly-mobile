@@ -71,6 +71,31 @@ interface Props {
  * The provider does NOT toast or navigate on its own — those are screen
  * concerns. It just owns the session.
  */
+/**
+ * Has this user finished onboarding? Retried once.
+ *
+ * A single transient failure used to fall through to `profileSetupDone:
+ * false`, which drops a fully onboarded user into the Terms screen — and the
+ * request runs immediately after sign-in, exactly when a cold radio or a
+ * just-refreshed token makes a blip most likely. One retry makes that
+ * harmless.
+ *
+ * A genuine, repeated failure still fails closed: letting an un-onboarded
+ * account into the app is the worse outcome, since the rest of the product
+ * assumes terms have been accepted.
+ */
+const hasAcceptedTerms = async (): Promise<boolean> => {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data } = await usersApi.getMyProfile();
+      return !!data?.profile?.terms_accepted_at;
+    } catch {
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
+    }
+  }
+  return false;
+};
+
 export function AuthProvider({ children }: Readonly<Props>) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
@@ -85,6 +110,18 @@ export function AuthProvider({ children }: Readonly<Props>) {
       if (!mountedRef.current) return;
       setSession(next);
       const store = useAppStore.getState();
+
+      // Decide whether the server round-trip is needed, and raise
+      // `authBootstrapping`, BEFORE `authenticated` flips.
+      //
+      // RootNavigator resolves (authenticated && !authBootstrapping &&
+      // !profileSetupDone) to ProfileSetup, and `logout()` clears
+      // profileSetupDone — so raising the flag after login() leaves a window
+      // on every sign-in where a fully onboarded user is shown the Terms
+      // screen they already completed.
+      const needsBootstrap = !!next && !store.profileSetupDone;
+      if (needsBootstrap) store.setAuthBootstrapping(true);
+
       if (next && !store.authenticated) store.login();
       else if (!next && store.authenticated) store.logout();
 
@@ -99,23 +136,16 @@ export function AuthProvider({ children }: Readonly<Props>) {
       }
 
       // Server-authoritative ProfileSetup gating: ask the server whether the
-      // user has accepted terms (`terms_accepted_at`). Only run when we have
-      // a session AND the local cache hasn't already resolved setup — so
-      // returning users skip the round-trip on every cold start.
-      if (next && !useAppStore.getState().profileSetupDone) {
-        useAppStore.getState().setAuthBootstrapping(true);
-        try {
-          const { data } = await usersApi.getMyProfile();
-          if (!mountedRef.current) return;
-          if (data?.profile?.terms_accepted_at) {
-            useAppStore.getState().setProfileSetupDone(true);
-          }
-        } catch {
-          // Network/404 — leave profileSetupDone false so the user is taken
-          // through ProfileSetup. Safer to err on showing the flow.
-        } finally {
-          if (mountedRef.current) useAppStore.getState().setAuthBootstrapping(false);
-        }
+      // user has accepted terms (`terms_accepted_at`). Skipped entirely when
+      // the local cache already resolved setup, so returning users don't pay
+      // for the round-trip on every cold start.
+      if (!needsBootstrap) return;
+      try {
+        const accepted = await hasAcceptedTerms();
+        if (!mountedRef.current) return;
+        if (accepted) useAppStore.getState().setProfileSetupDone(true);
+      } finally {
+        if (mountedRef.current) useAppStore.getState().setAuthBootstrapping(false);
       }
     };
 
