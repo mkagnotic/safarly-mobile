@@ -91,6 +91,21 @@ export const colors = {
 
   /** Light tint behind icons — keyed off brand lavender */
   surfaceTintPrimary: "#F5F1FC",
+  /**
+   * Opaque category tints for elevated surfaces, siblings of
+   * `surfaceTintPrimary` and matched to it in lightness.
+   *
+   * These MUST stay opaque. An elevated card (anything carrying `shadowCard`
+   * and friends) needs a solid background: on Android the elevation shadow is
+   * drawn from the view's outline and bleeds through a translucent surface
+   * instead of being clipped to the corner radius, which renders as a grey
+   * rectangle behind the card. Web's `boxShadow` shows through in the same way.
+   *
+   * So use these rather than an `rgba()` accent when the surface is raised.
+   * A translucent tint is still fine on flat, unshadowed chips (icon badges).
+   */
+  surfaceTintSafe: "#EFF9F3",
+  surfaceTintWarning: "#FDF6EB",
 };
 
 /**
