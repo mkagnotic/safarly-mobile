@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
   Platform,
@@ -15,9 +17,17 @@ import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
+import { LegalConsentText } from "@/components/ui/LegalConsentText";
+import { PasswordStrengthMeter } from "@/components/ui/PasswordStrengthMeter";
 import { Screen } from "@/components/ui/Screen";
+import {
+  PASSWORD_HINT,
+  validatePassword,
+  validatePasswordConfirm,
+} from "@/features/auth/passwordPolicy";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
-import { getErrorMessage } from "@/services/api";
+import type { RootStackParamList } from "@/navigation/types";
+import { authApi, getErrorMessage, type AuthMethodInfo } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
@@ -28,24 +38,23 @@ interface Props {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/** Matches Supabase Auth's default minimum password length. */
-const PASSWORD_MIN = 6;
 
 interface FormErrors {
   fullName?: string;
   email?: string;
   password?: string;
+  confirmPassword?: string;
 }
 
 export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { signUpWithPassword, signInWithGoogle } = useAuth();
-  const setPendingNotice = useAppStore((s) => s.setPendingNotice);
   const setKycWelcomePending = useAppStore((s) => s.setKycWelcomePending);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
@@ -60,6 +69,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const fullNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const clearError = useCallback(
     (key: keyof FormErrors) =>
@@ -73,16 +83,17 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
       if (!fullName.trim()) next.fullName = "Name is required";
       if (!nextEmail) next.email = "Email is required";
       else if (!EMAIL_RE.test(nextEmail)) next.email = "Enter a valid email";
-      if (!password) next.password = "Password is required";
-      else if (password.length < PASSWORD_MIN) next.password = `Min ${PASSWORD_MIN} characters`;
+      next.password = validatePassword(password) ?? undefined;
+      next.confirmPassword = validatePasswordConfirm(password, confirmPassword) ?? undefined;
       setErrors(next);
       // Standard pattern: focus the first invalid field on a failed submit.
       if (next.fullName) fullNameRef.current?.focus();
       else if (next.email) emailRef.current?.focus();
       else if (next.password) passwordRef.current?.focus();
-      return Object.keys(next).length === 0;
+      else if (next.confirmPassword) confirmPasswordRef.current?.focus();
+      return !Object.values(next).some(Boolean);
     },
-    [fullName, password],
+    [fullName, password, confirmPassword],
   );
 
   const handleGoogleSignUp = useCallback(async () => {
@@ -112,25 +123,62 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
     if (!validate(normalizedEmail)) return;
     setSubmitting(true);
     try {
-      const { hasSession } = await signUpWithPassword(normalizedEmail, password, {
-        full_name: fullName,
-        phone,
-      });
+      const { hasSession, emailAlreadyTaken } = await signUpWithPassword(
+        normalizedEmail,
+        password,
+        { full_name: fullName },
+      );
+
+      // Supabase reports an already-registered email as a successful signup
+      // with no session — without this branch it looks identical to a fresh
+      // one and the user is told to check an inbox that will never receive
+      // anything. Ask the server which case this really is.
+      if (emailAlreadyTaken) {
+        let info: AuthMethodInfo | null = null;
+        try {
+          info = (await authApi.checkAuthMethod(normalizedEmail)).data ?? null;
+        } catch {
+          // Rate limited or offline — fall through to the pending-verification
+          // path below, which is the safe assumption.
+        }
+
+        if (info?.exists && info.confirmed) {
+          if (!info.has_password && info.providers.includes("google")) {
+            setFormError(
+              "This email is registered with Google. Use “Continue with Google” to sign in.",
+            );
+          } else {
+            setErrors((e) => ({
+              ...e,
+              email: "An account with this email already exists. Try signing in instead.",
+            }));
+            emailRef.current?.focus();
+          }
+          return;
+        }
+
+        // Registered but never confirmed. Supabase sent no new code for this
+        // signup attempt, so issue one explicitly and take them to the verify
+        // screen to finish what they started.
+        try {
+          await authApi.resendEmailOtp(normalizedEmail);
+        } catch {
+          // Usually the 60s resend throttle — the verify screen has its own
+          // resend button, so let them continue and retry from there.
+        }
+        navigation.navigate("VerifyEmail", { email: normalizedEmail });
+        return;
+      }
+
       if (hasSession) {
         // Fresh registration → arm the one-shot KYC welcome prompt; Home consumes
         // it after ProfileSetup. AuthContext fires SIGNED_IN → ProfileSetup.
         setKycWelcomePending(true);
         return;
       }
-      // Email confirmation required — hand the notice to LoginScreen so it
-      // survives this screen unmounting.
-      setPendingNotice({
-        target: "login",
-        variant: "info",
-        title: "Check your email",
-        message: "We sent you a confirmation link to finish setup.",
-      });
-      onSwitchToLogin();
+      // Email confirmation required. The confirmation template is code-only
+      // (no link), so verification happens in-app rather than in a browser.
+      navigation.navigate("VerifyEmail", { email: normalizedEmail });
     } catch (err) {
       const mapped = mapAuthError(err, "signup");
       if (mapped.target === "email") {
@@ -145,7 +193,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
     } finally {
       setSubmitting(false);
     }
-  }, [busy, validate, signUpWithPassword, email, password, fullName, phone, onSwitchToLogin, setKycWelcomePending]);
+  }, [busy, validate, signUpWithPassword, email, password, fullName, onSwitchToLogin, setKycWelcomePending]);
 
   return (
     <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
@@ -217,16 +265,6 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
             />
-            <AppInput
-              label="Phone (optional)"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="+1 234 567 8900"
-              keyboardType="phone-pad"
-              editable={!busy}
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-            />
             <View>
               <AppInput
                 ref={passwordRef}
@@ -237,15 +275,16 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                   clearError("password");
                   if (formError) setFormError(null);
                 }}
-                placeholder={`Min ${PASSWORD_MIN} characters`}
+                placeholder="Create a password"
+                hint={PASSWORD_HINT}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="password-new"
                 editable={!busy}
                 error={errors.password}
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit}
+                returnKeyType="next"
+                onSubmitEditing={() => confirmPasswordRef.current?.focus()}
               />
               <Pressable
                 style={styles.eyeToggle}
@@ -261,6 +300,27 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                 />
               </Pressable>
             </View>
+
+            <PasswordStrengthMeter password={password} />
+
+            <AppInput
+              ref={confirmPasswordRef}
+              label="Confirm Password"
+              value={confirmPassword}
+              onChangeText={(v) => {
+                setConfirmPassword(v);
+                clearError("confirmPassword");
+                if (formError) setFormError(null);
+              }}
+              placeholder="Re-enter your password"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!busy}
+              error={errors.confirmPassword}
+              returnKeyType="go"
+              onSubmitEditing={handleSubmit}
+            />
           </View>
 
           <View style={styles.actions}>
@@ -308,9 +368,11 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                 </Text>
               </Pressable>
             </View>
-            <Text style={styles.terms}>
-              By creating an account, you agree to our Terms of Service and Privacy Policy
-            </Text>
+            <LegalConsentText
+              prefix="By creating an account, you agree to our"
+              style={styles.terms}
+              disabled={busy}
+            />
           </View>
         </ScrollView>
       </View>

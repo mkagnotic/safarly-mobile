@@ -16,8 +16,19 @@ export const colors = {
    * peach–lavender washes and frosted chrome (WCAG-oriented vs pastel backgrounds).
    */
   mutedText: "#14121C",
-  /** Captions, placeholders, hints — still clearly separated from `mutedText` but AA-friendly on `#FFF1E6`–`#FFFFFF` */
+  /** Captions, hints — still clearly separated from `mutedText` but AA-friendly on `#FFF1E6`–`#FFFFFF` */
   subtleText: "#3A3548",
+  /**
+   * Input placeholders ONLY — `foreground` at 45%, mirroring web's
+   * `placeholder:text-foreground/45`.
+   *
+   * Deliberately lighter than every other text token: a placeholder is a hint,
+   * not content. `mutedText`/`subtleText` are near-black and make an empty
+   * field look pre-filled, which is especially misleading on password and
+   * one-time-code inputs. Kept as rgba so it blends over whatever surface the
+   * field sits on rather than assuming a white background.
+   */
+  placeholderText: "rgba(8, 7, 13, 0.45)",
 
   /** Bottom tab: active icon/label on frosted bar (dark violet, not mid lavender) */
   tabBarActive: "#1E1430",

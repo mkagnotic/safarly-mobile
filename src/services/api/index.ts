@@ -8,7 +8,7 @@ export {
 export type { ApiResponse, ApiError, QueryParams, QueryParamValue } from "./client";
 
 export { authApi } from "./auth";
-export type { AuthUser, AuthSession } from "./auth";
+export type { AuthUser, AuthSession, AuthMethodInfo } from "./auth";
 
 export { usersApi } from "./users";
 export type { UserProfile, UserPreferences, UserStats } from "./users";
@@ -25,8 +25,13 @@ export type { CarrierRequest } from "./carriers";
 export { bookingsApi } from "./bookings";
 export type { Booking, BookingDetailResponse } from "./bookings";
 
-export { paymentsApi } from "./payments";
-export type { Transaction, CreateIntentResult, ConfirmPaymentResult } from "./payments";
+export { paymentsApi, isPayoutPending } from "./payments";
+export type {
+  Transaction,
+  CreateIntentResult,
+  ConfirmPaymentResult,
+  StripeConnectStatus,
+} from "./payments";
 
 export { walletApi } from "./wallet";
 export type { Wallet, SavedCard, Earnings } from "./wallet";

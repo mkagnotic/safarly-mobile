@@ -13,6 +13,16 @@ export { AuthCancelledError } from "@/services/auth/googleOAuth";
 export interface SignUpResult {
   /** Present only if email confirmation is disabled in Supabase Auth settings. */
   hasSession: boolean;
+  /**
+   * Supabase anti-enumeration: signing up with an already-registered email
+   * returns 200 with NO error, no session, and an empty `identities` array —
+   * outwardly identical to a fresh signup awaiting confirmation. An empty
+   * `identities` array is the only signal, and it means "this email is taken",
+   * not necessarily "by a verified account". Callers must ask the server
+   * (`authApi.checkAuthMethod`) which case it actually is before choosing what
+   * to tell the user.
+   */
+  emailAlreadyTaken: boolean;
 }
 
 export interface SignUpMetadata {
@@ -142,8 +152,10 @@ export function AuthProvider({ children }: Readonly<Props>) {
       },
       signUpWithPassword: async (email, password, metadata) => {
         // We bypass `authApi.customerSignup` here so we can pass `options.data`
-        // (user_metadata) — name/phone collected on SignupScreen end up there
-        // and are picked up by ProfileSetup as defaults.
+        // (user_metadata) — the name collected on SignupScreen ends up there
+        // and is picked up by ProfileSetup as a default.
+        // `phone` stays supported on SignUpMetadata but no screen sends it any
+        // more; the sign-up form is email-only.
         const trimmed: SignUpMetadata = {};
         if (metadata?.full_name?.trim()) trimmed.full_name = metadata.full_name.trim();
         if (metadata?.phone?.trim()) trimmed.phone = metadata.phone.trim();
@@ -153,7 +165,10 @@ export function AuthProvider({ children }: Readonly<Props>) {
           options: Object.keys(trimmed).length ? { data: trimmed } : undefined,
         });
         if (error) throw error;
-        return { hasSession: !!data.session };
+        return {
+          hasSession: !!data.session,
+          emailAlreadyTaken: !!data.user && (data.user.identities?.length ?? 0) === 0,
+        };
       },
       signOut: async () => {
         // signOut() also fires onAuthStateChange — the store flag flips there.

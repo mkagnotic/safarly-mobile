@@ -69,16 +69,11 @@ export function ProfileFormFields({
         />
       </Field>
 
+      {/* Country before City — matches web (onboarding and Edit Profile both
+          order it this way) and reads as a natural narrowing: pick the country,
+          then the city inside it. */}
       {layout === "grid" ? (
         <View style={styles.gridRow}>
-          <View style={styles.gridCol}>
-            <CityField
-              city={city}
-              onCity={onCity}
-              error={errors?.city}
-              disabled={disabled}
-            />
-          </View>
           <View style={styles.gridCol}>
             <CountryField
               country={country}
@@ -87,16 +82,24 @@ export function ProfileFormFields({
               disabled={disabled}
             />
           </View>
+          <View style={styles.gridCol}>
+            <CityField
+              city={city}
+              onCity={onCity}
+              error={errors?.city}
+              disabled={disabled}
+            />
+          </View>
         </View>
       ) : (
         <>
-          <CityField city={city} onCity={onCity} error={errors?.city} disabled={disabled} />
           <CountryField
             country={country}
             onCountry={onCountry}
             error={errors?.country}
             disabled={disabled}
           />
+          <CityField city={city} onCity={onCity} error={errors?.city} disabled={disabled} />
         </>
       )}
 
