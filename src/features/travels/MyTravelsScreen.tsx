@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -26,6 +26,7 @@ import {
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { isTerminal } from "@/features/travels/statusLabels";
 import { MatchesModal, type MatchesSource } from "@/features/travels/MatchesModal";
+import { ParcelJourneyTracker } from "@/features/travels/ParcelJourneyTracker";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
 import { useBookings } from "@/hooks/api/useBookings";
@@ -39,6 +40,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import {
   buddiesApi,
   getErrorMessage,
+  messagesApi,
   parcelsApi,
   ratingsApi,
   tripsApi,
@@ -49,7 +51,7 @@ import {
   type Parcel,
   type Trip,
 } from "@/services/api";
-import { colors } from "@/theme/colors";
+import { colors, primaryTint } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -62,6 +64,39 @@ interface TabConfig {
   key: TabKey;
   label: string;
   count?: number;
+}
+
+// How far a booking has progressed — higher wins when a parcel has several
+// bookings (multi-bidder). Failed/terminal bookings rank 0 and are ignored so
+// the tracker follows the live booking, not a stale cancelled bid.
+// Web parity (`CustomerMyTrips.tsx` BOOKING_PROGRESS_RANK).
+const BOOKING_PROGRESS_RANK: Record<string, number> = {
+  pending_payment: 1,
+  confirmed: 2,
+  awaiting_handoff: 3,
+  in_transit: 4,
+  delivered: 5,
+};
+const bookingRank = (b: Booking): number => BOOKING_PROGRESS_RANK[b.status] ?? 0;
+
+// Parcel statuses that mean "still looking for a carrier" — show no booking so
+// the tracker reads as awaiting, not as a stale cancelled bid.
+const AWAITING_CARRIER = new Set(["open", "looking_for_match", "match_requested", "chatting"]);
+
+/**
+ * Keep the first item for each key — guards lists against duplicate rows
+ * (e.g. a buddy connection that exists twice for the same pair).
+ * Web parity (`CustomerMyTrips.tsx` uniqueBy).
+ */
+function uniqueBy<T>(items: T[], keyOf: (item: T) => string | undefined): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = keyOf(item);
+    if (!key) return true; // no usable key — leave it in rather than drop silently
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function MyTravelsScreen() {
@@ -79,17 +114,65 @@ export function MyTravelsScreen() {
   const requests = useBuddyRequests();
   const connections = useBuddyConnections();
 
+  // Bookings where I'm the sender — drives the Receive-card journey tracker.
+  // Fetched broadly (all statuses) so we can pick the live booking per parcel;
+  // the list carries status + timestamps + timeline. Web parity.
+  const senderBookings = useBookings({ role: "sender", perPage: 100 });
+
+  // Dedupe every list defensively so a repeated row never renders twice. Most
+  // lists are keyed by row id; buddy connections collapse by the *buddy's* id
+  // because a pair can end up with more than one active connection row.
+  const dedupedSend = uniqueBy(sendParcels.parcels, (p) => p.id);
+  const dedupedReceive = uniqueBy(receiveParcels.parcels, (p) => p.id);
+  const dedupedConnections = uniqueBy(connections.connections, (c) => c.buddy?.id ?? c.id);
+  const dedupedRequests = uniqueBy(requests.requests, (r) => r.id);
+  const dedupedListings = uniqueBy(partners.listings, (b) => b.id);
+  const dedupedFlights = uniqueBy(flights.trips, (t) => t.id);
+  const dedupedArchive = uniqueBy(archive.trips, (t) => t.id);
+  const dedupedDelivered = uniqueBy(delivered.bookings, (b) => b.id);
+
   // Terminal parcels move to Archive, not the active Send/Receive lists (§3.3 / §10.1).
-  const activeSend = sendParcels.parcels.filter((p) => !isTerminal(p.status));
-  const activeReceive = receiveParcels.parcels.filter((p) => !isTerminal(p.status));
+  const activeSend = dedupedSend.filter((p) => !isTerminal(p.status));
+  const activeReceive = dedupedReceive.filter((p) => !isTerminal(p.status));
 
   // In-progress buddies stay in Partners; ratable ones move to Archive (§3.3 / §7.2).
-  const activeBuddies = connections.connections.filter(
-    (c) => !(c.can_rate || c.already_rated),
-  );
-  const completedBuddies = connections.connections.filter(
-    (c) => c.can_rate || c.already_rated,
-  );
+  const activeBuddies = dedupedConnections.filter((c) => !(c.can_rate || c.already_rated));
+  const completedBuddies = dedupedConnections.filter((c) => c.can_rate || c.already_rated);
+
+  /**
+   * Resolve each parcel to the booking that best represents its journey. Prefer
+   * the most-progressed *active* booking; if there's none and the parcel isn't
+   * back to searching, fall back to the latest booking so a terminal (cancelled)
+   * or disputed journey still renders its real state in the tracker.
+   */
+  const trackerBookingFor = useMemo(() => {
+    const myId = myProfile.profile?.id;
+    const activeByParcelId = new Map<string, Booking>();
+    const latestByParcelId = new Map<string, Booking>();
+    for (const b of senderBookings.bookings) {
+      if (myId && b.sender_id !== myId) continue;
+      const latest = latestByParcelId.get(b.parcel_id);
+      if (!latest || b.created_at > latest.created_at) latestByParcelId.set(b.parcel_id, b);
+      if (bookingRank(b) > 0) {
+        const active = activeByParcelId.get(b.parcel_id);
+        if (!active || bookingRank(b) > bookingRank(active)) {
+          activeByParcelId.set(b.parcel_id, b);
+        }
+      }
+    }
+    return (p: Parcel): Booking | null =>
+      activeByParcelId.get(p.id) ??
+      (AWAITING_CARRIER.has(p.status) ? null : latestByParcelId.get(p.id) ?? null);
+  }, [senderBookings.bookings, myProfile.profile?.id]);
+
+  // Parcels already carry resolved sender/carrier profiles; reuse them to label
+  // archived deliveries (the bookings list join is a deploy-dependent fallback).
+  const parcelById = useMemo(() => {
+    const map = new Map<string, Parcel>();
+    for (const p of dedupedSend) map.set(p.id, p);
+    for (const p of dedupedReceive) map.set(p.id, p);
+    return map;
+  }, [dedupedSend, dedupedReceive]);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
@@ -103,6 +186,7 @@ export function MyTravelsScreen() {
   const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
   const [ratePending, setRatePending] = useState(false);
   const [matchSource, setMatchSource] = useState<MatchesSource | null>(null);
+  const [chatPendingId, setChatPendingId] = useState<string | null>(null);
 
   const handleViewTripMatches = useCallback(
     (trip: Trip) =>
@@ -150,7 +234,13 @@ export function MyTravelsScreen() {
   const refetchActive = useCallback(async () => {
     if (activeTab === "flights") return flights.refetch();
     if (activeTab === "packages") {
-      await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
+      // senderBookings drives the journey trackers on the Receive cards, so it
+      // has to refresh with them or the timeline goes stale after a pull.
+      await Promise.all([
+        sendParcels.refetch(),
+        receiveParcels.refetch(),
+        senderBookings.refetch(),
+      ]);
       return;
     }
     if (activeTab === "partners") {
@@ -171,6 +261,7 @@ export function MyTravelsScreen() {
     delivered,
     requests,
     connections,
+    senderBookings,
   ]);
 
   const withDeleteFlow = useCallback(
@@ -245,36 +336,24 @@ export function MyTravelsScreen() {
     async (values: EditBuddyListingFormValues) => {
       if (!editingBuddy) return;
 
-      const fromYmd = values.travel_date_from.trim();
-      if (!fromYmd) {
-        setFormError("Pick a depart date to update this listing.");
-        return;
-      }
-      const toYmd = values.travel_date_to.trim() || fromYmd;
-
-      if (!values.from_city) {
-        setFormError("Select a departure city to update this listing.");
-        return;
-      }
-      if (!values.to_city) {
-        setFormError("Select a destination city to update this listing.");
-        return;
-      }
-
-      // buddy-handler PUT is a full upsert — fields omitted get nulled, so we
-      // seed every field from the source listing and overlay just the edits.
+      // The modal validates before calling this, so every field is present and
+      // in range by now. buddy-handler PUT is still a full upsert — anything
+      // omitted here gets nulled — so the payload must stay exhaustive.
+      const ymd = values.travel_date.trim();
       const payload = {
         from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
         to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        travel_date: fromYmd,
-        travel_date_from: fromYmd,
-        travel_date_to: toYmd,
+        // Single-date listing: buddy_listings has no date-mode column, so the
+        // "single" case is expressed as from === to.
+        travel_date: ymd,
+        travel_date_from: ymd,
+        travel_date_to: ymd,
         airline: values.airline.trim(),
         bio: values.bio.trim(),
-        age: editingBuddy.age ?? undefined,
-        languages: editingBuddy.languages ?? [],
-        interests: editingBuddy.interests ?? "",
-        layover: editingBuddy.layover ?? "",
+        age: values.age ? Number.parseInt(values.age, 10) : undefined,
+        languages: values.languages,
+        interests: values.interests.trim(),
+        layover: values.layover.trim(),
       };
 
       setEditBuddyPending(true);
@@ -339,6 +418,37 @@ export function MyTravelsScreen() {
       }
       if (values.description !== (editingParcel.description ?? "")) {
         data.description = values.description;
+      }
+      if (values.category && values.category !== editingParcel.category) {
+        data.category = values.category;
+      }
+      const feeNum = Number(values.fee_offered);
+      if (
+        values.fee_offered !== "" &&
+        Number.isFinite(feeNum) &&
+        feeNum !== editingParcel.fee_offered
+      ) {
+        data.fee_offered = feeNum;
+      }
+      if (values.fee_currency !== editingParcel.fee_currency) {
+        data.fee_currency = values.fee_currency;
+      }
+
+      // Dates travel as a set — see ParcelDetailsScreen: the PUT handler does
+      // not default delivery_date_mode, so a date change without it can leave
+      // mode="single" with from != to.
+      const curFrom = editingParcel.delivery_by_from ?? editingParcel.delivery_by ?? "";
+      const curTo = editingParcel.delivery_by_to ?? editingParcel.delivery_by ?? "";
+      const curMode = editingParcel.delivery_date_mode === "range" ? "range" : "single";
+      if (
+        values.delivery_by_from !== curFrom ||
+        values.delivery_by_to !== curTo ||
+        values.delivery_date_mode !== curMode
+      ) {
+        data.delivery_date_mode = values.delivery_date_mode;
+        data.delivery_by_from = values.delivery_by_from;
+        data.delivery_by_to = values.delivery_by_to;
+        data.delivery_by = values.delivery_by_to;
       }
 
       if (Object.keys(data).length === 0) {
@@ -540,6 +650,36 @@ export function MyTravelsScreen() {
     [connections],
   );
 
+  /**
+   * Open (or create) the chat with a parcel's matched counterpart — web parity
+   * with `TripCard`'s Chat button, which calls `useCreateConversation` and then
+   * navigates. The handler is idempotent server-side: one conversation per pair.
+   */
+  const handleChatCounterpart = useCallback(
+    async (parcel: Parcel) => {
+      const myId = myProfile.profile?.id;
+      const other = myId && parcel.sender_id === myId ? parcel.carrier : parcel.sender;
+      if (!other?.id) return;
+      setChatPendingId(parcel.id);
+      setFormError(null);
+      try {
+        const res = await messagesApi.createConversation(other.id, "booking");
+        const conversationId = res.data?.id;
+        if (!conversationId) throw new Error("Conversation could not be opened");
+        navigation.navigate("OfferChatTab", {
+          conversationId,
+          name: other.name ?? "Chat",
+          source: "travels",
+        });
+      } catch (err) {
+        setFormError(`Couldn't start chat. ${getErrorMessage(err)}`);
+      } finally {
+        setChatPendingId(null);
+      }
+    },
+    [myProfile.profile?.id, navigation],
+  );
+
   const handleChatConnection = useCallback(
     (conn: BuddyConnection) => {
       if (!conn.conversation_id) return;
@@ -637,7 +777,7 @@ export function MyTravelsScreen() {
           <FlightsTab
             loading={flights.loading}
             error={flights.error}
-            trips={flights.trips}
+            trips={dedupedFlights}
             onRetry={flights.refetch}
             onOpen={handleOpenTrip}
             onEdit={handleEditTrip}
@@ -665,7 +805,6 @@ export function MyTravelsScreen() {
             onDeleteReceive={handleDeleteReceiveParcel}
             onViewMatches={handleViewParcelMatches}
             deletingId={deletingId}
-            onSendParcel={goSendParcel}
             onRetrySend={sendParcels.refetch}
             onRetryReceive={receiveParcels.refetch}
             sendHasMore={sendParcels.hasMore}
@@ -674,6 +813,10 @@ export function MyTravelsScreen() {
             receiveHasMore={receiveParcels.hasMore}
             receiveLoadingMore={receiveParcels.loadingMore}
             onLoadMoreReceive={receiveParcels.loadMore}
+            trackerBookingFor={trackerBookingFor}
+            myUserId={myProfile.profile?.id ?? null}
+            onChat={(p) => void handleChatCounterpart(p)}
+            chatPendingId={chatPendingId}
           />
         ) : null}
 
@@ -681,7 +824,7 @@ export function MyTravelsScreen() {
           <PartnersTab
             loading={partners.loading}
             error={partners.error}
-            listings={partners.listings}
+            listings={dedupedListings}
             onRetry={partners.refetch}
             onOpen={handleOpenBuddy}
             onEdit={handleEditBuddy}
@@ -690,7 +833,7 @@ export function MyTravelsScreen() {
             hasMore={partners.hasMore}
             loadingMore={partners.loadingMore}
             onLoadMore={partners.loadMore}
-            requests={requests.requests}
+            requests={dedupedRequests}
             activeBuddies={activeBuddies}
             actioningId={actioningId}
             onAccept={handleAcceptRequest}
@@ -705,11 +848,11 @@ export function MyTravelsScreen() {
           <ArchiveTab
             loading={archive.loading}
             error={archive.error}
-            trips={archive.trips}
+            trips={dedupedArchive}
             onRetry={archive.refetch}
             onOpen={handleOpenTrip}
             deliveredLoading={delivered.loading}
-            deliveredBookings={delivered.bookings}
+            deliveredBookings={dedupedDelivered}
             myUserId={myProfile.profile?.id ?? null}
             onRateDelivery={handleRateDelivery}
             hasMore={archive.hasMore}
@@ -717,6 +860,7 @@ export function MyTravelsScreen() {
             onLoadMore={archive.loadMore}
             completedBuddies={completedBuddies}
             onRateBuddy={handleOpenRate}
+            parcelById={parcelById}
           />
         ) : null}
       </ScrollView>
@@ -770,6 +914,16 @@ export function MyTravelsScreen() {
             to_country: (editingParcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
             weight_kg: `${editingParcel.weight_kg ?? ""}`,
             description: editingParcel.description ?? "",
+            category:
+              (editingParcel.category as EditParcelFormValues["category"]) ?? "personal",
+            fee_offered: `${editingParcel.fee_offered ?? ""}`,
+            fee_currency: editingParcel.fee_currency === "INR" ? "INR" : "USD",
+            // Trust the persisted mode rather than inferring it from the dates.
+            delivery_by_from:
+              editingParcel.delivery_by_from ?? editingParcel.delivery_by ?? "",
+            delivery_by_to: editingParcel.delivery_by_to ?? editingParcel.delivery_by ?? "",
+            delivery_date_mode:
+              editingParcel.delivery_date_mode === "range" ? "range" : "single",
           }}
           pending={editParcelPending}
           onCancel={handleEditParcelCancel}
@@ -785,13 +939,12 @@ export function MyTravelsScreen() {
             from_country: USA_CITIES.includes(editingBuddy.from_city) ? "US" : "IN",
             to_city: editingBuddy.to_city === "Any" ? ANY_CITY : editingBuddy.to_city,
             to_country: INDIA_CITIES.includes(editingBuddy.to_city) ? "IN" : "US",
-            travel_date_from: editingBuddy.travel_date_from ?? editingBuddy.travel_date ?? "",
-            travel_date_to:
-              editingBuddy.travel_date_to &&
-              editingBuddy.travel_date_to !== editingBuddy.travel_date_from
-                ? editingBuddy.travel_date_to
-                : "",
+            travel_date: editingBuddy.travel_date_from ?? editingBuddy.travel_date ?? "",
             airline: editingBuddy.airline ?? "",
+            age: editingBuddy.age != null ? String(editingBuddy.age) : "",
+            languages: editingBuddy.languages ?? [],
+            interests: editingBuddy.interests ?? "",
+            layover: editingBuddy.layover ?? "",
             bio: editingBuddy.bio ?? "",
           }}
           pending={editBuddyPending}
@@ -811,28 +964,45 @@ interface TabsProps {
   onChange: (key: TabKey) => void;
 }
 
+/**
+ * Scrollable segmented control.
+ *
+ * Tabs size to their label rather than sharing the width equally: at phone
+ * widths four equal columns can't fit "Packages (12)" and the label was being
+ * clipped mid-word. Web solves it the same way — its TabsList only becomes a
+ * 4-column grid at `sm:` and up, and scrolls horizontally below that
+ * (`CustomerMyTrips.tsx` TabsList: `overflow-x-auto ... sm:grid-cols-4`).
+ */
 const Tabs = memo(function Tabs({ tabs, active, onChange }: Readonly<TabsProps>) {
   return (
     <View style={styles.tabsRow}>
-      {tabs.map((tab) => {
-        const isActive = tab.key === active;
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => onChange(tab.key)}
-            style={[styles.tab, isActive && styles.tabActive]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
-          >
-            <Text style={[styles.tabText, isActive && styles.tabTextActive]} numberOfLines={1}>
-              {tab.label}
-              {typeof tab.count === "number" ? (
-                <Text style={styles.tabCount}> ({tab.count})</Text>
-              ) : null}
-            </Text>
-          </Pressable>
-        );
-      })}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabsScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {tabs.map((tab) => {
+          const isActive = tab.key === active;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => onChange(tab.key)}
+              style={[styles.tab, isActive && styles.tabActive]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+            >
+              {/* No numberOfLines — the row scrolls, so labels never truncate. */}
+              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                {tab.label}
+                {typeof tab.count === "number" ? (
+                  <Text style={styles.tabCount}> ({tab.count})</Text>
+                ) : null}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 });
@@ -914,7 +1084,6 @@ function PackagesTab({
   onDeleteReceive,
   onViewMatches,
   deletingId,
-  onSendParcel,
   onRetrySend,
   onRetryReceive,
   sendHasMore,
@@ -923,6 +1092,10 @@ function PackagesTab({
   receiveHasMore,
   receiveLoadingMore,
   onLoadMoreReceive,
+  trackerBookingFor,
+  myUserId,
+  onChat,
+  chatPendingId,
 }: Readonly<{
   sendLoading: boolean;
   sendParcels: Parcel[];
@@ -936,7 +1109,6 @@ function PackagesTab({
   onDeleteReceive: (parcel: Parcel) => void;
   onViewMatches: (parcel: Parcel) => void;
   deletingId: string | null;
-  onSendParcel: () => void;
   onRetrySend: () => Promise<void>;
   onRetryReceive: () => Promise<void>;
   sendHasMore: boolean;
@@ -945,7 +1117,17 @@ function PackagesTab({
   receiveHasMore: boolean;
   receiveLoadingMore: boolean;
   onLoadMoreReceive: () => void;
+  /** Resolves the booking that drives a parcel's journey tracker. */
+  trackerBookingFor: (parcel: Parcel) => Booking | null;
+  myUserId: string | null;
+  onChat: (parcel: Parcel) => void;
+  chatPendingId: string | null;
 }>) {
+  /** The other party on a matched parcel — carrier if I sent it, else the sender. */
+  const counterpartOf = (p: Parcel) =>
+    (myUserId && p.sender_id === myUserId ? p.carrier : p.sender) ?? null;
+  const roleOf = (p: Parcel) => (myUserId && p.sender_id === myUserId ? "carrier" : "sender");
+
   return (
     <View>
       <View style={styles.section}>
@@ -959,8 +1141,8 @@ function PackagesTab({
         ) : sendError && sendParcels.length === 0 ? (
           <ErrorBlock message={getErrorMessage(sendError)} onRetry={onRetrySend} />
         ) : sendParcels.length === 0 ? (
-          <View style={styles.dashedEmpty}>
-            <Text style={styles.dashedEmptyText}>No packages to deliver yet</Text>
+          <View style={styles.emptyPanel}>
+            <Text style={styles.emptyPanelText}>No packages to deliver yet</Text>
           </View>
         ) : (
           sendParcels.map((p) => (
@@ -974,6 +1156,10 @@ function PackagesTab({
               onDelete={() => onDeleteSend(p)}
               onViewMatches={() => onViewMatches(p)}
               isDeleting={deletingId === p.id}
+              counterpart={counterpartOf(p)}
+              counterpartRole={roleOf(p)}
+              onChat={() => onChat(p)}
+              chatPending={chatPendingId === p.id}
             />
           ))
         )}
@@ -995,14 +1181,12 @@ function PackagesTab({
         ) : receiveError && receiveParcels.length === 0 ? (
           <ErrorBlock message={getErrorMessage(receiveError)} onRetry={onRetryReceive} />
         ) : receiveParcels.length === 0 ? (
-          <EmptyBlock
-            icon="cube-outline"
-            title="No receive requests"
-            subtitle="Send a parcel request to find a carrier."
-            actionLabel="Send a Parcel"
-            onAction={onSendParcel}
-            compact
-          />
+          // Matches the Send section above and web's dashed placeholder. The
+          // "Send a Parcel" CTA already sits in the header actions row, so
+          // repeating it here just pushed a second primary button on-screen.
+          <View style={styles.emptyPanel}>
+            <Text style={styles.emptyPanelText}>No packages to receive yet</Text>
+          </View>
         ) : (
           receiveParcels.map((p) => (
             <TravelCard
@@ -1015,6 +1199,13 @@ function PackagesTab({
               onDelete={() => onDeleteReceive(p)}
               onViewMatches={() => onViewMatches(p)}
               isDeleting={deletingId === p.id}
+              counterpart={counterpartOf(p)}
+              counterpartRole={roleOf(p)}
+              onChat={() => onChat(p)}
+              chatPending={chatPendingId === p.id}
+              // Web parity: only Receive cards carry the tracker — as the sender
+              // you're the one following the parcel's journey.
+              footer={<ParcelJourneyTracker parcel={p} booking={trackerBookingFor(p)} />}
             />
           ))
         )}
@@ -1286,6 +1477,7 @@ function ArchiveTab({
   onLoadMore,
   completedBuddies,
   onRateBuddy,
+  parcelById,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
@@ -1301,6 +1493,8 @@ function ArchiveTab({
   onLoadMore: () => void;
   completedBuddies: BuddyConnection[];
   onRateBuddy: (conn: BuddyConnection) => void;
+  /** Parcels already loaded in Send/Receive, keyed by id — feeds the archive tracker. */
+  parcelById: Map<string, Parcel>;
 }>) {
   const nothing =
     trips.length === 0 && deliveredBookings.length === 0 && completedBuddies.length === 0;
@@ -1327,6 +1521,7 @@ function ArchiveTab({
             <ArchiveBookingCard
               key={b.id}
               booking={b}
+              parcel={parcelById.get(b.parcel_id) ?? null}
               myUserId={myUserId}
               onRate={() => onRateDelivery(b.id)}
             />
@@ -1372,9 +1567,16 @@ function ArchiveTab({
 
 function ArchiveBookingCard({
   booking,
+  parcel,
   myUserId,
   onRate,
-}: Readonly<{ booking: Booking; myUserId: string | null; onRate: () => void }>) {
+}: Readonly<{
+  booking: Booking;
+  /** Resolved parcel, when loaded — gives the tracker its pre-booking fallback. */
+  parcel?: Parcel | null;
+  myUserId: string | null;
+  onRate: () => void;
+}>) {
   const isSender = !!myUserId && booking.sender_id === myUserId;
   const counterpart = isSender ? booking.carrier : booking.sender;
   const roleLabel = isSender ? "Carrier" : "Sender";
@@ -1413,6 +1615,7 @@ function ArchiveBookingCard({
           style={styles.archiveRateBtn}
         />
       </View>
+      <ParcelJourneyTracker parcel={parcel} booking={booking} />
     </View>
   );
 }
@@ -1590,40 +1793,52 @@ const styles = StyleSheet.create({
   actionButtonFlex: { flex: 1 },
 
   tabsRow: {
-    flexDirection: "row",
     backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
     padding: 4,
     marginBottom: 16,
   },
+  tabsScrollContent: { flexDirection: "row", gap: 4, alignItems: "stretch" },
   tab: {
-    flex: 1,
+    // Content-sized, never squeezed — `flex: 1` here is what clipped the labels.
+    flexShrink: 0,
     paddingVertical: 8,
-    paddingHorizontal: 6,
+    paddingHorizontal: 14,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  tabText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
+  tabText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   tabTextActive: { color: colors.text },
-  tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
+  tabCount: { color: colors.subtleText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
 
   // Sections within Packages
   section: { marginBottom: 18 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   sectionTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   sectionHint: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
-  dashedEmpty: {
-    paddingVertical: 24,
+  /**
+   * Empty-list panel.
+   *
+   * Was a dashed hairline in `colors.border` (#EDE6F5) with no fill, which is
+   * near-invisible against the peach/lavender hero wash (#ECDBE4) — the box read
+   * as floating text. Two changes fix it: an opaque white surface so the panel
+   * has an actual edge, and a solid brand-tinted stroke instead of dashed —
+   * RN draws `borderStyle: "dashed"` unreliably on Android once `borderRadius`
+   * is involved, so the dashes were being dropped on top of the low contrast.
+   */
+  emptyPanel: {
+    paddingVertical: 28,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.border,
+    borderColor: primaryTint.stroke18,
+    backgroundColor: colors.card,
     alignItems: "center",
+    justifyContent: "center",
   },
-  dashedEmptyText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
+  emptyPanelText: { color: colors.subtleText, fontSize: 13, lineHeight: 18, fontWeight: "500" },
 
   // Archive — completed delivery card
   archiveCard: {

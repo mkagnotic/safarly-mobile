@@ -14,7 +14,12 @@ export { usersApi } from "./users";
 export type { UserProfile, UserPreferences, UserStats } from "./users";
 
 export { parcelsApi } from "./parcels";
-export type { Parcel, ParcelListParams, ParcelCarrierMatch } from "./parcels";
+export type {
+  Parcel,
+  ParcelListParams,
+  ParcelCarrierMatch,
+  DeliveryDateMode,
+} from "./parcels";
 
 export { tripsApi } from "./trips";
 export type { Trip, TripListParams, TripParcelMatch } from "./trips";

@@ -206,41 +206,24 @@ export function PartnerDetailsScreen() {
     async (values: EditBuddyListingFormValues) => {
       if (!listingId || !listing) return;
 
-      const fromYmd = values.travel_date_from.trim();
-      if (!fromYmd) {
-        setNotice({
-          variant: "error",
-          title: "Pick a depart date",
-          message: "A travel date is required to update this listing.",
-        });
-        return;
-      }
-      const toYmd = values.travel_date_to.trim() || fromYmd;
-
-      if (!values.from_city) {
-        setNotice({ variant: "error", title: "Departure city required", message: "Select a departure city." });
-        return;
-      }
-      if (!values.to_city) {
-        setNotice({ variant: "error", title: "Destination city required", message: "Select a destination city." });
-        return;
-      }
-
-      // The buddy-handler PUT is a full upsert — it nulls any field omitted
-      // from the payload. We seed every field from the current listing and
-      // overlay only the ones exposed in the modal.
+      // The modal validates before calling this, so every field is present and
+      // in range by now. The buddy-handler PUT is still a full upsert — it nulls
+      // any field omitted from the payload — so this must stay exhaustive.
+      const ymd = values.travel_date.trim();
       const payload = {
         from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
         to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        travel_date: fromYmd,
-        travel_date_from: fromYmd,
-        travel_date_to: toYmd,
+        // Single-date listing: buddy_listings has no date-mode column, so the
+        // "single" case is expressed as from === to.
+        travel_date: ymd,
+        travel_date_from: ymd,
+        travel_date_to: ymd,
         airline: values.airline.trim(),
         bio: values.bio.trim(),
-        age: listing.age ?? undefined,
-        languages: listing.languages ?? [],
-        interests: listing.interests ?? "",
-        layover: listing.layover ?? "",
+        age: values.age ? Number.parseInt(values.age, 10) : undefined,
+        languages: values.languages,
+        interests: values.interests.trim(),
+        layover: values.layover.trim(),
       };
 
       setEditPending(true);
@@ -309,12 +292,12 @@ export function PartnerDetailsScreen() {
     from_country: USA_CITIES.includes(listing.from_city) ? "US" : "IN",
     to_city: listing.to_city === "Any" ? ANY_CITY : listing.to_city,
     to_country: INDIA_CITIES.includes(listing.to_city) ? "IN" : "US",
-    travel_date_from: listing.travel_date_from ?? listing.travel_date ?? "",
-    travel_date_to:
-      listing.travel_date_to && listing.travel_date_to !== listing.travel_date_from
-        ? listing.travel_date_to
-        : "",
+    travel_date: listing.travel_date_from ?? listing.travel_date ?? "",
     airline: listing.airline ?? "",
+    age: listing.age != null ? String(listing.age) : "",
+    languages: listing.languages ?? [],
+    interests: listing.interests ?? "",
+    layover: listing.layover ?? "",
     bio: listing.bio ?? "",
   };
 

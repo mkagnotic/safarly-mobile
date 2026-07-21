@@ -66,7 +66,7 @@ type ChatRoute = RouteProp<MainTabParamList, "OfferChatTab">;
 /** 10 MB — same cap as web (`MAX_FILE_SIZE` in CustomerMessages). */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-function getBackTarget(source: "home" | "offers" | "messages" | "buddies") {
+function getBackTarget(source: "home" | "offers" | "messages" | "buddies" | "travels") {
   switch (source) {
     case "home":
       return "Home" as const;
@@ -74,6 +74,10 @@ function getBackTarget(source: "home" | "offers" | "messages" | "buddies") {
       return "MessagesTab" as const;
     case "buddies":
       return "Buddies" as const;
+    // "Parcels" is the My Travels tab — chats opened from a parcel card there
+    // should return to it rather than dropping the user on Offers.
+    case "travels":
+      return "Parcels" as const;
     default:
       return "OffersTab" as const;
   }

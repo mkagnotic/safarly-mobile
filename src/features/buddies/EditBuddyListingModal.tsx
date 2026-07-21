@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,22 +11,27 @@ import {
   View,
 } from "react-native";
 
-import { LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { CalendarModal } from "@/components/ui/CalendarModal";
+import { ListPickerModal } from "@/components/ui/ListPickerModal";
+import { LocationCard } from "@/components/ui/FormSection";
+import {
+  AIRLINES,
+  LANGUAGE_OPTIONS,
+  MAX_LANGUAGES,
+  SAME_ROUTE_MESSAGE,
+  getAgeError,
+  isSameRoute as computeSameRoute,
+} from "@/features/buddies/buddyOptions";
 import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
-import { colors } from "@/theme/colors";
+import { colors, primaryTint } from "@/theme/colors";
+import { sanitizeDigitsOnly } from "@/utils/inputSanitizers";
 
 type Country = "IN" | "US";
 
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
-
-type CalendarTarget = "from" | "to";
-
-interface CalendarCell {
-  date: Date;
-  inMonth: boolean;
-}
+type FieldKey = "fromCity" | "toCity" | "travelDate" | "age";
 
 function formatYmd(d: Date): string {
   const y = d.getFullYear();
@@ -41,41 +45,7 @@ function parseYmd(s: string): Date | null {
   const [y, m, d] = s.split("-").map(Number);
   if (!y || !m || !d) return null;
   const dt = new Date(y, m - 1, d);
-  if (Number.isNaN(dt.getTime())) return null;
-  return dt;
-}
-
-function buildCalendar(monthDate: Date): CalendarCell[] {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const daysInPrev = new Date(year, month, 0).getDate();
-  const cells: CalendarCell[] = [];
-  for (let i = firstWeekday - 1; i >= 0; i -= 1) {
-    cells.push({ date: new Date(year, month - 1, daysInPrev - i), inMonth: false });
-  }
-  for (let d = 1; d <= daysInMonth; d += 1) {
-    cells.push({ date: new Date(year, month, d), inMonth: true });
-  }
-  while (cells.length < 42) {
-    const nextDay = cells.length - (firstWeekday + daysInMonth) + 1;
-    cells.push({ date: new Date(year, month + 1, nextDay), inMonth: false });
-  }
-  return cells;
-}
-
-function sameDate(a: Date | null, b: Date): boolean {
-  return (
-    !!a &&
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function formatMonthLabel(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
 function formatDateLabel(d: Date): string {
@@ -88,9 +58,18 @@ export interface EditBuddyListingFormValues {
   from_country: Country;
   to_city: string;
   to_country: Country;
-  travel_date_from: string;
-  travel_date_to: string;
+  /**
+   * Single `yyyy-MM-dd` travel date. Buddy listings are single-date only —
+   * web keeps its "Date range" toggle commented out in both the create page
+   * and the edit dialog — so callers persist this as from === to.
+   */
+  travel_date: string;
   airline: string;
+  /** Kept as a string so an empty field round-trips as "no age given". */
+  age: string;
+  languages: string[];
+  interests: string;
+  layover: string;
   bio: string;
 }
 
@@ -99,9 +78,19 @@ interface EditBuddyListingModalProps {
   initial: EditBuddyListingFormValues;
   pending: boolean;
   onCancel: () => void;
+  /** Called only once the form validates — callers just map and send. */
   onSubmit: (values: EditBuddyListingFormValues) => void;
 }
 
+/**
+ * Full-parity buddy listing editor.
+ *
+ * Mirrors web's `EditBuddyDialog`: every field the create form writes is
+ * editable here. Age, languages, interests and layover used to be absent, so
+ * callers had to re-seed them from the source listing on every save just to
+ * stop the handler's full-upsert PUT from nulling them — which meant those four
+ * fields could be set at creation and then never changed from the app.
+ */
 export function EditBuddyListingModal({
   open,
   initial,
@@ -110,10 +99,13 @@ export function EditBuddyListingModal({
   onSubmit,
 }: Readonly<EditBuddyListingModalProps>) {
   const [form, setForm] = useState<EditBuddyListingFormValues>(initial);
-  const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [airlineOpen, setAirlineOpen] = useState(false);
+  const [languagePickerOpen, setLanguagePickerOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
-    const initialDate = parseYmd(initial.travel_date_from) ?? new Date();
-    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+    const d = parseYmd(initial.travel_date) ?? new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const wasOpenRef = useRef(false);
 
@@ -121,7 +113,8 @@ export function EditBuddyListingModal({
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setForm(initial);
-      const d = parseYmd(initial.travel_date_from) ?? new Date();
+      setErrors({});
+      const d = parseYmd(initial.travel_date) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
     wasOpenRef.current = open;
@@ -138,36 +131,18 @@ export function EditBuddyListingModal({
     return d;
   }, [today]);
 
-  const selectedFrom = useMemo(() => parseYmd(form.travel_date_from), [form.travel_date_from]);
-  const selectedTo = useMemo(() => parseYmd(form.travel_date_to), [form.travel_date_to]);
+  const selectedDate = useMemo(() => parseYmd(form.travel_date), [form.travel_date]);
 
-  const openCalendar = (target: CalendarTarget) => {
-    const seed =
-      target === "from"
-        ? parseYmd(form.travel_date_from) ?? new Date()
-        : parseYmd(form.travel_date_to) ?? parseYmd(form.travel_date_from) ?? new Date();
-    setVisibleMonth(new Date(seed.getFullYear(), seed.getMonth(), 1));
-    setCalendarTarget(target);
-  };
+  const patch = (next: Partial<EditBuddyListingFormValues>) =>
+    setForm((prev) => ({ ...prev, ...next }));
 
-  const handleSelectDate = (d: Date) => {
-    if (!calendarTarget) return;
-    const ymd = formatYmd(d);
-    setForm((prev) => {
-      if (calendarTarget === "from") {
-        // If "to" is now before the new "from", clear it so the user re-picks.
-        const next = { ...prev, travel_date_from: ymd };
-        if (prev.travel_date_to && parseYmd(prev.travel_date_to)! < d) {
-          next.travel_date_to = "";
-        }
-        return next;
-      }
-      return { ...prev, travel_date_to: ymd };
+  const clearError = (key: FieldKey) =>
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
     });
-    setCalendarTarget(null);
-  };
-
-  const handleSubmit = () => onSubmit(form);
 
   const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
   const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
@@ -176,28 +151,62 @@ export function EditBuddyListingModal({
   const fromCities = form.from_country === "IN" ? INDIA_CITIES : USA_CITIES;
   const toCities = form.to_country === "IN" ? INDIA_CITIES : USA_CITIES;
 
-  const toggleFromCountry = () =>
+  // Live checks, matching the create screen and web.
+  const isSameRoute = computeSameRoute(
+    form.from_country,
+    form.from_city,
+    form.to_country,
+    form.to_city,
+  );
+  const toCityError = isSameRoute ? SAME_ROUTE_MESSAGE : errors.toCity;
+  const ageError = getAgeError(form.age) ?? errors.age;
+
+  const toggleFromCountry = () => {
     setForm((prev) => ({
       ...prev,
       from_country: prev.from_country === "IN" ? "US" : "IN",
       from_city: "",
     }));
-  const toggleToCountry = () =>
+    clearError("fromCity");
+  };
+  const toggleToCountry = () => {
     setForm((prev) => ({
       ...prev,
       to_country: prev.to_country === "IN" ? "US" : "IN",
       to_city: "",
     }));
+    clearError("toCity");
+  };
 
-  const fromLabel = selectedFrom ? formatDateLabel(selectedFrom) : "Select date";
-  const toLabel = selectedTo
-    ? formatDateLabel(selectedTo)
-    : selectedFrom
-    ? "Same day"
-    : "Select date";
-  const calendarCells = buildCalendar(visibleMonth);
+  const handleAddLanguage = (lang: string) => {
+    setForm((prev) =>
+      prev.languages.length >= MAX_LANGUAGES || prev.languages.includes(lang)
+        ? prev
+        : { ...prev, languages: [...prev.languages, lang] },
+    );
+  };
 
-  const calendarMin = calendarTarget === "to" && selectedFrom ? selectedFrom : today;
+  const handleRemoveLanguage = (lang: string) => {
+    setForm((prev) => ({ ...prev, languages: prev.languages.filter((l) => l !== lang) }));
+  };
+
+  const handleSubmit = () => {
+    const next: Partial<Record<FieldKey, string>> = {};
+    if (!form.from_city) next.fromCity = "Select a departure city";
+    if (!form.to_city) next.toCity = "Select a destination city";
+    if (isSameRoute) next.toCity = SAME_ROUTE_MESSAGE;
+    // Presence only, matching web. An already-persisted past date must stay
+    // saveable, otherwise a stale listing can't be edited at all; the calendar
+    // still refuses to *pick* a new past date.
+    if (!form.travel_date) next.travelDate = "Pick your travel date";
+    const ageRangeError = getAgeError(form.age);
+    if (ageRangeError) next.age = ageRangeError;
+
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
+    onSubmit(form);
+  };
 
   return (
     <Modal
@@ -219,7 +228,7 @@ export function EditBuddyListingModal({
       <View style={styles.center} pointerEvents="box-none">
         <View style={styles.card}>
           <View style={styles.header}>
-            <Text style={styles.title}>Edit listing</Text>
+            <Text style={styles.title}>Edit travel partner request</Text>
             <Pressable
               onPress={onCancel}
               hitSlop={8}
@@ -237,114 +246,206 @@ export function EditBuddyListingModal({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>From</Text>
-            <LocationCard
-              flag={fromFlag}
-              label={fromCountryName}
-              filled
-              onToggle={toggleFromCountry}
-            />
-            <CityPicker
-              value={form.from_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
-              cities={fromCities}
-              placeholder="Select departure city"
-              variant="card"
-              disabled={pending}
-            />
-          </View>
+            {/* ───── Route ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>From</Text>
+              <LocationCard
+                flag={fromFlag}
+                label={fromCountryName}
+                filled
+                onToggle={toggleFromCountry}
+              />
+              <CityPicker
+                value={form.from_city}
+                onChange={(v) => {
+                  patch({ from_city: v });
+                  clearError("fromCity");
+                }}
+                cities={fromCities}
+                placeholder="Select departure city"
+                variant="card"
+                disabled={pending}
+                invalid={!!errors.fromCity}
+              />
+              {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
+            </View>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>To</Text>
-            <LocationCard
-              flag={toFlag}
-              label={toCountryName}
-              filled
-              onToggle={toggleToCountry}
-            />
-            <CityPicker
-              value={form.to_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
-              cities={toCities}
-              placeholder="Select destination city"
-              variant="card"
-              disabled={pending}
-            />
-          </View>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>To</Text>
+              <LocationCard
+                flag={toFlag}
+                label={toCountryName}
+                filled
+                onToggle={toggleToCountry}
+              />
+              <CityPicker
+                value={form.to_city}
+                onChange={(v) => {
+                  patch({ to_city: v });
+                  clearError("toCity");
+                }}
+                cities={toCities}
+                placeholder="Select destination city"
+                variant="card"
+                disabled={pending}
+                invalid={!!toCityError}
+              />
+              {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
+            </View>
 
-          <View style={styles.dateRow}>
-            <View style={[styles.field, styles.dateField]}>
-              <Text style={styles.fieldLabel}>Depart</Text>
+            {/* ───── Travel date ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Travel date</Text>
               <Pressable
-                onPress={() => openCalendar("from")}
-                style={styles.input}
+                onPress={() => setCalendarOpen(true)}
+                style={[styles.input, styles.selectInput, !!errors.travelDate && styles.inputError]}
                 accessibilityRole="button"
-                accessibilityLabel="Pick depart date"
+                accessibilityLabel="Pick travel date"
                 disabled={pending}
               >
                 <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
                 <Text
-                  style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
+                  style={[styles.selectInputText, !selectedDate && styles.selectInputPlaceholder]}
                   numberOfLines={1}
                 >
-                  {fromLabel}
+                  {selectedDate ? formatDateLabel(selectedDate) : "Select date"}
                 </Text>
               </Pressable>
+              {errors.travelDate ? (
+                <Text style={styles.inlineError}>{errors.travelDate}</Text>
+              ) : null}
             </View>
 
-            <View style={[styles.field, styles.dateField]}>
+            {/* ───── Airline ───── */}
+            <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Return <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
               </Text>
               <Pressable
-                onPress={() => openCalendar("to")}
-                style={styles.input}
+                style={[styles.input, styles.selectInput]}
+                onPress={() => setAirlineOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Pick return date"
+                accessibilityLabel="Pick airline"
                 disabled={pending}
               >
-                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
                 <Text
-                  style={[styles.inputText, !selectedTo && styles.inputPlaceholder]}
+                  style={[styles.selectInputText, !form.airline && styles.selectInputPlaceholder]}
                   numberOfLines={1}
                 >
-                  {toLabel}
+                  {form.airline || "Select airline"}
                 </Text>
+                <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
               </Pressable>
             </View>
-          </View>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>
-              Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-            </Text>
-            <TextInput
-              value={form.airline}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, airline: t }))}
-              placeholder="e.g. Emirates"
-              placeholderTextColor={colors.subtleText}
-              style={styles.textInput}
-              editable={!pending}
-            />
-          </View>
+            {/* ───── Age ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+              </Text>
+              <TextInput
+                value={form.age}
+                onChangeText={(v) => {
+                  patch({ age: sanitizeDigitsOnly(v, 3) });
+                  clearError("age");
+                }}
+                placeholder="e.g. 28"
+                placeholderTextColor={colors.placeholderText}
+                keyboardType="number-pad"
+                style={[styles.textInput, !!ageError && styles.inputError]}
+                editable={!pending}
+              />
+              {ageError ? <Text style={styles.inlineError}>{ageError}</Text> : null}
+            </View>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>
-              Bio <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-            </Text>
-            <TextInput
-              value={form.bio}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, bio: t }))}
-              placeholder="A short intro for potential travel partners…"
-              placeholderTextColor={colors.subtleText}
-              style={[styles.textInput, styles.multiline]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              editable={!pending}
-            />
-          </View>
+            {/* ───── Languages ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Languages{" "}
+                <Text style={styles.fieldLabelMuted}>(Optional, up to {MAX_LANGUAGES})</Text>
+              </Text>
+              {form.languages.length > 0 ? (
+                <View style={styles.chipsRow}>
+                  {form.languages.map((lang) => (
+                    <View key={lang} style={styles.chip}>
+                      <Text style={styles.chipText}>{lang}</Text>
+                      <Pressable
+                        onPress={() => handleRemoveLanguage(lang)}
+                        hitSlop={6}
+                        disabled={pending}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${lang}`}
+                      >
+                        <Ionicons name="close" size={12} color={colors.mutedText} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              <Pressable
+                style={[styles.input, styles.selectInput]}
+                onPress={() => setLanguagePickerOpen(true)}
+                disabled={pending || form.languages.length >= MAX_LANGUAGES}
+                accessibilityRole="button"
+                accessibilityLabel="Add a language"
+              >
+                <Text style={[styles.selectInputText, styles.selectInputPlaceholder]}>
+                  {form.languages.length >= MAX_LANGUAGES
+                    ? `Max ${MAX_LANGUAGES} selected`
+                    : "Add a language"}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+              </Pressable>
+            </View>
+
+            {/* ───── Interests ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+              </Text>
+              <TextInput
+                value={form.interests}
+                onChangeText={(t) => patch({ interests: t })}
+                placeholder="e.g. Photography, Hiking, Food, Tech"
+                placeholderTextColor={colors.placeholderText}
+                style={styles.textInput}
+                editable={!pending}
+              />
+            </View>
+
+            {/* ───── Layover ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+              </Text>
+              <TextInput
+                value={form.layover}
+                onChangeText={(t) => patch({ layover: t })}
+                placeholder="e.g. London Heathrow — 3h layover"
+                placeholderTextColor={colors.placeholderText}
+                style={styles.textInput}
+                editable={!pending}
+              />
+            </View>
+
+            {/* ───── Bio ───── */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                About you <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+              </Text>
+              <TextInput
+                value={form.bio}
+                onChangeText={(t) => patch({ bio: t })}
+                placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
+                placeholderTextColor={colors.placeholderText}
+                style={[styles.textInput, styles.multiline]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={!pending}
+              />
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -369,94 +470,51 @@ export function EditBuddyListingModal({
         </View>
       </View>
 
-      {/* Calendar sub-modal — shared between Depart + Return */}
-      <Modal
-        visible={calendarTarget !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarTarget(null)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setCalendarTarget(null)} />
-        <View style={styles.calendarCenter} pointerEvents="box-none">
-          <View style={styles.calendarSheet}>
-            <View style={styles.calendarHeaderRow}>
-              <Pressable
-                onPress={() =>
-                  setVisibleMonth(
-                    new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1),
-                  )
-                }
-                style={styles.calendarNavButton}
-                accessibilityRole="button"
-                accessibilityLabel="Previous month"
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.text} />
-              </Pressable>
-              <Text style={styles.calendarTitle}>{formatMonthLabel(visibleMonth)}</Text>
-              <Pressable
-                onPress={() =>
-                  setVisibleMonth(
-                    new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1),
-                  )
-                }
-                style={styles.calendarNavButton}
-                accessibilityRole="button"
-                accessibilityLabel="Next month"
-              >
-                <Ionicons name="chevron-forward" size={18} color={colors.text} />
-              </Pressable>
-            </View>
-            <View style={styles.weekRow}>
-              {WEEKDAYS.map((d) => (
-                <Text key={d} style={styles.weekday}>
-                  {d}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.grid}>
-              {calendarCells.map((cell, i) => {
-                const isPast = cell.date < calendarMin;
-                const isFuture = cell.date > maxDate;
-                const disabled = isPast || isFuture;
-                const isSelected =
-                  calendarTarget === "from"
-                    ? sameDate(selectedFrom, cell.date)
-                    : sameDate(selectedTo, cell.date);
-                return (
-                  <Pressable
-                    key={i}
-                    disabled={disabled}
-                    onPress={() => handleSelectDate(cell.date)}
-                    style={[styles.cell, isSelected && styles.cellSelected]}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled, selected: isSelected }}
-                  >
-                    <Text
-                      style={[
-                        styles.cellText,
-                        !cell.inMonth && styles.cellTextMuted,
-                        disabled && styles.cellTextDisabled,
-                        isSelected && styles.cellTextSelected,
-                      ]}
-                    >
-                      {cell.date.getDate()}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ListPickerModal
+        open={airlineOpen}
+        title="Select airline"
+        options={AIRLINES}
+        selected={form.airline}
+        onSelect={(a) => {
+          patch({ airline: a });
+          setAirlineOpen(false);
+        }}
+        onClose={() => setAirlineOpen(false)}
+      />
+
+      <ListPickerModal
+        open={languagePickerOpen}
+        title="Add a language"
+        options={LANGUAGE_OPTIONS.filter((l) => !form.languages.includes(l))}
+        selected=""
+        onSelect={(l) => {
+          handleAddLanguage(l);
+          setLanguagePickerOpen(false);
+        }}
+        onClose={() => setLanguagePickerOpen(false)}
+      />
+
+      <CalendarModal
+        open={calendarOpen}
+        title="Pick travel date"
+        selected={selectedDate}
+        visibleMonth={visibleMonth}
+        today={today}
+        maxDate={maxDate}
+        onSelect={(d) => {
+          patch({ travel_date: formatYmd(d) });
+          clearError("travelDate");
+          setCalendarOpen(false);
+        }}
+        onChangeMonth={setVisibleMonth}
+        onClose={() => setCalendarOpen(false)}
+      />
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,15,25,0.4)",
-  },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
   center: {
     flex: 1,
     alignItems: "center",
@@ -476,15 +534,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
   },
-  title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
+  title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800", flex: 1 },
 
   scroll: { flexGrow: 0 },
   scrollContent: { gap: 16 },
 
   field: { gap: 8 },
-  dateRow: { flexDirection: "row", gap: 10 },
-  dateField: { flex: 1, minWidth: 0 },
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
 
@@ -495,12 +552,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
+  },
+  inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
+  selectInput: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  inputText: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "500", flex: 1 },
-  inputPlaceholder: { color: colors.subtleText },
+  selectInputText: { color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: "500", flex: 1 },
+  selectInputPlaceholder: { color: colors.placeholderText },
   textInput: {
     backgroundColor: colors.input,
     borderColor: colors.inputBorder,
@@ -513,68 +573,27 @@ const styles = StyleSheet.create({
   },
   multiline: { minHeight: 88, paddingTop: 12, textAlignVertical: "top" },
 
-  footer: { flexDirection: "row", gap: 10, marginTop: 4 },
-  footerButton: { flex: 1 },
+  inlineError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
 
-  // Calendar
-  calendarCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-  },
-  calendarSheet: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    padding: 14,
-    gap: 10,
-  },
-  calendarHeaderRow: {
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceTintPrimary,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke20,
   },
-  calendarNavButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calendarTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
-  weekRow: { flexDirection: "row", justifyContent: "space-between" },
-  weekday: {
-    flex: 1,
-    textAlign: "center",
-    color: colors.subtleText,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-  grid: { flexDirection: "row", flexWrap: "wrap" },
-  cell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cellSelected: { borderRadius: 999 },
-  cellText: { color: colors.text, fontSize: 14, lineHeight: 18, fontWeight: "600" },
-  cellTextMuted: { color: colors.subtleText, opacity: 0.45 },
-  cellTextDisabled: { color: colors.subtleText, opacity: 0.35 },
-  cellTextSelected: {
-    color: colors.white,
-    backgroundColor: colors.wordmark,
-    width: 36,
-    height: 36,
-    lineHeight: 36,
-    textAlign: "center",
-    borderRadius: 18,
-    overflow: "hidden",
-    fontWeight: "800",
-  },
+  chipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
+
+  footer: { flexDirection: "row", gap: 10, marginTop: 4 },
+  footerButton: { flex: 1 },
 });
