@@ -1,5 +1,8 @@
 import { api } from "./client";
 
+/** `parcel_requests.delivery_date_mode` — a single deadline or a window. */
+export type DeliveryDateMode = "single" | "range";
+
 /**
  * Server response shape — broader than the canonical `Parcel` because the
  * parcel-handler edge function returns `weight` (not `weight_kg`) and may
@@ -48,6 +51,8 @@ export interface Parcel {
   /** Delivery window start/end. Present when the sender picked a date range. */
   delivery_by_from?: string | null;
   delivery_by_to?: string | null;
+  /** Persisted so the edit form reopens in the mode the sender chose. */
+  delivery_date_mode?: DeliveryDateMode | null;
   fee_offered: number;
   fee_currency: string;
   status: string;
@@ -55,6 +60,13 @@ export interface Parcel {
   created_at: string;
   updated_at: string;
   sender?: { id: string; name: string; avatar_url: string | null; rating: number };
+  /**
+   * Matched carrier, once one is committed. `parcel-handler`'s list resolves it
+   * from `carrier_id` and attaches it per row; `normalizeParcel` spreads the raw
+   * row, so both already arrived at runtime before being declared here.
+   */
+  carrier_id?: string | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
 }
 
 /** A carrier trip that can deliver a parcel — from `/parcel-handler/matches`. */
@@ -94,10 +106,30 @@ export const parcelsApi = {
     delivery_by: string;
     delivery_by_from?: string;
     delivery_by_to?: string;
+    /**
+     * Whether the sender picked one date or a window. Persisted rather than
+     * inferred: the old inference compared delivery_by_from to delivery_by_to,
+     * which is lossy — a one-day range is indistinguishable from a single
+     * date, and a single-date parcel could silently reopen as a range. The
+     * handler also collapses the window server-side when this is "single".
+     */
+    delivery_date_mode?: DeliveryDateMode;
     fee_offered: number;
     fee_currency?: string;
     any_from?: boolean;
     any_to?: boolean;
+    /**
+     * Marketplace return flow — set when the parcel is a retail order, so a
+     * carrier who cancels post-possession has somewhere to send it back to.
+     * Column names mirror `parcel_requests` exactly; note there is no
+     * region/state column, so a state belongs in `return_address_line2`.
+     */
+    is_online_order?: boolean;
+    return_eligible?: boolean;
+    return_address_line1?: string;
+    return_address_line2?: string;
+    return_city?: string;
+    return_postal_code?: string;
   }) => {
     const { weight_kg, ...rest } = data;
     return api.post<Parcel>("/parcel-handler/", { ...rest, weight: weight_kg });
@@ -131,6 +163,14 @@ export const parcelsApi = {
       delivery_by?: string;
       delivery_by_from?: string;
       delivery_by_to?: string;
+      /**
+       * Send this with ANY date edit. Unlike create, the PUT handler does NOT
+       * default a missing value — it leaves the stored mode untouched. So
+       * changing dates without it can leave mode="single" with from != to,
+       * the inconsistent state the collapse logic exists to prevent.
+       */
+      delivery_date_mode?: DeliveryDateMode;
+      fee_currency?: string;
       any_from?: boolean;
       any_to?: boolean;
       status?: string;

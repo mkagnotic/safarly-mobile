@@ -55,6 +55,13 @@ export interface Booking {
   handoff_rejected_at?: string | null;
   handoff_rejection_reason?: string | null;
   handoff_rejection_proof_url?: string | null;
+  /**
+   * Travel date the pair agreed on. Returned by `booking-handler`'s list select
+   * and used by the journey tracker for the "Travel Tomorrow" / "Traveling"
+   * stages. `normalizeBooking` spreads the raw row, so this already arrived at
+   * runtime before it was declared here.
+   */
+  agreed_travel_date?: string | null;
   created_at: string;
   updated_at: string;
   parcel?: {
@@ -70,6 +77,11 @@ export interface Booking {
   };
   sender?: { id?: string; name: string; avatar_url: string | null; rating?: number };
   carrier?: { id?: string; name: string; avatar_url: string | null; rating?: number };
+  /** Deal-level travel-document verification — drives the tracker's "Flight Verified". */
+  carrier_request?: {
+    travel_doc_status?: "none" | "pending" | "approved" | "rejected";
+    parcel_review_status?: "none" | "pending" | "approved" | "rejected";
+  } | null;
   timeline?: { event: string; description: string | null; created_at: string }[];
 }
 

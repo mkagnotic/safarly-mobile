@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, type ReactNode } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
@@ -33,6 +33,29 @@ interface Props {
   isDeleting?: boolean;
   /** When set and the listing is matched/accepted, the status pill opens the matches view. */
   onViewMatches?: () => void;
+  /**
+   * The matched sender/carrier on the other side of this parcel. Renders a
+   * footer row with a Chat entry point, mirroring web's `TripCard`.
+   */
+  counterpart?: { id?: string; name?: string | null } | null;
+  /** Label for the counterpart's role, e.g. "carrier" / "sender". */
+  counterpartRole?: string;
+  onChat?: () => void;
+  chatPending?: boolean;
+  /**
+   * Rendered inside the card below the status pill — used for the parcel journey
+   * tracker, which web draws inside the same card rather than as a sibling.
+   */
+  footer?: ReactNode;
+}
+
+function initialsOf(name?: string | null): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 export const TravelCard = memo(function TravelCard({
@@ -44,6 +67,11 @@ export const TravelCard = memo(function TravelCard({
   onDelete,
   isDeleting,
   onViewMatches,
+  counterpart,
+  counterpartRole = "carrier",
+  onChat,
+  chatPending,
+  footer,
 }: Readonly<Props>) {
   const status = item.status ?? "";
   const tone = toneForStatus(status);
@@ -168,6 +196,37 @@ export const TravelCard = memo(function TravelCard({
           </Text>
         </View>
       ) : null}
+
+      {counterpart ? (
+        <View style={styles.counterpartRow}>
+          <View style={styles.counterpartAvatar}>
+            <Text style={styles.counterpartAvatarText}>{initialsOf(counterpart.name)}</Text>
+          </View>
+          <View style={styles.counterpartCol}>
+            <Text style={styles.counterpartName} numberOfLines={1}>
+              {counterpart.name || "Unknown user"}
+            </Text>
+            <Text style={styles.counterpartRole}>Matched {counterpartRole}</Text>
+          </View>
+          {onChat ? (
+            <Pressable
+              onPress={onChat}
+              disabled={chatPending}
+              style={styles.chatButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Chat with ${counterpart.name || "your match"}`}
+            >
+              {chatPending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.chatButtonText}>Chat</Text>
+              )}
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {footer}
     </Pressable>
   );
 });
@@ -287,4 +346,42 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase",
   },
+
+  // ───── Matched counterpart footer (web `TripCard`'s counterpart row) ─────
+  counterpartRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  counterpartAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counterpartAvatarText: {
+    color: colors.wordmark,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  counterpartCol: { flex: 1, minWidth: 0 },
+  counterpartName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700" },
+  counterpartRole: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
+  chatButton: {
+    minWidth: 84,
+    minHeight: 36,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: colors.ctaAccent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatButtonText: { color: colors.white, fontSize: 13, lineHeight: 18, fontWeight: "800" },
 });

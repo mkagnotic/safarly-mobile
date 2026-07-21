@@ -1,18 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
-  RouteProp,
   useFocusEffect,
   useNavigation,
-  useRoute,
 } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
-  FlatList,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -23,12 +19,21 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
+import { CalendarModal } from "@/components/ui/CalendarModal";
+import { DateField, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
+import { ListPickerModal } from "@/components/ui/ListPickerModal";
 import { Screen } from "@/components/ui/Screen";
+import {
+  AIRLINES,
+  LANGUAGE_OPTIONS,
+  MAX_LANGUAGES,
+  SAME_ROUTE_MESSAGE,
+  getAgeError,
+  isSameRoute as computeSameRoute,
+} from "@/features/buddies/buddyOptions";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
-import { useBuddyListings } from "@/hooks/api/useBuddyListings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { buddiesApi, getErrorMessage } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
@@ -38,58 +43,24 @@ type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "CreateBuddyTab">,
   NativeStackNavigationProp<RootStackParamList>
 >;
-type Route = RouteProp<MainTabParamList, "CreateBuddyTab">;
 
 type Country = "IN" | "US";
-type DateMode = "single" | "range";
 
 /** Keys for fields that can carry an inline validation error. */
-type FieldKey = "fromCity" | "toCity" | "departDate" | "returnDate" | "age";
+type FieldKey = "fromCity" | "toCity" | "travelDate" | "age";
 
-/** Web parity (`CustomerCreateBuddy.tsx:34-39`). */
-const AIRLINES: readonly string[] = [
-  "Air India",
-  "United Airlines",
-  "American Airlines",
-  "Delta Air Lines",
-  "Emirates",
-  "Qatar Airways",
-  "Etihad Airways",
-  "Lufthansa",
-  "British Airways",
-  "Singapore Airlines",
-  "Turkish Airlines",
-  "KLM Royal Dutch",
-  "Air France",
-  "Cathay Pacific",
-  "Japan Airlines",
-];
+/** Content-based section keys, so reordering can't invalidate scroll-to-error. */
+type SectionKey = "route" | "dates" | "flight" | "about";
 
-/** Web parity (`CustomerCreateBuddy.tsx:41-45`). */
-const LANGUAGE_OPTIONS: readonly string[] = [
-  "English",
-  "Hindi",
-  "Tamil",
-  "Telugu",
-  "Kannada",
-  "Malayalam",
-  "Bengali",
-  "Marathi",
-  "Gujarati",
-  "Punjabi",
-  "Urdu",
-  "Spanish",
-  "French",
-  "German",
-  "Mandarin",
-  "Japanese",
-  "Korean",
-  "Arabic",
-  "Portuguese",
-  "Russian",
-];
+const FIELD_TO_SECTION: Record<FieldKey, SectionKey> = {
+  fromCity: "route",
+  toCity: "route",
+  travelDate: "dates",
+  age: "about",
+};
 
-const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
+/** Surfaced in scroll-to-first-error order. */
+const FIELD_ORDER: readonly FieldKey[] = ["fromCity", "toCity", "travelDate", "age"];
 
 function formatYmd(d: Date): string {
   const yyyy = d.getFullYear();
@@ -99,69 +70,11 @@ function formatYmd(d: Date): string {
 }
 
 function formatDateLabel(d: Date): string {
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatMonthLabel(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
-function sameDate(a: Date | null, b: Date): boolean {
-  return (
-    !!a &&
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-interface CalendarCell {
-  date: Date;
-  inMonth: boolean;
-}
-
-function buildCalendar(monthDate: Date): CalendarCell[] {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
-  const cells: CalendarCell[] = [];
-  for (let i = firstWeekday - 1; i >= 0; i -= 1) {
-    cells.push({
-      date: new Date(year, month - 1, daysInPrevMonth - i),
-      inMonth: false,
-    });
-  }
-  for (let d = 1; d <= daysInMonth; d += 1) {
-    cells.push({ date: new Date(year, month, d), inMonth: true });
-  }
-  while (cells.length < 42) {
-    const nextDay = cells.length - (firstWeekday + daysInMonth) + 1;
-    cells.push({ date: new Date(year, month + 1, nextDay), inMonth: false });
-  }
-  return cells;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function CreateBuddyScreen() {
   const navigation = useNavigation<Nav>();
-  const route = useRoute<Route>();
-  const editId = route.params?.editId ?? null;
-  const isEditMode = !!editId;
-
-  const { listings, loading: listingsLoading } = useBuddyListings({
-    filter: isEditMode ? "my_listings" : undefined,
-    perPage: 100,
-  });
-  const editListing = useMemo(
-    () => (isEditMode ? listings.find((l) => l.id === editId) : null),
-    [isEditMode, listings, editId],
-  );
-  const [hydratedFromEdit, setHydratedFromEdit] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -174,10 +87,11 @@ export function CreateBuddyScreen() {
   const [airline, setAirline] = useState("");
   const [airlineOpen, setAirlineOpen] = useState(false);
 
-  const [dateMode, setDateMode] = useState<DateMode>("single");
-  const [departDate, setDepartDate] = useState<Date | null>(null);
-  const [returnDate, setReturnDate] = useState<Date | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState<"depart" | "return" | null>(null);
+  // Single travel date only — web parity. `CustomerCreateBuddy.tsx` keeps its
+  // "Date range" button commented out ("temporarily disabled for Find a Travel
+  // Buddy"), so a range created here could never be edited or reproduced on web.
+  const [travelDate, setTravelDate] = useState<Date | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -193,6 +107,7 @@ export function CreateBuddyScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
 
   const today = useMemo(() => {
     const d = new Date();
@@ -205,32 +120,6 @@ export function CreateBuddyScreen() {
     return d;
   }, [today]);
 
-  useEffect(() => {
-    if (!isEditMode || hydratedFromEdit || !editListing) return;
-    setFromCity(editListing.from_city);
-    setToCity(editListing.to_city);
-    setFromCountry(INDIA_CITIES.includes(editListing.from_city) ? "IN" : "US");
-    setToCountry(INDIA_CITIES.includes(editListing.to_city) ? "IN" : "US");
-    setAirline(editListing.airline ?? "");
-    const persistedFrom = editListing.travel_date_from || editListing.travel_date;
-    const persistedTo = editListing.travel_date_to || editListing.travel_date;
-    if (persistedFrom && persistedTo && persistedFrom !== persistedTo) {
-      setDateMode("range");
-      setDepartDate(new Date(persistedFrom));
-      setReturnDate(new Date(persistedTo));
-    } else if (persistedFrom) {
-      setDateMode("single");
-      setDepartDate(new Date(persistedFrom));
-      setReturnDate(null);
-    }
-    setBio(editListing.bio ?? "");
-    setAge(editListing.age != null ? String(editListing.age) : "");
-    setLanguages(editListing.languages ?? []);
-    setInterests(editListing.interests ?? "");
-    setLayover(editListing.layover ?? "");
-    setHydratedFromEdit(true);
-  }, [isEditMode, hydratedFromEdit, editListing]);
-
   const fromFlag = fromCountry === "IN" ? "🇮🇳" : "🇺🇸";
   const toFlag = toCountry === "IN" ? "🇮🇳" : "🇺🇸";
   const fromCountryName = fromCountry === "IN" ? "India" : "United States";
@@ -238,23 +127,20 @@ export function CreateBuddyScreen() {
   const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
   const toCities = toCountry === "IN" ? INDIA_CITIES : USA_CITIES;
 
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  // Live checks — these surface the moment the value goes bad, rather than
+  // waiting for submit. Web does the same for both.
+  const isSameRoute = computeSameRoute(fromCountry, fromCity, toCountry, toCity);
+  const toCityError = isSameRoute ? SAME_ROUTE_MESSAGE : fieldErrors.toCity;
+  const ageError = getAgeError(age) ?? fieldErrors.age;
 
   // Section Y offsets tracked via `onLayout` on the section wrappers.
   const scrollRef = useRef<ScrollView | null>(null);
-  const sectionYs = useRef<{
-    section1: number;
-    section2: number;
-    section3: number;
-    section4: number;
-  }>({ section1: 0, section2: 0, section3: 0, section4: 0 });
-  const fieldToSection: Record<FieldKey, "section1" | "section2" | "section3" | "section4"> = {
-    fromCity: "section1",
-    toCity: "section1",
-    departDate: "section2",
-    returnDate: "section2",
-    age: "section4",
-  };
+  const sectionYs = useRef<Record<SectionKey, number>>({
+    route: 0,
+    dates: 0,
+    flight: 0,
+    about: 0,
+  });
 
   const clearFieldError = useCallback((key: FieldKey) => {
     setFieldErrors((prev) => {
@@ -278,35 +164,27 @@ export function CreateBuddyScreen() {
   }, [clearFieldError]);
 
   const scrollToField = useCallback((key: FieldKey) => {
-    const sectionKey = fieldToSection[key];
-    const y = sectionYs.current[sectionKey];
+    const y = sectionYs.current[FIELD_TO_SECTION[key]];
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
-  }, [fieldToSection]);
+  }, []);
 
-  const section1Complete = !!fromCity && !!toCity;
-  const section2Complete = !!departDate && (dateMode === "single" || !!returnDate);
-  const section3Complete = !!airline || !!layover;
-  const section4Complete = !!age || languages.length > 0 || !!interests || !!bio;
+  const routeComplete = !!fromCity && !!toCity && !isSameRoute;
+  const datesComplete = !!travelDate;
+  const flightComplete = !!airline || !!layover;
+  const aboutComplete = !!age || languages.length > 0 || !!interests || !!bio;
 
-  // 3 required fields; date-range adds the return date as the 4th.
-  const requiredTotal = dateMode === "range" ? 4 : 3;
-  const requiredCompleted =
-    (fromCity ? 1 : 0) +
-    (toCity ? 1 : 0) +
-    (departDate ? 1 : 0) +
-    (dateMode === "range" && returnDate ? 1 : 0);
+  const requiredTotal = 3;
+  const requiredCompleted = (fromCity ? 1 : 0) + (toCity ? 1 : 0) + (travelDate ? 1 : 0);
   const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
-  const handleAddLanguage = useCallback(
-    (lang: string) => {
-      if (languages.length >= 3) return; // picker button is disabled at the cap, but guard anyway
+  const handleAddLanguage = useCallback((lang: string) => {
+    setLanguages((prev) => {
+      // The picker button is disabled at the cap, but guard anyway.
+      if (prev.length >= MAX_LANGUAGES || prev.includes(lang)) return prev;
+      return [...prev, lang];
+    });
+  }, []);
 
-      if (!languages.includes(lang)) {
-        setLanguages([...languages, lang]);
-      }
-    },
-    [languages],
-  );
   const handleRemoveLanguage = useCallback((lang: string) => {
     setLanguages((prev) => prev.filter((l) => l !== lang));
   }, []);
@@ -315,54 +193,43 @@ export function CreateBuddyScreen() {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
     if (!toCity) errors.toCity = "Select a destination city";
-    if (!departDate) {
-      errors.departDate = dateMode === "range" ? "Pick a start date" : "Pick a travel date";
-    } else if (departDate < today) {
-      errors.departDate = "Can't be in the past";
-    } else if (departDate > maxDate) {
-      errors.departDate = "Must be within 12 months";
+    if (isSameRoute) errors.toCity = SAME_ROUTE_MESSAGE;
+
+    if (!travelDate) {
+      errors.travelDate = "Pick a travel date";
+    } else if (travelDate < today) {
+      errors.travelDate = "Can't be in the past";
+    } else if (travelDate > maxDate) {
+      errors.travelDate = "Must be within 12 months";
     }
-    if (dateMode === "range") {
-      if (!returnDate) {
-        errors.returnDate = "Pick an end date";
-      } else if (departDate && returnDate < departDate) {
-        errors.returnDate = "Must be after start date";
-      } else if (returnDate > maxDate) {
-        errors.returnDate = "Must be within 12 months";
-      }
-    }
-    const ageNum = age ? parseInt(age, 10) : undefined;
-    if (ageNum !== undefined && (ageNum < 18 || ageNum > 120)) {
-      errors.age = "Age must be between 18 and 120";
-    }
+
+    const ageRangeError = getAgeError(age);
+    if (ageRangeError) errors.age = ageRangeError;
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       setFormError("Please fix the highlighted fields before continuing.");
-      const order: FieldKey[] = ["fromCity", "toCity", "departDate", "returnDate", "age"];
-      const firstKey = order.find((k) => errors[k]);
+      const firstKey = FIELD_ORDER.find((k) => errors[k]);
       if (firstKey) scrollToField(firstKey);
       return;
     }
 
     setFieldErrors({});
     setFormError(null);
+    if (!travelDate) return; // narrowing — guarded above
 
-    const effectiveFrom = departDate;
-    const effectiveTo = dateMode === "range" ? returnDate : departDate;
-    if (!effectiveFrom || !effectiveTo) return; // guarded by checks above
-
-    const isAnyFrom = fromCity === ANY_CITY;
-    const isAnyTo = toCity === ANY_CITY;
+    const ymd = formatYmd(travelDate);
     const payload = {
-      from_city: isAnyFrom ? "Any" : fromCity,
-      to_city: isAnyTo ? "Any" : toCity,
-      travel_date: formatYmd(effectiveFrom),
-      travel_date_from: formatYmd(effectiveFrom),
-      travel_date_to: formatYmd(effectiveTo),
+      from_city: fromCity === ANY_CITY ? "Any" : fromCity,
+      to_city: toCity === ANY_CITY ? "Any" : toCity,
+      // No `travel_date_mode` column exists on buddy_listings, so a single-date
+      // listing is expressed as from === to.
+      travel_date: ymd,
+      travel_date_from: ymd,
+      travel_date_to: ymd,
       bio: bio.trim() || undefined,
       airline: airline || undefined,
-      age: ageNum,
+      age: age ? Number.parseInt(age, 10) : undefined,
       languages: languages.length > 0 ? languages : undefined,
       interests: interests.trim() || undefined,
       layover: layover.trim() || undefined,
@@ -370,13 +237,8 @@ export function CreateBuddyScreen() {
 
     setSubmitting(true);
     try {
-      if (isEditMode && editId) {
-        await buddiesApi.update(editId, payload);
-        navigation.navigate("Parcels");
-      } else {
-        await buddiesApi.create(payload);
-        setSubmitted(true);
-      }
+      await buddiesApi.create(payload);
+      setSubmitted(true);
     } catch (err) {
       setFormError(`Couldn't save buddy listing. ${getErrorMessage(err)}`);
     } finally {
@@ -385,9 +247,8 @@ export function CreateBuddyScreen() {
   }, [
     fromCity,
     toCity,
-    dateMode,
-    departDate,
-    returnDate,
+    isSameRoute,
+    travelDate,
     today,
     maxDate,
     age,
@@ -396,9 +257,6 @@ export function CreateBuddyScreen() {
     languages,
     interests,
     layover,
-    isEditMode,
-    editId,
-    navigation,
     scrollToField,
   ]);
 
@@ -409,10 +267,8 @@ export function CreateBuddyScreen() {
     setToCity("");
     setAirline("");
     setAirlineOpen(false);
-    setDateMode("single");
-    setDepartDate(null);
-    setReturnDate(null);
-    setCalendarOpen(null);
+    setTravelDate(null);
+    setCalendarOpen(false);
     setAge("");
     setLanguages([]);
     setLanguagePickerOpen(false);
@@ -440,18 +296,9 @@ export function CreateBuddyScreen() {
   // ───────── Success state ─────────
   if (submitted) {
     return (
-      <Screen>
-        <View style={styles.headerRow}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <Ionicons name="chevron-back" size={18} color={colors.text} />
-          </Pressable>
-          <Text style={styles.title}>Buddy listing created</Text>
-        </View>
+      // `Screen`'s content style has no flexGrow, so a centred child needs both
+      // this and `flex: 1` below — otherwise the block sits at the top.
+      <Screen contentContainerStyle={styles.successScroll}>
         <View style={styles.successWrap}>
           <View style={styles.successIconBubble}>
             <Ionicons name="checkmark" size={36} color={colors.safe} />
@@ -480,8 +327,6 @@ export function CreateBuddyScreen() {
   }
 
   // ───────── Form ─────────
-  const editLoadingError = isEditMode && !listingsLoading && !editListing;
-
   return (
     <Screen scroll={false}>
       <ScrollView
@@ -499,17 +344,13 @@ export function CreateBuddyScreen() {
           >
             <Ionicons name="chevron-back" size={18} color={colors.text} />
           </Pressable>
-          <Text style={styles.title}>
-            {isEditMode ? "Edit travel buddy" : "Find a travel buddy"}
-          </Text>
+          <Text style={styles.title}>Find a travel buddy</Text>
         </View>
         <Text style={styles.subtitle}>
-          {isEditMode
-            ? "Update your travel partner request so other travelers can find the latest details."
-            : "Share your travel plans and connect with fellow travelers on your route."}
+          Share your travel plans and connect with fellow travelers on your route.
         </Text>
 
-        {/* Progress bar — % of required fields complete (3 required, 4 in date-range mode). */}
+        {/* Progress bar — % of the 3 required fields complete. */}
         <View style={styles.progressBlock}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
@@ -519,45 +360,27 @@ export function CreateBuddyScreen() {
           </Text>
         </View>
 
-        {isEditMode && listingsLoading ? (
-          <View style={styles.editLoadingRow}>
-            <ActivityIndicator size="small" color={colors.wordmark} />
-            <Text style={styles.editLoadingText}>Loading your existing buddy request…</Text>
-          </View>
-        ) : null}
-        {editLoadingError ? (
-          <View style={styles.bannerSlot}>
-            <FormBanner
-              message="Buddy request not found. It may have been removed already."
-            />
-          </View>
-        ) : null}
         {formError ? (
           <View style={styles.bannerSlot}>
             <FormBanner message={formError} onDismiss={() => setFormError(null)} />
           </View>
         ) : null}
 
-        {/* ───────── Section 1 — Where are you going? ───────── */}
+        {/* ───────── Where are you going? ───────── */}
         <View
           onLayout={(e) => {
-            sectionYs.current.section1 = e.nativeEvent.layout.y;
+            sectionYs.current.route = e.nativeEvent.layout.y;
           }}
         >
           <SectionCard
             index={1}
             title="Where are you going?"
             subtitle="Set your departure and destination"
-            complete={section1Complete}
-            hasError={!!fieldErrors.fromCity || !!fieldErrors.toCity}
+            complete={routeComplete}
+            hasError={!!fieldErrors.fromCity || !!toCityError}
           >
             <Text style={styles.fieldLabel}>From</Text>
-            <LocationCard
-              flag={fromFlag}
-              label={fromCountryName}
-              filled
-              onToggle={toggleFromCountry}
-            />
+            <LocationCard flag={fromFlag} label={fromCountryName} filled onToggle={toggleFromCountry} />
             <View>
               <CityPicker
                 value={fromCity}
@@ -576,12 +399,7 @@ export function CreateBuddyScreen() {
             </View>
 
             <Text style={styles.fieldLabel}>To</Text>
-            <LocationCard
-              flag={toFlag}
-              label={toCountryName}
-              filled
-              onToggle={toggleToCountry}
-            />
+            <LocationCard flag={toFlag} label={toCountryName} filled onToggle={toggleToCountry} />
             <View>
               <CityPicker
                 value={toCity}
@@ -592,81 +410,50 @@ export function CreateBuddyScreen() {
                 cities={toCities}
                 placeholder="Select destination city"
                 variant="card"
-                invalid={!!fieldErrors.toCity}
+                invalid={!!toCityError}
               />
-              {fieldErrors.toCity ? (
-                <Text style={styles.inlineError}>{fieldErrors.toCity}</Text>
-              ) : null}
+              {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
             </View>
           </SectionCard>
         </View>
 
-        {/* ───────── Section 2 — When are you traveling? ───────── */}
+        {/* ───────── When are you traveling? ───────── */}
         <View
           onLayout={(e) => {
-            sectionYs.current.section2 = e.nativeEvent.layout.y;
+            sectionYs.current.dates = e.nativeEvent.layout.y;
           }}
         >
           <SectionCard
             index={2}
             title="When are you traveling?"
-            subtitle="Single date or a flexible range"
-            complete={section2Complete}
-            hasError={!!fieldErrors.departDate || !!fieldErrors.returnDate}
+            subtitle="Pick your travel date"
+            complete={datesComplete}
+            hasError={!!fieldErrors.travelDate}
           >
-            <DateModeToggle<DateMode>
-              options={[
-                { value: "single", label: "Single Date" },
-                { value: "range", label: "Date Range" },
-              ]}
-              value={dateMode}
-              onChange={(next) => {
-                setDateMode(next);
-                if (next === "single") {
-                  setReturnDate(null);
-                  clearFieldError("returnDate");
-                }
-              }}
+            <DateField
+              label="Travel date"
+              value={travelDate ? formatDateLabel(travelDate) : null}
+              placeholder="Select date"
+              onPress={() => setCalendarOpen(true)}
+              error={fieldErrors.travelDate}
             />
-
-            <View style={styles.dateRow}>
-              <View style={styles.dateRowCell}>
-                <DateField
-                  label={dateMode === "range" ? "Start" : "Travel date"}
-                  value={departDate ? formatDateLabel(departDate) : null}
-                  placeholder="Select date"
-                  onPress={() => setCalendarOpen("depart")}
-                  error={fieldErrors.departDate}
-                />
-              </View>
-              <View style={styles.dateRowCell}>
-                <DateField
-                  label="End"
-                  value={returnDate ? formatDateLabel(returnDate) : null}
-                  placeholder="Select date"
-                  onPress={() => setCalendarOpen("return")}
-                  disabled={dateMode === "single"}
-                  error={fieldErrors.returnDate}
-                />
-              </View>
-            </View>
             <Text style={styles.helperText}>
-              Select a single date or a date range up to 12 months from today.
+              Select a travel date up to 12 months from today.
             </Text>
           </SectionCard>
         </View>
 
-        {/* ───────── Section 3 — Your flight (optional) ───────── */}
+        {/* ───────── Your flight (optional) ───────── */}
         <View
           onLayout={(e) => {
-            sectionYs.current.section3 = e.nativeEvent.layout.y;
+            sectionYs.current.flight = e.nativeEvent.layout.y;
           }}
         >
           <SectionCard
             index={3}
             title="Your flight"
             subtitle="Optional flight info to find buddies on the same plane"
-            complete={section3Complete}
+            complete={flightComplete}
           >
             <View style={styles.labelRow}>
               <Text style={styles.fieldLabel}>Airline</Text>
@@ -681,19 +468,12 @@ export function CreateBuddyScreen() {
               accessibilityLabel="Pick airline"
             >
               <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
-              <Text
-                style={[
-                  styles.selectInputText,
-                  !airline && { color: colors.subtleText },
-                ]}
-              >
+              <Text style={[styles.selectInputText, !airline && styles.selectInputPlaceholder]}>
                 {airline || "Select airline"}
               </Text>
               <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
             </Pressable>
-            <Text style={styles.helperText}>
-              Helps match with buddies on the same flight.
-            </Text>
+            <Text style={styles.helperText}>Helps match with buddies on the same flight.</Text>
 
             <View style={[styles.labelRow, styles.labelRowTopGap]}>
               <Text style={styles.fieldLabel}>Layover</Text>
@@ -704,8 +484,8 @@ export function CreateBuddyScreen() {
             <TextInput
               value={layover}
               onChangeText={setLayover}
-              placeholder="e.g. New York — 4h layover"
-              placeholderTextColor={colors.subtleText}
+              placeholder="e.g. London Heathrow — 3h layover"
+              placeholderTextColor={colors.placeholderText}
               style={styles.input}
             />
             <Text style={styles.helperText}>
@@ -714,18 +494,18 @@ export function CreateBuddyScreen() {
           </SectionCard>
         </View>
 
-        {/* ───────── Section 4 — About you (optional) ───────── */}
+        {/* ───────── About you (optional) ───────── */}
         <View
           onLayout={(e) => {
-            sectionYs.current.section4 = e.nativeEvent.layout.y;
+            sectionYs.current.about = e.nativeEvent.layout.y;
           }}
         >
           <SectionCard
             index={4}
             title="About you"
             subtitle="Optional — help travelers get to know you"
-            complete={section4Complete}
-            hasError={!!fieldErrors.age}
+            complete={aboutComplete}
+            hasError={!!ageError}
           >
             <View style={styles.labelRow}>
               <Text style={styles.fieldLabel}>Age</Text>
@@ -741,19 +521,17 @@ export function CreateBuddyScreen() {
                   clearFieldError("age");
                 }}
                 placeholder="e.g. 28"
-                placeholderTextColor={colors.subtleText}
+                placeholderTextColor={colors.placeholderText}
                 keyboardType="number-pad"
-                style={[styles.input, fieldErrors.age && styles.inputError]}
+                style={[styles.input, !!ageError && styles.inputError]}
               />
-              {fieldErrors.age ? (
-                <Text style={styles.inlineError}>{fieldErrors.age}</Text>
-              ) : null}
+              {ageError ? <Text style={styles.inlineError}>{ageError}</Text> : null}
             </View>
 
             <View style={[styles.labelRow, styles.labelRowTopGap]}>
               <Text style={styles.fieldLabel}>Languages</Text>
               <View style={styles.optionalPill}>
-                <Text style={styles.optionalPillText}>Up to 3</Text>
+                <Text style={styles.optionalPillText}>Up to {MAX_LANGUAGES}</Text>
               </View>
             </View>
             {languages.length > 0 ? (
@@ -776,14 +554,14 @@ export function CreateBuddyScreen() {
             <Pressable
               style={[styles.input, styles.selectInput]}
               onPress={() => setLanguagePickerOpen(true)}
-              disabled={languages.length >= 3}
+              disabled={languages.length >= MAX_LANGUAGES}
               accessibilityRole="button"
               accessibilityLabel="Add a language"
             >
-              <Text
-                style={[styles.selectInputText, { color: colors.subtleText }]}
-              >
-                {languages.length >= 3 ? "Max 3 selected" : "Add a language"}
+              <Text style={[styles.selectInputText, styles.selectInputPlaceholder]}>
+                {languages.length >= MAX_LANGUAGES
+                  ? `Max ${MAX_LANGUAGES} selected`
+                  : "Add a language"}
               </Text>
               <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
             </Pressable>
@@ -798,7 +576,7 @@ export function CreateBuddyScreen() {
               value={interests}
               onChangeText={setInterests}
               placeholder="e.g. Photography, Hiking, Food, Tech"
-              placeholderTextColor={colors.subtleText}
+              placeholderTextColor={colors.placeholderText}
               style={styles.input}
             />
             <Text style={styles.helperText}>
@@ -815,7 +593,7 @@ export function CreateBuddyScreen() {
               value={bio}
               onChangeText={setBio}
               placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
-              placeholderTextColor={colors.subtleText}
+              placeholderTextColor={colors.placeholderText}
               style={[styles.input, styles.textarea]}
               multiline
               numberOfLines={3}
@@ -826,17 +604,9 @@ export function CreateBuddyScreen() {
 
         <View style={styles.submitRow}>
           <AppButton
-            label={
-              submitting
-                ? isEditMode
-                  ? "Saving…"
-                  : "Creating…"
-                : isEditMode
-                  ? "Save buddy request"
-                  : "Find my travel buddy"
-            }
+            label={submitting ? "Creating…" : "Find my travel buddy"}
             onPress={() => void handleSubmit()}
-            disabled={submitting || (isEditMode && (listingsLoading || !editListing))}
+            disabled={submitting}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             leftIcon={
               submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined
@@ -845,7 +615,6 @@ export function CreateBuddyScreen() {
         </View>
       </ScrollView>
 
-      {/* Airline picker modal */}
       <ListPickerModal
         open={airlineOpen}
         title="Select airline"
@@ -858,7 +627,6 @@ export function CreateBuddyScreen() {
         onClose={() => setAirlineOpen(false)}
       />
 
-      {/* Language picker modal */}
       <ListPickerModal
         open={languagePickerOpen}
         title="Add a language"
@@ -871,208 +639,24 @@ export function CreateBuddyScreen() {
         onClose={() => setLanguagePickerOpen(false)}
       />
 
-      {/* Calendar */}
       <CalendarModal
-        open={calendarOpen !== null}
-        title={calendarOpen === "return" ? "Pick end date" : "Pick travel date"}
-        selected={calendarOpen === "return" ? returnDate : departDate}
+        open={calendarOpen}
+        title="Pick travel date"
+        selected={travelDate}
         visibleMonth={visibleMonth}
-        today={calendarOpen === "return" && departDate ? departDate : today}
+        today={today}
         maxDate={maxDate}
         onSelect={(d) => {
-          if (calendarOpen === "return") {
-            setReturnDate(d);
-            clearFieldError("returnDate");
-          } else {
-            setDepartDate(d);
-            clearFieldError("departDate");
-          }
-          setCalendarOpen(null);
+          setTravelDate(d);
+          clearFieldError("travelDate");
+          setCalendarOpen(false);
         }}
         onChangeMonth={setVisibleMonth}
-        onClose={() => setCalendarOpen(null)}
+        onClose={() => setCalendarOpen(false)}
       />
     </Screen>
   );
 }
-
-// ───────────────────────── Sub-components ─────────────────────────
-
-interface ListPickerModalProps {
-  open: boolean;
-  title: string;
-  options: readonly string[];
-  selected: string;
-  onSelect: (value: string) => void;
-  onClose: () => void;
-}
-
-function ListPickerModal({
-  open,
-  title,
-  options,
-  selected,
-  onSelect,
-  onClose,
-}: Readonly<ListPickerModalProps>) {
-  return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.pickerSheet}>
-        <View style={styles.pickerHeader}>
-          <Text style={styles.pickerTitle}>{title}</Text>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
-            <Ionicons name="close" size={20} color={colors.mutedText} />
-          </Pressable>
-        </View>
-        <FlatList
-          data={options}
-          keyExtractor={(item) => item}
-          renderItem={({ item }) => {
-            const isSel = item === selected;
-            return (
-              <Pressable
-                onPress={() => onSelect(item)}
-                style={[styles.pickerRow, isSel && styles.pickerRowSelected]}
-                accessibilityRole="button"
-              >
-                <Text
-                  style={[
-                    styles.pickerRowText,
-                    isSel && styles.pickerRowTextSelected,
-                  ]}
-                >
-                  {item}
-                </Text>
-                {isSel ? (
-                  <Ionicons name="checkmark" size={16} color={colors.wordmark} />
-                ) : null}
-              </Pressable>
-            );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.pickerSeparator} />}
-          showsVerticalScrollIndicator={false}
-        />
-      </View>
-    </Modal>
-  );
-}
-
-interface CalendarModalProps {
-  open: boolean;
-  title: string;
-  selected: Date | null;
-  visibleMonth: Date;
-  today: Date;
-  maxDate: Date;
-  onSelect: (d: Date) => void;
-  onChangeMonth: (d: Date) => void;
-  onClose: () => void;
-}
-
-function CalendarModal({
-  open,
-  title,
-  selected,
-  visibleMonth,
-  today,
-  maxDate,
-  onSelect,
-  onChangeMonth,
-  onClose,
-}: Readonly<CalendarModalProps>) {
-  const cells = useMemo(() => buildCalendar(visibleMonth), [visibleMonth]);
-  const monthLabel = formatMonthLabel(visibleMonth);
-
-  const goPrev = () => {
-    const next = new Date(visibleMonth);
-    next.setMonth(next.getMonth() - 1);
-    onChangeMonth(next);
-  };
-  const goNext = () => {
-    const next = new Date(visibleMonth);
-    next.setMonth(next.getMonth() + 1);
-    onChangeMonth(next);
-  };
-
-  return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose} />
-      <View style={styles.calendarCenterWrap} pointerEvents="box-none">
-        <View style={styles.calendarSheet}>
-          <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button">
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-          <View style={styles.calendarHeader}>
-          <Pressable
-            onPress={goPrev}
-            style={styles.calendarNavButton}
-            accessibilityRole="button"
-            accessibilityLabel="Previous month"
-          >
-            <Ionicons name="chevron-back" size={18} color={colors.text} />
-          </Pressable>
-          <Text style={styles.calendarTitle}>{monthLabel}</Text>
-          <Pressable
-            onPress={goNext}
-            style={styles.calendarNavButton}
-            accessibilityRole="button"
-            accessibilityLabel="Next month"
-          >
-            <Ionicons name="chevron-forward" size={18} color={colors.text} />
-          </Pressable>
-        </View>
-        <View style={styles.calendarWeekRow}>
-          {WEEKDAYS.map((d) => (
-            <Text key={d} style={styles.calendarWeekday}>
-              {d}
-            </Text>
-          ))}
-        </View>
-        <View style={styles.calendarGrid}>
-          {cells.map((cell, i) => {
-            const isPast = cell.date < today;
-            const isFuture = cell.date > maxDate;
-            const disabled = isPast || isFuture;
-            const isSelected = sameDate(selected, cell.date);
-            const isToday = sameDate(today, cell.date);
-            return (
-              <Pressable
-                key={i}
-                disabled={disabled}
-                onPress={() => onSelect(cell.date)}
-                style={[
-                  styles.calendarCell,
-                  isSelected && styles.calendarCellSelected,
-                  isToday && !isSelected && styles.calendarCellToday,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ disabled, selected: isSelected }}
-              >
-                <Text
-                  style={[
-                    styles.calendarCellText,
-                    !cell.inMonth && styles.calendarCellTextMuted,
-                    disabled && styles.calendarCellTextDisabled,
-                    isSelected && styles.calendarCellTextSelected,
-                  ]}
-                >
-                  {cell.date.getDate()}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 24 },
@@ -1093,7 +677,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
+  subtitle: {
+    color: colors.mutedText,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
+    marginBottom: 14,
+  },
   bannerSlot: { marginBottom: 14 },
 
   // ───── Progress bar ─────
@@ -1113,18 +703,8 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  editLoadingRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  editLoadingText: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
-
   // ───── Common fields ─────
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
-
   labelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   labelRowTopGap: { marginTop: 8 },
   optionalPill: {
@@ -1140,10 +720,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.3,
   },
-
-  // ───── Section 2: date row ─────
-  dateRow: { flexDirection: "row", gap: 10 },
-  dateRowCell: { flex: 1 },
 
   // ───── Inputs ─────
   input: {
@@ -1164,6 +740,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   selectInputText: { color: colors.text, fontSize: 15, lineHeight: 22, flex: 1 },
+  selectInputPlaceholder: { color: colors.placeholderText },
   textarea: { minHeight: 84, paddingTop: 12 },
 
   inlineError: {
@@ -1173,8 +750,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 6,
   },
-
-  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: 6 },
+  helperText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+    marginTop: 6,
+  },
 
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 6 },
   chip: {
@@ -1192,7 +774,9 @@ const styles = StyleSheet.create({
 
   submitRow: { marginTop: 4 },
 
-  successWrap: { alignItems: "center", paddingTop: 32, gap: 12 },
+  // ───── Success ─────
+  successScroll: { flexGrow: 1 },
+  successWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   successIconBubble: {
     width: 80,
     height: 80,
@@ -1213,100 +797,4 @@ const styles = StyleSheet.create({
   },
   successButtons: { flexDirection: "row", alignSelf: "stretch", gap: 10, marginTop: 18 },
   successButtonFlex: { flex: 1 },
-
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,15,25,0.4)",
-  },
-  pickerSheet: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 24,
-    maxHeight: "70%",
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-  },
-  pickerHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  pickerTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
-  pickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 6,
-    paddingVertical: 12,
-  },
-  pickerRowSelected: { backgroundColor: colors.surfaceTintPrimary, borderRadius: 8 },
-  pickerRowText: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
-  pickerRowTextSelected: { color: colors.wordmark, fontWeight: "800" },
-  pickerSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-
-  calendarCenterWrap: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 16,
-  },
-  calendarSheet: {
-    width: "100%",
-    maxWidth: 400,
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 14,
-  },
-  calendarHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginVertical: 8,
-  },
-  calendarNavButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surfaceMuted,
-  },
-  calendarTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
-  calendarWeekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  calendarWeekday: {
-    width: `${100 / 7}%`,
-    textAlign: "center",
-    color: colors.subtleText,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
-  calendarCell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-  },
-  calendarCellSelected: { backgroundColor: colors.wordmark },
-  calendarCellToday: { borderWidth: 1, borderColor: colors.wordmark },
-  calendarCellText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "600" },
-  calendarCellTextMuted: { color: colors.subtleText },
-  calendarCellTextDisabled: { color: colors.subtleText, opacity: 0.4 },
-  calendarCellTextSelected: { color: colors.white, fontWeight: "800" },
 });

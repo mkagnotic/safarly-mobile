@@ -278,6 +278,37 @@ export function ParcelDetailsScreen() {
       if (values.description !== (parcel.description ?? "")) {
         data.description = values.description;
       }
+      if (values.category && values.category !== parcel.category) {
+        data.category = values.category;
+      }
+      const feeNum = Number(values.fee_offered);
+      if (
+        values.fee_offered !== "" &&
+        Number.isFinite(feeNum) &&
+        feeNum !== parcel.fee_offered
+      ) {
+        data.fee_offered = feeNum;
+      }
+      if (values.fee_currency !== parcel.fee_currency) {
+        data.fee_currency = values.fee_currency;
+      }
+
+      // Dates travel as a set. The handler's collapse logic keys off
+      // delivery_date_mode and does NOT default it on PUT, so sending a changed
+      // date without the mode can leave mode="single" with from != to.
+      const curFrom = parcel.delivery_by_from ?? parcel.delivery_by ?? "";
+      const curTo = parcel.delivery_by_to ?? parcel.delivery_by ?? "";
+      const curMode = parcel.delivery_date_mode === "range" ? "range" : "single";
+      if (
+        values.delivery_by_from !== curFrom ||
+        values.delivery_by_to !== curTo ||
+        values.delivery_date_mode !== curMode
+      ) {
+        data.delivery_date_mode = values.delivery_date_mode;
+        data.delivery_by_from = values.delivery_by_from;
+        data.delivery_by_to = values.delivery_by_to;
+        data.delivery_by = values.delivery_by_to;
+      }
 
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
@@ -354,6 +385,14 @@ export function ParcelDetailsScreen() {
     to_country: (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
     weight_kg: `${parcel.weight_kg ?? ""}`,
     description: parcel.description ?? "",
+    category: (parcel.category as EditParcelFormValues["category"]) ?? "personal",
+    fee_offered: `${parcel.fee_offered ?? ""}`,
+    fee_currency: parcel.fee_currency === "INR" ? "INR" : "USD",
+    // Trust the persisted mode rather than re-deriving it from whether the two
+    // dates differ — that inference is exactly what delivery_date_mode replaced.
+    delivery_by_from: parcel.delivery_by_from ?? parcel.delivery_by ?? "",
+    delivery_by_to: parcel.delivery_by_to ?? parcel.delivery_by ?? "",
+    delivery_date_mode: parcel.delivery_date_mode === "range" ? "range" : "single",
   };
 
   return (

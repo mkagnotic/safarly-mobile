@@ -20,7 +20,7 @@ export type RootStackParamList = {
         /** Display name + parcel kept for legacy callers (mock flow). */
         name: string;
         parcel?: string;
-        source?: "home" | "offers" | "messages" | "buddies";
+        source?: "home" | "offers" | "messages" | "buddies" | "travels";
       }
     | undefined;
   SendParcel: undefined;
@@ -43,8 +43,8 @@ export type MainTabParamList = {
   Trips: undefined;
   Buddies: undefined;
   BuddyDetailsTab: { buddyName: string };
-  /** Travel-buddy listing form. `editId` set → load existing for edit. */
-  CreateBuddyTab: { editId?: string } | undefined;
+  /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
+  CreateBuddyTab: undefined;
   Profile: undefined;
   WalletTab: undefined;
   AddCardTab: undefined;
@@ -83,7 +83,7 @@ export type MainTabParamList = {
         /** Display name + parcel kept for legacy callers (mock flow). */
         name: string;
         parcel?: string;
-        source?: "home" | "offers" | "messages" | "buddies";
+        source?: "home" | "offers" | "messages" | "buddies" | "travels";
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };
