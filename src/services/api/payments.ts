@@ -33,6 +33,21 @@ export interface ConfirmPaymentResult {
   booking_status?: string; // "awaiting_handoff"
 }
 
+export interface StripeConnectStatus {
+  /** Both charges AND payouts enabled — the only state that clears the payout gate. */
+  connected: boolean;
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+  /** Stripe's forms were completed; verification may still be in progress. */
+  details_submitted: boolean;
+  account_id: string | null;
+}
+
+/** Started onboarding but Stripe hasn't enabled payouts yet. */
+export function isPayoutPending(status: StripeConnectStatus | null): boolean {
+  return !!status && status.details_submitted && !status.payouts_enabled;
+}
+
 export const paymentsApi = {
   createIntent: (booking_id: string) =>
     api.post<CreateIntentResult>("/payment-handler/create-intent", { booking_id }),
@@ -53,6 +68,30 @@ export const paymentsApi = {
 
   getMyTransactions: (params?: { page?: number; per_page?: number }) =>
     api.get<Transaction[]>("/payment-handler/me", params),
+
+  // --- Stripe Connect (carrier payouts) ---
+
+  /**
+   * Create (or reuse) the carrier's Express account and return a hosted
+   * onboarding link.
+   *
+   * The link's `return_url` is built server-side from `APP_URL`, so Stripe
+   * always sends the user to the *web* payout page — there's no mobile deep
+   * link to come back to. Callers therefore treat "the browser closed" as the
+   * signal to re-read `stripeConnectStatus`, which is authoritative either way.
+   */
+  stripeConnectOnboard: () =>
+    api.post<{ onboarding_url: string; account_id: string }>(
+      "/payment-handler/stripe-connect/onboard",
+    ),
+
+  /** Live status — the endpoint refreshes the flags from Stripe before replying. */
+  stripeConnectStatus: () =>
+    api.get<StripeConnectStatus>("/payment-handler/stripe-connect/status"),
+
+  /** Stripe Express dashboard link, for an already-onboarded carrier. */
+  stripeConnectDashboardLink: () =>
+    api.get<{ url: string }>("/payment-handler/stripe-connect/dashboard-link"),
 
   // --- Admin endpoints ---
   adminListPayouts: (params?: { page?: number; per_page?: number }) =>

@@ -24,6 +24,8 @@ import { LoginScreen } from "@/features/auth/LoginScreen";
 import { SignupScreen } from "@/features/auth/SignupScreen";
 import { ProfileSetupScreen } from "@/features/auth/ProfileSetupScreen";
 import { ForgotPasswordScreen } from "@/features/auth/ForgotPasswordScreen";
+import { ResetPasswordScreen } from "@/features/auth/ResetPasswordScreen";
+import { VerifyEmailScreen } from "@/features/auth/VerifyEmailScreen";
 import { TermsOfServiceScreen } from "@/features/legal/TermsOfServiceScreen";
 import { PrivacyPolicyScreen } from "@/features/legal/PrivacyPolicyScreen";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
@@ -376,6 +378,13 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Signup" component={SignupScreenWrapper} options={{ headerShown: false, animation: "slide_from_bottom" }} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} options={{ headerShown: false }} />
+            {/* Also registered in the profile-setup and main groups. Needed here
+                so the consent links on Login / Sign up can open them. */}
+            <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
           </>
         )}
         {!showSplash && onboarded && authenticated && authBootstrapping && (

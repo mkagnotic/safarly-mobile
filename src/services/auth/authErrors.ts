@@ -88,7 +88,9 @@ export function mapAuthError(error: unknown, ctx: "signin" | "signup"): MappedAu
     ) {
       return {
         target: "password",
-        message: "Choose a stronger password (at least 6 characters).",
+        // Wording tracks `passwordPolicy.PASSWORD_HINT`; not imported because
+        // services/ shouldn't depend on features/.
+        message: "Choose a stronger password — at least 8 characters, with letters and numbers.",
       };
     }
     if (text.includes("signups not allowed") || text.includes("signup is disabled")) {
@@ -117,4 +119,91 @@ export function mapAuthError(error: unknown, ctx: "signin" | "signup"): MappedAu
     target: "form",
     message: raw || "Something went wrong. Please try again.",
   };
+}
+
+/**
+ * Email one-time-code errors — `verifyEmailOtp` and `resendEmailOtp`.
+ *
+ * Supabase surfaces its resend throttle as a plain message ("For security
+ * purposes, you can only request this after N seconds"), which is worth
+ * passing through nearly verbatim: the user needs the number to know how long
+ * to wait.
+ */
+export function mapOtpError(error: unknown): string {
+  const err = (error ?? {}) as RawAuthError;
+  const raw = (err.message ?? "").trim();
+  const text = raw.toLowerCase();
+  const code = (err.code ?? "").toLowerCase();
+  const status = typeof err.status === "number" ? err.status : undefined;
+
+  if (
+    err.name === "AuthRetryableFetchError" ||
+    text.includes("network request failed") ||
+    text.includes("failed to fetch") ||
+    text.includes("network error")
+  ) {
+    return "Can't reach the server. Check your connection and try again.";
+  }
+
+  // Supabase's own throttle copy already names the wait, so keep it.
+  if (text.includes("for security purposes") || text.includes("only request this")) {
+    return raw;
+  }
+
+  if (status === 429 || code.includes("rate_limit") || text.includes("too many requests")) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+
+  if (
+    code === "otp_expired" ||
+    text.includes("expired") ||
+    text.includes("invalid") ||
+    text.includes("token not found")
+  ) {
+    return "That code is invalid or has expired. Request a new one.";
+  }
+
+  return raw || "Something went wrong. Please try again.";
+}
+
+/**
+ * Password-reset request errors (`authApi.forgotPassword`).
+ *
+ * Deliberately NOT `mapAuthError`: that mapper collapses any 400 in a `signin`
+ * context to "email or password is incorrect", which is nonsense on a screen
+ * with no password field.
+ *
+ * Security note: the endpoint always reports success so it can't be used to
+ * enumerate accounts, so nothing here may hint at whether an email is
+ * registered. Only transport- and policy-level failures reach the user.
+ *
+ * Duck-types the error rather than importing `ApiClientError` so this module
+ * stays dependency-free; `ApiClientError` exposes the same
+ * `message`/`code`/`status` surface as Supabase's `AuthError`.
+ */
+export function mapPasswordResetError(error: unknown): string {
+  const err = (error ?? {}) as RawAuthError;
+  const text = (err.message ?? "").trim().toLowerCase();
+  const code = (err.code ?? "").toLowerCase();
+  const status = typeof err.status === "number" ? err.status : undefined;
+
+  if (
+    err.name === "AuthRetryableFetchError" ||
+    text.includes("network request failed") ||
+    text.includes("failed to fetch") ||
+    text.includes("network error")
+  ) {
+    return "Can't reach the server. Check your connection and try again.";
+  }
+
+  // The endpoint rate-limits per IP (10/15min) and per email (5/15min).
+  if (status === 429 || code.includes("rate_limit") || text.includes("too many requests")) {
+    return "Too many reset requests. Please wait a few minutes and try again.";
+  }
+
+  if (code === "validation_error" || status === 422) {
+    return "Enter a valid email address.";
+  }
+
+  return "Something went wrong. Please try again.";
 }

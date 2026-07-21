@@ -20,6 +20,7 @@ import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
+import { LegalConsentText } from "@/components/ui/LegalConsentText";
 import { Screen } from "@/components/ui/Screen";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
@@ -44,7 +45,8 @@ export function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { signInWithPassword, signInWithGoogle } = useAuth();
 
-  // Cross-screen notice handed in by SignupScreen (e.g. "Check your email").
+  // Cross-screen notice handed in by another auth screen that's about to
+  // unmount — currently ResetPasswordScreen ("Password updated").
   const pendingNotice = useAppStore((s) => s.pendingNotice);
   const clearPendingNotice = useAppStore((s) => s.clearPendingNotice);
   const loginNotice = pendingNotice?.target === "login" ? pendingNotice : null;
@@ -87,13 +89,21 @@ export function LoginScreen() {
     const next: { email?: string; password?: string } = {};
     if (!nextEmail.trim()) next.email = "Email is required";
     else if (!EMAIL_RE.test(nextEmail.trim())) next.email = "Enter a valid email";
+    // Sign-in only checks presence. Applying the sign-up strength rules here
+    // would lock out anyone who registered under an older, looser policy —
+    // the server is the authority on whether a credential is correct.
     if (!nextPassword) next.password = "Password is required";
-    else if (nextPassword.length < 6) next.password = "Min 6 characters";
     setErrors(next);
     if (next.email) emailRef.current?.focus();
     else if (next.password) passwordRef.current?.focus();
     return Object.keys(next).length === 0;
   }, []);
+
+  /** Carry whatever they've typed across so they don't retype it. */
+  const goToForgotPassword = useCallback(() => {
+    const typed = email.trim().toLowerCase();
+    navigation.navigate("ForgotPassword", typed ? { email: typed } : undefined);
+  }, [navigation, email]);
 
   const handleSignIn = useCallback(async () => {
     if (submitting) return;
@@ -226,7 +236,7 @@ export function LoginScreen() {
                     if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
                     if (formError) setFormError(null);
                   }}
-                  placeholder="Min 6 characters"
+                  placeholder="Your password"
                   style={styles.passwordInput}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -250,6 +260,18 @@ export function LoginScreen() {
                     color={colors.mutedText}
                   />
                 </Pressable>
+                <Pressable
+                  onPress={goToForgotPassword}
+                  disabled={submitting}
+                  hitSlop={6}
+                  style={styles.forgotRow}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password"
+                >
+                  <Text style={[styles.forgotLink, submitting && styles.switchLinkDisabled]}>
+                    Forgot password?
+                  </Text>
+                </Pressable>
               </View>
             </View>
 
@@ -271,9 +293,11 @@ export function LoginScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <Text style={styles.authTerms}>
-                By signing in, you agree to our Terms of Service and Privacy Policy
-              </Text>
+              <LegalConsentText
+                prefix="By signing in, you agree to our"
+                style={styles.authTerms}
+                disabled={submitting}
+              />
             </View>
           </View>
         </ScrollView>
@@ -377,9 +401,11 @@ export function LoginScreen() {
               </Text>
             </Pressable>
           </View>
-          <Text style={styles.terms}>
-            By continuing, you agree to our Terms of Service and Privacy Policy
-          </Text>
+          <LegalConsentText
+            prefix="By continuing, you agree to our"
+            style={styles.terms}
+            disabled={googleSubmitting}
+          />
         </View>
       </View>
     </Screen>
@@ -472,6 +498,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Sits directly under the password field; AppInput's own 14px bottom margin
+  // provides the spacing, so the link shifts down naturally when an inline
+  // password error appears.
+  forgotRow: { alignSelf: "flex-end", paddingVertical: 2 },
+  forgotLink: { color: colors.ctaAccent, fontSize: 13, fontWeight: "700" },
   authActions: { gap: 12, marginTop: "auto", paddingBottom: 28 },
   authSwitchRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
   authTerms: { color: colors.mutedText, textAlign: "center", fontSize: 12, lineHeight: 17, marginTop: 4 },

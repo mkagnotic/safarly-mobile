@@ -19,7 +19,28 @@ export interface AuthSession {
   expires_in: number;
 }
 
+export interface AuthMethodInfo {
+  exists: boolean;
+  /** e.g. ["email"], ["google"], or both. */
+  providers: string[];
+  has_password: boolean;
+  /** `email_confirmed_at` is set — a real registered account, not a pending signup. */
+  confirmed: boolean;
+}
+
 export const authApi = {
+  /**
+   * Which sign-in methods exist for an email. Used after signup to tell an
+   * already-registered address apart from a fresh one, since Supabase's
+   * anti-enumeration response can't distinguish them.
+   *
+   * Intentionally reveals whether an email is registered — the endpoint is
+   * rate-limited (20 / 5 min per IP) and this is the same trade-off the web
+   * app makes to give people an accurate message.
+   */
+  checkAuthMethod: (email: string) =>
+    api.post<AuthMethodInfo>("/auth-handler/check-auth-method", { email }),
+
   /** Admin login via edge function. */
   adminLogin: (email: string, password: string) =>
     api.post<{ user: AuthUser; session: AuthSession }>("/auth-handler/admin/login", {
@@ -43,6 +64,26 @@ export const authApi = {
   /** Customer login via Supabase Auth (email/password). */
   customerLogin: async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Verify the 6-digit code from the signup confirmation email.
+   *
+   * On success this establishes a real session on the shared client, so
+   * `AuthContext` picks up SIGNED_IN and `RootNavigator` advances to profile
+   * setup on its own — the caller does not navigate.
+   */
+  verifyEmailOtp: async (email: string, token: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "signup" });
+    if (error) throw error;
+    return data;
+  },
+
+  /** Re-send the signup confirmation code. Server-throttled to 1 per 60s. */
+  resendEmailOtp: async (email: string) => {
+    const { data, error } = await supabase.auth.resend({ email, type: "signup" });
     if (error) throw error;
     return data;
   },

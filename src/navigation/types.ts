@@ -3,6 +3,13 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Signup: undefined;
+  /** Pre-auth password recovery. `email` pre-fills from the sign-in form. */
+  ForgotPassword: { email?: string } | undefined;
+  /** Enter the emailed recovery code + a new password. `email` is required
+   *  because `verifyOtp` needs it alongside the code. */
+  ResetPassword: { email: string };
+  /** Signup email confirmation — enter the 6-digit code from the welcome email. */
+  VerifyEmail: { email: string };
   AuthBootstrap: undefined;
   ProfileSetup: undefined;
   MainTabs: undefined;
@@ -49,7 +56,8 @@ export type MainTabParamList = {
   PreferencesTab: undefined;
   ChangePasswordTab: undefined;
   ChangeEmailTab: undefined;
-  ForgotPasswordTab: undefined;
+  /** Same screen as the root stack's `ForgotPassword`, reached from Change Password. */
+  ForgotPasswordTab: { email?: string } | undefined;
   SendParcelTab: undefined;
   ReviewPayTab: {
     draft: {

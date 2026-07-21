@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { useShallow } from "zustand/react/shallow";
 
 import { AppButton } from "@/components/ui/AppButton";
@@ -20,11 +21,15 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
+import { ONBOARDING_COUNTRIES } from "@/features/profile/countries";
 import { RootStackParamList } from "@/navigation/types";
 import {
   ApiClientError,
   authApi,
+  getErrorMessage,
+  paymentsApi,
   usersApi,
+  type StripeConnectStatus,
   type UserProfile as ApiUserProfile,
 } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
@@ -33,7 +38,10 @@ import { colors } from "@/theme/colors";
 
 const TERMS_VERSION = "v1";
 
-type Step = 0 | 1;
+/** 0 Terms, 1 Profile, 2 Payout (optional). Mirrors web's onboarding. */
+type Step = 0 | 1 | 2;
+
+const TOTAL_STEPS = 3;
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ProfileSetup">;
 
@@ -61,6 +69,9 @@ export function ProfileSetupScreen() {
   const [country, setCountry] = useState<string | null>(null);
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // Payout step
+  const [payoutStatus, setPayoutStatus] = useState<StripeConnectStatus | null>(null);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -101,48 +112,125 @@ export function ProfileSetupScreen() {
   };
 
   /**
-   * Web behavior: a "Skip" finishes onboarding by accepting terms only.
-   * "Complete" requires a name and saves the full profile + accepts terms.
+   * Step 1 -> Step 2. Mirrors web's `handleProfileNext`: "Skip" advances
+   * without saving, "Complete" requires a name and persists first. Terms are
+   * accepted on the final step either way, so abandoning here re-runs setup
+   * rather than stranding a half-onboarded account.
    */
-  const handleFinish = useCallback(
+  const handleProfileNext = useCallback(
     async (skipProfile: boolean) => {
       if (submitting) return;
       setFormError(null);
       setNameError(null);
-      if (!skipProfile && !name.trim()) {
+      if (skipProfile) {
+        setStep(2);
+        return;
+      }
+      if (!name.trim()) {
         setNameError("Name is required");
         return;
       }
       setSubmitting(true);
       try {
-        if (!skipProfile) {
-          const res = await usersApi.updateMyProfile({
-            name: name.trim(),
-            city: city.trim() || undefined,
-            country: country ?? undefined,
-            bio: bio.trim() || undefined,
-            avatar_url: avatarUrl ?? undefined,
-          });
-          const saved = res.data;
-          updateUserProfile({
-            fullName: saved?.name ?? name.trim(),
-            bio: saved?.bio ?? bio.trim(),
-            city: saved?.city ?? city.trim(),
-            country: saved?.country ?? country ?? "",
-            email: user?.email ?? "",
-            kycStatus: (saved?.kyc_status as never) ?? "not_started",
-          });
-        }
-        await authApi.acceptTerms(TERMS_VERSION);
-        finishProfileSetup();
+        const res = await usersApi.updateMyProfile({
+          name: name.trim(),
+          city: city.trim() || undefined,
+          country: country ?? undefined,
+          bio: bio.trim() || undefined,
+          avatar_url: avatarUrl ?? undefined,
+        });
+        const saved = res.data;
+        updateUserProfile({
+          fullName: saved?.name ?? name.trim(),
+          bio: saved?.bio ?? bio.trim(),
+          city: saved?.city ?? city.trim(),
+          country: saved?.country ?? country ?? "",
+          email: user?.email ?? "",
+          kycStatus: (saved?.kyc_status as never) ?? "not_started",
+        });
+        if (mountedRef.current) setStep(2);
       } catch (err) {
-        setFormError(mapAuthError(err, "signup").message);
+        if (mountedRef.current) setFormError(mapAuthError(err, "signup").message);
       } finally {
         if (mountedRef.current) setSubmitting(false);
       }
     },
-    [submitting, name, city, country, bio, avatarUrl, user?.email, updateUserProfile, finishProfileSetup],
+    [submitting, name, city, country, bio, avatarUrl, user?.email, updateUserProfile],
   );
+
+  /**
+   * Accept the terms exactly once, and always BEFORE handing off to Stripe.
+   * If a user bails out of Stripe's hosted flow, their terms are already
+   * recorded, so they land in the app instead of being bounced back through
+   * setup. Idempotent via the ref so a retry after a failed hand-off doesn't
+   * re-post it.
+   */
+  /** Non-fatal: the payout screen in Profile re-checks this later anyway. */
+  const refreshPayoutStatus = useCallback(async () => {
+    try {
+      const res = await paymentsApi.stripeConnectStatus();
+      if (mountedRef.current) setPayoutStatus(res.data ?? null);
+    } catch {
+      // Leave the step in its default "not set up" state.
+    }
+  }, []);
+
+  // Read the real status when the payout step opens, so a user who already
+  // onboarded (e.g. re-running setup) isn't asked to do it again.
+  useEffect(() => {
+    if (step === 2 && !payoutStatus) void refreshPayoutStatus();
+  }, [step, payoutStatus, refreshPayoutStatus]);
+
+  const termsCommitted = useRef(false);
+  const commitTerms = useCallback(async (): Promise<boolean> => {
+    if (termsCommitted.current) return true;
+    try {
+      await authApi.acceptTerms(TERMS_VERSION);
+      termsCommitted.current = true;
+      return true;
+    } catch (err) {
+      if (mountedRef.current) setFormError(mapAuthError(err, "signup").message);
+      return false;
+    }
+  }, []);
+
+  const handleSetUpPayouts = useCallback(async () => {
+    if (submitting) return;
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      if (!(await commitTerms())) return;
+      const res = await paymentsApi.stripeConnectOnboard();
+      const url = res.data?.onboarding_url;
+      if (!url) {
+        if (mountedRef.current) setFormError("Couldn't start payout setup. Please try again.");
+        return;
+      }
+      // Stripe's `return_url` is built from APP_URL server-side, so it lands on
+      // the *web* payout page — there is no deep link back into the app. The
+      // browser closing is therefore our only signal, and the server is the
+      // authority on what actually happened, so we just re-read the status.
+      await WebBrowser.openBrowserAsync(url);
+      if (!mountedRef.current) return;
+      await refreshPayoutStatus();
+    } catch (err) {
+      if (mountedRef.current) setFormError(getErrorMessage(err));
+    } finally {
+      if (mountedRef.current) setSubmitting(false);
+    }
+  }, [submitting, commitTerms, refreshPayoutStatus]);
+
+  /** "I'll do this later" / "Continue" — commit terms and enter the app. */
+  const handleFinishSetup = useCallback(async () => {
+    if (submitting) return;
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      if (await commitTerms()) finishProfileSetup();
+    } finally {
+      if (mountedRef.current) setSubmitting(false);
+    }
+  }, [submitting, commitTerms, finishProfileSetup]);
 
   const goNext = useCallback(() => {
     if (step === 0 && termsAccepted && liabilityAccepted) setStep(1);
@@ -150,6 +238,7 @@ export function ProfileSetupScreen() {
 
   const goBack = useCallback(() => {
     if (step === 1) setStep(0);
+    else if (step === 2) setStep(1);
   }, [step]);
 
   const initials = useMemo(() => {
@@ -171,6 +260,8 @@ export function ProfileSetupScreen() {
   return (
     <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
       <View style={styles.container}>
+        <StepIndicator current={step} />
+
         {step === 0 ? (
           <TermsStep
             termsAccepted={termsAccepted}
@@ -203,12 +294,49 @@ export function ProfileSetupScreen() {
             onBio={setBio}
             onAvatar={setAvatarUrl}
             onBack={goBack}
-            onComplete={() => handleFinish(false)}
-            onSkip={() => handleFinish(true)}
+            onComplete={() => handleProfileNext(false)}
+            onSkip={() => handleProfileNext(true)}
+          />
+        ) : null}
+
+        {step === 2 ? (
+          <PayoutStep
+            status={payoutStatus}
+            submitting={submitting}
+            formError={formError}
+            onBack={goBack}
+            onSetUp={handleSetUpPayouts}
+            onFinish={handleFinishSetup}
           />
         ) : null}
       </View>
     </Screen>
+  );
+}
+
+// ───────────────────────────── Step indicator ─────────────────────────────
+
+/** Numbered rail with a check on completed steps — mirrors web's onboarding. */
+function StepIndicator({ current }: Readonly<{ current: Step }>) {
+  return (
+    <View style={styles.stepRail} accessibilityLabel={`Step ${current + 1} of ${TOTAL_STEPS}`}>
+      {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+        <View key={`step-${i}`} style={styles.stepRailItem}>
+          <View style={[styles.stepDot, i <= current && styles.stepDotActive]}>
+            {i < current ? (
+              <Ionicons name="checkmark" size={14} color={colors.white} />
+            ) : (
+              <Text style={[styles.stepDotText, i === current && styles.stepDotTextActive]}>
+                {i + 1}
+              </Text>
+            )}
+          </View>
+          {i < TOTAL_STEPS - 1 ? (
+            <View style={[styles.stepBar, i < current && styles.stepBarActive]} />
+          ) : null}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -414,7 +542,19 @@ function ProfileStep({
           error={nameError ?? undefined}
         />
 
+        {/* Country before City — matches web's onboarding step, and reads in the
+            natural narrowing order (country, then the city within it). */}
         <View style={styles.gridRow}>
+          <View style={styles.gridCol}>
+            <FieldBlock label="Country">
+              <CountryPicker
+                value={country}
+                onChange={onCountry}
+                disabled={submitting}
+                options={ONBOARDING_COUNTRIES}
+              />
+            </FieldBlock>
+          </View>
           <View style={styles.gridCol}>
             <AppInput
               label="City"
@@ -424,11 +564,6 @@ function ProfileStep({
               autoCapitalize="words"
               editable={!submitting}
             />
-          </View>
-          <View style={styles.gridCol}>
-            <FieldBlock label="Country">
-              <CountryPicker value={country} onChange={onCountry} disabled={submitting} />
-            </FieldBlock>
           </View>
         </View>
 
@@ -457,6 +592,121 @@ function ProfileStep({
       >
         <Text style={[styles.skipText, submitting && styles.skipTextDisabled]}>Skip for now</Text>
       </Pressable>
+    </ScrollView>
+  );
+}
+
+// ───────────────────────────── Payout step ─────────────────────────────
+
+interface PayoutStepProps {
+  status: StripeConnectStatus | null;
+  submitting: boolean;
+  formError: string | null;
+  onBack: () => void;
+  onSetUp: () => void;
+  onFinish: () => void;
+}
+
+/**
+ * Optional final step: connect a Stripe account so this user can be paid for
+ * carrying parcels. Anyone can skip — senders never need it, and carriers are
+ * prompted again at the point it actually blocks them (accepting an offer).
+ */
+function PayoutStep({
+  status,
+  submitting,
+  formError,
+  onBack,
+  onSetUp,
+  onFinish,
+}: Readonly<PayoutStepProps>) {
+  const connected = !!status?.connected;
+  const pending = !connected && !!status?.details_submitted;
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stepScroll}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.authHeaderRow}>
+        <Pressable
+          style={styles.authBackButton}
+          onPress={onBack}
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.text} />
+        </Pressable>
+        <Text style={styles.authTitle}>How you get paid</Text>
+      </View>
+
+      <Text style={styles.authSubtitle}>
+        Planning to carry parcels for others? Connect a bank account so you can accept deliveries
+        and receive your earnings. You can always do this later from your profile.
+      </Text>
+
+      {formError ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner message={formError} />
+        </View>
+      ) : null}
+
+      {connected ? (
+        <View style={styles.payoutNotice}>
+          <View style={[styles.payoutIcon, styles.payoutIconSafe]}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.safe} />
+          </View>
+          <Text style={styles.payoutNoticeText}>
+            <Text style={styles.payoutNoticeStrong}>Payouts are set up.</Text> You're ready to accept
+            deliveries and get paid.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.payoutNotice}>
+          <View style={styles.payoutIcon}>
+            <Ionicons name="cash-outline" size={18} color={colors.ctaAccent} />
+          </View>
+          <Text style={styles.payoutNoticeText}>
+            {pending ? (
+              <>
+                <Text style={styles.payoutNoticeStrong}>Verification in progress.</Text> Stripe is
+                still reviewing your details — this usually takes a few minutes.
+              </>
+            ) : (
+              <>
+                Payouts are handled securely by{" "}
+                <Text style={styles.payoutNoticeStrong}>Stripe</Text>. It's free to connect, and you
+                only need it when someone books you to carry their parcel. Senders don't need this.
+              </>
+            )}
+          </Text>
+        </View>
+      )}
+
+      {connected ? (
+        <PrimaryButton label="Continue" onPress={onFinish} loading={submitting} />
+      ) : (
+        <>
+          <PrimaryButton
+            label={pending ? "Continue setup" : "Set up payouts"}
+            onPress={onSetUp}
+            loading={submitting}
+          />
+          <Pressable
+            onPress={onFinish}
+            disabled={submitting}
+            style={({ pressed }) => [styles.skipButton, pressed && styles.skipButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="I'll do this later"
+          >
+            <Text style={[styles.skipText, submitting && styles.skipTextDisabled]}>
+              I'll do this later
+            </Text>
+          </Pressable>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -612,6 +862,45 @@ const styles = StyleSheet.create({
   fieldLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginBottom: 8 },
   gridRow: { flexDirection: "row", gap: 10 },
   gridCol: { flex: 1 },
+
+  // Step indicator
+  stepRail: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 12 },
+  stepRailItem: { flexDirection: "row", alignItems: "center" },
+  stepDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepDotActive: { backgroundColor: colors.ctaAccent },
+  stepDotText: { color: colors.mutedText, fontSize: 12, fontWeight: "800" },
+  stepDotTextActive: { color: colors.white },
+  stepBar: { width: 32, height: 2, borderRadius: 1, backgroundColor: colors.surfaceMuted, marginHorizontal: 6 },
+  stepBarActive: { backgroundColor: colors.ctaAccent },
+
+  // Payout step
+  payoutNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 22,
+  },
+  payoutIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 122, 38, 0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payoutIconSafe: { backgroundColor: "rgba(34, 195, 93, 0.12)" },
+  payoutNoticeText: { flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19 },
+  payoutNoticeStrong: { color: colors.text, fontWeight: "700" },
 
   // Buttons
   primaryButtonFlex: { flex: 1 },
