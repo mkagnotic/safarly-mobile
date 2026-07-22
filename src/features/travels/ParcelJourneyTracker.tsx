@@ -1,25 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo, useState } from "react";
-import { LayoutAnimation, Platform, StyleSheet, Text, UIManager, View } from "react-native";
+import { memo, useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
 
-import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import {
   STAGE_ORDER,
   computeJourney,
+  type JourneyResult,
   type StageKey,
   type StageState,
 } from "@/features/travels/journeyTracker";
 import type { Booking, Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
-
-// LayoutAnimation is opt-in on Android; enabling it here keeps the expand/collapse
-// smooth without pulling in Reanimated for one component.
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -62,45 +53,29 @@ const LABEL_COLORS: Record<StageState, string> = {
   disputed: colors.warning,
 };
 
-interface Props {
+interface JourneyInput {
   /** Optional — only used as a pre-booking fallback; the booking drives the journey. */
   parcel?: Parcel | null;
   booking?: Booking | null;
-  /** Start expanded (e.g. deep-linked). Defaults to collapsed like a standard app. */
-  defaultOpen?: boolean;
 }
 
 /**
- * Amazon/Flipkart-style journey tracker for a parcel — the mobile counterpart of
- * web's `ParcelJourneyTracker`. Renders a collapsible "Track parcel" header that
- * expands a vertical timeline of the 11 delivery stages, including terminal
- * (cancelled/expired/declined) and disputed outcomes.
- *
- * All state comes from {@link computeJourney}, which is a verbatim port of web's
- * logic — so the two platforms can't disagree about a journey.
+ * Only surface a journey once a carrier is committed. Pre-match listings
+ * (open / looking-for-carrier / negotiating) have no journey to track, so
+ * showing "0/11" there is just noise. Web parity.
  */
-export const ParcelJourneyTracker = memo(function ParcelJourneyTracker({
-  parcel,
-  booking,
-  defaultOpen = false,
-}: Readonly<Props>) {
-  const [open, setOpen] = useState(defaultOpen);
+function useJourney({ parcel, booking }: JourneyInput): JourneyResult | null {
+  return useMemo(() => {
+    const isMatched =
+      !!booking ||
+      (!!parcel?.status &&
+        ["matched", "in_transit", "delivered", "completed", "disputed"].includes(parcel.status));
+    return isMatched ? computeJourney(parcel, booking) : null;
+  }, [parcel, booking]);
+}
 
-  // Only surface the tracker once a carrier is committed (matched). Pre-match
-  // listings (open / looking-for-carrier / negotiating) have no journey to track,
-  // so showing "Track parcel — 0/11" there is just noise.
-  const isMatched =
-    !!booking ||
-    (!!parcel?.status &&
-      ["matched", "in_transit", "delivered", "completed", "disputed"].includes(parcel.status));
-
-  const journey = useMemo(
-    () => (isMatched ? computeJourney(parcel, booking) : null),
-    [isMatched, parcel, booking],
-  );
-
-  if (!journey) return null;
-
+/** Shared header/summary derivation so the row and the timeline never disagree. */
+function summarise(journey: JourneyResult) {
   const { stages, outcome, outcomeLabel } = journey;
   const doneCount = stages.filter((s) => s.state === "done").length;
   const currentStage = stages.find((s) => s.state === "current");
@@ -109,192 +84,218 @@ export const ParcelJourneyTracker = memo(function ParcelJourneyTracker({
   const summary = isBad
     ? outcome === "disputed"
       ? "Payment under review"
-      : outcomeLabel
+      : (outcomeLabel ?? "Journey ended")
     : currentStage
       ? `Next: ${currentStage.label}`
       : doneCount >= STAGE_ORDER.length
-        ? "Journey complete"
+        ? "Journey completed"
         : "Awaiting carrier";
 
-  const summaryColor =
+  const tone =
     outcome === "cancelled"
       ? colors.danger
       : outcome === "disputed"
         ? colors.warning
         : colors.mutedText;
 
-  const badgeStyle =
-    outcome === "cancelled"
-      ? styles.badgeDanger
-      : outcome === "disputed"
-        ? styles.badgeWarning
-        : styles.badgePrimary;
-  const badgeColor =
-    outcome === "cancelled"
-      ? colors.danger
-      : outcome === "disputed"
-        ? colors.warning
-        : colors.wordmark;
+  return { doneCount, isBad, summary, tone };
+}
 
-  const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOpen((v) => !v);
-  };
+// ───────────────────────── Compact row (list cards) ─────────────────────────
+
+/**
+ * One-line journey status for a list card — the "at a glance" half of the
+ * standard tracking pattern. The full timeline lives on the item's details
+ * screen, which the parent card already navigates to on press, so this is
+ * presentational and carries only an affordance chevron.
+ */
+export const JourneySummaryRow = memo(function JourneySummaryRow({
+  parcel,
+  booking,
+}: Readonly<JourneyInput>) {
+  const journey = useJourney({ parcel, booking });
+  if (!journey) return null;
+
+  const { doneCount, isBad, summary, tone } = summarise(journey);
 
   return (
-    <View style={styles.wrap}>
-      <Pressable
-        onPress={toggle}
-        style={styles.header}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        accessibilityLabel={`Track parcel. ${summary}`}
+    <View style={styles.summaryRow}>
+      <View
+        style={[
+          styles.summaryBadge,
+          isBad && journey.outcome === "cancelled" && styles.badgeDanger,
+          isBad && journey.outcome === "disputed" && styles.badgeWarning,
+        ]}
       >
-        <View style={[styles.badge, badgeStyle]}>
-          <Ionicons
-            name={isBad ? "alert-circle-outline" : "location-outline"}
-            size={13}
-            color={badgeColor}
-          />
-        </View>
-        <View style={styles.headerTextCol}>
-          <Text style={styles.headerTitle}>Track parcel</Text>
-          <Text style={[styles.headerSummary, { color: summaryColor }]} numberOfLines={1}>
-            {summary}
-          </Text>
-        </View>
+        <Ionicons
+          name={isBad ? "alert-circle-outline" : "location-outline"}
+          size={13}
+          color={
+            journey.outcome === "cancelled"
+              ? colors.danger
+              : journey.outcome === "disputed"
+                ? colors.warning
+                : colors.wordmark
+          }
+        />
+      </View>
+      <Text style={[styles.summaryText, { color: tone }]} numberOfLines={1}>
+        {summary}
+      </Text>
+      {!isBad ? (
+        <Text style={styles.summaryCount}>
+          {Math.max(doneCount, 0)}/{STAGE_ORDER.length}
+        </Text>
+      ) : null}
+      <Ionicons name="chevron-forward" size={14} color={colors.subtleText} />
+    </View>
+  );
+});
+
+// ───────────────────────── Full timeline (details screens) ─────────────────────────
+
+/**
+ * The full 11-stage delivery timeline, always expanded — it's the point of the
+ * section it sits in on a details screen, so it doesn't hide behind a toggle.
+ * Renders nothing before a carrier is committed.
+ */
+export const ParcelJourneyTimeline = memo(function ParcelJourneyTimeline({
+  parcel,
+  booking,
+}: Readonly<JourneyInput>) {
+  const journey = useJourney({ parcel, booking });
+  if (!journey) return null;
+
+  const { stages, outcome, outcomeLabel } = journey;
+  const { doneCount, isBad, summary, tone } = summarise(journey);
+
+  return (
+    <View style={styles.timelineCard}>
+      <View style={styles.timelineHeader}>
+        <Text style={styles.timelineTitle}>Delivery tracking</Text>
         {!isBad ? (
-          <Text style={styles.headerCount}>
+          <Text style={styles.timelineCount}>
             {Math.max(doneCount, 0)}/{STAGE_ORDER.length}
           </Text>
         ) : null}
-        <Ionicons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={colors.mutedText}
-        />
-      </Pressable>
+      </View>
+      <Text style={[styles.timelineSummary, { color: tone }]}>{summary}</Text>
 
-      {open ? (
-        <View style={styles.body}>
-          {outcome === "cancelled" ? (
-            <View style={[styles.notice, styles.noticeDanger]}>
-              <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
-              <Text style={[styles.noticeText, { color: colors.danger }]}>
-                {outcomeLabel} — this journey didn&apos;t complete.
-              </Text>
-            </View>
-          ) : null}
-          {outcome === "disputed" ? (
-            <View style={[styles.notice, styles.noticeWarning]}>
-              <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
-              <Text style={[styles.noticeText, { color: colors.warning }]}>
-                Payment is under review — a dispute is open on this delivery.
-              </Text>
-            </View>
-          ) : null}
-
-          {stages.map((stage, i) => {
-            const tone = NODE_TONES[stage.state];
-            const isLast = i === stages.length - 1;
-            return (
-              <View key={stage.key} style={styles.stageRow}>
-                {/* Left rail: node + connector down to the next stage. */}
-                <View style={styles.rail}>
-                  <View
-                    style={[
-                      styles.node,
-                      { backgroundColor: tone.bg, borderColor: tone.border },
-                      stage.state === "current" && styles.nodeCurrent,
-                    ]}
-                  >
-                    <Ionicons
-                      name={
-                        stage.state === "done"
-                          ? "checkmark"
-                          : stage.state === "failed"
-                            ? "close"
-                            : stage.state === "disputed"
-                              ? "alert-circle-outline"
-                              : STAGE_ICONS[stage.key]
-                      }
-                      size={13}
-                      color={tone.fg}
-                    />
-                  </View>
-                  {!isLast ? (
-                    <View
-                      style={[
-                        styles.connector,
-                        stage.state === "done" && styles.connectorDone,
-                      ]}
-                    />
-                  ) : null}
-                </View>
-
-                {/* Content */}
-                <View style={[styles.stageContent, isLast && styles.stageContentLast]}>
-                  <View style={styles.stageTextCol}>
-                    <Text
-                      style={[
-                        styles.stageLabel,
-                        { color: LABEL_COLORS[stage.state] },
-                        stage.state === "current" && styles.stageLabelCurrent,
-                        stage.state === "skipped" && styles.stageLabelSkipped,
-                      ]}
-                    >
-                      {stage.label}
-                    </Text>
-                    {stage.state === "current" ? (
-                      <Text style={styles.stageHintCurrent}>In progress</Text>
-                    ) : null}
-                    {stage.state === "disputed" ? (
-                      <Text style={styles.stageHintDisputed}>Under review</Text>
-                    ) : null}
-                  </View>
-                  {stage.detail ? (
-                    <Text
-                      style={[
-                        styles.stageDetail,
-                        stage.state === "failed" && { color: colors.danger },
-                        stage.state === "disputed" && { color: colors.warning },
-                      ]}
-                    >
-                      {stage.detail}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })}
+      {outcome === "cancelled" ? (
+        <View style={[styles.notice, styles.noticeDanger]}>
+          <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
+          <Text style={[styles.noticeText, { color: colors.danger }]}>
+            {outcomeLabel} — this journey didn&apos;t complete.
+          </Text>
         </View>
       ) : null}
+      {outcome === "disputed" ? (
+        <View style={[styles.notice, styles.noticeWarning]}>
+          <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
+          <Text style={[styles.noticeText, { color: colors.warning }]}>
+            Payment is under review — a dispute is open on this delivery.
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.stages}>
+        {stages.map((stage, i) => {
+          const nodeTone = NODE_TONES[stage.state];
+          const isLast = i === stages.length - 1;
+          return (
+            <View key={stage.key} style={styles.stageRow}>
+              {/* Left rail: node + connector down to the next stage. */}
+              <View style={styles.rail}>
+                <View
+                  style={[
+                    styles.node,
+                    { backgroundColor: nodeTone.bg, borderColor: nodeTone.border },
+                    stage.state === "current" && styles.nodeCurrent,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      stage.state === "done"
+                        ? "checkmark"
+                        : stage.state === "failed"
+                          ? "close"
+                          : stage.state === "disputed"
+                            ? "alert-circle-outline"
+                            : STAGE_ICONS[stage.key]
+                    }
+                    size={13}
+                    color={nodeTone.fg}
+                  />
+                </View>
+                {!isLast ? (
+                  <View
+                    style={[styles.connector, stage.state === "done" && styles.connectorDone]}
+                  />
+                ) : null}
+              </View>
+
+              <View style={[styles.stageContent, isLast && styles.stageContentLast]}>
+                <View style={styles.stageTextCol}>
+                  <Text
+                    style={[
+                      styles.stageLabel,
+                      { color: LABEL_COLORS[stage.state] },
+                      stage.state === "current" && styles.stageLabelCurrent,
+                      stage.state === "skipped" && styles.stageLabelSkipped,
+                    ]}
+                  >
+                    {stage.label}
+                  </Text>
+                  {stage.state === "current" ? (
+                    <Text style={styles.stageHintCurrent}>In progress</Text>
+                  ) : null}
+                  {stage.state === "disputed" ? (
+                    <Text style={styles.stageHintDisputed}>Under review</Text>
+                  ) : null}
+                </View>
+                {stage.detail ? (
+                  <Text
+                    style={[
+                      styles.stageDetail,
+                      stage.state === "failed" && { color: colors.danger },
+                      stage.state === "disputed" && { color: colors.warning },
+                    ]}
+                  >
+                    {stage.detail}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  wrap: {
+  // ───── Compact row ─────
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
-    marginTop: 12,
-    paddingTop: 4,
   },
-  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
-  badge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  summaryBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surfaceTintPrimary,
   },
-  badgePrimary: { backgroundColor: colors.surfaceTintPrimary },
   badgeDanger: { backgroundColor: "rgba(220, 40, 40, 0.10)" },
   badgeWarning: { backgroundColor: colors.surfaceTintWarning },
-  headerTextCol: { flex: 1, minWidth: 0 },
-  headerTitle: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  headerSummary: { fontSize: 11, lineHeight: 15, fontWeight: "500", marginTop: 1 },
-  headerCount: {
+  summaryText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "600" },
+  summaryCount: {
     color: colors.mutedText,
     fontSize: 11,
     lineHeight: 15,
@@ -302,7 +303,30 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
 
-  body: { paddingTop: 4, paddingBottom: 8 },
+  // ───── Full timeline ─────
+  timelineCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 12,
+  },
+  timelineHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  timelineTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
+  timelineCount: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  timelineSummary: { fontSize: 13, lineHeight: 18, fontWeight: "600", marginTop: 2 },
 
   notice: {
     flexDirection: "row",
@@ -311,12 +335,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    marginBottom: 12,
+    marginTop: 12,
   },
   noticeDanger: { backgroundColor: "rgba(220, 40, 40, 0.08)" },
   noticeWarning: { backgroundColor: colors.surfaceTintWarning },
   noticeText: { flex: 1, fontSize: 12, lineHeight: 16, fontWeight: "600" },
 
+  stages: { marginTop: 16 },
   stageRow: { flexDirection: "row", gap: 12 },
   rail: { alignItems: "center" },
   node: {

@@ -13,11 +13,7 @@ import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { CityPicker } from "@/features/search/CityPicker";
-import {
-  citiesForDirection,
-  countryLabelForDirection,
-  type Direction,
-} from "@/features/search/cityLists";
+import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { DatePicker } from "@/features/search/DatePicker";
 import { RouteListingCard } from "@/features/search/RouteListingCard";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
@@ -44,6 +40,11 @@ type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+/** Per-side country for the route filter — independent, so IN -> IN is reachable. */
+type SearchCountry = "IN" | "US";
+const COUNTRY_LABEL: Record<SearchCountry, string> = { IN: "India", US: "USA" };
+const COUNTRY_FLAG: Record<SearchCountry, string> = { IN: "🇮🇳", US: "🇺🇸" };
 
 type LookingForType = "travel_buddy" | "carrier" | "receive_request";
 type ResultsTab = "package" | "buddy" | "receiver";
@@ -133,7 +134,12 @@ function dedupeBuddyMatchesByUser(matches: BuddySearchMatch[]): BuddySearchMatch
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
 
-  const [direction, setDirection] = useState<Direction>("IN_TO_US");
+  // Independent per-side countries, matching the create forms. Search used to
+  // model this as a coupled IN_TO_US / US_TO_IN "direction", which made
+  // domestic routes (IN -> IN, US -> US) impossible to search for even though
+  // every create form lets you list one.
+  const [fromCountry, setFromCountry] = useState<SearchCountry>("IN");
+  const [toCountry, setToCountry] = useState<SearchCountry>("US");
   const [fromCity, setFromCity] = useState("");
   const [toCity, setToCity] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -181,10 +187,10 @@ export function SearchScreen() {
   const myTripsState = useTrips({ filter: "my_trips", perPage: 100 });
   const myParcelsState = useParcels({ filter: "my_parcels", perPage: 100 });
 
-  const fromCities = citiesForDirection(direction, "from");
-  const toCities = citiesForDirection(direction, "to");
-  const fromCountry = countryLabelForDirection(direction, "from");
-  const toCountry = countryLabelForDirection(direction, "to");
+  const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
+  const toCities = toCountry === "IN" ? INDIA_CITIES : USA_CITIES;
+  const fromCountryLabel = COUNTRY_LABEL[fromCountry];
+  const toCountryLabel = COUNTRY_LABEL[toCountry];
 
   const carrierTrips = useMemo(
     () => (results?.package_matches ?? []).filter((m) => m.type === "carrier_trip"),
@@ -343,9 +349,13 @@ export function SearchScreen() {
     [dedupedBuddyMatches, safeAutoBuddyPage],
   );
 
-  const handleSwapDirection = useCallback(() => {
-    setDirection((d) => (d === "IN_TO_US" ? "US_TO_IN" : "IN_TO_US"));
+  /** Switching a side's country invalidates that side's city, so clear it. */
+  const toggleFromCountry = useCallback(() => {
+    setFromCountry((c) => (c === "IN" ? "US" : "IN"));
     setFromCity("");
+  }, []);
+  const toggleToCountry = useCallback(() => {
+    setToCountry((c) => (c === "IN" ? "US" : "IN"));
     setToCity("");
   }, []);
 
@@ -483,30 +493,54 @@ export function SearchScreen() {
 
         <Card style={styles.filtersCard}>
           <Text style={styles.fieldLabel}>ROUTE</Text>
+          {/* Each side owns its country, so a domestic route (IN -> IN) is
+              reachable. No swap control: with both sides independently
+              switchable it would be a redundant third way to do the same thing,
+              and the create forms don't have one either. */}
           <View style={styles.routeRow}>
-            <CityPicker
-              value={fromCity}
-              onChange={setFromCity}
-              cities={fromCities}
-              placeholder={`From (${fromCountry})`}
-              disabled={loading}
-            />
-            <Pressable
-              style={styles.swapButton}
-              onPress={handleSwapDirection}
-              disabled={loading}
-              accessibilityRole="button"
-              accessibilityLabel="Swap direction"
-            >
-              <Ionicons name="swap-vertical-outline" size={16} color={colors.wordmark} />
-            </Pressable>
-            <CityPicker
-              value={toCity}
-              onChange={setToCity}
-              cities={toCities}
-              placeholder={`To (${toCountry})`}
-              disabled={loading}
-            />
+            <View style={styles.routeCol}>
+              <Pressable
+                style={styles.countryChip}
+                onPress={toggleFromCountry}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel={`Departure country: ${fromCountryLabel}. Tap to switch.`}
+              >
+                <Text style={styles.countryChipText}>
+                  {COUNTRY_FLAG[fromCountry]} {fromCountryLabel}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
+              </Pressable>
+              <CityPicker
+                value={fromCity}
+                onChange={setFromCity}
+                cities={fromCities}
+                placeholder="From city"
+                disabled={loading}
+              />
+            </View>
+
+            <View style={styles.routeCol}>
+              <Pressable
+                style={styles.countryChip}
+                onPress={toggleToCountry}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel={`Arrival country: ${toCountryLabel}. Tap to switch.`}
+              >
+                <Text style={styles.countryChipText}>
+                  {COUNTRY_FLAG[toCountry]} {toCountryLabel}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
+              </Pressable>
+              <CityPicker
+                value={toCity}
+                onChange={setToCity}
+                cities={toCities}
+                placeholder="To city"
+                disabled={loading}
+              />
+            </View>
           </View>
 
           {/* Date Range — tappable fields that open a calendar sheet. */}
@@ -1500,7 +1534,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   fieldLabelTopGap: { marginTop: 6 },
-  routeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  routeRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  routeCol: { flex: 1, minWidth: 0, gap: 8 },
+  countryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted,
+  },
+  countryChipText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   swapButton: {
     width: 36,
     height: 36,

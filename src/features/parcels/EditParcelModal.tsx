@@ -177,7 +177,9 @@ export function EditParcelModal({
     if (!fromDate) return setError("Pick a delivery deadline");
     if (form.delivery_date_mode === "range") {
       if (!toDate) return setError("Pick the latest delivery date");
-      if (toDate < fromDate) return setError("Latest date must be after the earliest");
+      // Strictly after: equal ends are a single date, which the mode toggle
+      // already expresses. `<` allowed them to match despite this wording.
+      if (toDate <= fromDate) return setError("Latest date must be after the earliest");
     }
     const fee = Number(form.fee_offered);
     if (!form.fee_offered || Number.isNaN(fee) || fee <= 0) {

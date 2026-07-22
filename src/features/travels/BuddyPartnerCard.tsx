@@ -99,6 +99,14 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
               {metaLine}
             </Text>
           ) : null}
+          {/* Inside the text column, not below the row: the stacked Edit/Delete
+              column is taller than this text, so a pill placed after the row
+              inherited that height and left a large gap under the meta line. */}
+          <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
+            <Text style={[styles.statusPillText, { color: statusTone.fg }]} numberOfLines={1}>
+              {statusLabel}
+            </Text>
+          </View>
         </View>
 
         {onEdit || onDelete ? (
@@ -132,12 +140,6 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
             ) : null}
           </View>
         ) : null}
-      </View>
-
-      <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
-        <Text style={[styles.statusPillText, { color: statusTone.fg }]} numberOfLines={1}>
-          {statusLabel}
-        </Text>
       </View>
 
       {item.bio ? (
@@ -208,7 +210,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    marginTop: 10,
+    marginTop: 8,
   },
   statusPillText: {
     fontSize: 10,

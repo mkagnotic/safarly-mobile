@@ -27,6 +27,11 @@ interface Props {
   item: FlightItem | Parcel;
   /** Tag chip shown at the top — caller supplies the descriptive label. */
   tag?: string;
+  /**
+   * Tag colour. "muted" for archived/terminal records, where the accent orange
+   * reads as an active listing demanding attention.
+   */
+  tagTone?: "accent" | "muted";
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -62,6 +67,7 @@ export const TravelCard = memo(function TravelCard({
   type,
   item,
   tag,
+  tagTone = "accent",
   onPress,
   onEdit,
   onDelete,
@@ -84,6 +90,33 @@ export const TravelCard = memo(function TravelCard({
   const matchClickable =
     showStatusPill && !!onViewMatches && (status === "matched" || status === "accepted");
   const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
+  const hasActions = canModify && !!(onEdit || onDelete);
+
+  /** Status chip — placed under the text or in the right column, see below. */
+  const statusNode = expired ? (
+    <View style={styles.expiredPill}>
+      <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
+      <Text style={styles.expiredPillText}>EXPIRED</Text>
+    </View>
+  ) : matchClickable ? (
+    <Pressable
+      onPress={onViewMatches}
+      style={[styles.statusPill, styles.statusPillRow, { backgroundColor: tone.bg }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${labelForStatus(status)} — view matches`}
+    >
+      <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
+        {labelForStatus(status)}
+      </Text>
+      <Ionicons name="people" size={11} color={tone.fg} />
+    </Pressable>
+  ) : showStatusPill ? (
+    <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
+      <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
+        {labelForStatus(status)}
+      </Text>
+    </View>
+  ) : null;
 
   const metaLine =
     type === "flight"
@@ -117,8 +150,8 @@ export const TravelCard = memo(function TravelCard({
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={`${tagLabel}: ${item.from_city} to ${item.to_city}`}
     >
-      <View style={styles.tag}>
-        <Text style={styles.tagText}>{tagLabel}</Text>
+      <View style={[styles.tag, tagTone === "muted" && styles.tagMuted]}>
+        <Text style={[styles.tagText, tagTone === "muted" && styles.tagTextMuted]}>{tagLabel}</Text>
       </View>
 
       <View style={styles.row}>
@@ -137,9 +170,21 @@ export const TravelCard = memo(function TravelCard({
               {metaLine}
             </Text>
           ) : null}
+
+          {/* With actions present, the status sits under the text: the stacked
+              Edit/Delete column is taller, so a pill placed after the row
+              inherited that height and left a big gap under the meta line. */}
+          {hasActions ? statusNode : null}
         </View>
 
-        {canModify && (onEdit || onDelete) ? (
+        {/* Without actions (archived/closed records) the right column would be
+            dead space, so the status takes it — matching web, which renders the
+            status badge at the right of the card header. */}
+        {!hasActions && statusNode ? (
+          <View style={styles.statusCol}>{statusNode}</View>
+        ) : null}
+
+        {hasActions ? (
           <View style={styles.actionsCol}>
             {onEdit ? (
               <Pressable
@@ -171,31 +216,6 @@ export const TravelCard = memo(function TravelCard({
           </View>
         ) : null}
       </View>
-
-      {expired ? (
-        <View style={styles.expiredPill}>
-          <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
-          <Text style={styles.expiredPillText}>EXPIRED</Text>
-        </View>
-      ) : matchClickable ? (
-        <Pressable
-          onPress={onViewMatches}
-          style={[styles.statusPill, styles.statusPillRow, { backgroundColor: tone.bg }]}
-          accessibilityRole="button"
-          accessibilityLabel={`${labelForStatus(status)} — view matches`}
-        >
-          <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
-            {labelForStatus(status)}
-          </Text>
-          <Ionicons name="people" size={11} color={tone.fg} />
-        </Pressable>
-      ) : showStatusPill ? (
-        <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
-            {labelForStatus(status)}
-          </Text>
-        </View>
-      ) : null}
 
       {counterpart ? (
         <View style={styles.counterpartRow}>
@@ -283,12 +303,16 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
+  tagMuted: { backgroundColor: colors.surfaceMuted },
+  tagTextMuted: { color: colors.subtleText },
   row: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   bodyCol: { flex: 1, minWidth: 0 },
   routeRow: { flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" },
   routeText: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800", flexShrink: 1 },
   metaText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 4 },
   actionsCol: { gap: 8, alignItems: "flex-end", alignSelf: "center" },
+  /** Right-column home for the status chip when there are no action buttons. */
+  statusCol: { alignItems: "flex-end", flexShrink: 0 },
   editButton: {
     minWidth: 76,
     minHeight: 34,
@@ -318,7 +342,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    marginTop: 10,
+    marginTop: 8,
   },
   statusPillRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   expiredPill: {
@@ -329,7 +353,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    marginTop: 10,
+    marginTop: 8,
     backgroundColor: colors.surfaceMuted,
   },
   expiredPillText: {

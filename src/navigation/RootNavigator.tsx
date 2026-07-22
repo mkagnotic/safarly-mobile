@@ -62,6 +62,7 @@ import { BookingsScreen } from "@/features/bookings/BookingsScreen";
 import { PayBookingScreen } from "@/features/bookings/PayBookingScreen";
 import { OtpVerificationScreen } from "@/features/bookings/OtpVerificationScreen";
 import { DeliveryReviewScreen } from "@/features/bookings/DeliveryReviewScreen";
+import { DeliveryDetailsScreen } from "@/features/travels/DeliveryDetailsScreen";
 import { DisputesScreen } from "@/features/disputes/DisputesScreen";
 import { FileDisputeScreen } from "@/features/disputes/FileDisputeScreen";
 import { SafetyAlertsScreen } from "@/features/safety/SafetyAlertsScreen";
@@ -137,6 +138,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   PayBookingTab: "card-outline",
   OtpVerificationTab: "key-outline",
   DeliveryReviewTab: "star-outline",
+  DeliveryDetailsTab: "cube-outline",
   DisputesTab: "alert-circle",
   FileDisputeTab: "flag",
   SafetyAlertsTab: "shield-outline",
@@ -306,6 +308,7 @@ function MainTabs() {
       <Tabs.Screen name="PayBookingTab" component={PayBookingScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OtpVerificationTab" component={OtpVerificationScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DeliveryReviewTab" component={DeliveryReviewScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="DeliveryDetailsTab" component={DeliveryDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DisputesTab" component={DisputesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="FileDisputeTab" component={FileDisputeScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SafetyAlertsTab" component={SafetyAlertsScreen} options={HIDDEN_TAB} />

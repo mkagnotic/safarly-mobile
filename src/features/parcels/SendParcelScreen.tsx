@@ -333,7 +333,10 @@ export function SendParcelScreen() {
     if (dateMode === "range") {
       if (!deliveryTo) {
         errors.deliveryTo = "Pick the latest date";
-      } else if (deliveryBy && deliveryTo < deliveryBy) {
+      } else if (deliveryBy && deliveryTo <= deliveryBy) {
+        // Strictly after: a range whose ends are equal is a single date, and
+        // the mode toggle already covers that case. `<` let the two match while
+        // this message promised otherwise.
         errors.deliveryTo = "Must be after the earliest";
       } else if (deliveryTo > maxDate) {
         errors.deliveryTo = "Must be within 12 months";

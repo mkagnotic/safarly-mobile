@@ -62,6 +62,13 @@ export interface Booking {
    * runtime before it was declared here.
    */
   agreed_travel_date?: string | null;
+  /**
+   * Whether the CURRENT viewer has already rated this booking. Resolved
+   * per-viewer by `booking-handler` from `ratings.author_id` on both the list
+   * and detail endpoints. Drives the tracker's "Review" stage and the
+   * Rate/Rated state on archive cards.
+   */
+  viewer_has_rated?: boolean;
   created_at: string;
   updated_at: string;
   parcel?: {
