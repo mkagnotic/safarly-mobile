@@ -67,6 +67,16 @@ export interface Parcel {
    */
   carrier_id?: string | null;
   carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  /** Marketplace return flow — mirrors `parcel_requests` column names. */
+  is_online_order?: boolean;
+  return_eligible?: boolean;
+  return_reference?: string | null;
+  return_address_line1?: string | null;
+  return_address_line2?: string | null;
+  return_city?: string | null;
+  return_state?: string | null;
+  return_postal_code?: string | null;
+  return_country?: string | null;
 }
 
 /** A carrier trip that can deliver a parcel — from `/parcel-handler/matches`. */
@@ -121,15 +131,16 @@ export const parcelsApi = {
     /**
      * Marketplace return flow — set when the parcel is a retail order, so a
      * carrier who cancels post-possession has somewhere to send it back to.
-     * Column names mirror `parcel_requests` exactly; note there is no
-     * region/state column, so a state belongs in `return_address_line2`.
+     * Column names mirror `parcel_requests` exactly.
      */
     is_online_order?: boolean;
     return_eligible?: boolean;
     return_address_line1?: string;
     return_address_line2?: string;
     return_city?: string;
+    return_state?: string;
     return_postal_code?: string;
+    return_country?: string;
   }) => {
     const { weight_kg, ...rest } = data;
     return api.post<Parcel>("/parcel-handler/", { ...rest, weight: weight_kg });
