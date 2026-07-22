@@ -16,6 +16,7 @@ import { LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
 import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
+import { MAX_WEIGHT_KG, isSameRoute } from "@/features/travels/routeValidation";
 import { colors } from "@/theme/colors";
 
 type Country = "IN" | "US";
@@ -82,6 +83,12 @@ function formatDateLabel(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Fields that can carry an inline validation error. */
+type FieldKey = "fromCity" | "toCity" | "departDate" | "capacity";
+
+/** Web parity (`CustomerListTrip.tsx` sameRouteMsg). */
+const SAME_ROUTE_MSG = "Arrival city must be different from departure";
+
 export interface EditTripFormValues {
   /** `ANY_CITY` sentinel ⇒ "Any city" (any_from). */
   from_city: string;
@@ -112,6 +119,7 @@ export function EditTripModal({
   onSubmit,
 }: Readonly<EditTripModalProps>) {
   const [form, setForm] = useState<EditTripFormValues>(initial);
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const initialDate = parseYmd(initial.travel_date_from) ?? new Date();
@@ -123,6 +131,7 @@ export function EditTripModal({
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setForm(initial);
+      setErrors({});
       const d = parseYmd(initial.travel_date_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
@@ -168,7 +177,52 @@ export function EditTripModal({
     setCalendarTarget(null);
   };
 
-  const handleSubmit = () => onSubmit(form);
+  /**
+   * This modal previously called `onSubmit(form)` with no checks at all, so an
+   * empty city or a same-city route reached the API. Web's edit dialog blocks
+   * both; the create screen blocks those plus the capacity bounds. Validating
+   * here (rather than in each caller) means MyTravels and TripDetails can't
+   * drift apart the way they had.
+   */
+  const handleSubmit = () => {
+    const next: Partial<Record<FieldKey, string>> = {};
+    if (!form.from_city) next.fromCity = "Select a departure city";
+    if (!form.to_city) next.toCity = "Select an arrival city";
+    if (isSameRoute(form.from_country, form.from_city, form.to_country, form.to_city)) {
+      next.toCity = SAME_ROUTE_MSG;
+    }
+    // Presence only, matching web: an already-persisted past date must stay
+    // saveable, and the calendar already refuses to pick a new one.
+    if (!form.travel_date_from) next.departDate = "Pick a travel date";
+
+    const capacity = Number(form.luggage_capacity_kg);
+    if (form.luggage_capacity_kg.trim() === "" || !Number.isFinite(capacity) || capacity <= 0) {
+      next.capacity = "Enter the capacity you can carry";
+    } else if (capacity > MAX_WEIGHT_KG) {
+      next.capacity = `Must be ${MAX_WEIGHT_KG} kg or less`;
+    }
+
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    onSubmit(form);
+  };
+
+  const clearError = (key: FieldKey) =>
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  /** Live same-route error, so it shows on selection rather than only on save. */
+  const liveSameRoute = isSameRoute(
+    form.from_country,
+    form.from_city,
+    form.to_country,
+    form.to_city,
+  );
+  const toCityError = liveSameRoute ? SAME_ROUTE_MSG : errors.toCity;
 
   const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
   const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
@@ -243,12 +297,17 @@ export function EditTripModal({
             />
             <CityPicker
               value={form.from_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
+              onChange={(v) => {
+                setForm((prev) => ({ ...prev, from_city: v }));
+                clearError("fromCity");
+              }}
               cities={fromCities}
               placeholder="Select departure city"
               variant="card"
               disabled={pending}
+              invalid={!!errors.fromCity}
             />
+            {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
           </View>
 
           <View style={styles.field}>
@@ -261,12 +320,17 @@ export function EditTripModal({
             />
             <CityPicker
               value={form.to_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
+              onChange={(v) => {
+                setForm((prev) => ({ ...prev, to_city: v }));
+                clearError("toCity");
+              }}
               cities={toCities}
               placeholder="Select arrival city"
               variant="card"
               disabled={pending}
+              invalid={!!toCityError}
             />
+            {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
           </View>
 
           <View style={styles.dateRow}>
@@ -287,6 +351,9 @@ export function EditTripModal({
                   {fromLabel}
                 </Text>
               </Pressable>
+              {errors.departDate ? (
+                <Text style={styles.inlineError}>{errors.departDate}</Text>
+              ) : null}
             </View>
 
             <View style={[styles.field, styles.dateField]}>
@@ -315,13 +382,17 @@ export function EditTripModal({
             <Text style={styles.fieldLabel}>Luggage capacity (kg)</Text>
             <TextInput
               value={form.luggage_capacity_kg}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, luggage_capacity_kg: t }))}
+              onChangeText={(t) => {
+                setForm((prev) => ({ ...prev, luggage_capacity_kg: t }));
+                clearError("capacity");
+              }}
               keyboardType="decimal-pad"
               placeholder="0"
-              placeholderTextColor={colors.subtleText}
-              style={styles.textInput}
+              placeholderTextColor={colors.placeholderText}
+              style={[styles.textInput, !!errors.capacity && styles.inputError]}
               editable={!pending}
             />
+            {errors.capacity ? <Text style={styles.inlineError}>{errors.capacity}</Text> : null}
           </View>
 
           <View style={styles.field}>
@@ -510,6 +581,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   multiline: { minHeight: 88, paddingTop: 12, textAlignVertical: "top" },
+  inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
+  inlineError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
 
   footer: {
     flexDirection: "row",

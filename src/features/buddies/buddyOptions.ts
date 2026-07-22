@@ -1,4 +1,4 @@
-import { ANY_CITY } from "@/features/search/CityPicker";
+import { isSameRoute } from "@/features/travels/routeValidation";
 
 /**
  * Option lists and validation rules shared by the buddy create screen and the
@@ -62,27 +62,8 @@ export const MAX_AGE = 120;
 export const SAME_ROUTE_MESSAGE = "Destination must be different from departure";
 export const AGE_RANGE_MESSAGE = `Age must be between ${MIN_AGE} and ${MAX_AGE}`;
 
-/**
- * True when departure and destination are genuinely the same place.
- *
- * `ANY_CITY` is exempt: it's a wildcard, so "Any -> Any" is a deliberately
- * broad listing rather than a mistake. Matches the rule already used by the
- * trip and parcel forms.
- */
-export function isSameRoute(
-  fromCountry: string,
-  fromCity: string,
-  toCountry: string,
-  toCity: string,
-): boolean {
-  return (
-    !!fromCity &&
-    !!toCity &&
-    fromCity !== ANY_CITY &&
-    fromCountry === toCountry &&
-    fromCity === toCity
-  );
-}
+/** Re-exported so buddy callers keep a single import; the rule is shared. */
+export { isSameRoute };
 
 /**
  * Validates the optional age field. Empty is valid — age is optional — so this

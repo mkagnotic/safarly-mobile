@@ -26,7 +26,8 @@ import {
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { isTerminal } from "@/features/travels/statusLabels";
 import { MatchesModal, type MatchesSource } from "@/features/travels/MatchesModal";
-import { ParcelJourneyTracker } from "@/features/travels/ParcelJourneyTracker";
+import { JourneySummaryRow } from "@/features/travels/ParcelJourneyTracker";
+import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { TravelCard } from "@/features/travels/TravelCard";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
 import { useBookings } from "@/hooks/api/useBookings";
@@ -65,23 +66,6 @@ interface TabConfig {
   label: string;
   count?: number;
 }
-
-// How far a booking has progressed — higher wins when a parcel has several
-// bookings (multi-bidder). Failed/terminal bookings rank 0 and are ignored so
-// the tracker follows the live booking, not a stale cancelled bid.
-// Web parity (`CustomerMyTrips.tsx` BOOKING_PROGRESS_RANK).
-const BOOKING_PROGRESS_RANK: Record<string, number> = {
-  pending_payment: 1,
-  confirmed: 2,
-  awaiting_handoff: 3,
-  in_transit: 4,
-  delivered: 5,
-};
-const bookingRank = (b: Booking): number => BOOKING_PROGRESS_RANK[b.status] ?? 0;
-
-// Parcel statuses that mean "still looking for a carrier" — show no booking so
-// the tracker reads as awaiting, not as a stale cancelled bid.
-const AWAITING_CARRIER = new Set(["open", "looking_for_match", "match_requested", "chatting"]);
 
 /**
  * Keep the first item for each key — guards lists against duplicate rows
@@ -139,31 +123,11 @@ export function MyTravelsScreen() {
   const activeBuddies = dedupedConnections.filter((c) => !(c.can_rate || c.already_rated));
   const completedBuddies = dedupedConnections.filter((c) => c.can_rate || c.already_rated);
 
-  /**
-   * Resolve each parcel to the booking that best represents its journey. Prefer
-   * the most-progressed *active* booking; if there's none and the parcel isn't
-   * back to searching, fall back to the latest booking so a terminal (cancelled)
-   * or disputed journey still renders its real state in the tracker.
-   */
-  const trackerBookingFor = useMemo(() => {
-    const myId = myProfile.profile?.id;
-    const activeByParcelId = new Map<string, Booking>();
-    const latestByParcelId = new Map<string, Booking>();
-    for (const b of senderBookings.bookings) {
-      if (myId && b.sender_id !== myId) continue;
-      const latest = latestByParcelId.get(b.parcel_id);
-      if (!latest || b.created_at > latest.created_at) latestByParcelId.set(b.parcel_id, b);
-      if (bookingRank(b) > 0) {
-        const active = activeByParcelId.get(b.parcel_id);
-        if (!active || bookingRank(b) > bookingRank(active)) {
-          activeByParcelId.set(b.parcel_id, b);
-        }
-      }
-    }
-    return (p: Parcel): Booking | null =>
-      activeByParcelId.get(p.id) ??
-      (AWAITING_CARRIER.has(p.status) ? null : latestByParcelId.get(p.id) ?? null);
-  }, [senderBookings.bookings, myProfile.profile?.id]);
+  /** Resolves each parcel to the booking that best represents its journey. */
+  const trackerBookingFor = useMemo(
+    () => createTrackerBookingResolver(senderBookings.bookings, myProfile.profile?.id),
+    [senderBookings.bookings, myProfile.profile?.id],
+  );
 
   // Parcels already carry resolved sender/carrier profiles; reuse them to label
   // archived deliveries (the bookings list join is a deploy-dependent fallback).
@@ -531,7 +495,7 @@ export function MyTravelsScreen() {
         data.luggage_capacity_kg = capacityNum;
       }
       if (values.notes !== (editingTrip.notes ?? "")) {
-        (data as Record<string, unknown>).notes = values.notes;
+        data.notes = values.notes;
       }
 
       if (Object.keys(data).length === 0) {
@@ -568,6 +532,11 @@ export function MyTravelsScreen() {
 
   const handleRateDelivery = useCallback(
     (bookingId: string) => navigation.navigate("DeliveryReviewTab", { bookingId }),
+    [navigation],
+  );
+
+  const handleOpenDelivery = useCallback(
+    (bookingId: string) => navigation.navigate("DeliveryDetailsTab", { bookingId }),
     [navigation],
   );
 
@@ -784,7 +753,6 @@ export function MyTravelsScreen() {
             onDelete={handleDeleteTrip}
             onViewMatches={handleViewTripMatches}
             deletingId={deletingId}
-            onListTrip={goListTrip}
             hasMore={flights.hasMore}
             loadingMore={flights.loadingMore}
             onLoadMore={flights.loadMore}
@@ -855,6 +823,7 @@ export function MyTravelsScreen() {
             deliveredBookings={dedupedDelivered}
             myUserId={myProfile.profile?.id ?? null}
             onRateDelivery={handleRateDelivery}
+            onOpenDelivery={handleOpenDelivery}
             hasMore={archive.hasMore}
             loadingMore={archive.loadingMore}
             onLoadMore={archive.loadMore}
@@ -1019,7 +988,6 @@ function FlightsTab({
   onDelete,
   onViewMatches,
   deletingId,
-  onListTrip,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -1033,7 +1001,6 @@ function FlightsTab({
   onDelete: (trip: Trip) => void;
   onViewMatches: (trip: Trip) => void;
   deletingId: string | null;
-  onListTrip: () => void;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -1047,8 +1014,6 @@ function FlightsTab({
         icon="airplane-outline"
         title="No flights listed"
         subtitle="List a trip to start receiving parcel delivery offers."
-        actionLabel="Carry a Parcel"
-        onAction={onListTrip}
       />
     );
   return (
@@ -1203,9 +1168,10 @@ function PackagesTab({
               counterpartRole={roleOf(p)}
               onChat={() => onChat(p)}
               chatPending={chatPendingId === p.id}
-              // Web parity: only Receive cards carry the tracker — as the sender
-              // you're the one following the parcel's journey.
-              footer={<ParcelJourneyTracker parcel={p} booking={trackerBookingFor(p)} />}
+              // Only Receive cards carry journey status — as the sender you're
+              // the one following the parcel. The card shows a one-line summary;
+              // the full timeline lives on the details screen this card opens.
+              footer={<JourneySummaryRow parcel={p} booking={trackerBookingFor(p)} />}
             />
           ))
         )}
@@ -1472,6 +1438,7 @@ function ArchiveTab({
   deliveredBookings,
   myUserId,
   onRateDelivery,
+  onOpenDelivery,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -1488,6 +1455,7 @@ function ArchiveTab({
   deliveredBookings: Booking[];
   myUserId: string | null;
   onRateDelivery: (bookingId: string) => void;
+  onOpenDelivery: (bookingId: string) => void;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -1524,6 +1492,7 @@ function ArchiveTab({
               parcel={parcelById.get(b.parcel_id) ?? null}
               myUserId={myUserId}
               onRate={() => onRateDelivery(b.id)}
+              onOpen={() => onOpenDelivery(b.id)}
             />
           ))}
         </View>
@@ -1553,7 +1522,10 @@ function ArchiveTab({
             <TravelCard
               key={t.id}
               type="flight"
+              // Neutral tag: these are closed records, so the accent orange read
+              // as an active listing. The status pill carries the real outcome.
               tag="ARCHIVED TRIP"
+              tagTone="muted"
               item={t}
               onPress={() => onOpen(t.id)}
             />
@@ -1570,12 +1542,15 @@ function ArchiveBookingCard({
   parcel,
   myUserId,
   onRate,
+  onOpen,
 }: Readonly<{
   booking: Booking;
   /** Resolved parcel, when loaded — gives the tracker its pre-booking fallback. */
   parcel?: Parcel | null;
   myUserId: string | null;
   onRate: () => void;
+  /** Opens the delivery details screen, where the full timeline lives. */
+  onOpen: () => void;
 }>) {
   const isSender = !!myUserId && booking.sender_id === myUserId;
   const counterpart = isSender ? booking.carrier : booking.sender;
@@ -1591,7 +1566,12 @@ function ArchiveBookingCard({
       })
     : null;
   return (
-    <View style={styles.archiveCard}>
+    <Pressable
+      style={styles.archiveCard}
+      onPress={onOpen}
+      accessibilityRole="button"
+      accessibilityLabel={`Delivery details: ${route}`}
+    >
       <View style={styles.archiveTag}>
         <Text style={styles.archiveTagText}>DELIVERED</Text>
       </View>
@@ -1608,15 +1588,25 @@ function ArchiveBookingCard({
             {counterpart?.name || "Unknown user"}
           </Text>
         </View>
-        <AppButton
-          label={`Rate ${roleLabel}`}
-          onPress={onRate}
-          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-          style={styles.archiveRateBtn}
-        />
+        {/* Ratings are one-per (author, booking): offering "Rate" again after
+            the viewer has rated just fails with CONFLICT. */}
+        {booking.viewer_has_rated ? (
+          <View style={styles.ratedChip}>
+            <Ionicons name="star" size={13} color={colors.safe} />
+            <Text style={styles.ratedChipText}>Rated</Text>
+          </View>
+        ) : (
+          <AppButton
+            label={`Rate ${roleLabel}`}
+            onPress={onRate}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.archiveRateBtn}
+          />
+        )}
       </View>
-      <ParcelJourneyTracker parcel={parcel} booking={booking} />
-    </View>
+      {/* Summary only — the full timeline lives on the details screen. */}
+      <JourneySummaryRow parcel={parcel} booking={booking} />
+    </Pressable>
   );
 }
 
@@ -1746,34 +1736,23 @@ interface EmptyBlockProps {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
-  actionLabel?: string;
-  onAction?: () => void;
-  compact?: boolean;
 }
 
-function EmptyBlock({
-  icon,
-  title,
-  subtitle,
-  actionLabel,
-  onAction,
-  compact,
-}: Readonly<EmptyBlockProps>) {
+/**
+ * Whole-tab empty state.
+ *
+ * No action button by design: every tab's primary CTA ("Carry a Parcel" /
+ * "Send a Parcel") already sits in the header actions row, so repeating it here
+ * put two identical primary buttons on one screen.
+ */
+function EmptyBlock({ icon, title, subtitle }: Readonly<EmptyBlockProps>) {
   return (
-    <View style={[styles.emptyWrap, compact && styles.emptyCompact]}>
+    <View style={styles.emptyWrap}>
       <View style={styles.emptyIconBox}>
-        <Ionicons name={icon} size={compact ? 22 : 28} color={colors.wordmark} />
+        <Ionicons name={icon} size={28} color={colors.wordmark} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptySubtitle}>{subtitle}</Text>
-      {actionLabel && onAction ? (
-        <AppButton
-          label={actionLabel}
-          onPress={onAction}
-          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-          style={styles.emptyCtaWrap}
-        />
-      ) : null}
     </View>
   );
 }
@@ -1882,6 +1861,16 @@ const styles = StyleSheet.create({
   },
   archivePersonName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700", marginTop: 2 },
   archiveRateBtn: { minWidth: 130 },
+  ratedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(34, 195, 93, 0.12)",
+  },
+  ratedChipText: { color: colors.safe, fontSize: 13, lineHeight: 18, fontWeight: "800" },
   archiveTagBuddy: { backgroundColor: colors.surfaceTintPrimary },
   ratedBadge: {
     flexDirection: "row",
@@ -1963,8 +1952,21 @@ const styles = StyleSheet.create({
   errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   errorBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500", textAlign: "center", maxWidth: 280 },
   retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
-  emptyWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
-  emptyCompact: { paddingVertical: 20 },
+  /**
+   * Same surface as `emptyPanel` (the Send/Receive placeholders) so every empty
+   * state in My Travels reads as one thing. Was transparent, which left the
+   * block floating on the hero wash with no visible container.
+   */
+  emptyWrap: {
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke18,
+    backgroundColor: colors.card,
+  },
   emptyIconBox: {
     width: 56,
     height: 56,
@@ -1983,7 +1985,6 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     marginTop: 2,
   },
-  emptyCtaWrap: { marginTop: 12, alignSelf: "stretch", maxWidth: 240 },
 
   loadMoreButton: {
     marginTop: 6,

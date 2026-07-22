@@ -11,6 +11,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { ANY_CITY } from "@/features/search/CityPicker";
+import { isTerminal, labelForStatus } from "@/features/travels/statusLabels";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
 import { MainTabParamList } from "@/navigation/types";
@@ -184,10 +185,8 @@ export function TripDetailsScreen() {
       ) {
         data.luggage_capacity_kg = capacityNum;
       }
-      // `notes` is not in trip-handler's allowedFields (server-side gap) — we
-      // still send it for parity; server silently drops unknown fields.
       if (values.notes !== (trip.notes ?? "")) {
-        (data as Record<string, unknown>).notes = values.notes;
+        data.notes = values.notes;
       }
 
       if (Object.keys(data).length === 0) {
@@ -265,6 +264,8 @@ export function TripDetailsScreen() {
     notes: trip.notes ?? "",
   };
 
+  const canModify = !isTerminal(trip.status ?? "");
+
   return (
     <Screen onRefresh={refetch}>
       <DetailsHeader onBack={handleBack} />
@@ -282,21 +283,35 @@ export function TripDetailsScreen() {
 
       <TripCard trip={trip} />
 
-      <AppButton
-        label="Edit trip"
-        onPress={handleEditOpen}
-        gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-        style={styles.primaryActionButton}
-      />
+      {/* A cancelled/completed/expired trip is a closed record — editing or
+          cancelling it again is meaningless and the API rejects it. Matches
+          ParcelDetailsScreen and web's `canModify` gate on TripCard. */}
+      {canModify ? (
+        <>
+          <AppButton
+            label="Edit trip"
+            onPress={handleEditOpen}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+            style={styles.primaryActionButton}
+          />
 
-      <Pressable
-        onPress={() => setCancelOpen(true)}
-        style={styles.cancelButton}
-        accessibilityRole="button"
-        accessibilityLabel="Cancel trip"
-      >
-        <Text style={styles.cancelButtonText}>Cancel trip</Text>
-      </Pressable>
+          <Pressable
+            onPress={() => setCancelOpen(true)}
+            style={styles.cancelButton}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel trip"
+          >
+            <Text style={styles.cancelButtonText}>Cancel trip</Text>
+          </Pressable>
+        </>
+      ) : (
+        <View style={styles.closedNotice}>
+          <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} />
+          <Text style={styles.closedNoticeText}>
+            This trip is {labelForStatus(trip.status).toLowerCase()} and can no longer be changed.
+          </Text>
+        </View>
+      )}
 
       <EditTripModal
         open={editOpen}
@@ -360,6 +375,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   cancelButtonText: { color: colors.danger, fontSize: 15, lineHeight: 20, fontWeight: "700" },
+  closedNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
+  closedNoticeText: {
+    flex: 1,
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
 
   skeletonRouteRow: { flexDirection: "row", alignItems: "center" },
   skeletonCity: { flex: 1, height: 22, marginHorizontal: 4 },

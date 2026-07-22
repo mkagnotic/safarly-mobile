@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
@@ -18,7 +18,10 @@ import {
   labelForStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
+import { useBookings } from "@/hooks/api/useBookings";
 import { useParcelDetail } from "@/hooks/api/useParcelDetail";
+import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
+import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -214,6 +217,15 @@ export function ParcelDetailsScreen() {
   const parcelId = route.params?.parcelId;
 
   const { parcel, error, refetch } = useParcelDetail(parcelId);
+
+  // Drives the journey timeline below. No role filter — this screen is reachable
+  // as either side of the deal, and the resolver picks the booking that best
+  // represents the parcel's journey (most-progressed live one, else the latest).
+  const bookings = useBookings({ perPage: 100 });
+  const trackerBooking = useMemo(
+    () => (parcel ? createTrackerBookingResolver(bookings.bookings)(parcel) : null),
+    [bookings.bookings, parcel],
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -413,6 +425,10 @@ export function ParcelDetailsScreen() {
       <ParcelCard parcel={parcel} />
 
       <StatusAlert status={parcel.status} />
+
+      {/* Full delivery timeline. Renders nothing until a carrier is committed —
+          the My Travels card carries the one-line summary that leads here. */}
+      <ParcelJourneyTimeline parcel={parcel} booking={trackerBooking} />
 
       <DescriptionCard description={parcel.description} />
 

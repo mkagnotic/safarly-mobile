@@ -123,7 +123,21 @@ function AppAlertModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose} statusBarTranslucent>
       <Pressable style={styles.alertBackdrop} onPress={onRequestClose} accessibilityRole="button" accessibilityLabel="Dismiss">
         <Pressable onPress={(e) => e.stopPropagation()} style={[styles.alertCard, shadowCard(), { width: cardW }]}>
-          <Text style={styles.alertTitle}>{options?.title ?? ""}</Text>
+          {/* Explicit dismiss. Tapping the backdrop already closes the sheet,
+              but that affordance is invisible — a confirm dialog needs a way
+              out that you can see, especially for destructive actions. */}
+          <View style={styles.alertHeaderRow}>
+            <Text style={[styles.alertTitle, styles.alertTitleFlex]}>{options?.title ?? ""}</Text>
+            <AppPressable
+              onPress={onRequestClose}
+              hitSlop={10}
+              style={styles.alertCloseButton}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={18} color={colors.mutedText} />
+            </AppPressable>
+          </View>
           {options?.message ? <Text style={styles.alertMessage}>{options.message}</Text> : null}
           <View style={styles.alertActions}>
             {actions.map((action, index) => {
@@ -296,12 +310,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadowSoft(),
   },
+  alertHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   alertTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: -0.3,
     marginBottom: 8,
+  },
+  alertTitleFlex: { flex: 1, minWidth: 0 },
+  alertCloseButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
   },
   alertMessage: {
     color: colors.mutedText,

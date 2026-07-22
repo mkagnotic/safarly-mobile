@@ -103,6 +103,8 @@ export type MainTabParamList = {
   PayBookingTab: { bookingId: string };
   OtpVerificationTab: { bookingId: string };
   DeliveryReviewTab: { bookingId: string };
+  /** Read-only record of a completed delivery, incl. the journey timeline. */
+  DeliveryDetailsTab: { bookingId: string };
   DisputesTab: undefined;
   FileDisputeTab: { bookingId: string };
   SafetyAlertsTab: undefined;

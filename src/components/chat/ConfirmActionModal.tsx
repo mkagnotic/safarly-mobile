@@ -85,6 +85,20 @@ export function ConfirmActionModal({
               </Text>
               <Text style={styles.body}>{body}</Text>
             </View>
+            {/* Explicit dismiss. The backdrop already closes the sheet, but that
+                affordance is invisible — a confirm dialog needs a visible way
+                out, especially for destructive actions. Disabled mid-request so
+                it can't be closed while the mutation is in flight. */}
+            <Pressable
+              onPress={onCancel}
+              disabled={pending}
+              hitSlop={10}
+              style={[styles.closeButton, pending && styles.buttonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={18} color={colors.mutedText} />
+            </Pressable>
           </View>
 
           <View style={styles.footer}>
@@ -149,6 +163,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerText: { flex: 1, gap: 4 },
+  closeButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surfaceMuted,
+  },
   title: { color: colors.text, fontSize: 16, fontWeight: "800" },
   body: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
   footer: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },

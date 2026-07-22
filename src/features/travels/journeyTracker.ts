@@ -233,6 +233,10 @@ export function computeJourney(
   const traveling = !!status && ["in_transit", "delivered"].includes(status);
   const delivered = status === "delivered";
   const released = delivered && !!timelineAt(booking, "payment_released");
+  // Review completes once THIS viewer has left their rating. `viewer_has_rated`
+  // is per-viewer (booking-handler resolves it from ratings.author_id), so the
+  // step reflects your own action, not the counterpart's.
+  const rated = booking?.viewer_has_rated === true;
 
   const travelDaysOut = daysUntil(booking?.agreed_travel_date, now);
   const travelSoon = travelDaysOut != null && travelDaysOut <= 1;
@@ -256,7 +260,7 @@ export function computeJourney(
     delivered || (traveling && travelPassed), // ready_for_delivery
     delivered, // otp_verification
     released || delivered, // payment_released
-    false, // review — only ever "current" at the end
+    rated, // review — done once this viewer has submitted their rating
   ];
   let reachedIndex = -1;
   reached.forEach((ok, i) => {
