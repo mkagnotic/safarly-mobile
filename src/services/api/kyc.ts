@@ -10,6 +10,8 @@ export interface KycUploadFile {
   mimeType?: string | null;
   /** File extension without the dot — derived from the picked asset. */
   ext: string;
+  /** Original filename (PDFs from the document picker); shown to admin reviewers. */
+  name?: string | null;
 }
 
 export interface KycSubmissionFile {
@@ -41,7 +43,7 @@ export interface KycSubmission {
 
 export interface KycSubmitInput {
   doc_type: KycDocType;
-  files: { file_type: KycFileType; storage_path: string }[];
+  files: { file_type: KycFileType; storage_path: string; file_name?: string }[];
 }
 
 /** Private bucket — documents upload directly here; only paths reach the API. */
