@@ -20,6 +20,10 @@ import { useMyPreferences } from "@/hooks/api/useMyPreferences";
 import { type AppLanguage } from "@/i18n/translations";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type UserPreferences } from "@/services/api";
+import {
+  requestAndRegisterPushToken,
+  unregisterPushToken,
+} from "@/services/notifications/push";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 
@@ -37,17 +41,18 @@ const CURRENCIES: readonly CurrencyOption[] = [
 ] as const;
 
 interface ToggleConfig {
-  field: "email_notifications" | "push_notifications" | "notifications_enabled";
+  field: "email_notifications" | "push_enabled";
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   desc: string;
 }
 
 /**
- * Three notification toggles, mirroring web's CustomerPreferences exactly.
- * The third row maps the `notifications_enabled` API field to the user-facing
- * "SMS Alerts" label — a legacy naming choice we preserve for cross-platform
- * consistency.
+ * Notification toggles, mirroring web's CustomerPreferences. SMS was removed
+ * (dead feature — no sender ever existed). Push toggles the server-authoritative
+ * `push_enabled`, but turning it ON also has to secure the OS-level permission
+ * and register a device token (see `handlePushToggle`), exactly as web gates its
+ * push toggle on the browser Notification permission.
  */
 const TOGGLES: readonly ToggleConfig[] = [
   {
@@ -57,16 +62,10 @@ const TOGGLES: readonly ToggleConfig[] = [
     desc: "Receive updates via email",
   },
   {
-    field: "push_notifications",
+    field: "push_enabled",
     icon: "notifications-outline",
     label: "Push Notifications",
     desc: "Mobile push notifications",
-  },
-  {
-    field: "notifications_enabled",
-    icon: "phone-portrait",
-    label: "SMS Alerts",
-    desc: "Critical alerts via SMS",
   },
 ] as const;
 
@@ -105,6 +104,38 @@ export function PreferencesScreen() {
       }
     },
     [update],
+  );
+
+  // Push needs more than a DB write: turning it ON must secure the OS
+  // permission and register a device token first (web parity — it gates the
+  // toggle on the browser Notification permission). If permission is refused we
+  // surface why and leave the switch off. Turning it OFF flips the server flag
+  // (which stops delivery) and deregisters this device's token.
+  const handlePushToggle = useCallback(
+    async (next: boolean) => {
+      if (next) {
+        setSavingField("push_enabled");
+        const result = await requestAndRegisterPushToken();
+        setSavingField(null);
+        if (!result.ok) {
+          showToast({
+            title:
+              result.reason === "denied"
+                ? "Notifications are blocked"
+                : "Push isn't available yet",
+            message:
+              result.reason === "denied"
+                ? "Turn on notifications for Safarly in your device Settings to receive push alerts."
+                : "We couldn't set up push notifications on this device.",
+            variant: "error",
+          });
+          return; // leave the toggle off
+        }
+      }
+      await handleUpdate({ push_enabled: next });
+      if (!next) void unregisterPushToken();
+    },
+    [handleUpdate],
   );
 
   const handleLanguageChange = useCallback(
@@ -168,7 +199,11 @@ export function PreferencesScreen() {
             value={Boolean(preferences?.[toggle.field])}
             disabled={savingField === toggle.field}
             isLast={index === TOGGLES.length - 1}
-            onChange={(next) => void handleUpdate({ [toggle.field]: next } as Partial<UserPreferences>)}
+            onChange={(next) =>
+              toggle.field === "push_enabled"
+                ? void handlePushToggle(next)
+                : void handleUpdate({ [toggle.field]: next } as Partial<UserPreferences>)
+            }
           />
         ))}
       </Card>

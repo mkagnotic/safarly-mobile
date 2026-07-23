@@ -22,9 +22,14 @@ export interface UserPreferences {
   language: string;
   theme: string;
   currency: string;
-  notifications_enabled: boolean;
   email_notifications: boolean;
-  push_notifications: boolean;
+  /**
+   * Server-authoritative push opt-in. MUST stay named `push_enabled` — the
+   * `user-handler` PUT whitelist and `_shared/push.ts` both key off exactly this
+   * field. The old mobile name `push_notifications` was silently dropped by the
+   * whitelist, so the toggle never persisted. (SMS was removed entirely.)
+   */
+  push_enabled: boolean;
 }
 
 export interface UserStats {

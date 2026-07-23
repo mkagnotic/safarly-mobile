@@ -459,12 +459,19 @@ function WizardNav({
         <AppButton label="Back" variant="secondary" onPress={onBack} style={styles.navButton} />
       ) : null}
       {step < 3 ? (
-        <AppButton label="Continue" onPress={onNext} disabled={!canAdvance} style={styles.navButtonGrow} />
+        <AppButton
+          label="Continue"
+          onPress={onNext}
+          disabled={!canAdvance}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.navButtonGrow}
+        />
       ) : (
         <AppButton
           label={submitting ? "Submitting…" : "Submit for review"}
           onPress={onSubmit}
           disabled={submitting || !canAdvance}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
           leftIcon={submitting ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
           style={styles.navButtonGrow}
         />

@@ -71,6 +71,7 @@ import { BuddyCompletionScreen } from "@/features/matching/BuddyCompletionScreen
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAppStore } from "@/store/useAppStore";
 import { useStoreHydrated } from "@/hooks/useStoreHydrated";
+import { usePushNotifications } from "@/hooks/notifications/usePushNotifications";
 import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
@@ -361,6 +362,10 @@ export function RootNavigator() {
   // One consolidated channel that fans out into the realtime bus — drives
   // inbox auto-update, unread badges, notification toasts (when wired), etc.
   useRealtimeSync();
+  // OS push notifications: configures the foreground handler and routes taps
+  // (incl. cold-start) to the right screen. Mounted here so it lives inside the
+  // NavigationContainer, where `navigationRef` is ready.
+  usePushNotifications();
 
   return (
     <View style={styles.container}>

@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { Animated, Easing, Platform, StyleSheet, Text, TextInput, View } from "react-native";
-import { showAppAlert, showToast } from "@/feedback/appFeedback";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
+
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Screen } from "@/components/ui/Screen";
 import type { AppLanguage } from "@/i18n/translations";
@@ -33,7 +33,6 @@ type TxKind = "payout" | "escrow" | "refund";
 type TxStatus = "completed" | "held" | "refunded";
 
 type TxRow = { id: string; kind: TxKind; date: string; amount: number; status: TxStatus };
-const QUICK_AMOUNTS = [25, 50, 100] as const;
 
 const PAYMENT_METHODS_LIVE: readonly PaymentMethod[] = [
   { id: "1", brand: "Visa", last4: "4242", expiry: "12/2027", isDefault: true },
@@ -113,18 +112,6 @@ function statusColor(status: TxStatus): string {
   }
 }
 
-function sanitizeMoneyInput(raw: string): string {
-  const digitsAndDot = raw.replaceAll(/[^0-9.]/g, "");
-  const [whole, ...decimalChunks] = digitsAndDot.split(".");
-  const decimals = decimalChunks.join("").slice(0, 2);
-  return decimalChunks.length > 0 ? `${whole}.${decimals}` : whole;
-}
-
-function parseAmount(raw: string): number {
-  const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function TransactionCard({ item, language }: Readonly<{ item: TxRow; language: AppLanguage }>) {
   const refund = item.kind === "refund";
   const amountStr = `${refund ? "-" : ""}$${item.amount.toFixed(2)}`;
@@ -147,22 +134,15 @@ function TransactionCard({ item, language }: Readonly<{ item: TxRow; language: A
 
 export function WalletScreen() {
   const navigation = useNavigation<Nav>();
-  const [addMoneyOpen, setAddMoneyOpen] = useState(false);
-  const [amountToAdd, setAmountToAdd] = useState("0.00");
-  const addMoneyAnim = useRef(new Animated.Value(0)).current;
-  const { showLiveData, walletBalance, language, paymentMethodsStore, adjustWalletBalance } = useAppStore(
+  const { showLiveData, language, paymentMethodsStore } = useAppStore(
     useShallow((s) => ({
       showLiveData: s.showLiveData,
-      walletBalance: s.walletBalance,
       language: s.language,
       paymentMethodsStore: s.paymentMethods,
-      adjustWalletBalance: s.adjustWalletBalance,
     }))
   );
 
   const hasData = showLiveData;
-  // Always reflect wallet operations immediately on this screen.
-  const balanceStr = walletBalance.toFixed(2);
   const escrowStr = hasData ? WALLET_ESCROW_LIVE.toFixed(2) : "0.00";
   const earnedStr = hasData ? WALLET_EARNED_LIVE.toFixed(2) : "0.00";
   const paymentMethods = paymentMethodsStore.length > 0 ? paymentMethodsStore : [];
@@ -173,90 +153,6 @@ export function WalletScreen() {
     if (navigation.canGoBack()) navigation.goBack();
   }, [navigation]);
 
-  const toggleAddMoney = useCallback(() => {
-    const nextOpen = !addMoneyOpen;
-    setAddMoneyOpen(nextOpen);
-    Animated.timing(addMoneyAnim, {
-      toValue: nextOpen ? 1 : 0,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [addMoneyAnim, addMoneyOpen]);
-
-  const closeAddMoneyPanel = useCallback(() => {
-    setAddMoneyOpen(false);
-    Animated.timing(addMoneyAnim, {
-      toValue: 0,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [addMoneyAnim]);
-
-  const selectAmount = useCallback((value: number) => {
-    setAmountToAdd(value.toFixed(2));
-  }, []);
-
-  const handleAmountChange = useCallback((value: string) => {
-    setAmountToAdd(sanitizeMoneyInput(value));
-  }, []);
-
-  const handleAddMoney = useCallback(() => {
-    const delta = parseAmount(amountToAdd);
-    if (delta <= 0) return;
-    adjustWalletBalance(delta);
-    setAmountToAdd("0.00");
-    closeAddMoneyPanel();
-  }, [adjustWalletBalance, amountToAdd, closeAddMoneyPanel]);
-
-  const withdrawAmount = useCallback(
-    (delta: number) => {
-    if (delta <= 0) return;
-    if (delta > walletBalance) {
-      showToast({
-        title: "Insufficient balance",
-        message: "Enter an amount less than or equal to your available balance.",
-        variant: "error",
-      });
-      return;
-    }
-    adjustWalletBalance(-delta);
-    setAmountToAdd("0.00");
-    },
-    [adjustWalletBalance, walletBalance]
-  );
-
-  const handleWithdraw = useCallback(() => {
-    const typedAmount = parseAmount(amountToAdd);
-    showAppAlert({
-      title: "Withdraw",
-      message: "Select an amount to withdraw.",
-      actions: [
-        { text: "$25", onPress: () => withdrawAmount(25) },
-        { text: "$50", onPress: () => withdrawAmount(50) },
-        { text: "$100", onPress: () => withdrawAmount(100) },
-        ...(typedAmount > 0
-          ? [{ text: `Use $${typedAmount.toFixed(2)}`, onPress: () => withdrawAmount(typedAmount) }]
-          : []),
-        { text: "Cancel", style: "cancel" },
-      ],
-    });
-  }, [amountToAdd, withdrawAmount]);
-
-  const addMoneyHeight = addMoneyAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 160],
-  });
-  const addMoneyOpacity = addMoneyAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const addMoneyTranslate = addMoneyAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-8, 0],
-  });
-
   return (
     <Screen contentContainerStyle={styles.screenContent}>
       <View style={styles.headerRow}>
@@ -266,52 +162,23 @@ export function WalletScreen() {
         <Text style={styles.screenTitle}>{t(language, "stack.wallet")}</Text>
       </View>
 
-      <View style={[styles.balanceCard, shadowHero()]}>
-        <Text style={styles.balanceLabel}>{t(language, "wallet.availableBalance").toUpperCase()}</Text>
-        <Text style={styles.balanceAmount}>${balanceStr}</Text>
-        <View style={styles.heroActions}>
-          <Pressable style={styles.addMoneyBtn} onPress={toggleAddMoney} accessibilityRole="button" accessibilityLabel={t(language, "wallet.addMoney")}>
-            <Ionicons name="add" size={22} color={colors.white} />
-            <Text style={styles.addMoneyBtnText}>{t(language, "wallet.addMoney")}</Text>
-          </Pressable>
-          <Pressable style={styles.withdrawBtn} onPress={handleWithdraw} accessibilityRole="button" accessibilityLabel={t(language, "wallet.withdraw")}>
-            <Ionicons name="arrow-forward" size={18} color={colors.white} style={styles.withdrawIcon} />
-            <Text style={styles.withdrawBtnText}>{t(language, "wallet.withdraw")}</Text>
-          </Pressable>
+      {/* Auto-payout hero — earnings move Stripe → bank on their own now. */}
+      <View style={[styles.heroCard, shadowHero()]}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="cash-outline" size={18} color={colors.white} />
+          </View>
+          <Text style={styles.heroTitle}>Automatic Payouts</Text>
         </View>
+        <Text style={styles.heroBody}>
+          Your earnings are paid to your linked bank account automatically after each completed
+          delivery — no manual withdrawal needed.
+        </Text>
+        <Text style={styles.heroNote}>
+          Transfers usually arrive within 2–7 business days; your first payout can take 7–14 days
+          while Stripe verifies your account.
+        </Text>
       </View>
-
-      <Animated.View
-        pointerEvents={addMoneyOpen ? "auto" : "none"}
-        style={[styles.addMoneyWrap, { maxHeight: addMoneyHeight, opacity: addMoneyOpacity, transform: [{ translateY: addMoneyTranslate }] }]}
-      >
-        <View style={[styles.addMoneyCard, shadowCard()]}>
-          <Text style={styles.addMoneyTitle}>AMOUNT TO ADD</Text>
-          <View style={styles.addMoneyInputRow}>
-            <View style={styles.addMoneyInputWrap}>
-              <Text style={styles.amountPrefix}>$</Text>
-              <TextInput
-                value={amountToAdd}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
-                style={styles.addMoneyInput}
-                placeholder="0.00"
-                placeholderTextColor={colors.mutedText}
-              />
-            </View>
-            <Pressable style={styles.addMoneySubmit} onPress={handleAddMoney} accessibilityRole="button">
-              <Text style={styles.addMoneySubmitText}>Add</Text>
-            </Pressable>
-          </View>
-          <View style={styles.quickAmountRow}>
-            {QUICK_AMOUNTS.map((value) => (
-              <Pressable key={value} style={styles.quickAmountChip} onPress={() => selectAmount(value)} accessibilityRole="button">
-                <Text style={styles.quickAmountText}>${value}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      </Animated.View>
 
       <View style={styles.statsRow}>
         <View style={[styles.statCard, shadowCard()]}>
@@ -412,155 +279,31 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: "800",
   },
-  balanceCard: {
+  heroCard: {
     backgroundColor: HERO_BG,
     borderRadius: 22,
     paddingHorizontal: 18,
-    paddingTop: 20,
+    paddingTop: 18,
     paddingBottom: 18,
     marginBottom: 18,
-  },
-  balanceLabel: {
-    color: HERO_MUTED,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-  },
-  balanceAmount: {
-    color: colors.white,
-    fontSize: 36,
-    fontWeight: "800",
-    marginTop: 6,
-    marginBottom: 18,
-  },
-  heroActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     gap: 10,
   },
-  addMoneyBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
+  heroTopRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heroIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.16)",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 12,
   },
-  addMoneyBtnText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  withdrawBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-  },
-  withdrawIcon: {
-    transform: [{ rotate: "-45deg" }],
-  },
-  withdrawBtnText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "800",
-  },
+  heroTitle: { color: colors.white, fontSize: 17, fontWeight: "800" },
+  heroBody: { color: colors.white, fontSize: 14, lineHeight: 20, fontWeight: "500" },
+  heroNote: { color: HERO_MUTED, fontSize: 12, lineHeight: 18, fontWeight: "500" },
   statsRow: {
     flexDirection: "row",
     gap: 10,
     marginBottom: 18,
-  },
-  addMoneyWrap: {
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  addMoneyCard: {
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  addMoneyTitle: {
-    color: LABEL_CAPS,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
-  addMoneyInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-  },
-  addMoneyInputWrap: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-  },
-  amountPrefix: {
-    color: colors.mutedText,
-    fontSize: 18,
-    lineHeight: 24,
-    marginRight: 2,
-  },
-  addMoneyInput: {
-    flex: 1,
-    color: colors.mutedText,
-    fontSize: 26,
-    fontWeight: "700",
-    paddingVertical: 0,
-  },
-  addMoneySubmit: {
-    minWidth: 72,
-    minHeight: 42,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-  },
-  addMoneySubmitText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: "800",
-    lineHeight: 22,
-  },
-  quickAmountRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  quickAmountChip: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickAmountText: {
-    color: colors.mutedText,
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 22,
   },
   statCard: {
     flex: 1,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
@@ -26,6 +26,14 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl ?? null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<Status>(null);
+
+  // Follow the parent's `currentUrl` when it seeds/changes after mount — e.g. the
+  // edit screen hydrates from the loaded profile a tick after this mounts. Every
+  // internal change (pick/remove) also flows through `onChange` → the parent →
+  // back here as the same value, so this never fights a user action.
+  useEffect(() => {
+    setPreviewUrl(currentUrl ?? null);
+  }, [currentUrl]);
 
   const pickAndUpload = async () => {
     if (uploading || disabled) return;

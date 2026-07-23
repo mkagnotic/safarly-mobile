@@ -1,12 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
+import {
+  CompositeNavigationProp,
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
@@ -15,6 +21,14 @@ import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { DatePicker } from "@/features/search/DatePicker";
+import {
+  clearPersistedSearch,
+  loadPersistedSearch,
+  savePersistedSearch,
+  type LookingForType,
+  type ResultsTab,
+  type SearchCountry,
+} from "@/features/search/searchPersistence";
 import { RouteListingCard } from "@/features/search/RouteListingCard";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useParcels } from "@/hooks/api/useParcels";
@@ -33,7 +47,11 @@ import {
   type Trip,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
-import { carrierTripMatchesParcel, parcelMatchesTrip } from "@/utils/routeMatch";
+import {
+  carrierTripMatchesParcel,
+  parcelExceedsCapacity,
+  parcelMatchesTrip,
+} from "@/utils/routeMatch";
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
@@ -42,12 +60,8 @@ type Nav = CompositeNavigationProp<
 >;
 
 /** Per-side country for the route filter — independent, so IN -> IN is reachable. */
-type SearchCountry = "IN" | "US";
 const COUNTRY_LABEL: Record<SearchCountry, string> = { IN: "India", US: "USA" };
 const COUNTRY_FLAG: Record<SearchCountry, string> = { IN: "🇮🇳", US: "🇺🇸" };
-
-type LookingForType = "travel_buddy" | "carrier" | "receive_request";
-type ResultsTab = "package" | "buddy" | "receiver";
 
 type NoticeVariant = "error" | "info" | "success" | "warning";
 interface Notice {
@@ -93,25 +107,27 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function getInitials(name?: string | null): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+
+/** Move the deep-linked match (id === preferId) to the front so dedup keeps it
+ *  as the surviving card for its person (web parity: `preferId`). */
+function preferFirst<T extends { id: string }>(items: T[], preferId?: string): T[] {
+  if (!preferId || !items.some((it) => it.id === preferId)) return items;
+  return [...items].sort((a, b) => (a.id === preferId ? -1 : b.id === preferId ? 1 : 0));
 }
 
 /**
  * Collapse matches so each carrier/sender shows once (mirrors web). A single
  * person can list several trips on the same route + date, which otherwise
  * renders as duplicate profile cards all leading to the same chat. Keeps the
- * first (most relevant per backend ordering) match per person.
+ * first (most relevant per backend ordering) match per person — or the
+ * `preferId` match when set, so a deep-linked listing survives dedup.
  */
-function dedupePackageMatchesByPerson(matches: PackageMatch[]): PackageMatch[] {
+function dedupePackageMatchesByPerson(
+  matches: PackageMatch[],
+  preferId?: string,
+): PackageMatch[] {
   const seen = new Set<string>();
-  return matches.filter((m) => {
+  return preferFirst(matches, preferId).filter((m) => {
     const person = m.type === "carrier_trip" ? m.carrier : m.sender;
     const key = person?.id ?? `match-${m.type}-${m.id}`;
     if (seen.has(key)) return false;
@@ -121,9 +137,12 @@ function dedupePackageMatchesByPerson(matches: PackageMatch[]): PackageMatch[] {
 }
 
 /** Same idea for buddy matches — one card per user. */
-function dedupeBuddyMatchesByUser(matches: BuddySearchMatch[]): BuddySearchMatch[] {
+function dedupeBuddyMatchesByUser(
+  matches: BuddySearchMatch[],
+  preferId?: string,
+): BuddySearchMatch[] {
   const seen = new Set<string>();
-  return matches.filter((m) => {
+  return preferFirst(matches, preferId).filter((m) => {
     const key = m.user?.id ?? `buddy-${m.id}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -133,6 +152,11 @@ function dedupeBuddyMatchesByUser(matches: BuddySearchMatch[]): BuddySearchMatch
 
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
+  // Deep-link target from a match-found notification (`/customer/search?match=`).
+  // The screen also mounts as the hidden "SearchTab" route (no params) — reading
+  // an absent param is simply undefined.
+  const route = useRoute<RouteProp<MainTabParamList, "Trips">>();
+  const highlightId = route.params?.highlightId;
 
   // Independent per-side countries, matching the create forms. Search used to
   // model this as a coupled IN_TO_US / US_TO_IN "direction", which made
@@ -182,6 +206,79 @@ export function SearchScreen() {
     });
   }, [appliedFilters, pkgPage, rcvPage, buddyPage, search]);
 
+  // ── Restore-on-return (web parity: web persists to sessionStorage) ──
+  // Gates the persist effect below until the async load resolves, so we never
+  // clobber saved state with the initial defaults before restoring.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const snap = await loadPersistedSearch();
+      if (!cancelled && snap) {
+        setFromCountry(snap.fromCountry);
+        setToCountry(snap.toCountry);
+        setFromCity(snap.fromCity);
+        setToCity(snap.toCity);
+        setDateFrom(snap.dateFrom);
+        setDateTo(snap.dateTo);
+        setLookingFor(snap.lookingFor);
+        setActiveTab(snap.activeTab);
+        setPkgPage(snap.pkgPage);
+        setRcvPage(snap.rcvPage);
+        setBuddyPage(snap.buddyPage);
+        setAutoPkgPage(snap.autoPkgPage);
+        setAutoRcvPage(snap.autoRcvPage);
+        setAutoBuddyPage(snap.autoBuddyPage);
+        // Set applied filters LAST: the pagination effect above then replays the
+        // manual search for FREE (no quota) with the restored pages already set.
+        if (snap.appliedFilters) setAppliedFilters(snap.appliedFilters);
+      }
+      hydratedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the in-progress search whenever it changes (post-hydration only).
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    void savePersistedSearch({
+      v: 1,
+      fromCountry,
+      toCountry,
+      fromCity,
+      toCity,
+      dateFrom,
+      dateTo,
+      lookingFor,
+      activeTab,
+      appliedFilters,
+      pkgPage,
+      rcvPage,
+      buddyPage,
+      autoPkgPage,
+      autoRcvPage,
+      autoBuddyPage,
+    });
+  }, [
+    fromCountry,
+    toCountry,
+    fromCity,
+    toCity,
+    dateFrom,
+    dateTo,
+    lookingFor,
+    activeTab,
+    appliedFilters,
+    pkgPage,
+    rcvPage,
+    buddyPage,
+    autoPkgPage,
+    autoRcvPage,
+    autoBuddyPage,
+  ]);
+
   // In auto-match mode results are grouped under the user's own listings —
   // one card per parcel/trip with matches nested inside (mirrors web).
   const myTripsState = useTrips({ filter: "my_trips", perPage: 100 });
@@ -206,16 +303,16 @@ export function SearchScreen() {
   // repeat when they have several listings — collapse to one card per person
   // (mirrors web). Auto-match dedupes per-listing inside the maps above.
   const displayCarrierTrips = useMemo(
-    () => dedupePackageMatchesByPerson(carrierTrips),
-    [carrierTrips],
+    () => dedupePackageMatchesByPerson(carrierTrips, highlightId),
+    [carrierTrips, highlightId],
   );
   const displayReceiverRequests = useMemo(
-    () => dedupePackageMatchesByPerson(receiverRequests),
-    [receiverRequests],
+    () => dedupePackageMatchesByPerson(receiverRequests, highlightId),
+    [receiverRequests, highlightId],
   );
   const dedupedBuddyMatches = useMemo(
-    () => dedupeBuddyMatchesByUser(buddyMatches),
-    [buddyMatches],
+    () => dedupeBuddyMatchesByUser(buddyMatches, highlightId),
+    [buddyMatches, highlightId],
   );
 
   const sortedMyParcels: Parcel[] = useMemo(
@@ -242,23 +339,30 @@ export function SearchScreen() {
       map.set(
         parcel.id,
         dedupePackageMatchesByPerson(
-          carrierTrips.filter((m) =>
-            carrierTripMatchesParcel(
-              {
-                from_city: m.from_city,
-                to_city: m.to_city,
-                any_from: m.any_from,
-                any_to: m.any_to,
-                travel_date: m.travel_date,
-              },
-              parcel,
-            ),
-          ),
+          carrierTrips
+            .filter((m) =>
+              carrierTripMatchesParcel(
+                {
+                  from_city: m.from_city,
+                  to_city: m.to_city,
+                  any_from: m.any_from,
+                  any_to: m.any_to,
+                  travel_date: m.travel_date,
+                },
+                parcel,
+              ),
+            )
+            // Flag (don't hide) trips whose capacity is under this parcel's weight.
+            .map((m) => ({
+              ...m,
+              exceeds_capacity: parcelExceedsCapacity(parcel.weight_kg, m.luggage_capacity_kg),
+            })),
+          highlightId,
         ),
       );
     }
     return map;
-  }, [loading, carrierTrips, sortedMyParcels]);
+  }, [loading, carrierTrips, sortedMyParcels, highlightId]);
 
   const receiverRequestsByTripId = useMemo(() => {
     const map = new Map<string, PackageMatch[]>();
@@ -267,25 +371,85 @@ export function SearchScreen() {
       map.set(
         trip.id,
         dedupePackageMatchesByPerson(
-          receiverRequests.filter(
-            (m) =>
-              m.delivery_by != null &&
-              parcelMatchesTrip(
-                {
-                  from_city: m.from_city,
-                  to_city: m.to_city,
-                  any_from: m.any_from,
-                  any_to: m.any_to,
-                  delivery_by: m.delivery_by,
-                },
-                trip,
-              ),
-          ),
+          receiverRequests
+            .filter(
+              (m) =>
+                m.delivery_by != null &&
+                parcelMatchesTrip(
+                  {
+                    from_city: m.from_city,
+                    to_city: m.to_city,
+                    any_from: m.any_from,
+                    any_to: m.any_to,
+                    delivery_by: m.delivery_by,
+                  },
+                  trip,
+                ),
+            )
+            // Flag (don't hide) receive requests heavier than this trip's capacity.
+            .map((m) => ({
+              ...m,
+              exceeds_capacity: parcelExceedsCapacity(m.weight_kg, trip.luggage_capacity_kg),
+            })),
+          highlightId,
         ),
       );
     }
     return map;
-  }, [loading, receiverRequests, sortedMyTrips]);
+  }, [loading, receiverRequests, sortedMyTrips, highlightId]);
+
+  // Deep-link highlight (web parity): once the results are in, jump to the tab —
+  // and the page — that holds the `?match=` listing, so its ringed card is on
+  // screen. Runs once per id; the card ring itself is applied in the tab lists.
+  const highlightHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    if (highlightHandledRef.current === highlightId) return;
+
+    const inBuddy = buddyMatches.some((b) => b.id === highlightId);
+    const inCarrier = carrierTrips.some((m) => m.id === highlightId);
+    const inReceiver = receiverRequests.some((m) => m.id === highlightId);
+    if (!inBuddy && !inCarrier && !inReceiver) return; // not in this result set (yet)
+
+    highlightHandledRef.current = highlightId;
+    const autoMatch = !hasAppliedFilters; // isAutoMatch is declared below this effect
+
+    if (inBuddy) {
+      setActiveTab("buddy");
+      if (autoMatch) {
+        const idx = dedupedBuddyMatches.findIndex((b) => b.id === highlightId);
+        if (idx >= 0) setAutoBuddyPage(Math.floor(idx / AUTO_BUDDY_PER_PAGE) + 1);
+      }
+    } else if (inCarrier) {
+      setActiveTab("package");
+      if (autoMatch) {
+        const parcelIdx = sortedMyParcels.findIndex((p) =>
+          (carrierTripsByParcelId.get(p.id) ?? []).some((m) => m.id === highlightId),
+        );
+        if (parcelIdx >= 0) setAutoPkgPage(Math.floor(parcelIdx / AUTO_PER_PAGE) + 1);
+      }
+    } else {
+      setActiveTab("receiver");
+      if (autoMatch) {
+        const tripIdx = sortedMyTrips.findIndex((t) =>
+          (receiverRequestsByTripId.get(t.id) ?? []).some((m) => m.id === highlightId),
+        );
+        if (tripIdx >= 0) setAutoRcvPage(Math.floor(tripIdx / AUTO_PER_PAGE) + 1);
+      }
+    }
+  }, [
+    highlightId,
+    loading,
+    hasAppliedFilters,
+    buddyMatches,
+    carrierTrips,
+    receiverRequests,
+    dedupedBuddyMatches,
+    sortedMyParcels,
+    sortedMyTrips,
+    carrierTripsByParcelId,
+    receiverRequestsByTripId,
+  ]);
 
   // Auto-match counts = sum of nested matches under user listings; manual
   // filter counts = flat result length. Buddies is always flat.
@@ -427,6 +591,7 @@ export function SearchScreen() {
     setAutoRcvPage(1);
     setAutoBuddyPage(1);
     setNotice(null);
+    void clearPersistedSearch();
     void resetToAutoMatch();
   }, [resetToAutoMatch]);
 
@@ -642,6 +807,7 @@ export function SearchScreen() {
             matchesByParcelId={carrierTripsByParcelId}
             navigation={navigation}
             setNotice={setNotice}
+            highlightId={highlightId}
           />
         ) : activeTab === "buddy" ? (
           <BuddyTabResults
@@ -649,6 +815,7 @@ export function SearchScreen() {
             matches={isAutoMatch ? pagedBuddyMatches : dedupedBuddyMatches}
             navigation={navigation}
             setNotice={setNotice}
+            highlightId={highlightId}
           />
         ) : (
           <ReceiverTabResults
@@ -660,6 +827,7 @@ export function SearchScreen() {
             matchesByTripId={receiverRequestsByTripId}
             navigation={navigation}
             setNotice={setNotice}
+            highlightId={highlightId}
           />
         )}
 
@@ -812,6 +980,7 @@ function PackageTabResults({
   matchesByParcelId,
   navigation,
   setNotice,
+  highlightId,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
@@ -822,6 +991,7 @@ function PackageTabResults({
   matchesByParcelId: Map<string, PackageMatch[]>;
   navigation: Nav;
   setNotice: SetNotice;
+  highlightId?: string;
 }>) {
   if (isAutoMatch) {
     if (myParcelsLoading && myParcels.length === 0)
@@ -875,6 +1045,7 @@ function PackageTabResults({
                         navigation={navigation}
                         setNotice={setNotice}
                         nested
+                        highlighted={m.id === highlightId}
                       />
                     </View>
                   ))}
@@ -904,6 +1075,7 @@ function PackageTabResults({
           match={m}
           navigation={navigation}
           setNotice={setNotice}
+          highlighted={m.id === highlightId}
         />
       ))}
     </View>
@@ -915,11 +1087,13 @@ function BuddyTabResults({
   matches,
   navigation,
   setNotice,
+  highlightId,
 }: Readonly<{
   loading: boolean;
   matches: BuddySearchMatch[];
   navigation: Nav;
   setNotice: SetNotice;
+  highlightId?: string;
 }>) {
   if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
@@ -933,7 +1107,13 @@ function BuddyTabResults({
   return (
     <View>
       {matches.map((b) => (
-        <BuddyMatchCard key={b.id} match={b} navigation={navigation} setNotice={setNotice} />
+        <BuddyMatchCard
+          key={b.id}
+          match={b}
+          navigation={navigation}
+          setNotice={setNotice}
+          highlighted={b.id === highlightId}
+        />
       ))}
     </View>
   );
@@ -948,6 +1128,7 @@ function ReceiverTabResults({
   matchesByTripId,
   navigation,
   setNotice,
+  highlightId,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
@@ -958,6 +1139,7 @@ function ReceiverTabResults({
   matchesByTripId: Map<string, PackageMatch[]>;
   navigation: Nav;
   setNotice: SetNotice;
+  highlightId?: string;
 }>) {
   if (isAutoMatch) {
     if (myTripsLoading && myTrips.length === 0)
@@ -1009,6 +1191,7 @@ function ReceiverTabResults({
                         navigation={navigation}
                         setNotice={setNotice}
                         nested
+                        highlighted={m.id === highlightId}
                       />
                     </View>
                   ))}
@@ -1038,6 +1221,7 @@ function ReceiverTabResults({
           match={m}
           navigation={navigation}
           setNotice={setNotice}
+          highlighted={m.id === highlightId}
         />
       ))}
     </View>
@@ -1051,7 +1235,15 @@ function PackageMatchCard({
   navigation,
   setNotice,
   nested,
-}: Readonly<{ match: PackageMatch; navigation: Nav; setNotice: SetNotice; nested?: boolean }>) {
+  highlighted,
+}: Readonly<{
+  match: PackageMatch;
+  navigation: Nav;
+  setNotice: SetNotice;
+  nested?: boolean;
+  /** Deep-link highlight (web parity: the `?match=` ring). */
+  highlighted?: boolean;
+}>) {
   const isTrip = match.type === "carrier_trip";
   const person = isTrip ? match.carrier : match.sender;
   const dateLabel = isTrip
@@ -1117,15 +1309,17 @@ function PackageMatchCard({
     ? match.airline
       ? `Via ${match.airline}`
       : null
-    : match.category?.trim()
-      ? capitalize(match.category.trim())
-      : null;
+    : // Receive request: category + weight (web parity — web shows both).
+      [
+        match.category?.trim() ? capitalize(match.category.trim()) : null,
+        match.weight_kg != null ? `${match.weight_kg} kg` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null;
 
   const personBlock = (
     <View style={styles.personRow}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{getInitials(person?.name)}</Text>
-      </View>
+      <Avatar name={person?.name} uri={person?.avatar_url} size={40} />
       <View style={styles.personInfo}>
         <Text style={styles.personName} numberOfLines={2}>
           {person?.name || "Unknown user"}
@@ -1152,6 +1346,18 @@ function PackageMatchCard({
     </Text>
   ) : null;
 
+  // Web parity: a match still shows but wears an amber pill when the parcel is
+  // heavier than the carrier's capacity. Copy differs by side (carrier trip vs
+  // your trip), matching web's "Exceeds capacity" / "Exceeds your capacity".
+  const warningBlock = match.exceeds_capacity ? (
+    <View style={[styles.capacityPill, nested && styles.capacityPillNested]}>
+      <Ionicons name="alert-circle" size={12} color={colors.warning} />
+      <Text style={styles.capacityPillText}>
+        {isTrip ? "Exceeds capacity" : "Exceeds your capacity"}
+      </Text>
+    </View>
+  ) : null;
+
   const actionsBlock = (
     <View style={styles.actionsRow}>
       <AppButton
@@ -1173,17 +1379,18 @@ function PackageMatchCard({
   // Nested under a listing card: no card chrome or route header (parent shows it).
   if (nested) {
     return (
-      <View style={styles.matchNested}>
+      <View style={[styles.matchNested, highlighted && styles.matchHighlighted]}>
         {personBlock}
         {metricsBlock}
         {subtitleBlock}
+        {warningBlock}
         {actionsBlock}
       </View>
     );
   }
 
   return (
-    <Card style={styles.matchCard}>
+    <Card style={[styles.matchCard, highlighted && styles.matchHighlighted]}>
       <RouteHeader
         fromCity={match.from_city}
         toCity={match.to_city}
@@ -1192,6 +1399,7 @@ function PackageMatchCard({
       />
       {metricsBlock}
       {subtitleBlock}
+      {warningBlock}
       <View style={styles.divider} />
       {personBlock}
       {actionsBlock}
@@ -1203,7 +1411,14 @@ function BuddyMatchCard({
   match,
   navigation,
   setNotice,
-}: Readonly<{ match: BuddySearchMatch; navigation: Nav; setNotice: SetNotice }>) {
+  highlighted,
+}: Readonly<{
+  match: BuddySearchMatch;
+  navigation: Nav;
+  setNotice: SetNotice;
+  /** Deep-link highlight (web parity: the `?match=` ring). */
+  highlighted?: boolean;
+}>) {
   const dateFrom = match.travel_date_from || match.travel_date;
   const dateTo = match.travel_date_to || match.travel_date;
   const dateLabel =
@@ -1261,11 +1476,9 @@ function BuddyMatchCard({
   }, [match.user?.id, match.user?.name, navigation, setNotice]);
 
   return (
-    <Card style={styles.matchCard}>
+    <Card style={[styles.matchCard, highlighted && styles.matchHighlighted]}>
       <View style={styles.personRow}>
-        <View style={[styles.avatar, styles.avatarLarger]}>
-          <Text style={styles.avatarText}>{getInitials(match.user?.name)}</Text>
-        </View>
+        <Avatar name={match.user?.name} uri={match.user?.avatar_url} size={48} />
         <View style={styles.personInfo}>
           <View style={styles.buddyTitleRow}>
             <Text style={styles.personName} numberOfLines={2}>
@@ -1753,6 +1966,15 @@ const styles = StyleSheet.create({
   // Match card
   matchCard: { padding: 16, marginBottom: 14, gap: 14 },
   matchNested: { gap: 12 },
+  // Deep-link highlight ring (web parity: `border-primary ring-2`). The nested
+  // variant has no card chrome, so the ring also gives it padding + a radius.
+  matchHighlighted: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: colors.primarySoft,
+  },
   nestedDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -1767,19 +1989,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   matchSubtitleNested: { textAlign: "left" },
+  capacityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(245, 159, 10, 0.12)",
+    marginTop: 6,
+  },
+  capacityPillNested: { alignSelf: "flex-start" },
+  capacityPillText: { color: colors.warning, fontSize: 11, lineHeight: 14, fontWeight: "700" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 
   personRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceTintPrimary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarLarger: { width: 48, height: 48, borderRadius: 24 },
-  avatarText: { color: colors.wordmark, fontSize: 14, lineHeight: 18, fontWeight: "800" },
   personInfo: { flex: 1, minWidth: 0 },
   personName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700" },
   ratingText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", marginTop: 2 },

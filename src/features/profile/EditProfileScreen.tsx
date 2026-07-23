@@ -5,7 +5,6 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
-  Image,
   StyleSheet,
   Text,
   View,
@@ -13,6 +12,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
@@ -49,12 +49,15 @@ export function EditProfileScreen() {
   const [city, setCity] = useState("");
   const [country, setCountry] = useState<string | null>(null);
   const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Track if user has typed since last hydration so we don't blow away their
-  // edits if a background refetch lands.
+  // Track if user has edited since last hydration. The ref stops a background
+  // refetch from clobbering in-progress edits; the `dirty` state gates the Save
+  // button (web parity: Save is disabled until something changes).
   const dirtyRef = useRef(false);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -63,10 +66,12 @@ export function EditProfileScreen() {
     setBio(profile.bio ?? "");
     setCity(profile.city ?? "");
     setCountry(profile.country ?? null);
+    setAvatarUrl(profile.avatar_url ?? null);
   }, [profile]);
 
   const markDirty = useCallback(() => {
     dirtyRef.current = true;
+    setDirty(true);
   }, []);
 
   const validate = useCallback((): boolean => {
@@ -91,6 +96,8 @@ export function EditProfileScreen() {
         bio: bio.trim() || undefined,
         city: city.trim() || undefined,
         country: country ?? undefined,
+        // Web parity: always send avatar_url; "" clears it server-side.
+        avatar_url: avatarUrl ?? "",
       });
       const saved = res.data;
 
@@ -99,8 +106,9 @@ export function EditProfileScreen() {
         setUserProfileFromApi(saved, user?.email ?? "");
       }
 
-      // Clear dirty flag so any subsequent refetch can re-hydrate.
+      // Clear dirty flags so any subsequent refetch can re-hydrate.
       dirtyRef.current = false;
+      setDirty(false);
 
       showToast({ title: "Profile updated", variant: "success" });
       goBack();
@@ -120,6 +128,7 @@ export function EditProfileScreen() {
     bio,
     city,
     country,
+    avatarUrl,
     user?.email,
     setUserProfileFromApi,
     goBack,
@@ -180,7 +189,6 @@ export function EditProfileScreen() {
     );
   }
 
-  const avatarUrl = profile?.avatar_url ?? null;
   const initials = initialsFromFullName(name || profile?.name || "");
 
   return (
@@ -198,22 +206,17 @@ export function EditProfileScreen() {
         <Text style={styles.headerTitle}>{t(language, "profile.editProfile")}</Text>
       </View>
 
-      <View style={styles.avatarWrap}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        ) : (
-          <View style={styles.avatar}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </View>
-        )}
-        <Pressable
-          style={styles.cameraBadge}
-          onPress={() => showToast({ title: "Photo upload coming soon", variant: "info" })}
-          accessibilityRole="button"
-          accessibilityLabel={t(language, "profile.changePhoto")}
-        >
-          <Ionicons name="camera-outline" size={16} color={colors.white} />
-        </Pressable>
+      <View style={styles.avatarSection}>
+        <AvatarUpload
+          userId={profile?.id ?? ""}
+          currentUrl={avatarUrl}
+          initials={initials}
+          disabled={submitting}
+          onChange={(url) => {
+            setAvatarUrl(url);
+            markDirty();
+          }}
+        />
       </View>
 
       <ProfileFormFields
@@ -244,9 +247,9 @@ export function EditProfileScreen() {
       />
 
       <Pressable
-        style={[styles.saveButton, submitting && styles.saveButtonDisabled]}
+        style={[styles.saveButton, (submitting || !dirty) && styles.saveButtonDisabled]}
         onPress={handleSave}
-        disabled={submitting}
+        disabled={submitting || !dirty}
         accessibilityRole="button"
         accessibilityLabel={t(language, "profile.saveChanges")}
       >
@@ -291,35 +294,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   retryButtonText: { color: colors.white, fontSize: 14, fontWeight: "700" },
-  avatarWrap: { alignSelf: "center", marginBottom: 24, position: "relative" },
-  avatar: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: "#FFF1EC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarImage: { width: 104, height: 104, borderRadius: 52 },
-  avatarInitials: { color: colors.primary, fontWeight: "800", fontSize: 36, lineHeight: 40 },
-  cameraBadge: {
-    position: "absolute",
-    right: 2,
-    bottom: 2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: colors.card,
-  },
+  avatarSection: { alignItems: "center", marginBottom: 24 },
   saveButton: {
     marginTop: 18,
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: colors.primary,
+    // Primary CTA = orange accent (web parity), matching the photo CTA above.
+    backgroundColor: colors.ctaAccent,
     alignItems: "center",
     justifyContent: "center",
   },

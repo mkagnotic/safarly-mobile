@@ -4,6 +4,7 @@ import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppFeedbackProvider } from "@/context/AppFeedbackContext";
 import { AuthProvider } from "@/context/AuthContext";
+import { navigationRef } from "@/navigation/navigationRef";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { colors, screenCanvas } from "@/theme/colors";
 
@@ -26,7 +27,7 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <AppFeedbackProvider>
-            <NavigationContainer theme={appTheme}>
+            <NavigationContainer ref={navigationRef} theme={appTheme}>
               <StatusBar style="dark" />
               <RootNavigator />
             </NavigationContainer>

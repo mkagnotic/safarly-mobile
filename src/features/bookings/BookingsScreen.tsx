@@ -7,18 +7,23 @@ import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type ListRenderItemInfo,
 } from "react-native";
 
+import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
+import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -85,6 +90,54 @@ function formatDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/** Capitalize the first letter for display (categories arrive lowercased). */
+function formatCategory(value: string): string {
+  const v = value.trim();
+  return v ? v.charAt(0).toUpperCase() + v.slice(1) : v;
+}
+
+/** "Mar 18" — short form for the agreed-travel-date pill (web parity). */
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+/**
+ * Live "Xh Ym left to pay" pill for `pending_payment` bookings (web parity with
+ * `PaymentExpiryCountdown`). Ticks every 30s; turns red under 6h.
+ */
+function PaymentExpiryCountdown({ expiresAt }: Readonly<{ expiresAt: string | null }>) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!expiresAt) return null;
+  const target = new Date(expiresAt).getTime();
+  if (Number.isNaN(target)) return null;
+  const msLeft = target - now;
+  const urgent = isUrgent(msLeft);
+  const label = msLeft <= 0 ? "Payment window expired" : formatCountdown(msLeft);
+
+  return (
+    <View style={[styles.countdownPill, urgent || msLeft <= 0 ? styles.countdownPillUrgent : null]}>
+      <Ionicons
+        name="time-outline"
+        size={11}
+        color={urgent || msLeft <= 0 ? colors.danger : colors.warning}
+      />
+      <Text
+        style={[styles.countdownText, urgent || msLeft <= 0 ? styles.countdownTextUrgent : null]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function getRole(
@@ -788,7 +841,11 @@ function ExpandedBody({
     (booking.status === "in_transit" || isAwaitingHandoff) && role === "sender";
   const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
   const canCancelPostPossession = booking.status === "in_transit" && role === "carrier";
-  const canRate = booking.status === "delivered";
+  // Web parity: ratings are one-per-person-per-booking. Offer "Rate Delivery"
+  // only until the viewer has rated; afterwards show a done-state chip (re-rating
+  // would 409 CONFLICT server-side).
+  const canRate = booking.status === "delivered" && !booking.viewer_has_rated;
+  const hasRated = booking.status === "delivered" && Boolean(booking.viewer_has_rated);
 
   return (
     <View style={styles.expandedRoot}>
@@ -816,6 +873,14 @@ function ExpandedBody({
                 ${booking.parcel.fee_offered}
               </Text>
             </View>
+            {booking.agreed_travel_date ? (
+              <View style={styles.parcelCell}>
+                <Text style={styles.parcelCellKey}>Travel date: </Text>
+                <Text style={styles.parcelCellValue}>
+                  {formatDate(booking.agreed_travel_date)}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -825,11 +890,7 @@ function ExpandedBody({
         <View style={styles.partiesRow}>
           {booking.sender ? (
             <View style={styles.partyItem}>
-              <View style={[styles.partyAvatar, { backgroundColor: primaryTint.fill12 }]}>
-                <Text style={[styles.partyAvatarText, { color: colors.primary }]}>
-                  {booking.sender.name?.charAt(0)?.toUpperCase() ?? "?"}
-                </Text>
-              </View>
+              <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Sender</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
@@ -840,11 +901,7 @@ function ExpandedBody({
           ) : null}
           {booking.carrier ? (
             <View style={styles.partyItem}>
-              <View style={[styles.partyAvatar, { backgroundColor: "rgba(245,128,32,0.12)" }]}>
-                <Text style={[styles.partyAvatarText, { color: "#F08020" }]}>
-                  {booking.carrier.name?.charAt(0)?.toUpperCase() ?? "?"}
-                </Text>
-              </View>
+              <Avatar name={booking.carrier.name} uri={booking.carrier.avatar_url} size={36} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Carrier</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
@@ -1057,6 +1114,13 @@ function ExpandedBody({
             <Text style={styles.actionWarningText}>Rate Delivery</Text>
           </Pressable>
         ) : null}
+
+        {hasRated ? (
+          <View style={[styles.actionButton, styles.actionRated]}>
+            <Ionicons name="star" size={14} color={colors.safe} />
+            <Text style={styles.actionRatedText}>You rated this delivery</Text>
+          </View>
+        ) : null}
       </View>
 
       <CancelBookingModal
@@ -1141,10 +1205,15 @@ function BookingRow({
               <Text style={styles.metaText} numberOfLines={1}>
                 {formatDate(booking.created_at)}
               </Text>
-              <Text style={styles.subDot}>·</Text>
-              <Text style={styles.bookingId} numberOfLines={1}>
-                #{booking.id.slice(0, 6)}
-              </Text>
+              {booking.parcel?.category ? (
+                <>
+                  <Text style={styles.subDot}>·</Text>
+                  <Ionicons name="pricetag-outline" size={12} color={colors.subtleText} />
+                  <Text style={styles.metaText} numberOfLines={1}>
+                    {formatCategory(booking.parcel.category)}
+                  </Text>
+                </>
+              ) : null}
             </View>
           </View>
           <Ionicons
@@ -1153,6 +1222,24 @@ function BookingRow({
             color={colors.mutedText}
           />
         </View>
+
+        {/* Pills: payment countdown (pending) + agreed travel date (web parity) */}
+        {(booking.status === "pending_payment" && booking.payment_expires_at) ||
+        booking.agreed_travel_date ? (
+          <View style={styles.cardPillsRow}>
+            {booking.status === "pending_payment" && booking.payment_expires_at ? (
+              <PaymentExpiryCountdown expiresAt={booking.payment_expires_at} />
+            ) : null}
+            {booking.agreed_travel_date ? (
+              <View style={styles.travelDatePill}>
+                <Ionicons name="airplane" size={11} color={colors.primary} />
+                <Text style={styles.travelDateText}>
+                  {formatShortDate(booking.agreed_travel_date)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Footer: status + fee */}
         <View style={styles.cardFooter}>
@@ -1192,10 +1279,20 @@ export function BookingsScreen() {
 
   const [filterIdx, setFilterIdx] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const status = FILTERS[filterIdx]?.status;
-  const { bookings, loading, error, refetch } = useBookings({ status });
+  const { bookings, loading, loadingMore, hasMore, error, refetch, loadMore } = useBookings({
+    status,
+  });
+
+  // Web parity: debounce the client-side search 300ms so filtering doesn't run
+  // on every keystroke.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(id);
+  }, [search]);
 
   // Auto-expand if a notification deep-link or other navigator passed `expandId`.
   // Mirrors web's `/customer/bookings` page where deep-links land on the list
@@ -1208,7 +1305,7 @@ export function BookingsScreen() {
   }, [route.params?.expandId, bookings]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return bookings;
     return bookings.filter(
       (b) =>
@@ -1216,7 +1313,7 @@ export function BookingsScreen() {
         b.parcel?.from_city?.toLowerCase().includes(q) ||
         b.parcel?.to_city?.toLowerCase().includes(q),
     );
-  }, [bookings, search]);
+  }, [bookings, debouncedSearch]);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -1238,65 +1335,35 @@ export function BookingsScreen() {
     [navigation],
   );
 
-  return (
-    <Screen onRefresh={refetch}>
-      <View style={styles.headerRow}>
-        <Pressable
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.text} />
-        </Pressable>
-        <View style={styles.titleBlock}>
-          <Text style={styles.title}>My Bookings</Text>
-          <Text style={styles.subtitle}>Manage your delivery bookings</Text>
-        </View>
-      </View>
+  const keyExtractor = useCallback((b: Booking) => b.id, []);
 
-      {/* Search */}
-      <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={16} color={colors.subtleText} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by city, booking ID..."
-          placeholderTextColor={colors.subtleText}
-          style={styles.searchInput}
-          accessibilityLabel="Search bookings"
-        />
-      </View>
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<Booking>) => (
+      <BookingRow
+        booking={item}
+        role={getRole(item, userId)}
+        expanded={expandedId === item.id}
+        onToggle={() => handleToggle(item.id)}
+        onNavigateRate={handleNavigateRate}
+        onNavigatePay={handleNavigatePay}
+      />
+    ),
+    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay],
+  );
 
-      {/* Filter chips */}
-      <View style={styles.filterRow}>
-        {FILTERS.map((f, i) => {
-          const active = i === filterIdx;
-          return (
-            <Pressable
-              key={f.label}
-              onPress={() => {
-                setFilterIdx(i);
-                setExpandedId(null);
-              }}
-              style={[styles.chip, active && styles.chipActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`Filter: ${f.label}`}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Body */}
-      {loading && bookings.length === 0 ? (
+  // Loading / error / empty all render through ListEmptyComponent so the fixed
+  // header + filters stay put and only the list body swaps.
+  const listEmpty = useMemo(() => {
+    if (loading && bookings.length === 0) {
+      return (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading bookings…</Text>
         </View>
-      ) : error && bookings.length === 0 ? (
+      );
+    }
+    if (error && bookings.length === 0) {
+      return (
         <Card style={styles.errorCard}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
           <Text style={styles.errorTitle}>Failed to load bookings</Text>
@@ -1312,33 +1379,130 @@ export function BookingsScreen() {
             <Text style={styles.retryButtonText}>Try again</Text>
           </Pressable>
         </Card>
-      ) : filtered.length === 0 ? (
-        <Card style={styles.emptyCard}>
-          <View style={styles.emptyIconBox}>
-            <Ionicons name="cube-outline" size={28} color={colors.primary} />
-          </View>
-          <Text style={styles.emptyTitle}>No bookings yet</Text>
-          <Text style={styles.emptySubtitle}>
-            {filterIdx > 0
-              ? "Try a different filter."
-              : "Browse parcels or trips to create your first booking."}
-          </Text>
-        </Card>
-      ) : (
-        <View>
-          {filtered.map((booking) => (
-            <BookingRow
-              key={booking.id}
-              booking={booking}
-              role={getRole(booking, userId)}
-              expanded={expandedId === booking.id}
-              onToggle={() => handleToggle(booking.id)}
-              onNavigateRate={handleNavigateRate}
-              onNavigatePay={handleNavigatePay}
-            />
-          ))}
+      );
+    }
+    return (
+      <Card style={styles.emptyCard}>
+        <View style={styles.emptyIconBox}>
+          <Ionicons name="cube-outline" size={28} color={colors.primary} />
         </View>
-      )}
+        <Text style={styles.emptyTitle}>No bookings yet</Text>
+        <Text style={styles.emptySubtitle}>
+          {filterIdx > 0
+            ? "Try a different filter."
+            : "Browse parcels or trips to create your first booking."}
+        </Text>
+        {/* Web parity: empty-state CTAs (only when no filter is narrowing). */}
+        {filterIdx === 0 ? (
+          <View style={styles.emptyActions}>
+            <Pressable
+              onPress={() => navigation.navigate("Parcels")}
+              style={[styles.emptyActionButton, styles.emptyActionPrimary]}
+              accessibilityRole="button"
+              accessibilityLabel="Browse parcels"
+            >
+              <Text style={styles.emptyActionPrimaryText}>Browse Parcels</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate("Trips")}
+              style={[styles.emptyActionButton, styles.emptyActionSecondary]}
+              accessibilityRole="button"
+              accessibilityLabel="Browse trips"
+            >
+              <Text style={styles.emptyActionSecondaryText}>Browse Trips</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </Card>
+    );
+  }, [loading, error, bookings.length, filterIdx, refetch, navigation]);
+
+  return (
+    <Screen scroll={false}>
+      <View style={styles.page}>
+        {/* Fixed header */}
+        <View style={styles.headerRow}>
+          <Pressable
+            onPress={handleBack}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <View style={styles.titleBlock}>
+            <Text style={styles.title}>My Bookings</Text>
+            <Text style={styles.subtitle}>Manage your delivery bookings</Text>
+          </View>
+        </View>
+
+        {/* Search */}
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={16} color={colors.subtleText} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by city, booking ID..."
+            placeholderTextColor={colors.subtleText}
+            style={styles.searchInput}
+            accessibilityLabel="Search bookings"
+          />
+        </View>
+
+        {/* Filter chips */}
+        <View style={styles.filterRow}>
+          {FILTERS.map((f, i) => {
+            const active = i === filterIdx;
+            return (
+              <Pressable
+                key={f.label}
+                onPress={() => {
+                  setFilterIdx(i);
+                  setExpandedId(null);
+                }}
+                style={[styles.chip, active && styles.chipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Filter: ${f.label}`}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* List (infinite scroll) */}
+        <FlatList
+          data={filtered}
+          style={styles.list}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          ListEmptyComponent={listEmpty}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          onEndReached={() => {
+            if (hasMore) void loadMore();
+          }}
+          onEndReachedThreshold={0.4}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={
+            filtered.length === 0 ? styles.listContentEmpty : styles.listContent
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={loading && bookings.length > 0}
+              onRefresh={refetch}
+              tintColor={colors.primary}
+            />
+          }
+        />
+      </View>
     </Screen>
   );
 }
@@ -1400,8 +1564,11 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.white },
 
   // Cards
-  bookingCard: { borderRadius: 16, marginBottom: 12, overflow: "hidden" },
-  cardSummary: { padding: 14 },
+  // padding:0 cancels Card's default 16px — the summary + expanded body each
+  // supply their own padding, so the default would double up and leave the
+  // collapsed card looking empty/bottom-heavy.
+  bookingCard: { borderRadius: 16, marginBottom: 12, overflow: "hidden", padding: 0 },
+  cardSummary: { padding: 16 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardHeaderMain: { flex: 1, minWidth: 0, gap: 5 },
   routeText: {
@@ -1417,7 +1584,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     rowGap: 2,
   },
-  bookingId: { color: colors.subtleText, fontSize: 12, fontWeight: "700", flexShrink: 1 },
   subDot: { color: colors.subtleText, fontSize: 12, fontWeight: "700" },
   roleText: { fontSize: 12, fontWeight: "800" },
   metaText: { color: colors.subtleText, fontSize: 12, fontWeight: "500" },
@@ -1444,6 +1610,31 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
   feeText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
+
+  // Card pills (payment countdown + agreed travel date)
+  cardPillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  countdownPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(245,159,10,0.12)",
+  },
+  countdownPillUrgent: { backgroundColor: "rgba(220,40,40,0.10)" },
+  countdownText: { color: colors.warning, fontSize: 11, fontWeight: "700" },
+  countdownTextUrgent: { color: colors.danger },
+  travelDatePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+  },
+  travelDateText: { color: colors.primary, fontSize: 11, fontWeight: "700" },
 
   // Expanded body
   expandedDivider: {
@@ -1479,14 +1670,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 140,
   },
-  partyAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  partyAvatarText: { fontSize: 13, fontWeight: "800" },
   partyKey: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
   partyValue: { color: colors.text, fontSize: 13, fontWeight: "700" },
 
@@ -1523,6 +1706,8 @@ const styles = StyleSheet.create({
   actionSafeText: { color: colors.safe, fontSize: 13, fontWeight: "800" },
   actionWarning: { backgroundColor: "rgba(245,159,10,0.12)" },
   actionWarningText: { color: colors.warning, fontSize: 13, fontWeight: "800" },
+  actionRated: { backgroundColor: "rgba(34,197,94,0.12)" },
+  actionRatedText: { color: colors.safe, fontSize: 13, fontWeight: "800" },
   actionGhost: {
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
@@ -1782,4 +1967,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 300,
   },
+  emptyActions: { flexDirection: "row", gap: 10, marginTop: 16 },
+  emptyActionButton: {
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyActionPrimary: { backgroundColor: colors.primary },
+  emptyActionPrimaryText: { color: colors.white, fontSize: 14, fontWeight: "800" },
+  emptyActionSecondary: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
+  emptyActionSecondaryText: { color: colors.text, fontSize: 14, fontWeight: "800" },
+
+  // FlatList layout (scroll={false} Screen → fixed header + scrolling list)
+  page: { flex: 1, paddingHorizontal: 20 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: 24 },
+  listContentEmpty: { flexGrow: 1 },
+  footerLoading: { paddingVertical: 16, alignItems: "center" },
 });

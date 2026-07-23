@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 
 import {
   ApiClientError,
@@ -6,6 +7,10 @@ import {
   type SearchFilters,
   type SearchResults,
 } from "@/services/api";
+
+/** Web parity: web polls search every 30s (`refetchInterval`) so freshly posted
+ *  trips/parcels surface without a manual refresh. */
+const POLL_INTERVAL_MS = 30_000;
 
 export interface UseSearchMatchesOptions {
   /**
@@ -57,25 +62,46 @@ export function useSearchMatches({
   const lastFiltersRef = useRef<SearchFilters | null>(defaultInitial);
   // Captured once so "Clear" can always restore the free auto-match query.
   const autoMatchFiltersRef = useRef<SearchFilters | null>(defaultInitial);
+  // True while a user-initiated (non-silent) request is in flight, so the
+  // background poll can stand down and never discard the foreground result.
+  const foregroundBusyRef = useRef(false);
 
-  const runSearch = useCallback(async (filters: SearchFilters) => {
-    const myToken = ++requestSeqRef.current;
-    lastFiltersRef.current = filters;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await searchApi.search(filters);
-      if (!mountedRef.current || myToken !== requestSeqRef.current) return;
-      setResults(res.data ?? null);
-    } catch (err) {
-      if (!mountedRef.current || myToken !== requestSeqRef.current) return;
-      setError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      if (mountedRef.current && myToken === requestSeqRef.current) {
-        setLoading(false);
+  const runSearch = useCallback(
+    async (filters: SearchFilters, opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      const myToken = ++requestSeqRef.current;
+      lastFiltersRef.current = filters;
+      // A silent background poll must not flash the loading UI or clobber good
+      // results with a transient error — it only ever swaps in fresher data.
+      if (!silent) {
+        foregroundBusyRef.current = true;
+        setLoading(true);
+        setError(null);
       }
-    }
-  }, []);
+      try {
+        const res = await searchApi.search(filters);
+        if (!mountedRef.current || myToken !== requestSeqRef.current) return;
+        setResults(res.data ?? null);
+        if (silent) setError(null); // a good refresh clears any stale error
+      } catch (err) {
+        if (!mountedRef.current || myToken !== requestSeqRef.current) return;
+        if (!silent) setError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        if (mountedRef.current && myToken === requestSeqRef.current && !silent) {
+          setLoading(false);
+        }
+        if (!silent) foregroundBusyRef.current = false;
+      }
+    },
+    [],
+  );
+
+  /** Silent re-run of the current query (poll / focus). Skips while a foreground
+   *  request is in flight, and never toggles loading or consumes quota. */
+  const silentRefetch = useCallback(async () => {
+    if (foregroundBusyRef.current) return;
+    if (lastFiltersRef.current) await runSearch(lastFiltersRef.current, { silent: true });
+  }, [runSearch]);
 
   // Auto-fetch on mount when initialFilters is set.
   // We intentionally omit defaultInitial / runSearch from deps — the initial
@@ -91,6 +117,19 @@ export function useSearchMatches({
     };
 
   }, []);
+
+  // Web parity (`refetchOnWindowFocus` + `refetchInterval: 30s`): refetch when
+  // the screen regains focus, then poll every 30s WHILE focused. The interval is
+  // torn down on blur, so there's no background polling. All silent — see
+  // `silentRefetch`. The mount fetch (above) runs first and raises the busy
+  // flag, so the initial focus poll no-ops rather than double-fetching.
+  useFocusEffect(
+    useCallback(() => {
+      void silentRefetch();
+      const id = setInterval(() => void silentRefetch(), POLL_INTERVAL_MS);
+      return () => clearInterval(id);
+    }, [silentRefetch]),
+  );
 
   const search = useCallback(
     async (filters: SearchFilters) => {

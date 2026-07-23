@@ -4,6 +4,10 @@ import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { authApi } from "@/services/api/auth";
 import { usersApi } from "@/services/api/users";
+import {
+  syncPushRegistrationOnLogin,
+  unregisterPushToken,
+} from "@/services/notifications/push";
 import { performGoogleOAuth } from "@/services/auth/googleOAuth";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -122,8 +126,14 @@ export function AuthProvider({ children }: Readonly<Props>) {
       const needsBootstrap = !!next && !store.profileSetupDone;
       if (needsBootstrap) store.setAuthBootstrapping(true);
 
-      if (next && !store.authenticated) store.login();
-      else if (!next && store.authenticated) store.logout();
+      if (next && !store.authenticated) {
+        store.login();
+        // Silently re-register this device's push token if the user already
+        // granted permission (never prompts here — opt-in lives on Preferences).
+        void syncPushRegistrationOnLogin();
+      } else if (!next && store.authenticated) {
+        store.logout();
+      }
 
       // Propagate the JWT to the Realtime client. Without this, RLS-gated
       // postgres_changes subscriptions silently drop events on Supabase v2,
@@ -201,6 +211,10 @@ export function AuthProvider({ children }: Readonly<Props>) {
         };
       },
       signOut: async () => {
+        // Deregister this device's push token while the session (and its JWT) is
+        // still valid — after signOut the DELETE would 401. Best-effort; never
+        // blocks sign-out.
+        await unregisterPushToken();
         // signOut() also fires onAuthStateChange — the store flag flips there.
         const { error } = await supabase.auth.signOut();
         if (error) throw error;

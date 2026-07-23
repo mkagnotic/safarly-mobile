@@ -1,4 +1,5 @@
 import { api, newIdempotencyKey } from "./client";
+import type { RNUploadFile } from "./messages";
 
 export interface Dispute {
   id: string;
@@ -25,8 +26,17 @@ export const disputesApi = {
 
   getById: (id: string) => api.get<Dispute>(`/dispute-handler/${id}`),
 
-  uploadEvidence: (id: string, formData: FormData) =>
-    api.upload<{ evidence_files: string[] }>(`/dispute-handler/${id}/evidence`, formData),
+  /**
+   * Upload evidence photos. RN-safe: hands the picker files to `uploadRNFiles`
+   * (byte-accurate multipart under the `files` field), NOT a `{uri}` FormData —
+   * the edge function's `req.formData()` would 422 on an empty part otherwise.
+   */
+  uploadEvidence: (id: string, files: RNUploadFile[]) =>
+    api.uploadRNFiles<{ evidence_files: string[] }>(
+      `/dispute-handler/${id}/evidence`,
+      files,
+      "files",
+    ),
 
   addMessage: (id: string, text: string) =>
     api.post<{ message: unknown }>(`/dispute-handler/${id}/messages`, { text }),
