@@ -49,12 +49,6 @@ export const notificationsApi = {
       body,
       type: type ?? "system",
     }),
-
-  registerPushToken: (token: string, platform: "ios" | "android" | "web") =>
-    api.post<{ registered: boolean }>("/user-handler/me/push-token", { token, platform }),
-
-  removePushToken: (token: string) =>
-    api.delete<{ removed: boolean }>(
-      `/user-handler/me/push-token?token=${encodeURIComponent(token)}`,
-    ),
+  // Push-token registration lives on `usersApi` (the `user-handler` endpoint) —
+  // see `services/api/users.ts`. Kept there as the single owner.
 };

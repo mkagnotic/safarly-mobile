@@ -18,6 +18,7 @@ import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useMyNotifications } from "@/hooks/api/useMyNotifications";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Notification } from "@/services/api";
+import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
 
@@ -100,55 +101,17 @@ export function NotificationsScreen() {
         }
       }
       // Navigate off `data.link` when we recognise it, else fall back to a
-      // per-type landing screen — web parity with `resolveNotificationLink` +
-      // `fallbackPathForType` (`lib/notificationLink.ts`). A tap always lands
-      // somewhere sensible rather than no-opping.
+      // per-type landing screen — shared with the OS push-tap handler via
+      // `resolveNotificationRoute` (web parity: `resolveNotificationLink` +
+      // `fallbackPathForType`). A tap always lands somewhere sensible.
       const link = (n.data as { link?: string } | null | undefined)?.link ?? "";
-
-      const messagesMatch = link.match(/^\/customer\/messages\/([0-9a-f-]{36})/i);
-      if (messagesMatch) {
-        navigation.navigate("OfferChatTab", {
-          conversationId: messagesMatch[1],
-          name: n.title?.replace(/^New message from /i, "") ?? "Conversation",
-          source: "messages",
-        });
-        return;
-      }
-      // `/customer/bookings/:id` isn't a route on web either — the list uses
-      // inline expandable cards, so pass `expandId` to auto-open the row.
-      const bookingsMatch = link.match(/^\/customer\/bookings\/([0-9a-f-]{36})/i);
-      if (bookingsMatch) {
-        navigation.navigate("BookingsTab", { expandId: bookingsMatch[1] });
-        return;
-      }
-      if (link.startsWith("/customer/messages")) return navigation.navigate("MessagesTab");
-      if (link.startsWith("/customer/bookings")) return navigation.navigate("BookingsTab");
-      if (link.includes("/wallet")) return navigation.navigate("WalletTab");
-      if (link.includes("/kyc")) return navigation.navigate("KycVerificationTab");
-      if (link.startsWith("/customer/disputes")) return navigation.navigate("DisputesTab");
-      if (link.startsWith("/customer/buddies")) return navigation.navigate("Buddies");
-      if (link.startsWith("/customer/activity")) return navigation.navigate("ActivityTab");
-
-      // No link (or an unrecognised one) → land on the type's home, mirroring
-      // web's `TYPE_FALLBACK` (message→messages, payment→wallet, kyc→kyc, …).
-      switch (n.type) {
-        case "message":
-          return navigation.navigate("MessagesTab");
-        case "booking":
-          return navigation.navigate("BookingsTab");
-        case "payment":
-          return navigation.navigate("WalletTab");
-        case "kyc":
-          return navigation.navigate("KycVerificationTab");
-        case "dispute":
-          return navigation.navigate("DisputesTab");
-        case "buddy":
-          return navigation.navigate("Buddies");
-        case "rating":
-          return navigation.navigate("ActivityTab");
-        default:
-          return navigation.navigate("Home");
-      }
+      const target = resolveNotificationRoute(link, n.type, n.title);
+      // The screen name is a computed union the typed `navigate` can't verify;
+      // every target is a real MainTab route, so use the loose signature.
+      (navigation.navigate as (screen: string, params?: object) => void)(
+        target.screen,
+        target.params,
+      );
     },
     [markAsRead, navigation],
   );

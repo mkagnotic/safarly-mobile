@@ -105,3 +105,12 @@ export function carrierTripMatchesParcel(
     ) && trip.travel_date <= parcel.delivery_by
   );
 }
+
+/** Show-but-flag helper: the parcel is heavier than the carrier's capacity. */
+export function parcelExceedsCapacity(
+  weightKg: number | null | undefined,
+  capacityKg: number | null | undefined,
+): boolean {
+  if (weightKg == null || capacityKg == null) return false;
+  return Number(weightKg) > Number(capacityKg);
+}

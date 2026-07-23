@@ -185,7 +185,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
     minHeight: 52,
     borderRadius: 12,
-    backgroundColor: colors.primary,
+    // Primary CTA = orange accent (profile-section CTA convention).
+    backgroundColor: colors.ctaAccent,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -234,7 +235,7 @@ const styles = StyleSheet.create({
     minWidth: 84,
     minHeight: 40,
     borderRadius: 12,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ctaAccent,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,

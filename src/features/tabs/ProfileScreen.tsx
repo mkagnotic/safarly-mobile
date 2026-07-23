@@ -74,7 +74,6 @@ export function ProfileScreen() {
         title: "ACCOUNT",
         items: [
           { icon: "calendar-clear", label: "My Bookings", target: "BookingsTab" },
-          { icon: "flash-outline", label: "Delivery Opportunities", target: "OpportunitiesTab" },
           { icon: "alert-circle", label: "My Disputes", target: "DisputesTab" },
           { icon: "wallet-outline", label: "Payment Methods", target: "WalletTab" },
           { icon: "shield-checkmark-outline", label: "KYC Verification", target: "KycVerificationTab" },

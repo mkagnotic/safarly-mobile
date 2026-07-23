@@ -40,7 +40,9 @@ export type MainTabParamList = {
   MessagesTab: undefined;
   Notifications: undefined;
   Parcels: undefined;
-  Trips: undefined;
+  /** `highlightId` deep-links a specific match card from a match-found
+   *  notification (web parity: `/customer/search?match=<id>`). */
+  Trips: { highlightId?: string } | undefined;
   Buddies: undefined;
   BuddyDetailsTab: { buddyName: string };
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
@@ -106,7 +108,9 @@ export type MainTabParamList = {
   /** Read-only record of a completed delivery, incl. the journey timeline. */
   DeliveryDetailsTab: { bookingId: string };
   DisputesTab: undefined;
-  FileDisputeTab: { bookingId: string };
+  /** `bookingId` preselects the booking (from chat); omitted → the form shows a
+   *  booking picker (web parity). */
+  FileDisputeTab: { bookingId?: string } | undefined;
   SafetyAlertsTab: undefined;
   MatchTab: { type?: "parcel" | "buddy"; matchName?: string; route?: string };
   BuddyCompletionTab: { buddyName: string };
