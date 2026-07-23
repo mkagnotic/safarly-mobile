@@ -805,7 +805,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   btnDisabled: { opacity: 0.5 },
-  btnPrimary: { backgroundColor: colors.primary },
+  btnPrimary: { backgroundColor: colors.ctaAccent },
   btnPrimaryText: { color: colors.white, fontSize: 14, fontWeight: "800" },
   btnDanger: { backgroundColor: colors.danger },
   btnDangerText: { color: colors.white, fontSize: 13, fontWeight: "800" },

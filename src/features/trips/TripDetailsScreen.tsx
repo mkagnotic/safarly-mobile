@@ -11,7 +11,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { ANY_CITY } from "@/features/search/CityPicker";
-import { isTerminal, labelForStatus } from "@/features/travels/statusLabels";
+import { isListingExpired, isTerminal, labelForStatus } from "@/features/travels/statusLabels";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
 import { MainTabParamList } from "@/navigation/types";
@@ -264,7 +264,11 @@ export function TripDetailsScreen() {
     notes: trip.notes ?? "",
   };
 
-  const canModify = !isTerminal(trip.status ?? "");
+  // A trip past its travel date reads as "expired" even while its DB status is
+  // still `active`/`open` (expiry is derived client-side, not a stored status).
+  // Such a trip is a closed record too, so it must not offer Edit / Cancel.
+  const expired = isListingExpired(trip.status ?? "", trip.travel_date ?? trip.travel_date_from);
+  const canModify = !isTerminal(trip.status ?? "") && !expired;
 
   return (
     <Screen onRefresh={refetch}>
@@ -308,7 +312,8 @@ export function TripDetailsScreen() {
         <View style={styles.closedNotice}>
           <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} />
           <Text style={styles.closedNoticeText}>
-            This trip is {labelForStatus(trip.status).toLowerCase()} and can no longer be changed.
+            This trip is {expired ? "expired" : labelForStatus(trip.status).toLowerCase()} and can no
+            longer be changed.
           </Text>
         </View>
       )}

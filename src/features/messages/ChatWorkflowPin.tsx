@@ -173,7 +173,7 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
 
         {isAction ? (
           <Pressable
-            style={[styles.actionButton, { backgroundColor: tone === "bad" ? colors.danger : colors.primary }]}
+            style={[styles.actionButton, { backgroundColor: tone === "bad" ? colors.danger : colors.ctaAccent }]}
             onPress={() => onAction(cta.code)}
             disabled={pending}
             accessibilityRole="button"

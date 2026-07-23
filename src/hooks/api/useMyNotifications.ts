@@ -20,12 +20,24 @@ export interface UseMyNotificationsResult {
   marking: boolean;
   /** True while a `markAllAsRead` is in flight. */
   markingAll: boolean;
+  /** True while a `clearAll` is in flight. */
+  clearing: boolean;
+  /** More pages are available (drives infinite scroll). */
+  hasMore: boolean;
+  /** True while a `loadMore` page fetch is in flight. */
+  loadingMore: boolean;
   /** Re-fetch the first page from scratch. */
   refetch: () => Promise<void>;
+  /** Fetch and append the next page. */
+  loadMore: () => Promise<void>;
   /** Mark a single notification as read. Optimistic, with rollback on failure. */
   markAsRead: (id: string) => Promise<void>;
   /** Mark every loaded notification as read. Optimistic. */
   markAllAsRead: () => Promise<void>;
+  /** Delete a single notification. Optimistic, with rollback on failure. */
+  remove: (id: string) => Promise<void>;
+  /** Clear all of the user's notifications. Optimistic, with rollback. */
+  clearAll: () => Promise<void>;
 }
 
 /**
@@ -45,9 +57,13 @@ export function useMyNotifications(
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   const [marking, setMarking] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  const pageRef = useRef(1);
 
   const refetch = useCallback(async () => {
     if (inFlightRef.current) return inFlightRef.current;
@@ -58,7 +74,10 @@ export function useMyNotifications(
       try {
         const res = await notificationsApi.list({ page: 1, per_page: perPage });
         if (!mountedRef.current) return;
-        setNotifications(res.data ?? []);
+        const rows = res.data ?? [];
+        setNotifications(rows);
+        pageRef.current = 1;
+        setHasMore(rows.length >= perPage);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -71,6 +90,28 @@ export function useMyNotifications(
     inFlightRef.current = promise;
     return promise;
   }, [perPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || inFlightRef.current) return;
+    setLoadingMore(true);
+    try {
+      const next = pageRef.current + 1;
+      const res = await notificationsApi.list({ page: next, per_page: perPage });
+      if (!mountedRef.current) return;
+      const rows = res.data ?? [];
+      setNotifications((prev) => {
+        // De-dupe on id — a realtime refetch could overlap a page append.
+        const seen = new Set(prev.map((n) => n.id));
+        return [...prev, ...rows.filter((n) => !seen.has(n.id))];
+      });
+      pageRef.current = next;
+      setHasMore(rows.length >= perPage);
+    } catch {
+      // A failed page-load shouldn't wipe what's already on screen; leave as-is.
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, perPage]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -118,14 +159,52 @@ export function useMyNotifications(
     }
   }, []);
 
+  const remove = useCallback(async (id: string) => {
+    let snapshot: Notification[] | null = null;
+    setNotifications((prev) => {
+      snapshot = prev;
+      return prev.filter((n) => n.id !== id);
+    });
+    try {
+      await notificationsApi.remove(id);
+    } catch (err) {
+      if (snapshot && mountedRef.current) setNotifications(snapshot);
+      throw err;
+    }
+  }, []);
+
+  const clearAll = useCallback(async () => {
+    let snapshot: Notification[] | null = null;
+    setNotifications((prev) => {
+      snapshot = prev;
+      return [];
+    });
+    setClearing(true);
+    setHasMore(false);
+    try {
+      await notificationsApi.clearAll();
+    } catch (err) {
+      if (snapshot && mountedRef.current) setNotifications(snapshot);
+      throw err;
+    } finally {
+      if (mountedRef.current) setClearing(false);
+    }
+  }, []);
+
   return {
     notifications,
     loading,
     error,
     marking,
     markingAll,
+    clearing,
+    hasMore,
+    loadingMore,
     refetch,
+    loadMore,
     markAsRead,
     markAllAsRead,
+    remove,
+    clearAll,
   };
 }

@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.text, fontSize: 16, fontWeight: "800" },
   body: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
-  footer: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
+  footer: { flexDirection: "row", gap: 8, justifyContent: "center" },
   button: {
     paddingHorizontal: 16,
     paddingVertical: 10,

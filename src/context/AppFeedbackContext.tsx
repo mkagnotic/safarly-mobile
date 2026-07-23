@@ -39,16 +39,13 @@ function ToastBanner({
   payload,
   onDismiss,
   topOffset,
-  maxWidth,
 }: Readonly<{
   payload: ToastPayload;
   onDismiss: () => void;
   topOffset: number;
-  maxWidth: number;
 }>) {
   const variant = payload.variant ?? "info";
   const accent = toastAccent(variant);
-  const widthStyle = Math.min(maxWidth - 32, 420);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-14)).current;
 
@@ -73,7 +70,7 @@ function ToastBanner({
     <Animated.View
       style={[
         styles.toastWrap,
-        { top: topOffset, maxWidth: widthStyle },
+        { top: topOffset },
         { opacity, transform: [{ translateY }] },
       ]}
     >
@@ -181,7 +178,6 @@ function AppAlertModal({
 
 export function AppFeedbackProvider({ children }: Readonly<PropsWithChildren>) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const [toast, setToast] = useState<ToastPayload | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [alertOptions, setAlertOptions] = useState<AppAlertOptions | null>(null);
@@ -234,7 +230,7 @@ export function AppFeedbackProvider({ children }: Readonly<PropsWithChildren>) {
       {children}
       {toast ? (
         <View style={styles.toastLayer} pointerEvents="box-none">
-          <ToastBanner payload={toast} onDismiss={dismissToast} topOffset={topToast} maxWidth={width} />
+          <ToastBanner payload={toast} onDismiss={dismissToast} topOffset={topToast} />
         </View>
       ) : null}
       <AppAlertModal visible={alertOptions != null} options={alertOptions} onRequestClose={dismissAlert} />
@@ -251,13 +247,17 @@ const styles = StyleSheet.create({
   },
   toastWrap: {
     position: "absolute",
-    alignSelf: "center",
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
+    left: 16,
+    right: 16,
     alignItems: "center",
   },
   toastCard: {
+    // Full-width banner (with side margins), capped on large screens and
+    // centred — a consistent shape regardless of message length, rather than a
+    // content-hugging pill.
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: colors.card,

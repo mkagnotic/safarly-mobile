@@ -20,11 +20,28 @@ export interface Conversation {
   declined_at: string | null;
   declined_by: string | null;
   decline_reason: string | null;
+  /** Whether the current user has archived this conversation (per-user). */
+  archived?: boolean;
   participant?: {
     id: string;
     name: string;
     avatar_url: string | null;
   };
+}
+
+/** A shared attachment in a conversation, with a fresh signed URL. */
+export interface ChatMediaItem {
+  id: string;
+  from_user_id: string | null;
+  attachment_url: string | null;
+  attachment_type: string | null;
+  attachment_name: string | null;
+  created_at: string;
+  /**
+   * Where the item came from: a chat message, the carrier's travel document, or
+   * the sender's parcel photos. Lets the gallery badge verification media.
+   */
+  category?: "chat" | "travel_document" | "parcel_photo";
 }
 
 export type MessageKind =
@@ -233,8 +250,16 @@ export const messagesApi = {
     });
   },
 
-  listConversations: (params?: { page?: number; per_page?: number }) =>
-    api.get<Conversation[]>("/message-handler/conversations", params),
+  /**
+   * List conversations. Pass `archived: true` for the WhatsApp-style Archived
+   * view; default (omitted/false) returns only non-archived conversations.
+   */
+  listConversations: (params?: { page?: number; per_page?: number; archived?: boolean }) =>
+    api.get<Conversation[]>("/message-handler/conversations", {
+      page: params?.page,
+      per_page: params?.per_page,
+      archived: params?.archived ? "true" : undefined,
+    }),
 
   /** Total unread count for the inbox badge. */
   unreadCount: () =>
@@ -330,6 +355,24 @@ export const messagesApi = {
   getDeliveryHistory: (conversationId: string) =>
     api.get<DeliveryHistoryItem[]>(
       `/message-handler/conversations/${conversationId}/delivery-history`,
+    ),
+
+  /** Archive the conversation for the current user only (WhatsApp-style). */
+  archiveConversation: (conversationId: string) =>
+    api.post<{ archived: boolean }>(
+      `/message-handler/conversations/${conversationId}/archive`,
+    ),
+
+  /** Unarchive the conversation for the current user only. */
+  unarchiveConversation: (conversationId: string) =>
+    api.delete<{ archived: boolean }>(
+      `/message-handler/conversations/${conversationId}/archive`,
+    ),
+
+  /** All shared media/attachments in the conversation (newest first). */
+  getMedia: (conversationId: string) =>
+    api.get<{ media: ChatMediaItem[] }>(
+      `/message-handler/conversations/${conversationId}/media`,
     ),
 
   // --- Admin endpoints ---

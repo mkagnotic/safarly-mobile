@@ -15,6 +15,7 @@ import {
   Linking,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -30,18 +31,20 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
 import { DeclineMatchModal } from "@/components/chat/DeclineMatchModal";
-import { DeliveryHistoryModal } from "@/components/chat/DeliveryHistoryModal";
 import {
   MatchConfirmationModal,
   type MatchUserRole,
 } from "@/components/chat/MatchConfirmationModal";
+import { MediaGalleryModal } from "@/components/chat/MediaGalleryModal";
 import { OfferComposerModal, type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
+import { ParcelReviewModal } from "@/components/chat/ParcelReviewModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
+import { useParcelReview } from "@/hooks/api/useParcelReview";
 import { useTravelDoc } from "@/hooks/api/useTravelDoc";
 import { useChatMessages, type DisplayMessage } from "@/hooks/api/useChatMessages";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
@@ -53,6 +56,7 @@ import {
 } from "@/features/messages/offerResolution";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { MainTabParamList } from "@/navigation/types";
+import { setActiveConversation } from "@/store/activeConversation";
 import {
   getErrorMessage,
   messagesApi,
@@ -60,6 +64,7 @@ import {
   type OfferAcceptPayload,
   type OfferCardPayload,
   type OfferStatus,
+  type ParcelReviewReason,
   type RNUploadFile,
   type SystemEventPayload,
 } from "@/services/api";
@@ -156,6 +161,11 @@ export function OfferChatScreen() {
   const composerBottomPad = keyboardOpen
     ? 10
     : Math.max(insets.bottom, Platform.OS === "ios" ? 18 : 10);
+  // Only iOS needs a manual lift: it never resizes the window for the keyboard.
+  // On Android under Expo 54 edge-to-edge the OS DOES resize now (the IME inset
+  // is consumed), so the layout already ends above the keyboard — adding
+  // keyboardHeight there double-counts and floats the composer up with a big gap.
+  const containerKeyboardPad = Platform.OS === "ios" ? keyboardHeight : 0;
 
   const conversationId = route.params?.conversationId ?? null;
   const fallbackName = route.params?.name ?? "Conversation";
@@ -196,10 +206,6 @@ export function OfferChatScreen() {
     !conversation?.matched_by &&
     !!conversation?.matched_at;
   const isDeclined = matchStatus === "declined";
-  // Web parity: "ever matched" is the union of currently-matched + previously-
-  // matched-and-now-something-else. Drives the "Delivery history" affordance
-  // so users can review past deliveries even after a decline / unmatch.
-  const hasBeenMatched = matchStatus === "matched" || !!conversation?.matched_at;
   const canSend = !isBlocked && !!conversationId;
 
   const userRole = useMemo(
@@ -276,15 +282,22 @@ export function OfferChatScreen() {
   // CustomerMessages.tsx:905-908). Cleared whenever a new file is picked or
   // a send succeeds.
   const [uploadFailed, setUploadFailed] = useState(false);
+  // Two separate sheets: the composer paperclip opens the attach sheet; the
+  // header kebab opens the conversation-actions sheet (web parity).
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [reportUserOpen, setReportUserOpen] = useState(false);
+  const [reportUserPending, setReportUserPending] = useState(false);
+  const [archivePending, setArchivePending] = useState(false);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [decliningPending, setDecliningPending] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [matchPending, setMatchPending] = useState(false);
   const [travelDocOpen, setTravelDocOpen] = useState(false);
+  const [parcelReviewOpen, setParcelReviewOpen] = useState(false);
 
   // ───────── Travel-document verification ─────────
   // Only fetch the doc while the deal is actually in a verification stage (or the
@@ -297,6 +310,13 @@ export function OfferChatScreen() {
       ? activeDeal?.carrier_request_id ?? null
       : null;
   const travelDoc = useTravelDoc(travelDocRequestId);
+
+  // ───────── Parcel-photo review ─────────
+  const parcelReviewRequestId =
+    workflow?.state === "PARCEL_REVIEW" || parcelReviewOpen
+      ? activeDeal?.carrier_request_id ?? null
+      : null;
+  const parcelReview = useParcelReview(parcelReviewRequestId);
   const [reportTarget, setReportTarget] = useState<DisplayMessage | null>(null);
   const [reportPending, setReportPending] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<DisplayMessage | null>(null);
@@ -306,6 +326,16 @@ export function OfferChatScreen() {
     title: string;
     message?: string;
   } | null>(null);
+
+  // Auto-dismiss the offer feedback banner like a standard toast — success/info
+  // clear quickly, errors linger a little longer so they stay readable. The
+  // manual × still works: dismissing sets it to null, which runs this cleanup.
+  useEffect(() => {
+    if (!offerBanner) return;
+    const ms = offerBanner.variant === "error" ? 5000 : 2800;
+    const timer = setTimeout(() => setOfferBanner(null), ms);
+    return () => clearTimeout(timer);
+  }, [offerBanner]);
   // Two destructive-confirm states reuse one ConfirmActionModal — `null` when
   // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
   // pattern in `ChatActionDropdown.tsx:46`.
@@ -322,6 +352,14 @@ export function OfferChatScreen() {
     else navigation.navigate(fallbackBackTarget);
   }, [navigation, fallbackBackTarget]);
 
+  // Tapping the header avatar / name opens the other user's public profile —
+  // web parity (`CustomerMessages.tsx` navigates to `/customer/profile/:id`).
+  // No-ops until the conversation (and thus the participant id) has loaded.
+  const handleOpenProfile = useCallback(() => {
+    if (!participantId) return;
+    navigation.navigate("PublicProfileTab", { userId: participantId, name: participantName });
+  }, [navigation, participantId, participantName]);
+
   // Hardware back button on Android.
   useFocusEffect(
     useCallback(() => {
@@ -331,6 +369,16 @@ export function OfferChatScreen() {
       });
       return () => sub.remove();
     }, [goBack]),
+  );
+
+  // Mark this conversation as the one on screen so the realtime sync suppresses
+  // the in-app new-message toast for it (standard chat behaviour — no banner for
+  // the thread you're already reading). Cleared on blur / switching threads.
+  useFocusEffect(
+    useCallback(() => {
+      setActiveConversation(conversationId);
+      return () => setActiveConversation(null);
+    }, [conversationId]),
   );
 
   // Auto-scroll to bottom only when a NEWER message lands (not on prepend).
@@ -401,7 +449,7 @@ export function OfferChatScreen() {
   }, [conversationId]);
 
   const handlePickImage = useCallback(async () => {
-    setActionMenuOpen(false);
+    setAttachMenuOpen(false);
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
@@ -436,7 +484,7 @@ export function OfferChatScreen() {
   }, []);
 
   const handleTakePhoto = useCallback(async () => {
-    setActionMenuOpen(false);
+    setAttachMenuOpen(false);
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
@@ -473,7 +521,7 @@ export function OfferChatScreen() {
   }, []);
 
   const handlePickDocument = useCallback(async () => {
-    setActionMenuOpen(false);
+    setAttachMenuOpen(false);
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
@@ -647,11 +695,6 @@ export function OfferChatScreen() {
     }
   }, [conversationId, refetchConversations]);
 
-  const handleDeliveryHistory = useCallback(() => {
-    setActionMenuOpen(false);
-    setHistoryOpen(true);
-  }, []);
-
   // ───────── Bubble long-press: copy / report ─────────
 
   const handleBubbleLongPress = useCallback((message: DisplayMessage) => {
@@ -725,16 +768,23 @@ export function OfferChatScreen() {
   const handleSubmitOffer = useCallback(
     async ({ amount, note }: OfferComposerSubmit) => {
       if (!offerComposer) return;
+      // Post into the EXISTING deal whenever one exists. Web always sends the
+      // offer with `activeDeal.carrier_request_id` (`ChatOfferPrompt`), even for
+      // the very first fee offer. `seed-offer` instead auto-detects a brand-new
+      // trip+parcel pair and 404s once the listings are locked into a deal — so
+      // it's only for starting a deal from scratch (no carrier_request yet).
+      const carrierRequestId =
+        liveOffer?.carrierRequestId ?? activeDeal?.carrier_request_id ?? null;
       try {
-        if (offerComposer.mode === "counter" && liveOffer?.carrierRequestId) {
-          await postOffer({ carrier_request_id: liveOffer.carrierRequestId, amount, note });
+        if (carrierRequestId) {
+          await postOffer({ carrier_request_id: carrierRequestId, amount, note });
         } else {
           await seedOffer({ amount, note });
         }
         setOfferComposer(null);
         setOfferBanner({
           variant: "success",
-          title: offerComposer.mode === "counter" ? "Counter sent" : "Offer sent",
+          title: liveOffer ? "Counter sent" : "Offer sent",
         });
       } catch (err) {
         setOfferComposer(null);
@@ -745,7 +795,7 @@ export function OfferChatScreen() {
         });
       }
     },
-    [offerComposer, liveOffer, postOffer, seedOffer],
+    [offerComposer, liveOffer, activeDeal?.carrier_request_id, postOffer, seedOffer],
   );
 
   /**
@@ -792,11 +842,7 @@ export function OfferChatScreen() {
           return;
         case "upload_parcel_photos":
         case "review_parcel_photos":
-          showToast({
-            title: "Finish this step on the web app",
-            message: "Parcel-photo review isn't in the mobile app yet.",
-            variant: "info",
-          });
+          setParcelReviewOpen(true);
           return;
         default:
           return;
@@ -869,6 +915,118 @@ export function OfferChatScreen() {
       showToast({ title: "Couldn't cancel", message: getErrorMessage(err), variant: "error" });
     }
   }, [travelDoc, refetchActiveDeal, refetchConversations]);
+
+  // ───────── Parcel-review action handlers ─────────
+  const handleParcelUpload = useCallback(
+    async (files: RNUploadFile[]) => {
+      try {
+        await parcelReview.upload(files);
+        showToast({ title: "Photos submitted", variant: "success", duration: 1800 });
+      } catch (err) {
+        showToast({ title: "Upload failed", message: getErrorMessage(err), variant: "error" });
+      }
+    },
+    [parcelReview],
+  );
+
+  const handleParcelApprove = useCallback(async () => {
+    try {
+      await parcelReview.approve();
+      setParcelReviewOpen(false);
+      showToast({ title: "Parcel approved", variant: "success", duration: 1800 });
+      void refetchActiveDeal();
+    } catch (err) {
+      showToast({ title: "Couldn't approve", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [parcelReview, refetchActiveDeal]);
+
+  const handleParcelReject = useCallback(
+    async (reason: ParcelReviewReason, note?: string) => {
+      try {
+        await parcelReview.reject(reason, note);
+        showToast({ title: "Changes requested", variant: "info", duration: 1800 });
+        void refetchActiveDeal();
+      } catch (err) {
+        showToast({
+          title: "Couldn't request changes",
+          message: getErrorMessage(err),
+          variant: "error",
+        });
+      }
+    },
+    [parcelReview, refetchActiveDeal],
+  );
+
+  const handleParcelCancel = useCallback(async () => {
+    try {
+      await parcelReview.cancel();
+      setParcelReviewOpen(false);
+      showToast({ title: "Request cancelled", variant: "info", duration: 1800 });
+      void refetchActiveDeal();
+      void refetchConversations();
+    } catch (err) {
+      showToast({ title: "Couldn't cancel", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [parcelReview, refetchActiveDeal, refetchConversations]);
+
+  // ───────── Header action-menu handlers (web parity) ─────────
+  const isArchived = conversation?.archived === true;
+
+  const handleArchiveToggle = useCallback(async () => {
+    if (!conversationId) return;
+    setActionMenuOpen(false);
+    setArchivePending(true);
+    try {
+      if (isArchived) {
+        await messagesApi.unarchiveConversation(conversationId);
+        showToast({ title: "Chat unarchived", variant: "info", duration: 1600 });
+      } else {
+        await messagesApi.archiveConversation(conversationId);
+        showToast({ title: "Chat archived", variant: "info", duration: 1600 });
+      }
+      void refetchConversations();
+    } catch (err) {
+      showToast({ title: "Couldn't update", message: getErrorMessage(err), variant: "error" });
+    } finally {
+      setArchivePending(false);
+    }
+  }, [conversationId, isArchived, refetchConversations]);
+
+  // Raise a dispute: jump to the filing screen pre-scoped to this deal's booking
+  // when one exists, otherwise the disputes list where the user can pick one.
+  const handleRaiseDispute = useCallback(() => {
+    setActionMenuOpen(false);
+    const bookingId = activeDeal?.booking_id ?? null;
+    if (bookingId) navigation.navigate("FileDisputeTab", { bookingId });
+    else navigation.navigate("DisputesTab");
+  }, [activeDeal?.booking_id, navigation]);
+
+  // Conversation-level report reuses the message-report endpoint with the
+  // conversation id as the target — exactly what web's "Report User" does.
+  const handleSubmitUserReport = useCallback(
+    async ({ reason, details }: { reason: string; details: string | undefined }) => {
+      if (!conversationId) return;
+      setReportUserPending(true);
+      try {
+        await messagesApi.reportMessage(conversationId, reason, details);
+        setReportUserOpen(false);
+        showToast({
+          title: "Reported",
+          message: "Thank you for keeping the community safe.",
+          variant: "success",
+        });
+      } catch (err) {
+        showToast({
+          title: "Couldn't submit report",
+          message: getErrorMessage(err),
+          variant: "error",
+        });
+      } finally {
+        setReportUserPending(false);
+      }
+    },
+    [conversationId],
+  );
 
   const handleAcceptOffer = useCallback(
     async (offerId: string) => {
@@ -1040,18 +1198,20 @@ export function OfferChatScreen() {
       disableKeyboardAvoiding
     >
       {/*
-        Deliberately NOT KeyboardAvoidingView.
+        Keyboard handling, WhatsApp-style: the composer sits flush on the
+        keyboard with no gap.
 
-        Under Expo 54 Android runs edge-to-edge, so the window is no longer
-        resized by `adjustResize` and KAV has nothing to react to — with
-        `behavior="height"` it collapsed the layout, and with `undefined` it did
-        nothing at all. Either way the composer ended up under the keyboard.
+        - Android (Expo 54 edge-to-edge): the OS resizes the window on keyboard
+          open, so this container already ends above the keyboard — we add NO
+          padding. (Reserving keyboardHeight here on top of the resize was what
+          floated the composer up with a large empty band.)
+        - iOS: the window is never resized for the keyboard, so we lift the whole
+          container by the real keyboard height instead.
 
-        Instead we read the keyboard's real height from the OS and reserve
-        exactly that much space. Deterministic on both platforms, correct under
-        edge-to-edge, and no native dependency.
+        `keyboardOpen`/`keyboardHeight` are still read from the OS to drive the
+        composer's bottom padding and the scroll-to-newest on open.
       */}
-      <View style={[styles.flex, { paddingBottom: keyboardHeight }]}>
+      <View style={[styles.flex, { paddingBottom: containerKeyboardPad }]}>
         {/* ───────── Header ───────── */}
         <View style={styles.headerRow}>
           <Pressable
@@ -1062,28 +1222,36 @@ export function OfferChatScreen() {
           >
             <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
-          {participantAvatarUrl ? (
-            <Image source={{ uri: participantAvatarUrl }} style={styles.headerAvatarImage} />
-          ) : (
-            <View style={styles.headerAvatar}>
-              <Text style={styles.headerAvatarText}>{participantInitials}</Text>
+          <Pressable
+            onPress={handleOpenProfile}
+            disabled={!participantId}
+            style={styles.headerIdentity}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${participantName}'s profile`}
+          >
+            {participantAvatarUrl ? (
+              <Image source={{ uri: participantAvatarUrl }} style={styles.headerAvatarImage} />
+            ) : (
+              <View style={styles.headerAvatar}>
+                <Text style={styles.headerAvatarText}>{participantInitials}</Text>
+              </View>
+            )}
+            <View style={styles.headerTextWrap}>
+              <View style={styles.headerTitleRow}>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                  {participantName}
+                </Text>
+                {titleStatus ? (
+                  <View style={[styles.headerStatusPill, { backgroundColor: titleStatus.bg }]}>
+                    <Text style={[styles.headerStatusText, { color: titleStatus.fg }]}>
+                      {titleStatus.label}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {renderSubtitle()}
             </View>
-          )}
-          <View style={styles.headerTextWrap}>
-            <View style={styles.headerTitleRow}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                {participantName}
-              </Text>
-              {titleStatus ? (
-                <View style={[styles.headerStatusPill, { backgroundColor: titleStatus.bg }]}>
-                  <Text style={[styles.headerStatusText, { color: titleStatus.fg }]}>
-                    {titleStatus.label}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            {renderSubtitle()}
-          </View>
+          </Pressable>
           <Pressable
             onPress={() => setActionMenuOpen(true)}
             style={styles.iconButton}
@@ -1376,7 +1544,7 @@ export function OfferChatScreen() {
                 redundant third way in — removed to keep the composer clean.
               */}
               <Pressable
-                onPress={() => setActionMenuOpen(true)}
+                onPress={() => setAttachMenuOpen(true)}
                 style={styles.composerIconButton}
                 accessibilityRole="button"
                 accessibilityLabel="Attach"
@@ -1424,16 +1592,16 @@ export function OfferChatScreen() {
         ) : null}
       </View>
 
-      {/* ───────── Action menu modal ───────── */}
+      {/* ───────── Attach sheet (composer paperclip) ───────── */}
       <Modal
-        visible={actionMenuOpen}
+        visible={attachMenuOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setActionMenuOpen(false)}
+        onRequestClose={() => setAttachMenuOpen(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setActionMenuOpen(false)} />
+        <Pressable style={styles.modalBackdrop} onPress={() => setAttachMenuOpen(false)} />
         <View style={styles.actionSheet}>
-          <Text style={styles.actionSheetTitle}>Chat actions</Text>
+          <Text style={styles.actionSheetTitle}>Attach</Text>
           <ActionRow icon="image" label="Send a photo" onPress={handlePickImage} />
           <ActionRow icon="camera-outline" label="Take a photo" onPress={handleTakePhoto} />
           <ActionRow
@@ -1442,61 +1610,89 @@ export function OfferChatScreen() {
             onPress={handlePickDocument}
           />
           <View style={styles.actionDivider} />
-          {/* Web parity (`ChatActionDropdown.tsx:142-160`): "Match" / "Match
-              again" available whenever pending or declined; "Delivery history"
-              available whenever ever-matched (matched_at set), even if the
-              relationship was later declined / unmatched. */}
-          {matchStatus === "pending" || matchStatus === "declined" ? (
+          <ActionRow icon="close" label="Cancel" onPress={() => setAttachMenuOpen(false)} />
+        </View>
+      </Modal>
+
+      {/* ───────── Conversation actions sheet (header kebab) ─────────
+          Mirrors web's ChatActionDropdown: Match/Decline, View media, Archive,
+          Report user, Raise dispute, Block/Unblock, Unmatch. */}
+      <Modal
+        visible={actionMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionMenuOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setActionMenuOpen(false)} />
+        <View style={[styles.actionSheet, styles.actionSheetTall]}>
+          <Text style={styles.actionSheetTitle}>Chat actions</Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {matchStatus === "pending" || matchStatus === "declined" ? (
+              <ActionRow
+                icon="checkmark-circle"
+                label={matchStatus === "declined" ? "Match again" : "Send match request"}
+                onPress={() => {
+                  setActionMenuOpen(false);
+                  setMatchModalOpen(true);
+                }}
+              />
+            ) : null}
+            {matchStatus === "pending" ? (
+              <ActionRow
+                icon="close-circle"
+                label="Decline match"
+                tone="danger"
+                onPress={() => {
+                  setActionMenuOpen(false);
+                  setDeclineOpen(true);
+                }}
+              />
+            ) : null}
+            {matchStatus === "pending" || matchStatus === "declined" ? (
+              <View style={styles.actionDivider} />
+            ) : null}
+
             <ActionRow
-              icon="checkmark-circle"
-              label={matchStatus === "declined" ? "Match again" : "Send match request"}
+              icon="images-outline"
+              label="View media"
               onPress={() => {
                 setActionMenuOpen(false);
-                setMatchModalOpen(true);
+                setMediaOpen(true);
               }}
             />
-          ) : null}
-          {matchStatus === "matched" ? (
-            <ActionRow icon="link" label="Unmatch" onPress={handleUnmatch} />
-          ) : null}
-          {hasBeenMatched ? (
             <ActionRow
-              icon="cube-outline"
-              label="Delivery history"
-              onPress={handleDeliveryHistory}
+              icon={isArchived ? "arrow-undo-outline" : "archive-outline"}
+              label={
+                archivePending
+                  ? "Working…"
+                  : isArchived
+                    ? "Unarchive chat"
+                    : "Archive chat"
+              }
+              onPress={handleArchiveToggle}
             />
-          ) : null}
-          {matchStatus === "pending" ? (
             <ActionRow
-              icon="close-circle"
-              label="Decline match"
-              tone="danger"
+              icon="flag-outline"
+              label="Report user"
               onPress={() => {
                 setActionMenuOpen(false);
-                setDeclineOpen(true);
+                setReportUserOpen(true);
               }}
             />
-          ) : null}
-          {isBlocked ? (
-            <ActionRow
-              icon="checkmark-circle"
-              label="Unblock user"
-              onPress={handleUnblock}
-            />
-          ) : (
-            <ActionRow
-              icon="ban"
-              label="Block user"
-              tone="danger"
-              onPress={handleBlock}
-            />
-          )}
-          <View style={styles.actionDivider} />
-          <ActionRow
-            icon="close"
-            label="Cancel"
-            onPress={() => setActionMenuOpen(false)}
-          />
+            <ActionRow icon="scale-outline" label="Raise dispute" onPress={handleRaiseDispute} />
+
+            {isBlocked ? (
+              <ActionRow icon="checkmark-circle" label="Unblock user" onPress={handleUnblock} />
+            ) : (
+              <ActionRow icon="ban" label="Block user" tone="danger" onPress={handleBlock} />
+            )}
+            {matchStatus === "matched" ? (
+              <ActionRow icon="link" label="Unmatch" tone="danger" onPress={handleUnmatch} />
+            ) : null}
+
+            <View style={styles.actionDivider} />
+            <ActionRow icon="close" label="Cancel" onPress={() => setActionMenuOpen(false)} />
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1570,14 +1766,7 @@ export function OfferChatScreen() {
         onConfirm={(reason) => void handleDeclineConfirm(reason)}
       />
 
-      {/* ───────── Delivery history modal ───────── */}
-      <DeliveryHistoryModal
-        open={historyOpen}
-        conversationId={conversationId}
-        onClose={() => setHistoryOpen(false)}
-      />
-
-      {/* ───────── Report message modal ───────── */}
+      {/* ───────── Report message modal (per-message, long-press) ───────── */}
       <ReportMessageModal
         open={!!reportTarget}
         pending={reportPending}
@@ -1585,6 +1774,25 @@ export function OfferChatScreen() {
           if (!reportPending) setReportTarget(null);
         }}
         onSubmit={(input) => void handleSubmitReport(input)}
+      />
+
+      {/* ───────── Report user modal (conversation-level, from actions) ───────── */}
+      <ReportMessageModal
+        open={reportUserOpen}
+        pending={reportUserPending}
+        title={`Report ${participantName.split(" ")[0]}`}
+        subtitle="Help us keep Safarly safe. Our trust & safety team reviews every report."
+        onCancel={() => {
+          if (!reportUserPending) setReportUserOpen(false);
+        }}
+        onSubmit={(input) => void handleSubmitUserReport(input)}
+      />
+
+      {/* ───────── Shared media gallery ───────── */}
+      <MediaGalleryModal
+        open={mediaOpen}
+        conversationId={conversationId}
+        onClose={() => setMediaOpen(false)}
       />
 
       {/* ───────── Block / Unmatch confirmation ───────── */}
@@ -1634,6 +1842,19 @@ export function OfferChatScreen() {
         onCancelMatch={() => void handleDocCancelMatch()}
       />
 
+      {/* ───────── Parcel-photo review modal ───────── */}
+      <ParcelReviewModal
+        open={parcelReviewOpen}
+        review={parcelReview.review}
+        loading={parcelReview.loading}
+        pending={parcelReview.pending}
+        onClose={() => setParcelReviewOpen(false)}
+        onUpload={(files) => void handleParcelUpload(files)}
+        onApprove={() => void handleParcelApprove()}
+        onReject={(reason, note) => void handleParcelReject(reason, note)}
+        onCancelRequest={() => void handleParcelCancel()}
+      />
+
       {/* ───────── Offer composer modal ───────── */}
       <OfferComposerModal
         open={!!offerComposer}
@@ -1679,19 +1900,32 @@ interface OfferCardBubbleProps {
   actions?: OfferCardActions;
 }
 
+/** Per-status presentation for the offer card badge + accents. */
+const OFFER_STATUS_META: Record<
+  OfferStatus,
+  { label: string; icon: keyof typeof Ionicons.glyphMap; fg: string; bg: string }
+> = {
+  open: { label: "Open offer", icon: "pricetag", fg: colors.primary, bg: colors.surfaceTintPrimary },
+  accepted: {
+    label: "Accepted",
+    icon: "checkmark-circle",
+    fg: colors.safe,
+    bg: "rgba(34,195,93,0.14)",
+  },
+  rejected: { label: "Declined", icon: "close-circle", fg: colors.danger, bg: "rgba(220,40,40,0.10)" },
+  expired: { label: "Expired", icon: "time-outline", fg: colors.subtleText, bg: colors.surfaceMuted },
+  superseded: {
+    label: "Superseded",
+    icon: "swap-horizontal",
+    fg: colors.subtleText,
+    bg: colors.surfaceMuted,
+  },
+};
+
 function OfferCardBubble({ payload, mine, time, status, actions }: Readonly<OfferCardBubbleProps>) {
   const isClosed = status === "rejected" || status === "expired" || status === "superseded";
-  const isAccepted = status === "accepted";
-  const statusLabel =
-    status === "open"
-      ? "Open offer"
-      : status === "accepted"
-        ? "Accepted"
-        : status === "rejected"
-          ? "Declined"
-          : status === "expired"
-            ? "Expired"
-            : "Superseded";
+  const isOpen = status === "open";
+  const meta = OFFER_STATUS_META[status] ?? OFFER_STATUS_META.open;
   const busy = !!actions && (actions.acceptPending || actions.rejectPending);
 
   return (
@@ -1699,83 +1933,89 @@ function OfferCardBubble({ payload, mine, time, status, actions }: Readonly<Offe
       <View
         style={[
           styles.offerCard,
-          isAccepted && styles.offerCardAccepted,
+          isOpen && styles.offerCardOpen,
+          status === "accepted" && styles.offerCardAccepted,
           isClosed && styles.offerCardClosed,
         ]}
       >
-        <View style={styles.offerCardHeader}>
-          <Ionicons
-            name={
-              isAccepted
-                ? "checkmark-circle"
-                : status === "rejected"
-                  ? "close-circle"
-                  : status === "expired"
-                    ? "time-outline"
-                    : "pricetag"
-            }
-            size={14}
-            color={isAccepted ? colors.safe : isClosed ? colors.subtleText : colors.primary}
-          />
-          <Text
-            style={[
-              styles.offerCardStatusLabel,
-              isAccepted && { color: colors.safe },
-              isClosed && { color: colors.subtleText },
-            ]}
-          >
-            {statusLabel}
-          </Text>
+        <View style={[styles.offerBadge, { backgroundColor: meta.bg }]}>
+          <Ionicons name={meta.icon} size={12} color={meta.fg} />
+          <Text style={[styles.offerBadgeText, { color: meta.fg }]}>{meta.label}</Text>
         </View>
-        <Text style={styles.offerCardAmount}>
+
+        <Text
+          style={[
+            styles.offerCardAmount,
+            isClosed && styles.offerCardAmountClosed,
+            status === "superseded" && styles.offerCardAmountStruck,
+          ]}
+        >
           {formatMoney(payload.amount, payload.currency)}
         </Text>
+
         {payload.note ? (
           <Text style={styles.offerCardNote} numberOfLines={3}>
             {payload.note}
           </Text>
         ) : null}
+
         <Text style={styles.offerCardFooter}>
-          {payload.proposer_name ? `${payload.proposer_name} • ` : ""}
+          {payload.proposer_name ? `${payload.proposer_name} · ` : ""}
           {time}
         </Text>
+
         {actions ? (
           <View style={styles.offerCardActions}>
-            <Pressable
-              onPress={actions.onDecline}
-              disabled={busy}
-              style={[styles.offerCardBtn, styles.offerCardBtnGhost]}
-              accessibilityRole="button"
-              accessibilityLabel="Decline offer"
-            >
-              {actions.rejectPending ? (
-                <ActivityIndicator size="small" color={colors.danger} />
-              ) : (
-                <Text style={styles.offerCardBtnGhostText}>Decline</Text>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={actions.onCounter}
-              disabled={busy}
-              style={[styles.offerCardBtn, styles.offerCardBtnOutline]}
-              accessibilityRole="button"
-              accessibilityLabel="Counter offer"
-            >
-              <Text style={styles.offerCardBtnOutlineText}>Counter</Text>
-            </Pressable>
+            {/* Primary action gets its own full-width row so it's unmissable;
+                the two secondary choices sit below with equal weight. */}
             <Pressable
               onPress={actions.onAccept}
               disabled={busy}
-              style={[styles.offerCardBtn, styles.offerCardBtnPrimary]}
+              style={[styles.offerActionBtn, styles.offerActionAccept]}
               accessibilityRole="button"
               accessibilityLabel="Accept offer"
             >
               {actions.acceptPending ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.offerCardBtnPrimaryText}>Accept</Text>
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.white} />
+                  <Text style={styles.offerActionAcceptText}>Accept offer</Text>
+                </>
               )}
             </Pressable>
+            <View style={styles.offerActionSecondaryRow}>
+              <Pressable
+                onPress={actions.onCounter}
+                disabled={busy}
+                style={[styles.offerActionBtn, styles.offerActionSecondary, styles.offerActionCounter]}
+                accessibilityRole="button"
+                accessibilityLabel="Counter offer"
+              >
+                <Ionicons name="swap-horizontal" size={16} color={colors.text} />
+                <Text style={styles.offerActionCounterText} numberOfLines={1}>
+                  Counter
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={actions.onDecline}
+                disabled={busy}
+                style={[styles.offerActionBtn, styles.offerActionSecondary, styles.offerActionDecline]}
+                accessibilityRole="button"
+                accessibilityLabel="Decline offer"
+              >
+                {actions.rejectPending ? (
+                  <ActivityIndicator size="small" color={colors.danger} />
+                ) : (
+                  <>
+                    <Ionicons name="close" size={16} color={colors.danger} />
+                    <Text style={styles.offerActionDeclineText} numberOfLines={1}>
+                      Decline
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
         ) : null}
       </View>
@@ -2075,6 +2315,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // Avatar + name/subtitle — one tap target that opens the profile, sitting
+  // between the back button and the kebab.
+  headerIdentity: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0 },
   headerAvatar: {
     width: 36,
     height: 36,
@@ -2274,7 +2517,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ctaAccent,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2304,7 +2547,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.ctaAccent,
   },
   retryButtonText: { color: colors.white, fontSize: 13, fontWeight: "700" },
 
@@ -2322,6 +2565,9 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     paddingHorizontal: 8,
   },
+  // The conversation-actions sheet has more rows; cap it and let it scroll on
+  // short screens so Cancel is always reachable.
+  actionSheetTall: { maxHeight: "82%" },
   actionSheetTitle: {
     color: colors.mutedText,
     fontSize: 11,
@@ -2367,35 +2613,68 @@ const styles = StyleSheet.create({
   },
 
   // Typed bubbles — offer cards & system events
-  offerCardRow: { flexDirection: "row", paddingHorizontal: 14, marginBottom: 8 },
+  offerCardRow: { flexDirection: "row", paddingHorizontal: 14, marginVertical: 4 },
   offerCard: {
-    maxWidth: "80%",
+    maxWidth: "92%",
+    minWidth: 240,
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 12,
-    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+    // Soft lift so an actionable offer reads as a card, not another bubble.
+    shadowColor: "#1B1330",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
+  offerCardOpen: { borderColor: "rgba(93, 63, 211, 0.30)" },
+  // Accepted is a terminal record, so it sits flat like the closed cards — but
+  // with a green accent. The fill MUST be opaque: a translucent background under
+  // the base card's elevation makes Android paint a grey box behind it.
   offerCardAccepted: {
     borderColor: "rgba(34,195,93,0.45)",
-    backgroundColor: "rgba(34,195,93,0.06)",
+    backgroundColor: "#EAF7EF",
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  offerCardClosed: { opacity: 0.65 },
-  offerCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-  offerCardStatusLabel: {
-    color: colors.primary,
-    fontSize: 11,
+  // Closed offers (superseded / expired / declined) recede: clean white card,
+  // no lift, tighter — a quiet record rather than a live card. They stay white
+  // (not the muted fill) so they don't blend into the lavender chat surface.
+  offerCardClosed: {
+    backgroundColor: colors.card,
+    borderColor: colors.border,
+    gap: 5,
+    paddingVertical: 10,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  offerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  offerBadgeText: {
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   offerCardAmount: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "800",
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
+  offerCardAmountClosed: { fontSize: 19, color: colors.mutedText },
+  offerCardAmountStruck: { textDecorationLine: "line-through" },
   offerCardNote: {
     color: colors.mutedText,
     fontSize: 13,
@@ -2404,26 +2683,45 @@ const styles = StyleSheet.create({
   },
   offerCardFooter: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
   offerCardActions: {
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 8,
-    paddingTop: 10,
+    gap: 8,
+    marginTop: 6,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  offerCardBtn: {
-    flex: 1,
-    height: 34,
-    borderRadius: 10,
+  offerActionSecondaryRow: { flexDirection: "row", gap: 8 },
+  offerActionBtn: {
+    height: 46,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
     alignItems: "center",
     justifyContent: "center",
   },
-  offerCardBtnGhost: { backgroundColor: "rgba(220, 40, 40, 0.08)" },
-  offerCardBtnGhostText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
-  offerCardBtnOutline: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
-  offerCardBtnOutlineText: { color: colors.text, fontSize: 12, fontWeight: "800" },
-  offerCardBtnPrimary: { backgroundColor: colors.safe },
-  offerCardBtnPrimaryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+  // Primary — full width, solid, lifted so it clearly leads.
+  offerActionAccept: {
+    backgroundColor: colors.safe,
+    shadowColor: colors.safe,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  offerActionAcceptText: { color: colors.white, fontSize: 15, fontWeight: "800" },
+  // Secondary — equal-width, bordered so they read as real buttons, not text.
+  // `minWidth: 0` + `flexShrink` on the label keep the text inside the button
+  // instead of spilling past the border on a narrow card.
+  offerActionSecondary: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    backgroundColor: colors.card,
+  },
+  offerActionCounter: { borderColor: colors.border },
+  offerActionCounterText: { color: colors.text, fontSize: 14, fontWeight: "800", flexShrink: 1 },
+  offerActionDecline: { borderColor: "rgba(220, 40, 40, 0.35)" },
+  offerActionDeclineText: { color: colors.danger, fontSize: 14, fontWeight: "800", flexShrink: 1 },
 
   // Offer bar (above the composer)
   offerBar: {

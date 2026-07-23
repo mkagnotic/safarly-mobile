@@ -37,6 +37,12 @@ export const notificationsApi = {
 
   markAllAsRead: () => api.put<{ read_all: boolean }>("/notification-handler/read-all"),
 
+  /** Soft-delete a single notification (web parity: the row's trash icon). */
+  remove: (id: string) => api.delete<{ deleted: boolean }>(`/notification-handler/${id}`),
+
+  /** Clear all of the user's notifications (web parity: "Clear all"). */
+  clearAll: () => api.delete<{ cleared: boolean }>("/notification-handler/clear-all"),
+
   adminBroadcast: (title: string, body: string, type?: string) =>
     api.post<{ sent_to: number }>("/notification-handler/admin/broadcast", {
       title,

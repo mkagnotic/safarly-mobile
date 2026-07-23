@@ -72,7 +72,13 @@ export function PrimaryHeaderActions() {
         }
       >
         <Ionicons name="notifications-outline" size={18} color={colors.text} />
-        {notificationsUnread > 0 ? <View style={styles.badgeDot} /> : null}
+        {notificationsUnread > 0 ? (
+          <View style={styles.badgeCount}>
+            <Text style={styles.badgeCountText}>
+              {notificationsUnread > 9 ? "9+" : notificationsUnread}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
       <Pressable
         style={styles.avatarBadge}
@@ -135,13 +141,26 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     backgroundColor: colors.border,
   },
-  badgeDot: {
+  // Numeric unread badge (web parity: count capped at "9+"), ringed with the
+  // header background so it reads clearly over the bell.
+  badgeCount: {
     position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.wordmark,
-    right: 11,
-    top: 11,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 8.5,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    borderWidth: 1.5,
+    borderColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    right: 3,
+    top: 2,
+  },
+  badgeCountText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 11,
   },
 });

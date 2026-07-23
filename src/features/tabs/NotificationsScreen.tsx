@@ -14,7 +14,7 @@ import {
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Screen } from "@/components/ui/Screen";
-import { showToast } from "@/feedback/appFeedback";
+import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useMyNotifications } from "@/hooks/api/useMyNotifications";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Notification } from "@/services/api";
@@ -68,9 +68,14 @@ export function NotificationsScreen() {
     loading,
     error,
     markingAll,
+    clearing,
+    loadingMore,
     refetch,
+    loadMore,
     markAsRead,
     markAllAsRead,
+    remove,
+    clearAll,
   } = useMyNotifications({ perPage: 20 });
 
   const hasUnread = useMemo(() => notifications.some((n) => !n.read), [notifications]);
@@ -94,12 +99,12 @@ export function NotificationsScreen() {
           });
         }
       }
-      // Web parity (`useRealtimeSync.ts:42-49` + Index.tsx:126): notifications
-      // carry `data.link`, e.g. `/customer/messages/{convId}` for chat events.
-      // Mobile maps the supported subset directly to tab routes. Unknown
-      // links no-op silently — better than a broken navigation.
-      const link = (n.data as { link?: string } | null | undefined)?.link;
-      if (!link) return;
+      // Navigate off `data.link` when we recognise it, else fall back to a
+      // per-type landing screen — web parity with `resolveNotificationLink` +
+      // `fallbackPathForType` (`lib/notificationLink.ts`). A tap always lands
+      // somewhere sensible rather than no-opping.
+      const link = (n.data as { link?: string } | null | undefined)?.link ?? "";
+
       const messagesMatch = link.match(/^\/customer\/messages\/([0-9a-f-]{36})/i);
       if (messagesMatch) {
         navigation.navigate("OfferChatTab", {
@@ -109,25 +114,83 @@ export function NotificationsScreen() {
         });
         return;
       }
+      // `/customer/bookings/:id` isn't a route on web either — the list uses
+      // inline expandable cards, so pass `expandId` to auto-open the row.
       const bookingsMatch = link.match(/^\/customer\/bookings\/([0-9a-f-]{36})/i);
       if (bookingsMatch) {
-        // Web parity: `/customer/bookings/:id` is not a real route in web —
-        // there's no `CustomerBookingDetail` page. The list page uses inline
-        // expandable cards, so we navigate to the list and pass `expandId` so
-        // the matching row auto-opens.
         navigation.navigate("BookingsTab", { expandId: bookingsMatch[1] });
         return;
       }
-      if (link.startsWith("/customer/messages")) {
-        navigation.navigate("MessagesTab");
-        return;
-      }
-      if (link.startsWith("/customer/bookings")) {
-        navigation.navigate("BookingsTab");
+      if (link.startsWith("/customer/messages")) return navigation.navigate("MessagesTab");
+      if (link.startsWith("/customer/bookings")) return navigation.navigate("BookingsTab");
+      if (link.includes("/wallet")) return navigation.navigate("WalletTab");
+      if (link.includes("/kyc")) return navigation.navigate("KycVerificationTab");
+      if (link.startsWith("/customer/disputes")) return navigation.navigate("DisputesTab");
+      if (link.startsWith("/customer/buddies")) return navigation.navigate("Buddies");
+      if (link.startsWith("/customer/activity")) return navigation.navigate("ActivityTab");
+
+      // No link (or an unrecognised one) → land on the type's home, mirroring
+      // web's `TYPE_FALLBACK` (message→messages, payment→wallet, kyc→kyc, …).
+      switch (n.type) {
+        case "message":
+          return navigation.navigate("MessagesTab");
+        case "booking":
+          return navigation.navigate("BookingsTab");
+        case "payment":
+          return navigation.navigate("WalletTab");
+        case "kyc":
+          return navigation.navigate("KycVerificationTab");
+        case "dispute":
+          return navigation.navigate("DisputesTab");
+        case "buddy":
+          return navigation.navigate("Buddies");
+        case "rating":
+          return navigation.navigate("ActivityTab");
+        default:
+          return navigation.navigate("Home");
       }
     },
     [markAsRead, navigation],
   );
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        await remove(id);
+      } catch (err) {
+        showToast({ title: "Couldn't delete", message: getErrorMessage(err), variant: "error" });
+      }
+    },
+    [remove],
+  );
+
+  const handleClearAll = useCallback(() => {
+    showAppAlert({
+      title: "Clear all notifications?",
+      message: "This removes every notification. This can't be undone.",
+      actions: [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear all",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              try {
+                await clearAll();
+                showToast({ title: "Notifications cleared", variant: "info", duration: 1800 });
+              } catch (err) {
+                showToast({
+                  title: "Couldn't clear",
+                  message: getErrorMessage(err),
+                  variant: "error",
+                });
+              }
+            })();
+          },
+        },
+      ],
+    });
+  }, [clearAll]);
 
   const handleMarkAll = useCallback(async () => {
     try {
@@ -142,6 +205,7 @@ export function NotificationsScreen() {
     }
   }, [markAllAsRead]);
 
+  const hasAny = notifications.length > 0;
   const listHeader = useMemo(
     () => (
       <View>
@@ -156,22 +220,43 @@ export function NotificationsScreen() {
           </Pressable>
           <Text style={styles.title}>Notifications</Text>
         </View>
-        {hasUnread ? (
-          <View style={styles.markAllRow}>
+        {hasAny ? (
+          <View style={styles.actionsRow}>
+            {hasUnread ? (
+              <Pressable
+                onPress={() => void handleMarkAll()}
+                disabled={markingAll}
+                hitSlop={6}
+                style={[styles.actionButton, markingAll && styles.markAllButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Mark all as read"
+              >
+                {markingAll ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done" size={14} color={colors.primary} />
+                    <Text style={styles.markAllText}>Mark all as read</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : (
+              <View />
+            )}
             <Pressable
-              onPress={() => void handleMarkAll()}
-              disabled={markingAll}
+              onPress={handleClearAll}
+              disabled={clearing}
               hitSlop={6}
-              style={[styles.markAllButton, markingAll && styles.markAllButtonDisabled]}
+              style={[styles.actionButton, clearing && styles.markAllButtonDisabled]}
               accessibilityRole="button"
-              accessibilityLabel="Mark all as read"
+              accessibilityLabel="Clear all notifications"
             >
-              {markingAll ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+              {clearing ? (
+                <ActivityIndicator size="small" color={colors.danger} />
               ) : (
                 <>
-                  <Ionicons name="checkmark-done" size={14} color={colors.primary} />
-                  <Text style={styles.markAllText}>Mark all as read</Text>
+                  <Ionicons name="trash-outline" size={14} color={colors.danger} />
+                  <Text style={styles.clearAllText}>Clear all</Text>
                 </>
               )}
             </Pressable>
@@ -179,16 +264,20 @@ export function NotificationsScreen() {
         ) : null}
       </View>
     ),
-    [handleBack, hasUnread, handleMarkAll, markingAll],
+    [handleBack, hasAny, hasUnread, handleMarkAll, markingAll, handleClearAll, clearing],
   );
 
   const keyExtractor = useCallback((item: Notification) => item.id, []);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<Notification>) => (
-      <NotificationRow item={item} onPress={() => void handleNotificationPress(item)} />
+      <NotificationRow
+        item={item}
+        onPress={() => void handleNotificationPress(item)}
+        onDelete={() => void handleDelete(item.id)}
+      />
     ),
-    [handleNotificationPress],
+    [handleNotificationPress, handleDelete],
   );
 
   const listEmpty = useMemo(() => {
@@ -237,6 +326,15 @@ export function NotificationsScreen() {
           renderItem={renderItem}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={listEmpty}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.4}
           contentContainerStyle={[styles.listContent, notifications.length === 0 && styles.listContentEmpty]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -261,11 +359,13 @@ export function NotificationsScreen() {
 interface NotificationRowProps {
   item: Notification;
   onPress: () => void;
+  onDelete: () => void;
 }
 
 const NotificationRow = memo(function NotificationRow({
   item,
   onPress,
+  onDelete,
 }: Readonly<NotificationRowProps>) {
   const unread = !item.read;
   const style = styleForType(item.type);
@@ -286,7 +386,6 @@ const NotificationRow = memo(function NotificationRow({
           <Text style={styles.cardTitle} numberOfLines={1}>
             {item.title}
           </Text>
-          {unread ? <View style={styles.unreadDot} /> : null}
         </View>
         {item.body ? (
           <Text style={styles.cardDesc} numberOfLines={2}>
@@ -295,6 +394,17 @@ const NotificationRow = memo(function NotificationRow({
         ) : null}
         {created ? <Text style={styles.cardTime}>{created.toUpperCase()}</Text> : null}
       </View>
+      {/* Nested Pressable captures the touch, so deleting doesn't also open
+          the notification (web parity: the trash icon stops propagation). */}
+      <Pressable
+        onPress={onDelete}
+        hitSlop={8}
+        style={styles.deleteButton}
+        accessibilityRole="button"
+        accessibilityLabel="Delete notification"
+      >
+        <Ionicons name="trash-outline" size={16} color={colors.subtleText} />
+      </Pressable>
     </Pressable>
   );
 });
@@ -325,8 +435,13 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
 
-  markAllRow: { alignItems: "flex-end", marginBottom: 12 },
-  markAllButton: {
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  actionButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -335,6 +450,8 @@ const styles = StyleSheet.create({
   },
   markAllButtonDisabled: { opacity: 0.6 },
   markAllText: { color: colors.primary, fontSize: 12, fontWeight: "800" },
+  clearAllText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
+  footerLoading: { paddingVertical: 16, alignItems: "center" },
 
   // Loading / error / empty
   centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
@@ -371,9 +488,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     flexDirection: "row",
     gap: 12,
-    alignItems: "flex-start",
+    // Centre the leading type icon (and trailing trash) vertically against the
+    // text block so the card reads balanced rather than top-heavy.
+    alignItems: "center",
   },
-  cardUnread: { backgroundColor: "#FFF9F7", borderColor: "#FFE0D8" },
+  // Unread = a soft lavender box (brand tint, no dot); read = plain white. The
+  // fill MUST be opaque (`primarySoft`): this card carries a shadow, and a
+  // translucent background makes Android paint a grey box behind the elevation.
+  cardUnread: { backgroundColor: colors.primarySoft, borderColor: primaryTint.stroke20 },
   cardRead: { backgroundColor: colors.card, borderColor: colors.border },
   typeIconWrap: {
     width: 36,
@@ -384,9 +506,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   cardBody: { flex: 1, minWidth: 0 },
-  cardTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "800", flex: 1, paddingRight: 8 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  deleteButton: {
+    padding: 4,
+    marginLeft: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardTopRow: { flexDirection: "row", alignItems: "center" },
+  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "800", flex: 1 },
   cardDesc: { color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 2 },
   cardTime: { color: colors.subtleText, fontSize: 10, fontWeight: "700", letterSpacing: 0.5, marginTop: 6 },
 });

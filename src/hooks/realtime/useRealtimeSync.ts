@@ -4,6 +4,8 @@ import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { supabase } from "@/integrations/supabase/client";
 import { messagesApi } from "@/services/api/messages";
+import { notificationsApi } from "@/services/api/notifications";
+import { getActiveConversation } from "@/store/activeConversation";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
 
 interface MessagePayload {
@@ -13,8 +15,19 @@ interface MessagePayload {
 }
 
 interface NotificationPayload {
+  id?: string;
+  type?: string;
   title?: string;
   body?: string;
+  data?: { link?: string; conversation_id?: string } | null;
+}
+
+/** The conversation a notification refers to, from its data (id or link). */
+function notificationConversationId(n: NotificationPayload): string | null {
+  if (n.data?.conversation_id) return n.data.conversation_id;
+  const link = n.data?.link ?? "";
+  const m = link.match(/\/customer\/messages\/([0-9a-f-]{36})/i);
+  return m ? m[1] : null;
 }
 
 /**
@@ -61,12 +74,18 @@ export function useRealtimeSync() {
         },
         (payload) => {
           bumpRealtimeTopic("notifications");
-          // Web parity (`useRealtimeSync.ts:42-49`): surface a toast when a
-          // new notification lands so the user sees it from any screen.
           const n = payload.new as NotificationPayload | undefined;
-          if (n?.title) {
-            showToast({ title: n.title, message: n.body, variant: "info", duration: 4200 });
+          if (!n?.title) return;
+          // Standard chat behaviour (web parity): don't toast for a message in
+          // the conversation the user is already viewing — instead mark that
+          // notification read so the bell doesn't tick up for something they're
+          // actively reading. Everything else surfaces a toast from any screen.
+          const convId = notificationConversationId(n);
+          if (convId && convId === getActiveConversation()) {
+            if (n.id) void notificationsApi.markAsRead(n.id).catch(() => {});
+            return;
           }
+          showToast({ title: n.title, message: n.body, variant: "info", duration: 4200 });
         },
       )
       .on(

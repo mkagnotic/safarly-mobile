@@ -21,6 +21,37 @@ export interface TravelDocState {
   viewer_role: "carrier" | "sender";
 }
 
+/** A stored parcel-review photo/attachment with a fresh signed URL. */
+export interface ParcelReviewPhoto {
+  path: string;
+  name: string | null;
+  url: string | null;
+}
+
+/** Reject-reason slugs the carrier can choose from (web parity). */
+export type ParcelReviewReason =
+  | "too_large"
+  | "restricted"
+  | "fragile"
+  | "different_than_described"
+  | "airline_restriction"
+  | "other";
+
+/** Parcel-review state for a carrier_request (mirror of TravelDocState, roles swapped). */
+export interface ParcelReviewState {
+  carrier_request_id: string;
+  parcel_id: string;
+  status: "none" | "pending" | "approved" | "rejected";
+  photos: ParcelReviewPhoto[];
+  reason: ParcelReviewReason | null;
+  reason_note: string | null;
+  min_photos: number;
+  max_photos: number;
+  carrier_id: string;
+  sender_id: string | null;
+  viewer_role: "carrier" | "sender";
+}
+
 export interface CarrierRequest {
   id: string;
   parcel_id: string;
@@ -108,5 +139,37 @@ export const carriersApi = {
     api.post<{ escalated: boolean }>(
       `/carrier-request-handler/travel-doc/${requestId}/request-admin-review`,
       {},
+    ),
+
+  // --- Parcel review (sender uploads parcel photos, carrier approves before payment) ---
+
+  /** Parcel-review state for a deal (either participant). */
+  getParcelReview: (requestId: string) =>
+    api.get<ParcelReviewState>(`/carrier-request-handler/parcel-review/${requestId}`),
+
+  /**
+   * Sender uploads parcel photos (min 2, image or PDF). Uses the RN-safe
+   * multi-file uploader (field name `files`) — a plain FormData part reaches the
+   * edge function empty under Expo/Hermes. See `client.ts`.
+   */
+  uploadParcelReview: (requestId: string, files: RNUploadFile[]) =>
+    api.uploadRNFiles<{ status: string; photos: ParcelReviewPhoto[] }>(
+      `/carrier-request-handler/parcel-review/${requestId}/upload`,
+      files,
+      "files",
+    ),
+
+  /** Carrier approves the parcel. */
+  approveParcelReview: (requestId: string) =>
+    api.post<{ status: string }>(
+      `/carrier-request-handler/parcel-review/${requestId}/approve`,
+      {},
+    ),
+
+  /** Carrier requests changes with a reason (and optional note). */
+  rejectParcelReview: (requestId: string, reason: ParcelReviewReason, note?: string) =>
+    api.post<{ status: string; reason: string }>(
+      `/carrier-request-handler/parcel-review/${requestId}/reject`,
+      { reason, note },
     ),
 };

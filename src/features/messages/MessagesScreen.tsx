@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -7,7 +7,6 @@ import {
   FlatList,
   Image,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,7 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { getErrorMessage, type Conversation } from "@/services/api";
+import { getErrorMessage, messagesApi, type Conversation } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
@@ -142,15 +141,52 @@ export function MessagesScreen() {
     markConversationRead,
   } = useMyConversations({ currentUserId: user?.id ?? null });
 
+  // Second instance for the WhatsApp-style Archived view. Archiving hides a chat
+  // from the inbox above; this is how the user gets back to it to unarchive.
+  const {
+    conversations: archivedConversations,
+    loading: archivedLoading,
+    refetch: refetchArchived,
+  } = useMyConversations({ currentUserId: user?.id ?? null, archived: true });
+
+  const [showArchived, setShowArchived] = useState(false);
+  const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+
   // The Buddies tab is `freezeOnBlur: true`, so the initial useEffect refetch
   // only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
   // counts the user just cleared by reading messages reflect immediately —
-  // belt-and-suspenders for the realtime path.
+  // belt-and-suspenders for the realtime path. Pull the archived list too so a
+  // chat archived from inside the conversation shows up here right away.
   useFocusEffect(
     useCallback(() => {
       void refetch();
-    }, [refetch]),
+      void refetchArchived();
+    }, [refetch, refetchArchived]),
   );
+
+  const handleUnarchive = useCallback(
+    async (c: Conversation) => {
+      setUnarchivingId(c.id);
+      try {
+        await messagesApi.unarchiveConversation(c.id);
+        showToast({ title: "Chat unarchived", variant: "info", duration: 1600 });
+        void refetch();
+        void refetchArchived();
+      } catch (err) {
+        showToast({ title: "Couldn't unarchive", message: getErrorMessage(err), variant: "error" });
+      } finally {
+        setUnarchivingId(null);
+      }
+    },
+    [refetch, refetchArchived],
+  );
+
+  // WhatsApp behaviour: when the last archived chat is unarchived, drop back to
+  // the inbox automatically rather than leaving an empty Archived screen.
+  const noArchivedLeft = showArchived && !archivedLoading && archivedConversations.length === 0;
+  useEffect(() => {
+    if (noArchivedLeft) setShowArchived(false);
+  }, [noArchivedLeft]);
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
@@ -163,7 +199,8 @@ export function MessagesScreen() {
 
   const onRefresh = useCallback(() => {
     void refetch();
-  }, [refetch]);
+    void refetchArchived();
+  }, [refetch, refetchArchived]);
 
   // Web parity: search filters by participant name + last message preview.
   const searched = useMemo(() => {
@@ -274,9 +311,11 @@ export function MessagesScreen() {
         onAccept={openAccept}
         onDecline={openDecline}
         onMatchAgain={openAccept}
+        onUnarchive={showArchived ? handleUnarchive : undefined}
+        unarchiving={unarchivingId === item.id}
       />
     ),
-    [user?.id, mutating, handleOpenChat, openAccept, openDecline],
+    [user?.id, mutating, handleOpenChat, openAccept, openDecline, showArchived, handleUnarchive, unarchivingId],
   );
 
   const renderEmpty = useCallback(() => {
@@ -347,22 +386,38 @@ export function MessagesScreen() {
   return (
     <Screen scroll={false} edges={["top", "left", "right"]}>
       <FlatList
-        data={sectionedData}
+        data={showArchived ? archivedConversations : sectionedData}
         keyExtractor={keyExtractor}
         renderItem={renderRow}
         ListHeaderComponent={
-          <ListHeader
-            search={search}
-            onSearch={setSearch}
-            filter={filter}
-            onFilter={setFilter}
-            counts={counts}
-            requestRowsCount={requestRows.length}
-          />
+          showArchived ? (
+            <ArchivedHeader
+              count={archivedConversations.length}
+              onBack={() => setShowArchived(false)}
+            />
+          ) : (
+            <>
+              <ListHeader
+                search={search}
+                onSearch={setSearch}
+                filter={filter}
+                onFilter={setFilter}
+                counts={counts}
+                requestRowsCount={requestRows.length}
+              />
+              {archivedConversations.length > 0 ? (
+                <ArchivedBanner
+                  count={archivedConversations.length}
+                  onPress={() => setShowArchived(true)}
+                />
+              ) : null}
+            </>
+          )
         }
-        ListEmptyComponent={renderEmpty}
+        ListEmptyComponent={showArchived ? ArchivedEmpty : renderEmpty}
         ItemSeparatorComponent={({ leadingItem }) => {
-          if (!leadingItem || requestRows.length === 0 || otherRows.length === 0) return null;
+          if (showArchived || !leadingItem || requestRows.length === 0 || otherRows.length === 0)
+            return null;
           const isLastRequest = requestRows[requestRows.length - 1]?.id === (leadingItem as Conversation).id;
           if (!isLastRequest) return null;
           // Web parity: "All conversations" label only appears when there's
@@ -375,11 +430,16 @@ export function MessagesScreen() {
         }}
         contentContainerStyle={[
           styles.listContent,
-          sectionedData.length === 0 && styles.listContentEmpty,
+          (showArchived ? archivedConversations.length === 0 : sectionedData.length === 0) &&
+            styles.listContentEmpty,
         ]}
         refreshControl={
           <RefreshControl
-            refreshing={loading && conversations.length > 0}
+            refreshing={
+              showArchived
+                ? archivedLoading && archivedConversations.length > 0
+                : loading && conversations.length > 0
+            }
             onRefresh={onRefresh}
             tintColor={colors.primary}
           />
@@ -452,12 +512,10 @@ const ListHeader = memo(function ListHeader({
       </View>
 
       <View style={styles.headerCard}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsContent}
-          style={styles.chipsScroll}
-        >
+        {/* Fixed set of 3 filters — spread them evenly across the row so there's
+            no dead space on the right (a horizontal scroller only hugged their
+            content width). */}
+        <View style={styles.chipsRow}>
           {filters.map((f) => {
             const active = f.key === filter;
             return (
@@ -487,7 +545,7 @@ const ListHeader = memo(function ListHeader({
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
 
         <View style={styles.searchRow}>
           <Ionicons name="search-outline" size={18} color={colors.mutedText} />
@@ -562,6 +620,9 @@ interface ConversationRowProps {
   onDecline: (c: Conversation) => void;
   /** Re-match a previously declined or unmatched conversation. */
   onMatchAgain: (c: Conversation) => void;
+  /** Present only in the Archived view — shows an Unarchive action in the tail. */
+  onUnarchive?: (c: Conversation) => void;
+  unarchiving?: boolean;
 }
 
 const ConversationRow = memo(function ConversationRow({
@@ -572,6 +633,8 @@ const ConversationRow = memo(function ConversationRow({
   onAccept,
   onDecline,
   onMatchAgain,
+  onUnarchive,
+  unarchiving,
 }: Readonly<ConversationRowProps>) {
   const flags = flagsForConversation(conversation, currentUserId);
   const miniStatus = miniStatusForFlags(flags);
@@ -643,7 +706,19 @@ const ConversationRow = memo(function ConversationRow({
          *   3. Has unread → numeric badge (capped at "9+")
          *   4. Otherwise → time only (already rendered above)
          */}
-        {flags.awaitingMine ? (
+        {onUnarchive ? (
+          <Pressable
+            onPress={() => onUnarchive(conversation)}
+            disabled={unarchiving}
+            style={[styles.actionButton, styles.unarchiveButton]}
+            accessibilityRole="button"
+            accessibilityLabel="Unarchive chat"
+            hitSlop={4}
+          >
+            <Ionicons name="arrow-undo-outline" size={12} color={colors.primary} />
+            <Text style={styles.unarchiveButtonText}>{unarchiving ? "…" : "Unarchive"}</Text>
+          </Pressable>
+        ) : flags.awaitingMine ? (
           <View style={styles.actionsRow}>
             <Pressable
               onPress={() => onAccept(conversation)}
@@ -689,6 +764,64 @@ const ConversationRow = memo(function ConversationRow({
   );
 });
 
+// ───────────────────────── Archived section (WhatsApp-style) ─────────────────────────
+
+/** Tappable banner at the top of the inbox that opens the Archived list. */
+function ArchivedBanner({ count, onPress }: Readonly<{ count: number; onPress: () => void }>) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.archivedBanner}
+      accessibilityRole="button"
+      accessibilityLabel={`Archived, ${count} chat${count === 1 ? "" : "s"}`}
+    >
+      <View style={styles.archivedIconBox}>
+        <Ionicons name="archive" size={17} color={colors.primary} />
+      </View>
+      <Text style={styles.archivedBannerText}>Archived</Text>
+      <View style={styles.archivedCount}>
+        <Text style={styles.archivedCountText}>{count}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+    </Pressable>
+  );
+}
+
+/** Header for the Archived list view, with a back affordance to the inbox. */
+function ArchivedHeader({ count, onBack }: Readonly<{ count: number; onBack: () => void }>) {
+  return (
+    <View style={styles.archivedHeaderWrap}>
+      <View style={styles.archivedHeaderRow}>
+        <Pressable
+          onPress={onBack}
+          hitSlop={8}
+          style={styles.archivedBackBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back to inbox"
+        >
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
+        </Pressable>
+        <Text style={styles.title}>Archived</Text>
+      </View>
+      <Text style={styles.archivedHint}>
+        {count} archived chat{count === 1 ? "" : "s"} · hidden from your inbox.
+      </Text>
+    </View>
+  );
+}
+
+function ArchivedEmpty() {
+  return (
+    <View style={styles.centered}>
+      <View style={styles.emptyIconBox}>
+        <Ionicons name="archive-outline" size={26} color={colors.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>No archived chats</Text>
+      <Text style={styles.emptySubtitle}>Chats you archive will appear here.</Text>
+    </View>
+  );
+}
+
 // ───────────────────────── Styles ─────────────────────────
 
 const styles = StyleSheet.create({
@@ -716,11 +849,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 10,
   },
-  chipsScroll: { marginHorizontal: -2 },
-  chipsContent: { flexDirection: "row", paddingHorizontal: 2, gap: 8 },
+  chipsRow: { flexDirection: "row", gap: 8 },
   chip: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -872,6 +1006,58 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   declineButtonText: { color: colors.text, fontSize: 11, fontWeight: "800" },
+  unarchiveButton: {
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+    backgroundColor: colors.surfaceTintPrimary,
+    borderWidth: 1,
+    borderColor: "rgba(93, 63, 211, 0.30)",
+  },
+  unarchiveButtonText: { color: colors.primary, fontSize: 11, fontWeight: "800" },
+
+  // Archived (WhatsApp-style)
+  archivedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  archivedIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceTintPrimary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  archivedBannerText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: "700" },
+  archivedCount: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 7,
+    borderRadius: 11,
+    backgroundColor: colors.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  archivedCountText: { color: colors.text, fontSize: 11, fontWeight: "800" },
+  archivedHeaderWrap: { marginTop: 16, marginBottom: 14, gap: 6 },
+  archivedHeaderRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  archivedBackBtn: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -6,
+  },
+  archivedHint: { color: colors.mutedText, fontSize: 12, paddingHorizontal: 2 },
   // Tail-side unread count badge (shown when there's no other action button).
   unreadCountBadge: {
     minWidth: 22,

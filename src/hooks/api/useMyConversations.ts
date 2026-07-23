@@ -12,6 +12,8 @@ export interface UseMyConversationsOptions {
   perPage?: number;
   /** Logged-in user id — used to filter self-chats and identify match-request direction. */
   currentUserId: string | null;
+  /** Fetch the archived list instead of the active inbox (WhatsApp-style). */
+  archived?: boolean;
 }
 
 export interface UseMyConversationsResult {
@@ -43,6 +45,7 @@ export interface UseMyConversationsResult {
 export function useMyConversations({
   perPage = 50,
   currentUserId,
+  archived = false,
 }: UseMyConversationsOptions): UseMyConversationsResult {
   const [rawConversations, setRawConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,7 @@ export function useMyConversations({
       setLoading(true);
       setError(null);
       try {
-        const res = await messagesApi.listConversations({ page: 1, per_page: perPage });
+        const res = await messagesApi.listConversations({ page: 1, per_page: perPage, archived });
         if (!mountedRef.current) return;
         setRawConversations(res.data ?? []);
       } catch (err) {
@@ -73,7 +76,7 @@ export function useMyConversations({
 
     inFlightRef.current = promise;
     return promise;
-  }, [perPage]);
+  }, [perPage, archived]);
 
   useEffect(() => {
     mountedRef.current = true;

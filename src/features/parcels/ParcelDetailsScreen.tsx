@@ -14,6 +14,7 @@ import { ANY_CITY } from "@/features/search/CityPicker";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
+  isListingExpired,
   isTerminal,
   labelForStatus,
   toneForStatus,
@@ -388,7 +389,13 @@ export function ParcelDetailsScreen() {
     );
   }
 
-  const canModify = !isTerminal(parcel.status);
+  // A parcel past its delivery-by date is a closed record even while its DB
+  // status is still open (expiry is derived client-side) — no Edit / Cancel.
+  const parcelExpired = isListingExpired(
+    parcel.status ?? "",
+    parcel.delivery_by ?? parcel.delivery_by_to ?? parcel.delivery_by_from,
+  );
+  const canModify = !isTerminal(parcel.status) && !parcelExpired;
 
   const editInitial: EditParcelFormValues = {
     from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
