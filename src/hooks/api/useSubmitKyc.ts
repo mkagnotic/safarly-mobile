@@ -42,7 +42,8 @@ export function useSubmitKyc(): UseSubmitKycResult {
       const res = await kycApi.submit({
         doc_type: docType,
         files: [
-          { file_type: "doc_front", storage_path: docPath },
+          // file_name lets admins see the original PDF/photo name (web parity).
+          { file_type: "doc_front", storage_path: docPath, file_name: doc.name ?? undefined },
           { file_type: "selfie", storage_path: selfiePath },
         ],
       });

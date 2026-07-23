@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 
@@ -12,7 +13,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { useKycStatus } from "@/hooks/api/useKycStatus";
 import { useSubmitKyc } from "@/hooks/api/useSubmitKyc";
-import { kycExtFromMime, validateKycAsset } from "@/features/profile/kycValidation";
+import { KYC_PDF_MIME, kycExtFromMime, validateKycAsset } from "@/features/profile/kycValidation";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type KycDocType } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -25,7 +26,7 @@ const DOC_TYPES: { value: KycDocType; label: string; icon: keyof typeof Ionicons
   { value: "national_id", label: "National ID", icon: "id-card-outline" },
 ];
 
-type PickedFile = { uri: string; mimeType: string | null; ext: string };
+type PickedFile = { uri: string; mimeType: string | null; ext: string; name: string; isPdf: boolean };
 type Banner = { variant: "error" | "warning" | "success" | "info"; title: string; message?: string };
 type Slot = "doc" | "selfie";
 
@@ -68,37 +69,80 @@ export function KycVerificationScreen() {
     setBanner({ variant: "error", title: "Couldn't submit", message: getErrorMessage(submitError) });
   }, [submitError]);
 
-  const pickImage = useCallback(async (slot: Slot) => {
+  // Validate an image asset and commit it to a slot. Shared by gallery + camera.
+  const applyImageAsset = useCallback((slot: Slot, asset: ImagePicker.ImagePickerAsset): void => {
+    const rejection = validateKycAsset({ mimeType: asset.mimeType, fileSize: asset.fileSize });
+    if (rejection) {
+      setBanner({ variant: "error", title: rejection.title, message: rejection.message });
+      return;
+    }
+    const ext = kycExtFromMime(asset.mimeType);
+    const file: PickedFile = {
+      uri: asset.uri,
+      mimeType: asset.mimeType ?? null,
+      ext,
+      name: asset.fileName ?? `${slot}-${Date.now()}.${ext}`,
+      isPdf: false,
+    };
+    if (slot === "doc") setDocFile(file);
+    else setSelfieFile(file);
+  }, []);
+
+  // Document: gallery photo.
+  const pickDocFromLibrary = useCallback(async () => {
     setBanner(null);
     clearError();
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        setBanner({
-          variant: "warning",
-          title: "Permission needed",
-          message: "Allow photo access to upload your verification documents.",
-        });
+        setBanner({ variant: "warning", title: "Permission needed", message: "Allow photo access to upload your document." });
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      if (result.canceled || !result.assets?.[0]) return;
+      applyImageAsset("doc", result.assets[0]);
+    } catch (err) {
+      setBanner({ variant: "error", title: "Couldn't open photos", message: getErrorMessage(err) });
+    }
+  }, [applyImageAsset, clearError]);
+
+  // Document + selfie: live camera capture (selfie uses the front camera — web parity).
+  const capturePhoto = useCallback(async (slot: Slot) => {
+    setBanner(null);
+    clearError();
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm.status !== "granted") {
+        setBanner({ variant: "warning", title: "Permission needed", message: "Allow camera access to take a photo." });
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
         quality: 0.8,
+        cameraType: slot === "selfie" ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
       });
       if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
+      applyImageAsset(slot, result.assets[0]);
+    } catch (err) {
+      setBanner({ variant: "error", title: "Couldn't open camera", message: getErrorMessage(err) });
+    }
+  }, [applyImageAsset, clearError]);
 
-      const rejection = validateKycAsset({ mimeType: asset.mimeType, fileSize: asset.fileSize });
+  // Document only: a scanned PDF (e.g. a downloaded e-passport / bank-issued ID).
+  const pickDocPdf = useCallback(async () => {
+    setBanner(null);
+    clearError();
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true, multiple: false });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      const rejection = validateKycAsset({ mimeType: asset.mimeType, fileSize: asset.size }, { allowPdf: true });
       if (rejection) {
         setBanner({ variant: "error", title: rejection.title, message: rejection.message });
         return;
       }
-
-      const file: PickedFile = { uri: asset.uri, mimeType: asset.mimeType ?? null, ext: kycExtFromMime(asset.mimeType) };
-      if (slot === "doc") setDocFile(file);
-      else setSelfieFile(file);
+      setDocFile({ uri: asset.uri, mimeType: asset.mimeType ?? KYC_PDF_MIME, ext: "pdf", name: asset.name, isPdf: true });
     } catch (err) {
-      setBanner({ variant: "error", title: "Couldn't open photos", message: getErrorMessage(err) });
+      setBanner({ variant: "error", title: "Couldn't pick file", message: getErrorMessage(err) });
     }
   }, [clearError]);
 
@@ -234,10 +278,11 @@ export function KycVerificationScreen() {
               </View>
 
               <Text style={[styles.cardTitle, styles.uploadHeading]}>Upload {docLabel(docType)}</Text>
-              <UploadSlot
+              <DocSlot
                 file={docFile}
-                label="Take or upload a clear photo of your document"
-                onPick={() => void pickImage("doc")}
+                onPickImage={() => void pickDocFromLibrary()}
+                onTakePhoto={() => void capturePhoto("doc")}
+                onPickPdf={() => void pickDocPdf()}
                 onRemove={() => removeFile("doc")}
               />
             </Card>
@@ -247,12 +292,11 @@ export function KycVerificationScreen() {
             <Card style={styles.card}>
               <Text style={styles.cardTitle}>Selfie with ID</Text>
               <Text style={styles.cardSubtitle}>
-                Take a photo of yourself holding your ID document next to your face, with both clearly visible.
+                Take a live photo of yourself holding your ID document next to your face, with both clearly visible.
               </Text>
-              <UploadSlot
+              <SelfieSlot
                 file={selfieFile}
-                label="Upload a selfie holding your ID"
-                onPick={() => void pickImage("selfie")}
+                onCapture={() => void capturePhoto("selfie")}
                 onRemove={() => removeFile("selfie")}
               />
             </Card>
@@ -349,8 +393,8 @@ function PendingCard({
 function IntroCard() {
   const points = [
     "Have your passport, driver's license, or national ID ready.",
-    "You'll upload a photo of the document and a selfie holding it.",
-    "Use JPG, PNG, or WebP images under 10MB.",
+    "Upload a clear photo or PDF of the document, then take a live selfie holding it.",
+    "Use JPG, PNG, WebP, or PDF files under 10MB.",
   ];
   return (
     <Card style={[styles.card, styles.introCard]}>
@@ -392,12 +436,72 @@ function StepIndicator({ step }: Readonly<{ step: 1 | 2 | 3 }>) {
   );
 }
 
-function UploadSlot({
-  file,
+function PickerChip({
+  icon,
   label,
-  onPick,
+  onPress,
+}: Readonly<{ icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }>) {
+  return (
+    <Pressable style={styles.pickerChip} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Ionicons name={icon} size={20} color={colors.primary} />
+      <Text style={styles.pickerChipText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// Filled-file preview: an image thumbnail, or a PDF card (PDFs can't render as an Image).
+function FilePreview({ file, onRemove }: Readonly<{ file: PickedFile; onRemove: () => void }>) {
+  return (
+    <View style={styles.filePreview}>
+      {file.isPdf ? (
+        <View style={styles.pdfCard}>
+          <Ionicons name="document-text" size={22} color={colors.primary} />
+          <Text style={styles.pdfName} numberOfLines={1}>{file.name}</Text>
+        </View>
+      ) : (
+        <Image source={{ uri: file.uri }} style={styles.previewImage} accessibilityIgnoresInvertColors />
+      )}
+      <Pressable style={styles.removeLink} onPress={onRemove} accessibilityRole="button" accessibilityLabel="Remove file" hitSlop={6}>
+        <Ionicons name="close-circle" size={16} color={colors.mutedText} />
+        <Text style={styles.removeLinkText}>Remove</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// Document slot — image (gallery / camera) or PDF, matching the web file picker.
+function DocSlot({
+  file,
+  onPickImage,
+  onTakePhoto,
+  onPickPdf,
   onRemove,
-}: Readonly<{ file: PickedFile | null; label: string; onPick: () => void; onRemove: () => void }>) {
+}: Readonly<{
+  file: PickedFile | null;
+  onPickImage: () => void;
+  onTakePhoto: () => void;
+  onPickPdf: () => void;
+  onRemove: () => void;
+}>) {
+  if (file) return <FilePreview file={file} onRemove={onRemove} />;
+  return (
+    <>
+      <View style={styles.pickerRow}>
+        <PickerChip icon="image" label="Gallery" onPress={onPickImage} />
+        <PickerChip icon="camera" label="Camera" onPress={onTakePhoto} />
+        <PickerChip icon="document-text" label="PDF" onPress={onPickPdf} />
+      </View>
+      <Text style={styles.pickerHint}>JPG, PNG, WebP or PDF · up to 10MB</Text>
+    </>
+  );
+}
+
+// Selfie slot — live camera only (gallery uploads aren't accepted; web parity).
+function SelfieSlot({
+  file,
+  onCapture,
+  onRemove,
+}: Readonly<{ file: PickedFile | null; onCapture: () => void; onRemove: () => void }>) {
   if (file) {
     return (
       <View style={styles.previewWrap}>
@@ -405,20 +509,20 @@ function UploadSlot({
         <Pressable style={styles.previewRemove} onPress={onRemove} accessibilityRole="button" accessibilityLabel="Remove" hitSlop={6}>
           <Ionicons name="close" size={15} color={colors.white} />
         </Pressable>
-        <Pressable style={styles.previewChange} onPress={onPick} accessibilityRole="button" accessibilityLabel="Change photo">
+        <Pressable style={styles.previewChange} onPress={onCapture} accessibilityRole="button" accessibilityLabel="Retake selfie">
           <Ionicons name="camera-outline" size={14} color={colors.white} />
-          <Text style={styles.previewChangeText}>Change</Text>
+          <Text style={styles.previewChangeText}>Retake</Text>
         </Pressable>
       </View>
     );
   }
   return (
-    <Pressable style={styles.dropzone} onPress={onPick} accessibilityRole="button" accessibilityLabel={label}>
+    <Pressable style={styles.dropzone} onPress={onCapture} accessibilityRole="button" accessibilityLabel="Open camera">
       <View style={styles.dropzoneIcon}>
-        <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} />
+        <Ionicons name="camera-outline" size={22} color={colors.primary} />
       </View>
-      <Text style={styles.dropzoneLabel}>{label}</Text>
-      <Text style={styles.dropzoneHint}>JPG, PNG or WebP · up to 10MB</Text>
+      <Text style={styles.dropzoneLabel}>Open camera</Text>
+      <Text style={styles.dropzoneHint}>We&apos;ll use your camera — gallery uploads aren&apos;t accepted.</Text>
     </Pressable>
   );
 }
@@ -426,7 +530,11 @@ function UploadSlot({
 function ReviewThumb({ file, caption }: Readonly<{ file: PickedFile | null; caption: string }>) {
   return (
     <View style={styles.reviewThumbWrap}>
-      {file ? (
+      {file && file.isPdf ? (
+        <View style={[styles.reviewThumb, styles.reviewThumbEmpty]}>
+          <Ionicons name="document-text" size={22} color={colors.primary} />
+        </View>
+      ) : file ? (
         <Image source={{ uri: file.uri }} style={styles.reviewThumb} accessibilityIgnoresInvertColors />
       ) : (
         <View style={[styles.reviewThumb, styles.reviewThumbEmpty]}>
@@ -634,6 +742,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15,15,25,0.6)",
   },
   previewChangeText: { color: colors.white, fontSize: 12, fontWeight: "700" },
+
+  // Doc picker chips (Gallery / Camera / PDF) + PDF card
+  pickerRow: { flexDirection: "row", gap: 8 },
+  pickerChip: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  pickerChipText: { color: colors.primary, fontSize: 12, fontWeight: "800" },
+  pickerHint: { color: colors.subtleText, fontSize: 12, fontWeight: "500", textAlign: "center", marginTop: 8 },
+
+  filePreview: { gap: 8 },
+  pdfCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
+  pdfName: { flex: 1, color: colors.text, fontSize: 13, fontWeight: "700" },
+  removeLink: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start" },
+  removeLinkText: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
 
   // Review
   reviewRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },

@@ -17,10 +17,18 @@ test("rejects a non-image / unsupported MIME", () => {
   }
 });
 
-test("rejects an oversized image", () => {
+test("accepts a PDF only when allowPdf is set (doc slot, web parity)", () => {
+  // selfie slot (default) rejects PDF; doc slot accepts it.
+  assert.ok(validateKycAsset({ mimeType: "application/pdf", fileSize: 1024 }));
+  assert.equal(validateKycAsset({ mimeType: "application/pdf", fileSize: 1024 }, { allowPdf: true }), null);
+  // allowPdf still rejects other non-image types.
+  assert.ok(validateKycAsset({ mimeType: "text/plain", fileSize: 1024 }, { allowPdf: true }));
+});
+
+test("rejects an oversized file", () => {
   const r = validateKycAsset({ mimeType: "image/jpeg", fileSize: KYC_MAX_BYTES + 1 });
   assert.ok(r);
-  assert.equal(r.title, "Image too large");
+  assert.equal(r.title, "File too large");
 });
 
 test("accepts a file exactly at the size limit (boundary)", () => {
@@ -43,6 +51,7 @@ test("kycExtFromMime maps types and defaults to jpg", () => {
   assert.equal(kycExtFromMime("image/png"), "png");
   assert.equal(kycExtFromMime("image/webp"), "webp");
   assert.equal(kycExtFromMime("image/jpeg"), "jpg");
+  assert.equal(kycExtFromMime("application/pdf"), "pdf");
   assert.equal(kycExtFromMime(null), "jpg");
   assert.equal(kycExtFromMime(undefined), "jpg");
 });
