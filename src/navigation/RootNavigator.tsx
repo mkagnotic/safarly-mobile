@@ -198,6 +198,14 @@ function renderTabIcon(routeName: string, focused: boolean, color: string, size:
 /** Helper to create hidden tab screen options */
 const HIDDEN_TAB = { tabBarButton: () => null, tabBarItemStyle: { display: "none" as const } };
 
+/**
+ * Hides the tab BAR as well as the tab button. `HIDDEN_TAB` only removes the
+ * item from the bar, so the bar itself still sat under the screen — under a
+ * chat composer that reads as a stray strip, and no messaging app shows app
+ * tabs inside a conversation. Use for immersive, single-purpose screens.
+ */
+const FULLSCREEN_TAB = { ...HIDDEN_TAB, tabBarStyle: { display: "none" as const } };
+
 function MainTabs() {
   const insets = useSafeAreaInsets();
   const language = useAppStore((s) => s.language);
@@ -297,7 +305,7 @@ function MainTabs() {
       <Tabs.Screen name="ListTripSuccessTab" component={ListTripSuccessScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TripDetailsTab" component={TripDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OffersTab" component={ParcelOffersScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="OfferChatTab" component={OfferChatScreen} options={{ ...HIDDEN_TAB, tabBarHideOnKeyboard: true }} />
+      <Tabs.Screen name="OfferChatTab" component={OfferChatScreen} options={FULLSCREEN_TAB} />
       <Tabs.Screen name="ParcelDetailsTab" component={ParcelDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PartnerDetailsTab" component={PartnerDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PublicProfileTab" component={PublicProfileScreen} options={HIDDEN_TAB} />

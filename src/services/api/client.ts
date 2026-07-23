@@ -174,6 +174,82 @@ async function requestMultipart<T>(
   return response.json() as Promise<ApiResponse<T>>;
 }
 
+/** A React Native file blob: a local `uri` plus its display name and MIME type. */
+export interface RNFileBlob {
+  uri: string;
+  name: string;
+  type: string;
+}
+
+/** ASCII (Latin-1) string → bytes, for the multipart envelope we fully control. */
+function latin1Bytes(str: string): Uint8Array {
+  const out = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i += 1) out[i] = str.charCodeAt(i) & 0xff;
+  return out;
+}
+
+/**
+ * Reliable multipart single-file upload for React Native.
+ *
+ * WHY THIS EXISTS: appending a `{ uri, name, type }` blob to `FormData` and
+ * POSTing it — the shape web and several of our service modules use — does NOT
+ * stream the file bytes to a Deno edge function under Expo/Hermes. The server's
+ * `req.formData()` receives no usable `file` part and rejects with 422. (A DOM
+ * `File` in the browser carries real bytes, so web is fine.)
+ *
+ * So we read the bytes ourselves — `fetch(uri).arrayBuffer()`, the same tactic
+ * the KYC uploader already relies on for local picker URIs — and hand-build the
+ * multipart envelope as one contiguous byte array. RN fetch transmits a raw
+ * byte body verbatim, so the edge function gets a well-formed `file` field.
+ *
+ * Field name is always `file` (what every handler expects). Extra text fields
+ * can be supplied via `fields`.
+ */
+async function uploadRNFile<T>(
+  path: string,
+  file: RNFileBlob,
+  fields?: Record<string, string>,
+  options?: RequestOptions,
+): Promise<ApiResponse<T>> {
+  const fileBytes = new Uint8Array(await (await fetch(file.uri)).arrayBuffer());
+
+  const boundary = `----safarly${newIdempotencyKey().replace(/-/g, "")}`;
+  const CRLF = "\r\n";
+  // Filenames are echoed back into the header we control; strip anything that
+  // could break the multipart framing or isn't plain ASCII.
+  const safeName = (file.name || "upload")
+    .replace(/[\r\n"\\]/g, "_")
+    .replace(/[^\x20-\x7E]/g, "_");
+
+  let head = "";
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    head += `--${boundary}${CRLF}Content-Disposition: form-data; name="${key}"${CRLF}${CRLF}${value}${CRLF}`;
+  }
+  head +=
+    `--${boundary}${CRLF}` +
+    `Content-Disposition: form-data; name="file"; filename="${safeName}"${CRLF}` +
+    `Content-Type: ${file.type || "application/octet-stream"}${CRLF}${CRLF}`;
+  const tail = `${CRLF}--${boundary}--${CRLF}`;
+
+  const headBytes = latin1Bytes(head);
+  const tailBytes = latin1Bytes(tail);
+  const body = new Uint8Array(headBytes.length + fileBytes.length + tailBytes.length);
+  body.set(headBytes, 0);
+  body.set(fileBytes, headBytes.length);
+  body.set(tailBytes, headBytes.length + fileBytes.length);
+
+  const url = `${SUPABASE_FUNCTIONS_URL}${path}`;
+  const headers = await authHeaders({
+    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+  });
+  const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
+
+  const response = await send(url, init, options?.signal);
+  if (!response.ok) await parseError(response);
+  return response.json() as Promise<ApiResponse<T>>;
+}
+
 export const api = {
   get: <T>(path: string, params?: QueryParams, options?: RequestOptions) =>
     request<T>("GET", path, undefined, params, options),
@@ -187,6 +263,17 @@ export const api = {
     request<T>("DELETE", path, undefined, undefined, options),
   upload: <T>(path: string, formData: FormData, options?: RequestOptions) =>
     requestMultipart<T>("POST", path, formData, options),
+  /**
+   * RN-safe single-file multipart upload — reads the file bytes and builds the
+   * body by hand. Use this (not `upload`) whenever the file comes from a picker
+   * `uri`, or the edge function's `req.formData()` will 422 on an empty part.
+   */
+  uploadRNFile: <T>(
+    path: string,
+    file: RNFileBlob,
+    fields?: Record<string, string>,
+    options?: RequestOptions,
+  ) => uploadRNFile<T>(path, file, fields, options),
 };
 
 /** v4-style id for `Idempotency-Key` — unique per action, not cryptographic. */

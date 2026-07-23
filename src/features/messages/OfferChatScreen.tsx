@@ -5,12 +5,13 @@ import { RouteProp, useFocusEffect, useNavigation, useRoute } from "@react-navig
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
   BackHandler,
   FlatList,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -36,8 +37,12 @@ import {
 } from "@/components/chat/MatchConfirmationModal";
 import { OfferComposerModal, type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
+import { TravelDocModal } from "@/components/chat/TravelDocModal";
+import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
+import { useActiveDeal } from "@/hooks/api/useActiveDeal";
+import { useTravelDoc } from "@/hooks/api/useTravelDoc";
 import { useChatMessages, type DisplayMessage } from "@/hooks/api/useChatMessages";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
 import { useOffers } from "@/hooks/api/useOffers";
@@ -118,6 +123,39 @@ export function OfferChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
   const { user } = useAuth();
+  // The conversation hides the tab bar (FULLSCREEN_TAB), so the composer is now
+  // the bottom-most element and has to clear the gesture bar itself.
+  const insets = useSafeAreaInsets();
+  /**
+   * Height the keyboard currently occupies, straight from the OS.
+   *
+   * We reserve this as padding rather than relying on KeyboardAvoidingView,
+   * which cannot work on Android under edge-to-edge (the window is never
+   * resized, so it has nothing to measure). Reading the real height is exact on
+   * both platforms and is what makes the composer sit flush on the keyboard.
+   *
+   * iOS uses the `Will` events so the layout moves with the system animation
+   * instead of snapping after it; Android only fires `Did` reliably.
+   */
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) =>
+      setKeyboardHeight(e?.endCoordinates?.height ?? 0),
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const keyboardOpen = keyboardHeight > 0;
+  // With the keyboard up the gesture bar is behind it, so reserving that inset
+  // too would float the composer on a band of dead space.
+  const composerBottomPad = keyboardOpen
+    ? 10
+    : Math.max(insets.bottom, Platform.OS === "ios" ? 18 : 10);
 
   const conversationId = route.params?.conversationId ?? null;
   const fallbackName = route.params?.name ?? "Conversation";
@@ -204,6 +242,28 @@ export function OfferChatScreen() {
   );
   const liveOffer = offerState.live;
   const isMatched = matchStatus === "matched";
+
+  // ───────── Server-owned workflow (pinned action bar) ─────────
+  const { activeDeal, workflow, refetch: refetchActiveDeal } = useActiveDeal(conversationId);
+  // The match banner and the live-offer bar already own some states, so the pin
+  // defers to them to avoid two controls doing the same job. But it defers only
+  // when that bespoke UI is ACTUALLY on screen: a conversation just opened from
+  // search isn't in the conversations list yet, so `conversation` is null, every
+  // match-banner branch is false, and the banner renders nothing — which is why
+  // the match prompt went missing. In that case the pin (driven directly by the
+  // server FSM per conversation id) shows `request_match`, matching web.
+  const matchBannerVisible =
+    matchedByOther || matchedByMe || isDeclined || wasUnmatched || isBlocked;
+  const showWorkflowPin = useMemo(() => {
+    if (!workflow) return false;
+    if (workflow.state === "MATCHED") return false; // nothing to prompt between stages
+    if (workflow.state === "PRICE_OFFER" && liveOffer) return false; // offer bar owns it
+    const isMatchState = (
+      ["NEGOTIATING", "MATCH_REQUESTED", "MATCH_DECLINED", "BLOCKED"] as const
+    ).includes(workflow.state as never);
+    if (isMatchState && matchBannerVisible) return false; // banner owns it
+    return true;
+  }, [workflow, liveOffer, matchBannerVisible]);
   // Delivery offers only exist in a booking context, never for buddy matches.
   const supportsOffers = isMatched && conversation?.context_type !== "buddy";
   const offerCurrencySymbol = liveOffer?.currency === "INR" ? "₹" : "$";
@@ -224,6 +284,19 @@ export function OfferChatScreen() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [matchModalOpen, setMatchModalOpen] = useState(false);
   const [matchPending, setMatchPending] = useState(false);
+  const [travelDocOpen, setTravelDocOpen] = useState(false);
+
+  // ───────── Travel-document verification ─────────
+  // Only fetch the doc while the deal is actually in a verification stage (or the
+  // modal is open), so we don't hit the endpoint for every conversation. The pin
+  // CTA itself comes from the server FSM regardless; this just backs the modal.
+  const travelDocRequestId =
+    workflow?.state === "TRAVEL_VERIFICATION" ||
+    workflow?.state === "ADMIN_REVIEW" ||
+    travelDocOpen
+      ? activeDeal?.carrier_request_id ?? null
+      : null;
+  const travelDoc = useTravelDoc(travelDocRequestId);
   const [reportTarget, setReportTarget] = useState<DisplayMessage | null>(null);
   const [reportPending, setReportPending] = useState(false);
   const [bubbleMenu, setBubbleMenu] = useState<DisplayMessage | null>(null);
@@ -284,6 +357,28 @@ export function OfferChatScreen() {
   useEffect(() => {
     latestSeenRef.current = 0;
   }, [conversationId]);
+
+  // A chat opened straight from Search/Matches was just created, so it isn't in
+  // the conversations list yet — leaving the header name/avatar, presence and
+  // the match banner unhydrated. Pull the list once when we're on a conversation
+  // that isn't present so those fill in. (The workflow pin already renders the
+  // right state meanwhile, since it fetches by id.)
+  useEffect(() => {
+    if (conversationId && !conversation) void refetchConversations();
+  }, [conversationId, conversation, refetchConversations]);
+
+  // Follow to the newest message when the keyboard opens. Without this the
+  // thread just gets shorter and you're left reading older messages while
+  // typing — every messaging app scrolls down here. The delay lets the
+  // keyboard-driven resize settle before measuring.
+  useEffect(() => {
+    if (!keyboardOpen) return;
+    const timer = setTimeout(
+      () => flatListRef.current?.scrollToEnd({ animated: true }),
+      80,
+    );
+    return () => clearTimeout(timer);
+  }, [keyboardOpen]);
 
   // Auto-load older messages when the user scrolls within 80px of the top —
   // matches web (CustomerMessages.tsx:232-239). Manual button stays as a
@@ -653,6 +748,128 @@ export function OfferChatScreen() {
     [offerComposer, liveOffer, postOffer, seedOffer],
   );
 
+  /**
+   * Runs a workflow-pin CTA. The pin is a projection of the server FSM; this
+   * maps each `cta.code` to the mobile capability that satisfies it. Codes for
+   * stages that already have bespoke UI (match handshake, live offer) route to
+   * those same handlers, so behaviour stays consistent if the pin ever shows
+   * them. Travel-doc and parcel-review are not yet built on mobile (their own
+   * phases) — those codes explain that rather than dead-ending.
+   */
+  const handlePinAction = useCallback(
+    (code: string) => {
+      const bookingId = activeDeal?.booking_id ?? null;
+      switch (code) {
+        case "request_match":
+        case "request_match_again":
+          setMatchModalOpen(true);
+          return;
+        case "accept_match":
+          void handleAccept();
+          return;
+        case "make_offer":
+        case "accept_offer":
+          handleOpenOfferComposer();
+          return;
+        case "pay":
+        case "pay_grace":
+          if (bookingId) navigation.navigate("PayBookingTab", { bookingId });
+          return;
+        case "verify_otp":
+          if (bookingId) navigation.navigate("OtpVerificationTab", { bookingId });
+          return;
+        case "generate_otp":
+        case "share_otp":
+        case "accept_handoff":
+          if (bookingId) navigation.navigate("BookingsTab", { expandId: bookingId });
+          return;
+        case "completed":
+          if (bookingId) navigation.navigate("DeliveryReviewTab", { bookingId });
+          return;
+        case "upload_travel_doc":
+        case "review_travel_doc":
+          setTravelDocOpen(true);
+          return;
+        case "upload_parcel_photos":
+        case "review_parcel_photos":
+          showToast({
+            title: "Finish this step on the web app",
+            message: "Parcel-photo review isn't in the mobile app yet.",
+            variant: "info",
+          });
+          return;
+        default:
+          return;
+      }
+    },
+    [activeDeal?.booking_id, handleAccept, handleOpenOfferComposer, navigation],
+  );
+
+  // ───────── Travel-doc action handlers ─────────
+  // Each forwards to the hook (which refetches the doc), toasts, and — for the
+  // actions that advance the FSM (approve/withdraw) — nudges the workflow pin so
+  // it moves on without waiting for the realtime round-trip.
+  const handleDocUpload = useCallback(
+    async (file: RNUploadFile) => {
+      try {
+        await travelDoc.upload(file);
+        showToast({ title: "Document uploaded", variant: "success", duration: 1800 });
+      } catch (err) {
+        showToast({ title: "Upload failed", message: getErrorMessage(err), variant: "error" });
+      }
+    },
+    [travelDoc],
+  );
+
+  const handleDocApprove = useCallback(async () => {
+    try {
+      await travelDoc.approve();
+      setTravelDocOpen(false);
+      showToast({ title: "Document approved", variant: "success", duration: 1800 });
+      void refetchActiveDeal();
+    } catch (err) {
+      showToast({ title: "Couldn't approve", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [travelDoc, refetchActiveDeal]);
+
+  const handleDocReject = useCallback(
+    async (reason: string) => {
+      try {
+        await travelDoc.reject(reason);
+        showToast({ title: "Re-upload requested", variant: "info", duration: 1800 });
+        void refetchActiveDeal();
+      } catch (err) {
+        showToast({
+          title: "Couldn't request re-upload",
+          message: getErrorMessage(err),
+          variant: "error",
+        });
+      }
+    },
+    [travelDoc, refetchActiveDeal],
+  );
+
+  const handleDocAdminReview = useCallback(async () => {
+    try {
+      await travelDoc.requestAdminReview();
+      showToast({ title: "Admin review requested", variant: "info", duration: 1800 });
+    } catch (err) {
+      showToast({ title: "Couldn't escalate", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [travelDoc]);
+
+  const handleDocCancelMatch = useCallback(async () => {
+    try {
+      await travelDoc.withdraw();
+      setTravelDocOpen(false);
+      showToast({ title: "Match cancelled", variant: "info", duration: 1800 });
+      void refetchActiveDeal();
+      void refetchConversations();
+    } catch (err) {
+      showToast({ title: "Couldn't cancel", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [travelDoc, refetchActiveDeal, refetchConversations]);
+
   const handleAcceptOffer = useCallback(
     async (offerId: string) => {
       setOfferBanner(null);
@@ -754,7 +971,11 @@ export function OfferChatScreen() {
   // ───────── No-conversation guard ─────────
   if (!conversationId) {
     return (
-      <Screen scroll={false} edges={["top", "left", "right"]}>
+      <Screen
+        scroll={false}
+        edges={["top", "left", "right"]}
+        safeBackgroundColor={colors.chatSurface}
+      >
         <View style={styles.headerRow}>
           <Pressable
             onPress={goBack}
@@ -810,11 +1031,27 @@ export function OfferChatScreen() {
   };
 
   return (
-    <Screen scroll={false} edges={["top", "left", "right"]} disableKeyboardAvoiding>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
+    // Flat neutral surface rather than the app's hero gradient: bubbles are the
+    // content here, and the peach/lavender wash competed with them.
+    <Screen
+      scroll={false}
+      edges={["top", "left", "right"]}
+      safeBackgroundColor={colors.chatSurface}
+      disableKeyboardAvoiding
+    >
+      {/*
+        Deliberately NOT KeyboardAvoidingView.
+
+        Under Expo 54 Android runs edge-to-edge, so the window is no longer
+        resized by `adjustResize` and KAV has nothing to react to — with
+        `behavior="height"` it collapsed the layout, and with `undefined` it did
+        nothing at all. Either way the composer ended up under the keyboard.
+
+        Instead we read the keyboard's real height from the OS and reserve
+        exactly that much space. Deterministic on both platforms, correct under
+        edge-to-edge, and no native dependency.
+      */}
+      <View style={[styles.flex, { paddingBottom: keyboardHeight }]}>
         {/* ───────── Header ───────── */}
         <View style={styles.headerRow}>
           <Pressable
@@ -1001,6 +1238,15 @@ export function OfferChatScreen() {
           )}
         </View>
 
+        {/* ───────── Workflow pin (server FSM) ───────── */}
+        {showWorkflowPin && workflow ? (
+          <ChatWorkflowPin
+            workflow={workflow}
+            activeDeal={activeDeal}
+            onAction={handlePinAction}
+          />
+        ) : null}
+
         {/* ───────── Offer bar ───────── */}
         {supportsOffers && liveOffer ? (
           <View style={styles.offerBar}>
@@ -1062,8 +1308,16 @@ export function OfferChatScreen() {
         ) : null}
 
         {/* ───────── Composer ───────── */}
-        {canSend && !matchedByOther ? (
-          <View style={styles.composerWrap}>
+        {/*
+          Always show the composer unless blocked — web parity
+          (`CustomerMessages.tsx` only disables on `isBlocked`) and standard
+          messaging-app behaviour. Previously `!matchedByOther` removed the whole
+          input box for the person who RECEIVED a match request, leaving the
+          screen with the Accept banner and empty dead space below it. The
+          accept/decline banner now sits above a live composer instead.
+        */}
+        {canSend ? (
+          <View style={[styles.composerWrap, { paddingBottom: composerBottomPad }]}>
             {pendingFile ? (
               <View style={[styles.previewRow, uploadFailed && styles.previewRowFailed]}>
                 {previewUri ? (
@@ -1116,17 +1370,11 @@ export function OfferChatScreen() {
               </View>
             ) : null}
             <View style={styles.composerRow}>
-              {supportsOffers ? (
-                <Pressable
-                  onPress={handleOpenOfferComposer}
-                  style={styles.composerIconButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Make an offer"
-                  disabled={uploading || !!offerPending}
-                >
-                  <Ionicons name="pricetag" size={20} color={colors.primary} />
-                </Pressable>
-              ) : null}
+              {/*
+                The make-offer entry point lives on the workflow pin's "Offer" CTA
+                and the live-offer bar, so the composer price-tag icon was a
+                redundant third way in — removed to keep the composer clean.
+              */}
               <Pressable
                 onPress={() => setActionMenuOpen(true)}
                 style={styles.composerIconButton}
@@ -1174,7 +1422,7 @@ export function OfferChatScreen() {
             </View>
           </View>
         ) : null}
-      </KeyboardAvoidingView>
+      </View>
 
       {/* ───────── Action menu modal ───────── */}
       <Modal
@@ -1372,6 +1620,20 @@ export function OfferChatScreen() {
         onConfirm={() => void handleAccept()}
       />
 
+      {/* ───────── Travel-document verification modal ───────── */}
+      <TravelDocModal
+        open={travelDocOpen}
+        doc={travelDoc.doc}
+        loading={travelDoc.loading}
+        pending={travelDoc.pending}
+        onClose={() => setTravelDocOpen(false)}
+        onUpload={(file) => void handleDocUpload(file)}
+        onApprove={() => void handleDocApprove()}
+        onReject={(reason) => void handleDocReject(reason)}
+        onRequestAdminReview={() => void handleDocAdminReview()}
+        onCancelMatch={() => void handleDocCancelMatch()}
+      />
+
       {/* ───────── Offer composer modal ───────── */}
       <OfferComposerModal
         open={!!offerComposer}
@@ -1528,21 +1790,41 @@ interface SystemRowProps {
   onPress?: () => void;
 }
 
+/**
+ * Centered status line between messages — the standard chat treatment for
+ * system events (WhatsApp/Telegram-style), rather than a message bubble.
+ *
+ * Deliberately understated: these are context, not conversation. Previously
+ * each rendered as a bold pill with a generic info icon AND a chevron, which
+ * gave a run of them the look of a settings list rather than a chat, and long
+ * server text turned the pill into a full-width grey block. The chevron in
+ * particular appeared on every row, so it signalled nothing.
+ */
 function SystemRow({ icon, text, tone = "neutral", onPress }: Readonly<SystemRowProps>) {
+  // `subtleText` (#3A3548), not `mutedText` (#14121C) — the latter is near-black
+  // and would make these asides heavier than the messages around them.
   const toneColor =
     tone === "good" ? colors.safe : tone === "bad" ? colors.danger : colors.subtleText;
+
+  const body = (
+    <View style={styles.systemPill}>
+      {/* Icon only where it carries meaning — a neutral update needs no glyph. */}
+      {tone !== "neutral" ? (
+        <Ionicons name={icon} size={12} color={toneColor} style={styles.systemIcon} />
+      ) : null}
+      <Text style={[styles.systemPillText, { color: toneColor }]}>{text}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.systemRow}>
-      <Pressable
-        style={styles.systemPill}
-        onPress={onPress}
-        disabled={!onPress}
-        accessibilityRole={onPress ? "button" : "text"}
-      >
-        <Ionicons name={icon} size={12} color={toneColor} />
-        <Text style={[styles.systemPillText, { color: toneColor }]}>{text}</Text>
-        {onPress ? <Ionicons name="chevron-forward" size={12} color={toneColor} /> : null}
-      </Pressable>
+      {onPress ? (
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={text}>
+          {body}
+        </Pressable>
+      ) : (
+        body
+      )}
     </View>
   );
 }
@@ -1621,7 +1903,9 @@ function MessageBubble({
           : "neutral";
     return (
       <SystemRow
-        icon="information-circle-outline"
+        // Only rendered for good/bad tones, so it reads as an outcome rather
+        // than decorating every neutral update with a generic info glyph.
+        icon={tone === "good" ? "checkmark-circle" : "alert-circle"}
         tone={tone}
         text={label}
         onPress={p?.booking_id ? () => onSystemPress(p.booking_id as string) : undefined}
@@ -1781,7 +2065,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: colors.card,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   iconButton: {
@@ -1854,7 +2138,9 @@ const styles = StyleSheet.create({
   bannerButtonOutlineText: { color: colors.text, fontSize: 11, fontWeight: "800" },
 
   // List
-  listContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 16, gap: 8 },
+  // gap 2 (not 8): rows carry their own margins, so consecutive bubbles sit ~6px
+  // apart and system asides ~14px — the tighter grouping messaging apps use.
+  listContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 16, gap: 2 },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
 
   // "Load older messages" header button
@@ -1925,11 +2211,11 @@ const styles = StyleSheet.create({
   // Composer
   composerWrap: {
     backgroundColor: colors.card,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     paddingHorizontal: 12,
     paddingTop: 8,
-    paddingBottom: Platform.OS === "ios" ? 18 : 10,
+    // paddingBottom is applied inline from the safe-area inset.
     gap: 8,
   },
   previewRow: {
@@ -2176,17 +2462,29 @@ const styles = StyleSheet.create({
   systemRow: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 14,
-    marginBottom: 8,
+    // Generous side padding keeps a long status from spanning the full width,
+    // so it reads as a centered aside rather than another message.
+    paddingHorizontal: 44,
+    marginVertical: 6,
   },
   systemPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 999,
+    gap: 5,
+    // Translucent rather than a solid fill: these sit between bubbles and
+    // shouldn't compete with them for weight.
+    backgroundColor: "rgba(8, 7, 13, 0.05)",
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
-  systemPillText: { fontSize: 12, fontWeight: "700" },
+  systemIcon: { marginTop: 1 },
+  systemPillText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+    textAlign: "center",
+    // Lets a long status wrap inside the pill instead of forcing it wider.
+    flexShrink: 1,
+  },
 });

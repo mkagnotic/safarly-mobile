@@ -34,6 +34,94 @@ export type MessageKind =
   | "offer_reject"
   | "system_event";
 
+// ── Server-owned chat workflow (FSM) ─────────────────────────────────────────
+// Ported verbatim from web (`web/src/services/api/messages.ts`) so the two
+// platforms project the SAME backend state. The FSM is the single source of
+// truth (`supabase/functions/_shared/fsm.ts`); the UI is a pure projection of
+// `WorkflowView` returned by `GET /conversations/:id/active-deal`.
+
+/** Canonical FSM state — mirrors `supabase/functions/_shared/fsm.ts`. */
+export type WorkflowState =
+  | "NEGOTIATING"
+  | "MATCH_REQUESTED"
+  | "MATCH_DECLINED"
+  | "BLOCKED"
+  | "MATCHED"
+  | "TRAVEL_VERIFICATION"
+  | "ADMIN_REVIEW"
+  | "PARCEL_REVIEW"
+  | "PRICE_OFFER"
+  | "PAYMENT_PENDING"
+  | "PAYMENT_GRACE_PERIOD"
+  | "AWAITING_HANDOFF"
+  | "IN_TRANSIT"
+  | "OTP_VERIFICATION"
+  | "COMPLETED"
+  | "ARCHIVED"
+  | "CANCELLED"
+  | "RETURN_FLOW";
+
+export type WorkflowEvent =
+  | "REQUEST_MATCH" | "ACCEPT_MATCH" | "REJECT_MATCH" | "CANCEL_MATCH"
+  | "BLOCK" | "UNBLOCK"
+  | "UPLOAD_TRAVEL_DOCUMENT" | "APPROVE_TRAVEL_DOCUMENT" | "REJECT_TRAVEL_DOCUMENT" | "REQUEST_ADMIN_REVIEW"
+  | "UPLOAD_PARCEL" | "ACCEPT_PARCEL" | "REJECT_PARCEL"
+  | "MAKE_OFFER" | "COUNTER" | "ACCEPT_OFFER" | "REJECT_OFFER"
+  | "PAY" | "PAYMENT_COMPLETED"
+  | "CONFIRM_TRAVEL_DATE" | "ACCEPT_HANDOFF" | "REJECT_HANDOFF"
+  | "GENERATE_OTP" | "VERIFY_OTP"
+  | "CANCEL";
+
+/** The single pinned CTA for the viewer, computed by the backend FSM. */
+export interface WorkflowCta {
+  /** Stable slug → localized copy/icon on the client. */
+  code: string;
+  /** English default label (fallback). null = read-only (no action). */
+  label: string | null;
+  kind: "action" | "waiting" | "link" | "none";
+  event: WorkflowEvent | null;
+  variant?: "primary" | "secondary" | "destructive";
+}
+
+/** Backend-owned workflow view — the UI is a pure projection of this. */
+export interface WorkflowView {
+  state: WorkflowState;
+  role: "carrier" | "sender";
+  cta: WorkflowCta;
+  allowed_events: WorkflowEvent[];
+  /** Absolute ISO instant the stage times out. Display only — a scheduled job does the work. */
+  expires_at?: string | null;
+  /** What happens at `expires_at` (e.g. "match_auto_decline", "payment_cancel"). */
+  timeout_kind?: string | null;
+}
+
+/** The single "current deal" that drives the one in-chat pinned action. */
+export interface ActiveDeal {
+  carrier_request_id: string;
+  parcel_id: string;
+  parcel: { from_city: string; to_city: string; category: string | null; weight_kg: number | null } | null;
+  trip_capacity_kg: number | null;
+  offer: {
+    offer_id: string;
+    amount: number;
+    currency: string;
+    status: "open" | "accepted" | "superseded" | "expired" | "rejected";
+    proposed_by: string;
+  } | null;
+  booking_id: string | null;
+  booking_status: string | null;
+  travel_doc_status: "none" | "pending" | "approved" | "rejected";
+  parcel_review_status: "none" | "pending" | "approved" | "rejected";
+  viewer_role: "carrier" | "sender";
+  match_status: "pending" | "matched" | "declined" | "blocked";
+  matched_by: string | null;
+}
+
+export interface ActiveDealResponse {
+  active_deal: ActiveDeal | null;
+  workflow: WorkflowView;
+}
+
 export type OfferStatus = "open" | "accepted" | "superseded" | "expired" | "rejected";
 
 export interface OfferCardPayload {
@@ -151,6 +239,15 @@ export const messagesApi = {
   /** Total unread count for the inbox badge. */
   unreadCount: () =>
     api.get<{ unread_count: number }>("/message-handler/conversations/unread-count"),
+
+  /**
+   * The server-computed workflow view that drives the pinned action bar. Same
+   * endpoint web uses; the client is a pure projection of `workflow`.
+   */
+  getActiveDeal: (conversationId: string) =>
+    api.get<ActiveDealResponse>(
+      `/message-handler/conversations/${conversationId}/active-deal`,
+    ),
 
   getMessages: (conversationId: string, params?: { limit?: number; before?: string }) =>
     api.get<{ messages: Message[]; has_more: boolean }>(
