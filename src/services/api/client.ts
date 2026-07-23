@@ -250,6 +250,60 @@ async function uploadRNFile<T>(
   return response.json() as Promise<ApiResponse<T>>;
 }
 
+/**
+ * RN-safe multipart upload for MULTIPLE files under one field name (e.g. parcel
+ * photos → `files`). Same byte-accurate tactic as `uploadRNFile` — reads every
+ * picked file and concatenates a well-formed multipart body — extended to N
+ * parts so `req.formData().getAll(fieldName)` sees them all.
+ */
+async function uploadRNFiles<T>(
+  path: string,
+  files: RNFileBlob[],
+  fieldName: string,
+  options?: RequestOptions,
+): Promise<ApiResponse<T>> {
+  const parts = await Promise.all(
+    files.map(async (file) => ({
+      file,
+      bytes: new Uint8Array(await (await fetch(file.uri)).arrayBuffer()),
+    })),
+  );
+
+  const boundary = `----safarly${newIdempotencyKey().replace(/-/g, "")}`;
+  const CRLF = "\r\n";
+  const chunks: Uint8Array[] = [];
+  for (const { file, bytes } of parts) {
+    const safeName = (file.name || "upload")
+      .replace(/[\r\n"\\]/g, "_")
+      .replace(/[^\x20-\x7E]/g, "_");
+    const partHead =
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="${fieldName}"; filename="${safeName}"${CRLF}` +
+      `Content-Type: ${file.type || "application/octet-stream"}${CRLF}${CRLF}`;
+    chunks.push(latin1Bytes(partHead), bytes, latin1Bytes(CRLF));
+  }
+  chunks.push(latin1Bytes(`--${boundary}--${CRLF}`));
+
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    body.set(c, offset);
+    offset += c.length;
+  }
+
+  const url = `${SUPABASE_FUNCTIONS_URL}${path}`;
+  const headers = await authHeaders({
+    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+  });
+  const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
+
+  const response = await send(url, init, options?.signal);
+  if (!response.ok) await parseError(response);
+  return response.json() as Promise<ApiResponse<T>>;
+}
+
 export const api = {
   get: <T>(path: string, params?: QueryParams, options?: RequestOptions) =>
     request<T>("GET", path, undefined, params, options),
@@ -274,6 +328,13 @@ export const api = {
     fields?: Record<string, string>,
     options?: RequestOptions,
   ) => uploadRNFile<T>(path, file, fields, options),
+  /** RN-safe multi-file upload under one field name (e.g. parcel photos). */
+  uploadRNFiles: <T>(
+    path: string,
+    files: RNFileBlob[],
+    fieldName: string,
+    options?: RequestOptions,
+  ) => uploadRNFiles<T>(path, files, fieldName, options),
 };
 
 /** v4-style id for `Idempotency-Key` — unique per action, not cryptographic. */

@@ -25,7 +25,13 @@ export { tripsApi } from "./trips";
 export type { Trip, TripListParams, TripParcelMatch } from "./trips";
 
 export { carriersApi } from "./carriers";
-export type { CarrierRequest, TravelDocState } from "./carriers";
+export type {
+  CarrierRequest,
+  TravelDocState,
+  ParcelReviewState,
+  ParcelReviewPhoto,
+  ParcelReviewReason,
+} from "./carriers";
 
 export { bookingsApi } from "./bookings";
 export type { Booking, BookingDetailResponse } from "./bookings";
@@ -54,6 +60,7 @@ export type {
   SystemEventName,
   SystemEventPayload,
   DeliveryHistoryItem,
+  ChatMediaItem,
   RNUploadFile,
   WorkflowState,
   WorkflowEvent,

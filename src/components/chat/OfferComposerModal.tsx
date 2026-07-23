@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   cancelText: { color: colors.text, fontSize: 13, fontWeight: "700" },
-  confirmButton: { backgroundColor: colors.primary },
+  confirmButton: { backgroundColor: colors.ctaAccent },
   confirmText: { color: colors.white, fontSize: 13, fontWeight: "800" },
   buttonDisabled: { opacity: 0.5 },
 });

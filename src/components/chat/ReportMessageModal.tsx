@@ -47,6 +47,10 @@ const MAX_DETAILS = 500;
 interface ReportMessageModalProps {
   open: boolean;
   pending: boolean;
+  /** Header title — defaults to the message-report wording. */
+  title?: string;
+  /** Header subtitle. */
+  subtitle?: string;
   onCancel: () => void;
   onSubmit: (input: { reason: string; details: string | undefined }) => void;
 }
@@ -54,11 +58,15 @@ interface ReportMessageModalProps {
 /**
  * Mirrors web's `Report User` dialog (`ChatActionDropdown.tsx:282-363`):
  * radio-style reason picker + optional details textarea (required when
- * "other" is selected). Resets between opens.
+ * "other" is selected). Resets between opens. The same reason set backs both
+ * the per-message report and the conversation-level "Report User" flow — pass
+ * `title`/`subtitle` to switch the wording.
  */
 export function ReportMessageModal({
   open,
   pending,
+  title = "Report message",
+  subtitle = "Help us keep Safarly safe. Our trust & safety team reviews every report.",
   onCancel,
   onSubmit,
 }: Readonly<ReportMessageModalProps>) {
@@ -103,10 +111,8 @@ export function ReportMessageModal({
                 <Ionicons name="flag" size={18} color={colors.danger} />
               </View>
               <View style={styles.headerText}>
-                <Text style={styles.title}>Report message</Text>
-                <Text style={styles.body}>
-                  Help us keep Safarly safe. Our trust &amp; safety team reviews every report.
-                </Text>
+                <Text style={styles.title}>{title}</Text>
+                <Text style={styles.body}>{subtitle}</Text>
               </View>
             </View>
 
