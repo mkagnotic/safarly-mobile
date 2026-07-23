@@ -418,10 +418,11 @@ export function SendParcelScreen() {
         ...(isOnlineOrder && returnEligible
           ? {
               return_address_line1: returnLine1.trim() || undefined,
-              // No region/state column exists on parcel_requests, so the
-              // state goes in line 2 rather than being thrown away.
-              return_address_line2: returnRegion.trim() || undefined,
               return_city: returnCity.trim() || undefined,
+              // Was written into return_address_line2 while no state column
+              // existed; that column means "second address line", so the data
+              // contradicted its name. Now stored properly.
+              return_state: returnRegion.trim() || undefined,
               return_postal_code: returnPostal.trim() || undefined,
             }
           : {}),

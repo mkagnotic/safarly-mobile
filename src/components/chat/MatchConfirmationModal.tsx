@@ -17,7 +17,12 @@ export type MatchUserRole = "carrier" | "sender";
 interface MatchConfirmationModalProps {
   open: boolean;
   pending: boolean;
-  userRole: MatchUserRole;
+  /**
+   * Retained for API/parity with web (`MatchConfirmationModal`), but no longer
+   * read: the Responsibilities section is a single shared list for both parties
+   * now, so the copy is role-agnostic.
+   */
+  userRole?: MatchUserRole;
   /** Conversation `context_type` — `"buddy"` switches the copy to the buddy variant. */
   contextType?: string;
   onCancel: () => void;
@@ -34,16 +39,16 @@ const RESTRICTED_ITEMS: readonly string[] = [
   "High-value undeclared items",
 ];
 
-const CARRIER_RESPONSIBILITIES: readonly string[] = [
-  "You may inspect the parcel before accepting it.",
-  "You can decline if contents are unclear, unsafe, or contain restricted items.",
-  "You can decline if packaging is improper or insufficient.",
-];
-
-const SENDER_RESPONSIBILITIES: readonly string[] = [
-  "You must provide accurate parcel details and descriptions.",
-  "No restricted or illegal items may be included.",
-  "You are responsible for any misrepresentation of parcel contents.",
+/**
+ * Shared responsibilities shown to BOTH parties — web parity
+ * (`MatchConfirmationModal.tsx:117-134`). Web deliberately uses one unified list
+ * reviewed by everyone rather than splitting it by role, so mobile matches that.
+ */
+const RESPONSIBILITIES: readonly string[] = [
+  "Parcel details and descriptions must be accurate and reviewed by both parties.",
+  "No restricted, illegal, or undeclared items may be included or carried.",
+  "The parcel may be inspected or declined if contents are unclear, unsafe, or improperly packaged.",
+  "Each party is responsible for any misrepresentation of the parcel contents.",
 ];
 
 const BUDDY_SAFETY: readonly string[] = [
@@ -61,15 +66,12 @@ const BUDDY_SAFETY: readonly string[] = [
 export function MatchConfirmationModal({
   open,
   pending,
-  userRole,
   contextType = "booking",
   onCancel,
   onConfirm,
 }: Readonly<MatchConfirmationModalProps>) {
   const [agreed, setAgreed] = useState(false);
   const isBuddy = contextType === "buddy";
-  const responsibilities =
-    userRole === "carrier" ? CARRIER_RESPONSIBILITIES : SENDER_RESPONSIBILITIES;
 
   // Reset agreement when the modal closes so the next open requires re-confirmation.
   useEffect(() => {
@@ -137,15 +139,8 @@ export function MatchConfirmationModal({
 
           <View style={styles.divider} />
 
-          <Section
-            icon={userRole === "carrier" ? "car" : "cube-outline"}
-            title={
-              userRole === "carrier"
-                ? "Carrier Responsibilities"
-                : "Sender Responsibilities"
-            }
-          >
-            {responsibilities.map((line) => (
+          <Section icon="cube-outline" title="Responsibilities">
+            {RESPONSIBILITIES.map((line) => (
               <BulletItem key={line}>{line}</BulletItem>
             ))}
           </Section>

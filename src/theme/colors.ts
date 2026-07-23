@@ -89,6 +89,20 @@ export const colors = {
   danger: "#DC2828",
   white: "#FFFFFF",
 
+  /**
+   * Conversation background.
+   *
+   * A chat needs a calm, flat surface: message bubbles ARE the content, and the
+   * peach/lavender `heroBackgroundGradient` competed with them — white "theirs"
+   * bubbles and grey status pills both muddied against it, which is why the
+   * thread read as noisy. Standard messaging apps use exactly this: one quiet
+   * neutral. Tinted from the brand lavender (`primary` #A388FA) rather than a
+   * plain grey — near-white read as washed-out and unfinished behind the
+   * bubbles, while this still lets a white "theirs" bubble separate cleanly and
+   * keeps a lavender "mine" bubble distinctly darker than the surface.
+   */
+  chatSurface: "#EFEBF7",
+
   /** Light tint behind icons — keyed off brand lavender */
   surfaceTintPrimary: "#F5F1FC",
   /**
