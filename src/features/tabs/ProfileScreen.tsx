@@ -38,6 +38,7 @@ type ProfileMenuTarget =
   | "KycVerificationTab"
   | "ReviewsTab"
   | "MessagesTab"
+  | "SecurityTab"
   | "ChangePasswordTab"
   | "Notifications"
   | "PreferencesTab";
@@ -89,7 +90,7 @@ export function ProfileScreen() {
       {
         title: "SETTINGS",
         items: [
-          { icon: "lock-closed-outline", label: "Security", target: "ChangePasswordTab" },
+          { icon: "lock-closed-outline", label: "Security", target: "SecurityTab" },
           {
             icon: "notifications-outline",
             label: "Notifications",
@@ -285,10 +286,10 @@ export function ProfileScreen() {
         onPress={handleSignOut}
         disabled={signingOut}
         accessibilityRole="button"
-        accessibilityLabel="Sign out"
+        accessibilityLabel="Log out"
       >
         {signingOut ? (
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.danger} />
         ) : (
           <Text style={styles.signOutLabel}>{t(language, "profile.signOut")}</Text>
         )}
@@ -495,12 +496,12 @@ const styles = StyleSheet.create({
   signOutButton: {
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: "#FFF1EC",
+    backgroundColor: "#FDECEC",
     borderWidth: 1,
-    borderColor: "#F8D7CD",
+    borderColor: "#F5C6C3",
     alignItems: "center",
     justifyContent: "center",
   },
   signOutButtonDisabled: { opacity: 0.6 },
-  signOutLabel: { color: colors.primary, fontSize: 15, fontWeight: "800" },
+  signOutLabel: { color: colors.danger, fontSize: 15, fontWeight: "800" },
 });

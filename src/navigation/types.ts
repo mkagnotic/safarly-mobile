@@ -55,6 +55,8 @@ export type MainTabParamList = {
   EditProfileTab: undefined;
   ReviewsTab: undefined;
   SettingsTab: undefined;
+  /** Security hub — lists Email + Change Password (web AccountSecuritySettings parity). */
+  SecurityTab: undefined;
   PreferencesTab: undefined;
   ChangePasswordTab: undefined;
   ChangeEmailTab: undefined;

@@ -53,6 +53,7 @@ import { AddCardScreen } from "@/features/wallet/AddCardScreen";
 import { ReviewsScreen } from "@/features/reviews/ReviewsScreen";
 import { KycVerificationScreen } from "@/features/profile/KycVerificationScreen";
 import { SettingsScreen } from "@/features/profile/SettingsScreen";
+import { SecurityScreen } from "@/features/profile/SecurityScreen";
 import { PreferencesScreen } from "@/features/profile/PreferencesScreen";
 import { ChangePasswordScreen } from "@/features/profile/ChangePasswordScreen";
 import { ChangeEmailScreen } from "@/features/profile/ChangeEmailScreen";
@@ -75,6 +76,7 @@ import { usePushNotifications } from "@/hooks/notifications/usePushNotifications
 import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
+import { RateDeliveryPrompt } from "@/components/reviews/RateDeliveryPrompt";
 import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
@@ -118,6 +120,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   EditProfileTab: "create",
   ReviewsTab: "star-outline",
   SettingsTab: "settings-outline",
+  SecurityTab: "lock-closed-outline",
   PreferencesTab: "options-outline",
   ChangePasswordTab: "lock-closed-outline",
   ChangeEmailTab: "mail-open-outline",
@@ -294,6 +297,7 @@ function MainTabs() {
       <Tabs.Screen name="EditProfileTab" component={EditProfileScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ReviewsTab" component={ReviewsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SettingsTab" component={SettingsScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="SecurityTab" component={SecurityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PreferencesTab" component={PreferencesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangePasswordTab" component={ChangePasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangeEmailTab" component={ChangeEmailScreen} options={HIDDEN_TAB} />
@@ -426,6 +430,12 @@ export function RootNavigator() {
           </>
         )}
       </Stack.Navigator>
+      {/* App-wide auto rate-prompt for the first delivered-unrated booking
+          (web RateDeliveryPrompt parity). Only in the fully-authed app so it
+          never fetches on splash / auth / profile-setup. */}
+      {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
+        <RateDeliveryPrompt />
+      )}
       {SHOW_DATA_TOGGLE && (
         <Pressable
           onPress={toggleLiveDataVisibility}
