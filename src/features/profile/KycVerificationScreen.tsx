@@ -11,6 +11,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
+import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useKycStatus } from "@/hooks/api/useKycStatus";
 import { useSubmitKyc } from "@/hooks/api/useSubmitKyc";
 import { KYC_PDF_MIME, kycExtFromMime, validateKycAsset } from "@/features/profile/kycValidation";
@@ -214,10 +215,7 @@ export function KycVerificationScreen() {
       ) : null}
 
       {kyc.loading && kyc.status === "" && !kyc.submission ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredBody}>Loading verification status…</Text>
-        </View>
+        <DetailSkeleton />
       ) : kyc.error && kyc.status === "" ? (
         <Card style={styles.panel}>
           <Ionicons name="cloud-offline-outline" size={34} color={colors.mutedText} />

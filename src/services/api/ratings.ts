@@ -86,7 +86,7 @@ export const ratingsApi = {
 
   getUserRatings: async (
     userId: string,
-    params?: { page?: number; per_page?: number },
+    params?: { page?: number; per_page?: number; role?: "received" | "given" },
   ) => {
     const res = await api.get<UserRatings>(`/rating-handler/users/${userId}`, params);
     if (res.data) {

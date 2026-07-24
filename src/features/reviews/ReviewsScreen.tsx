@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { useUserReviews } from "@/hooks/api/useUserReviews";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -150,12 +151,7 @@ function ReviewCard({ review }: Readonly<{ review: Rating }>) {
 }
 
 function LoadingState() {
-  return (
-    <View style={styles.centeredWrap}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.centeredText}>Loading reviews…</Text>
-    </View>
-  );
+  return <ListSkeleton />;
 }
 
 function ErrorView({
@@ -179,7 +175,7 @@ function ErrorView({
   );
 }
 
-function EmptyView() {
+function EmptyView({ tab }: Readonly<{ tab: ReviewTab }>) {
   return (
     <Card style={styles.emptyCard}>
       <Ionicons
@@ -188,76 +184,129 @@ function EmptyView() {
         color={colors.mutedText}
         style={{ opacity: 0.4 }}
       />
-      <Text style={styles.emptyText}>No reviews yet</Text>
+      <Text style={styles.emptyText}>
+        {tab === "given" ? "You haven't reviewed anyone yet" : "No reviews yet"}
+      </Text>
     </Card>
   );
 }
+
+type ReviewTab = "received" | "given";
 
 export function ReviewsScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const userId = user?.id;
 
-  const {
-    reviews,
-    averageRating,
-    total,
-    breakdown,
-    loading,
-    loadingMore,
-    error,
-    hasMore,
-    refetch,
-    loadMore,
-  } = useUserReviews(userId, { perPage: PER_PAGE });
+  const [tab, setTab] = useState<ReviewTab>("received");
+  // Web parity: two independent lists. The summary card always reflects RECEIVED.
+  const received = useUserReviews(userId, { perPage: PER_PAGE, role: "received" });
+  const given = useUserReviews(userId, { perPage: PER_PAGE, role: "given" });
+  const active = tab === "received" ? received : given;
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.navigate("Profile");
   }, [navigation]);
 
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([received.refetch(), given.refetch()]);
+  }, [received.refetch, given.refetch]);
+
   return (
-    <Screen onRefresh={refetch}>
+    <Screen onRefresh={handleRefresh}>
       <HeaderRow onBack={handleBack} />
 
-      {loading && reviews.length === 0 ? (
+      {received.loading && received.reviews.length === 0 ? (
         <LoadingState />
-      ) : error && reviews.length === 0 ? (
-        <ErrorView message={getErrorMessage(error)} onRetry={() => void refetch()} />
+      ) : received.error && received.reviews.length === 0 ? (
+        <ErrorView message={getErrorMessage(received.error)} onRetry={() => void received.refetch()} />
       ) : (
         <>
-          <SummaryCard averageRating={averageRating} total={total} breakdown={breakdown} />
-          {reviews.length === 0 ? (
-            <EmptyView />
+          {/* Summary always reflects reviews RECEIVED about this user (web parity). */}
+          <SummaryCard
+            averageRating={received.averageRating}
+            total={received.total}
+            breakdown={received.breakdown}
+          />
+
+          <ReviewTabs
+            tab={tab}
+            onChange={setTab}
+            receivedCount={received.total}
+            givenCount={given.total}
+          />
+
+          {active.loading && active.reviews.length === 0 ? (
+            <LoadingState />
+          ) : active.error && active.reviews.length === 0 ? (
+            <ErrorView message={getErrorMessage(active.error)} onRetry={() => void active.refetch()} />
+          ) : active.reviews.length === 0 ? (
+            <EmptyView tab={tab} />
           ) : (
             <View style={styles.listWrap}>
-              {reviews.map((r) => (
+              {active.reviews.map((r) => (
                 <ReviewCard key={r.id} review={r} />
               ))}
-              {hasMore ? (
+              {active.hasMore ? (
                 <Pressable
-                  onPress={() => void loadMore()}
-                  style={[styles.loadMoreButton, loadingMore && styles.loadMoreDisabled]}
-                  disabled={loadingMore}
+                  onPress={() => void active.loadMore()}
+                  style={[styles.loadMoreButton, active.loadingMore && styles.loadMoreDisabled]}
+                  disabled={active.loadingMore}
                   accessibilityRole="button"
                   accessibilityLabel="Load more reviews"
                 >
-                  {loadingMore ? (
+                  {active.loadingMore ? (
                     <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
                     <Text style={styles.loadMoreText}>Load more</Text>
                   )}
                 </Pressable>
-              ) : reviews.length > 0 ? (
+              ) : (
                 <Text style={styles.endText}>
-                  {total > 0 ? `Showing all ${total} reviews` : "End of reviews"}
+                  {active.total > 0 ? `Showing all ${active.total} reviews` : "End of reviews"}
                 </Text>
-              ) : null}
+              )}
             </View>
           )}
         </>
       )}
     </Screen>
+  );
+}
+
+function ReviewTabs({
+  tab,
+  onChange,
+  receivedCount,
+  givenCount,
+}: Readonly<{
+  tab: ReviewTab;
+  onChange: (t: ReviewTab) => void;
+  receivedCount: number;
+  givenCount: number;
+}>) {
+  return (
+    <View style={styles.tabs}>
+      {(["received", "given"] as const).map((t) => {
+        const activeTab = t === tab;
+        const label = t === "received" ? `Received (${receivedCount})` : `Given (${givenCount})`;
+        return (
+          <Pressable
+            key={t}
+            onPress={() => onChange(t)}
+            style={[styles.tab, activeTab && styles.tabActive]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab }}
+            accessibilityLabel={label}
+          >
+            <Text style={[styles.tabText, activeTab && styles.tabTextActive]} numberOfLines={1}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -332,6 +381,31 @@ const styles = StyleSheet.create({
     width: 16,
     textAlign: "right",
   },
+
+  // Received / Given tabs (segmented control)
+  tabs: {
+    flexDirection: "row",
+    gap: 6,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+    marginBottom: 14,
+  },
+  tab: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  tabActive: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tabText: { color: colors.mutedText, fontSize: 13, fontWeight: "700" },
+  tabTextActive: { color: colors.text, fontWeight: "800" },
 
   // Review list
   listWrap: { gap: 10 },

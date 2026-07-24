@@ -7,6 +7,7 @@ import { ActivityIndicator, StyleSheet, Switch, Text, View } from "react-native"
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { showToast } from "@/feedback/appFeedback";
 import { useMyPreferences } from "@/hooks/api/useMyPreferences";
 import { MainTabParamList } from "@/navigation/types";
@@ -110,10 +111,7 @@ export function PreferencesScreen() {
     return (
       <Screen contentContainerStyle={styles.contentContainer} refreshEnabled={false}>
         <PreferencesHeader onBack={goBack} />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading preferences…</Text>
-        </View>
+        <ListSkeleton rows={2} />
       </Screen>
     );
   }

@@ -8,6 +8,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ProfileSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { initialsFromFullName } from "@/features/profile/profileUtils";
@@ -120,10 +121,7 @@ export function ProfileScreen() {
   if (loading && !profile) {
     return (
       <Screen contentContainerStyle={styles.contentContainer} refreshEnabled={false}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading profile…</Text>
-        </View>
+        <ProfileSkeleton />
       </Screen>
     );
   }

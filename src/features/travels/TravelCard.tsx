@@ -82,8 +82,13 @@ export const TravelCard = memo(function TravelCard({
   const status = item.status ?? "";
   const tone = toneForStatus(status);
   const canModify = !isTerminal(status);
+  // Flights expire at the END of the travel window (web parity: travel_date_to
+  // || travel_date), so a multi-day trip isn't marked expired while still ongoing.
   const expiryDate =
-    type === "parcel" ? (item as Parcel).delivery_by : (item as FlightItem).travel_date;
+    type === "parcel"
+      ? (item as Parcel).delivery_by
+      : ((item as FlightItem & { travel_date_to?: string | null }).travel_date_to ??
+        (item as FlightItem).travel_date);
   const expired = isListingExpired(status, expiryDate);
   const showStatusPill = !expired && !!status && !isImplicitStatus(status);
   // A matched/accepted listing's badge opens the list of matching counterparts.

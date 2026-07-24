@@ -140,11 +140,12 @@ export const bookingsApi = {
 
   /** Upload reject evidence (carrier-only, ≤10MB image); pass the returned `path` as `photo_path`. */
   uploadHandoffEvidence: async (id: string, file: RNUploadFile) => {
-    const formData = new FormData();
-    formData.append("file", file as unknown as Blob);
-    const res = await api.upload<{ path: string; url: string }>(
+    // Byte-accurate multipart via api.uploadRNFile — a plain FormData `{uri}` blob
+    // arrives empty at the Deno edge fn under Expo/Hermes and 422s (same fix as
+    // chat attachments / travel-doc / parcel-review). See client.ts.
+    const res = await api.uploadRNFile<{ path: string; url: string }>(
       `/booking-handler/${id}/handoff/upload-evidence`,
-      formData,
+      file,
     );
     return res.data;
   },

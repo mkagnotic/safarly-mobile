@@ -29,6 +29,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useMyDisputes } from "@/hooks/api/useMyDisputes";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { MainTabParamList } from "@/navigation/types";
 import { disputesApi, getErrorMessage, type Dispute } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -112,12 +113,7 @@ export function DisputesScreen() {
 
   const listEmpty = useMemo(() => {
     if (loading && disputes.length === 0) {
-      return (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading disputes…</Text>
-        </View>
-      );
+      return <ListSkeleton />;
     }
     if (error && disputes.length === 0) {
       return (

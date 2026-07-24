@@ -14,6 +14,7 @@ import {
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useMyNotifications } from "@/hooks/api/useMyNotifications";
 import { MainTabParamList } from "@/navigation/types";
@@ -42,6 +43,9 @@ const TYPE_STYLES: Readonly<Record<string, TypeStyle>> = {
   kyc: { icon: "shield-checkmark-outline", fg: colors.primary, bg: "rgba(255, 122, 38, 0.10)" },
   dispute: { icon: "alert-circle", fg: colors.danger, bg: "rgba(239, 68, 68, 0.10)" },
   buddy: { icon: "people-outline", fg: colors.text, bg: colors.surfaceMuted },
+  // Web parity: rating → Star (warning), system → Clock (primary).
+  rating: { icon: "star", fg: colors.warning, bg: "rgba(245, 158, 11, 0.12)" },
+  system: { icon: "time-outline", fg: colors.primary, bg: primaryTint.fill10 },
 };
 
 const DEFAULT_STYLE: TypeStyle = {
@@ -245,12 +249,7 @@ export function NotificationsScreen() {
 
   const listEmpty = useMemo(() => {
     if (loading) {
-      return (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading notifications…</Text>
-        </View>
-      );
+      return <ListSkeleton />;
     }
     if (error) {
       return (

@@ -12,6 +12,7 @@ import {
 
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useActivityFeed } from "@/hooks/api/useActivityFeed";
 import { MainTabParamList } from "@/navigation/types";
 import { type FeedItem, getErrorMessage } from "@/services/api";
@@ -58,12 +59,7 @@ function ActivityCard({ item }: Readonly<{ item: FeedItem }>) {
 }
 
 function LoadingState() {
-  return (
-    <View style={styles.centeredWrap}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.centeredText}>Loading activity…</Text>
-    </View>
-  );
+  return <ListSkeleton />;
 }
 
 function ErrorView({

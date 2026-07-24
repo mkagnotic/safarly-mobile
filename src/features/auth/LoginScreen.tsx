@@ -24,7 +24,7 @@ import { LegalConsentText } from "@/components/ui/LegalConsentText";
 import { Screen } from "@/components/ui/Screen";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
-import { getErrorMessage } from "@/services/api";
+import { authApi, getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
@@ -118,6 +118,24 @@ export function LoginScreen() {
       if (loginNotice) clearPendingNotice();
       // Navigation flips via AuthContext → store → RootNavigator.
     } catch (err) {
+      // A Google-only account (no password set) that tries password login gets a
+      // misleading "incorrect credentials" otherwise — probe the auth method and
+      // point them to Google (web parity). The "no account" case stays generic
+      // so we don't leak which emails are registered (anti-enumeration).
+      const raw = getErrorMessage(err).toLowerCase();
+      const looksLikeBadCreds = raw.includes("invalid") && (raw.includes("credential") || raw.includes("login"));
+      if (looksLikeBadCreds) {
+        try {
+          const info = await authApi.checkAuthMethod(normalizedEmail);
+          const method = info.data;
+          if (method?.exists && !method.has_password && method.providers.includes("google")) {
+            setFormError("This account uses Google sign-in. Please continue with Google.");
+            return;
+          }
+        } catch {
+          // Probe failed — fall through to the generic mapped message.
+        }
+      }
       const mapped = mapAuthError(err, "signin");
       if (mapped.target === "email") {
         setErrors((e) => ({ ...e, email: mapped.message }));
