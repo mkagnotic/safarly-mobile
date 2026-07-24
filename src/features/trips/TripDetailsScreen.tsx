@@ -267,7 +267,12 @@ export function TripDetailsScreen() {
   // A trip past its travel date reads as "expired" even while its DB status is
   // still `active`/`open` (expiry is derived client-side, not a stored status).
   // Such a trip is a closed record too, so it must not offer Edit / Cancel.
-  const expired = isListingExpired(trip.status ?? "", trip.travel_date ?? trip.travel_date_from);
+  // End of the travel window (web parity: travel_date_to || travel_date), so a
+  // multi-day trip isn't marked expired while it's still ongoing.
+  const expired = isListingExpired(
+    trip.status ?? "",
+    trip.travel_date_to ?? trip.travel_date ?? trip.travel_date_from,
+  );
   const canModify = !isTerminal(trip.status ?? "") && !expired;
 
   return (

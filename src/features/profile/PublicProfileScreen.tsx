@@ -13,6 +13,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ProfileSkeleton } from "@/components/ui/Skeletons";
 import { initialsFromFullName } from "@/features/profile/profileUtils";
 import { usePublicProfile } from "@/hooks/api/usePublicProfile";
 import { useUserReviews } from "@/hooks/api/useUserReviews";
@@ -91,10 +92,7 @@ export function PublicProfileScreen() {
       </View>
 
       {loading && !profile ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading profile…</Text>
-        </View>
+        <ProfileSkeleton />
       ) : error && !profile ? (
         <Card style={styles.errorCard}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />

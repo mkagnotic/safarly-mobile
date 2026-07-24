@@ -1377,20 +1377,13 @@ export function OfferChatScreen() {
                 messages.length === 0 && styles.listContentEmpty,
               ]}
               ListHeaderComponent={
-                hasMore || loadingOlder ? (
-                  <Pressable
-                    onPress={() => void loadOlder()}
-                    disabled={loadingOlder}
-                    style={styles.loadOlderButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Load older messages"
-                  >
-                    {loadingOlder ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <Text style={styles.loadOlderText}>Load older messages</Text>
-                    )}
-                  </Pressable>
+                // WhatsApp-style: no persistent button — scrolling near the top
+                // auto-loads older messages (see handleListScroll), and this
+                // spinner shows only while that fetch is in flight.
+                loadingOlder ? (
+                  <View style={styles.loadOlderSpinner}>
+                    <ActivityIndicator size="small" color={colors.mutedText} />
+                  </View>
                 ) : null
               }
               ListEmptyComponent={
@@ -2082,6 +2075,7 @@ interface MessageBubbleProps {
 
 const SYSTEM_EVENT_LABELS: Record<string, string> = {
   match_confirmed: "Match confirmed",
+  travel_date_confirmed: "Travel date confirmed",
   payment_received: "Payment received",
   payment_pending: "Payment pending",
   handoff_accepted: "Handoff accepted",
@@ -2136,7 +2130,10 @@ function MessageBubble({
     const mapped = p?.event ? SYSTEM_EVENT_LABELS[p.event] : undefined;
     const label = mapped ?? (message.text?.trim() || p?.event || "Update");
     const tone: SystemRowProps["tone"] =
-      p?.event === "delivered" || p?.event === "payment_received" || p?.event === "match_confirmed"
+      p?.event === "delivered" ||
+      p?.event === "payment_received" ||
+      p?.event === "match_confirmed" ||
+      p?.event === "travel_date_confirmed"
         ? "good"
         : p?.event === "cancelled" || p?.event === "handoff_rejected"
           ? "bad"
@@ -2386,22 +2383,12 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 16, gap: 2 },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
 
-  // "Load older messages" header button
-  loadOlderButton: {
-    alignSelf: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-    minWidth: 160,
+  // Top "loading older messages" spinner (WhatsApp-style, auto-load on scroll-up)
+  loadOlderSpinner: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 32,
+    paddingVertical: 12,
   },
-  loadOlderText: { color: colors.primary, fontSize: 12, fontWeight: "800" },
 
   // Bubble
   bubbleRow: { width: "100%", marginBottom: 4 },

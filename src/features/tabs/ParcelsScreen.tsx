@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -17,6 +16,7 @@ import {
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useParcels } from "@/hooks/api/useParcels";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Parcel } from "@/services/api";
@@ -132,12 +132,7 @@ export function ParcelsScreen() {
 
   const listEmpty = useMemo(() => {
     if (loading) {
-      return (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading parcels…</Text>
-        </View>
-      );
+      return <ListSkeleton />;
     }
     if (error) {
       return (

@@ -4,6 +4,8 @@ import { ApiClientError, ratingsApi, type Rating, type UserRatings } from "@/ser
 
 export interface UseUserReviewsOptions {
   perPage?: number;
+  /** Web parity: "received" (about this user, default) or "given" (by this user). */
+  role?: "received" | "given";
 }
 
 export interface UseUserReviewsResult {
@@ -32,7 +34,7 @@ export interface UseUserReviewsResult {
  */
 export function useUserReviews(
   userId: string | undefined,
-  { perPage = 10 }: UseUserReviewsOptions = {},
+  { perPage = 10, role = "received" }: UseUserReviewsOptions = {},
 ): UseUserReviewsResult {
   const [reviews, setReviews] = useState<Rating[]>([]);
   const [averageRating, setAverageRating] = useState(0);
@@ -53,7 +55,7 @@ export function useUserReviews(
       setLoading(true);
       setError(null);
       try {
-        const res = await ratingsApi.getUserRatings(userId, { page: 1, per_page: perPage });
+        const res = await ratingsApi.getUserRatings(userId, { page: 1, per_page: perPage, role });
         if (!mountedRef.current) return;
         const data = res.data as UserRatings | null;
         setReviews(data?.ratings ?? []);
@@ -73,7 +75,7 @@ export function useUserReviews(
     })();
     inFlightRef.current = promise;
     return promise;
-  }, [userId, perPage]);
+  }, [userId, perPage, role]);
 
   const loadMore = useCallback(async () => {
     if (!userId) return;
@@ -82,7 +84,7 @@ export function useUserReviews(
     setLoadingMore(true);
     try {
       const next = page + 1;
-      const res = await ratingsApi.getUserRatings(userId, { page: next, per_page: perPage });
+      const res = await ratingsApi.getUserRatings(userId, { page: next, per_page: perPage, role });
       if (!mountedRef.current) return;
       const data = res.data as UserRatings | null;
       const newRows = data?.ratings ?? [];
@@ -98,9 +100,9 @@ export function useUserReviews(
     } finally {
       if (mountedRef.current) setLoadingMore(false);
     }
-  }, [userId, loadingMore, loading, reviews.length, total, page, perPage]);
+  }, [userId, loadingMore, loading, reviews.length, total, page, perPage, role]);
 
-  // Reset on userId change — same race-fix template as the detail hooks.
+  // Reset on userId/role change — same race-fix template as the detail hooks.
   useEffect(() => {
     setReviews([]);
     setAverageRating(0);
@@ -108,7 +110,7 @@ export function useUserReviews(
     setBreakdown({});
     setError(null);
     setLoading(Boolean(userId));
-  }, [userId]);
+  }, [userId, role]);
 
   useEffect(() => {
     mountedRef.current = true;

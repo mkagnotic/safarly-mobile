@@ -22,6 +22,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
+import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
@@ -1355,12 +1356,7 @@ export function BookingsScreen() {
   // header + filters stay put and only the list body swaps.
   const listEmpty = useMemo(() => {
     if (loading && bookings.length === 0) {
-      return (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading bookings…</Text>
-        </View>
-      );
+      return <ListSkeleton />;
     }
     if (error && bookings.length === 0) {
       return (

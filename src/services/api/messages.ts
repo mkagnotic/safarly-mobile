@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { SUPABASE_ANON_KEY, SUPABASE_FUNCTIONS_URL } from "@/integrations/supabase/env";
 
 import { api, ApiClientError } from "./client";
 
@@ -299,34 +298,16 @@ export const messagesApi = {
     conversationId: string,
     file: RNUploadFile,
   ): Promise<{ url: string; path: string; type: string }> => {
-    const formData = new FormData();
-    // RN's FormData accepts the blob shape directly. The cast satisfies TS DOM lib.
-    formData.append("file", file as unknown as Blob);
-
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    const response = await fetch(
-      `${SUPABASE_FUNCTIONS_URL}/message-handler/conversations/${conversationId}/upload`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token ?? SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-        },
-        body: formData,
-      },
+    // Byte-accurate multipart via api.uploadRNFile. A plain FormData `{uri}` blob
+    // does NOT stream the file bytes to the Deno edge fn under Expo/Hermes — it
+    // arrives empty and 422s — so chat attachments must use the same byte-reader
+    // travel-doc / parcel-review already use. See client.ts.
+    const res = await api.uploadRNFile<{ url: string; path: string; type: string }>(
+      `/message-handler/conversations/${conversationId}/upload`,
+      file,
     );
-
-    const result = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new ApiClientError(
-        result?.error?.message ?? "Upload failed",
-        result?.error?.code ?? "UPLOAD_FAILED",
-        response.status,
-        result?.error?.details,
-      );
-    }
-    return result.data;
+    if (!res.data) throw new ApiClientError("Upload failed", "UPLOAD_FAILED", 0);
+    return res.data;
   },
 
   /** Mark incoming messages as delivered (fire-and-forget from realtime). */

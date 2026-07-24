@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showAppAlert } from "@/feedback/appFeedback";
+import { isListingExpired } from "@/features/travels/statusLabels";
 import type { BuddyListing } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
@@ -44,6 +45,11 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   const rawStatus = (item.status ?? "").toLowerCase();
   const isMatched = MATCHED_STATUSES.has(rawStatus);
   const statusLabel = isMatched ? "Matched" : "Looking for Match";
+  // Web parity: a buddy listing whose travel window has passed reads as expired.
+  const expired = isListingExpired(
+    rawStatus,
+    item.travel_date_to ?? item.travel_date_from ?? item.travel_date,
+  );
   const statusTone = useMemo(
     () =>
       isMatched
@@ -102,11 +108,18 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
           {/* Inside the text column, not below the row: the stacked Edit/Delete
               column is taller than this text, so a pill placed after the row
               inherited that height and left a large gap under the meta line. */}
-          <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
-            <Text style={[styles.statusPillText, { color: statusTone.fg }]} numberOfLines={1}>
-              {statusLabel}
-            </Text>
-          </View>
+          {expired ? (
+            <View style={styles.expiredPill}>
+              <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
+              <Text style={styles.expiredPillText}>EXPIRED</Text>
+            </View>
+          ) : (
+            <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
+              <Text style={[styles.statusPillText, { color: statusTone.fg }]} numberOfLines={1}>
+                {statusLabel}
+              </Text>
+            </View>
+          )}
         </View>
 
         {onEdit || onDelete ? (
@@ -211,6 +224,24 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     marginTop: 8,
+  },
+  expiredPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+    marginTop: 8,
+  },
+  expiredPillText: {
+    color: colors.mutedText,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
   statusPillText: {
     fontSize: 10,

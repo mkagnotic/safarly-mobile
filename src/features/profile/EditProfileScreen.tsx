@@ -14,6 +14,7 @@ import { useShallow } from "zustand/react/shallow";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Screen } from "@/components/ui/Screen";
+import { ProfileSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import {
@@ -149,10 +150,7 @@ export function EditProfileScreen() {
           </Pressable>
           <Text style={styles.headerTitle}>{t(language, "profile.editProfile")}</Text>
         </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredText}>Loading profile…</Text>
-        </View>
+        <ProfileSkeleton />
       </Screen>
     );
   }

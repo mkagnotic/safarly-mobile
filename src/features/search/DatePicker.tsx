@@ -10,6 +10,10 @@ interface Props {
   onChange: (date: string) => void;
   placeholder: string;
   disabled?: boolean;
+  /** Earliest selectable day (ISO "YYYY-MM-DD"). Days before it are disabled. */
+  minDate?: string;
+  /** Latest selectable day (ISO "YYYY-MM-DD"). Days after it are disabled. */
+  maxDate?: string;
 }
 
 const DOW = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
@@ -57,7 +61,7 @@ function formatDisplay(d: Date): string {
   });
 }
 
-export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<Props>) {
+export function DatePicker({ value, onChange, placeholder, disabled, minDate, maxDate }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
   const initialMonth = useMemo(() => startOfMonth(fromIso(value) ?? new Date()), [value]);
   const [viewMonth, setViewMonth] = useState(initialMonth);
@@ -71,6 +75,18 @@ export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<
   const todayIso = toIso(new Date());
 
   const cells = useMemo(() => buildGrid(viewMonth), [viewMonth]);
+
+  // Month-level bounds so the ‹ › nav can't leave the allowed [min, max] window.
+  const minMonth = useMemo(() => {
+    const d = minDate ? fromIso(minDate) : null;
+    return d ? startOfMonth(d) : null;
+  }, [minDate]);
+  const maxMonth = useMemo(() => {
+    const d = maxDate ? fromIso(maxDate) : null;
+    return d ? startOfMonth(d) : null;
+  }, [maxDate]);
+  const prevDisabled = !!minMonth && startOfMonth(viewMonth).getTime() <= minMonth.getTime();
+  const nextDisabled = !!maxMonth && startOfMonth(viewMonth).getTime() >= maxMonth.getTime();
 
   const close = useCallback(() => setOpen(false), []);
   const goPrev = useCallback(() => setViewMonth((m) => addMonths(m, -1)), []);
@@ -128,12 +144,14 @@ export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<
           <View style={styles.headerRow}>
             <Pressable
               onPress={goPrev}
+              disabled={prevDisabled}
               hitSlop={8}
-              style={styles.navButton}
+              style={[styles.navButton, prevDisabled && styles.navButtonDisabled]}
               accessibilityRole="button"
               accessibilityLabel="Previous month"
+              accessibilityState={{ disabled: prevDisabled }}
             >
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
+              <Ionicons name="chevron-back" size={20} color={prevDisabled ? colors.subtleText : colors.text} />
             </Pressable>
             <Text style={styles.monthLabel}>
               {viewMonth.toLocaleDateString(undefined, {
@@ -143,12 +161,14 @@ export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<
             </Text>
             <Pressable
               onPress={goNext}
+              disabled={nextDisabled}
               hitSlop={8}
-              style={styles.navButton}
+              style={[styles.navButton, nextDisabled && styles.navButtonDisabled]}
               accessibilityRole="button"
               accessibilityLabel="Next month"
+              accessibilityState={{ disabled: nextDisabled }}
             >
-              <Ionicons name="chevron-forward" size={20} color={colors.text} />
+              <Ionicons name="chevron-forward" size={20} color={nextDisabled ? colors.subtleText : colors.text} />
             </Pressable>
           </View>
 
@@ -165,22 +185,24 @@ export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<
               const iso = toIso(date);
               const isSelected = iso === selectedIso;
               const isToday = iso === todayIso;
+              const outOfRange = (!!minDate && iso < minDate) || (!!maxDate && iso > maxDate);
               return (
                 <Pressable
                   key={iso}
                   onPress={() => handlePick(date)}
+                  disabled={outOfRange}
                   style={({ pressed }) => [
                     styles.cell,
-                    pressed && styles.cellPressed,
+                    pressed && !outOfRange && styles.cellPressed,
                   ]}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
+                  accessibilityState={{ selected: isSelected, disabled: outOfRange }}
                   accessibilityLabel={formatDisplay(date)}
                 >
                   <View
                     style={[
                       styles.cellInner,
-                      isToday && !isSelected && styles.cellToday,
+                      isToday && !isSelected && !outOfRange && styles.cellToday,
                       isSelected && styles.cellSelected,
                     ]}
                   >
@@ -188,8 +210,9 @@ export function DatePicker({ value, onChange, placeholder, disabled }: Readonly<
                       style={[
                         styles.cellText,
                         !inMonth && styles.cellTextOut,
-                        isToday && !isSelected && styles.cellTextToday,
+                        isToday && !isSelected && !outOfRange && styles.cellTextToday,
                         isSelected && styles.cellTextSelected,
+                        outOfRange && styles.cellTextDisabled,
                       ]}
                     >
                       {date.getDate()}
@@ -279,6 +302,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  navButtonDisabled: { opacity: 0.4 },
 
   dowRow: {
     flexDirection: "row",
@@ -321,6 +345,7 @@ const styles = StyleSheet.create({
   },
   cellText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   cellTextOut: { color: colors.subtleText, opacity: 0.4 },
+  cellTextDisabled: { color: colors.subtleText, opacity: 0.28 },
   cellTextToday: { color: colors.wordmark, fontWeight: "800" },
   cellTextSelected: { color: colors.white, fontWeight: "800" },
 

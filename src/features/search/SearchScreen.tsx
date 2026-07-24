@@ -21,6 +21,7 @@ import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { DatePicker } from "@/features/search/DatePicker";
+import { isSameRoute } from "@/features/travels/routeValidation";
 import {
   clearPersistedSearch,
   loadPersistedSearch,
@@ -72,6 +73,17 @@ interface Notice {
 type SetNotice = (notice: Notice | null) => void;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Local-midnight ISO "YYYY-MM-DD" (avoids UTC day-shift). */
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Web parity: search dates are bounded to today … +12 months. */
+function searchDateBounds(): { todayIso: string; maxIso: string } {
+  const today = new Date();
+  const max = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+  return { todayIso: isoDay(today), maxIso: isoDay(max) };
+}
 
 /** Web parity: 3/day cap, 10 per manual page (auto-match uses 50). */
 const DAILY_SEARCH_LIMIT = 3;
@@ -168,6 +180,8 @@ export function SearchScreen() {
   const [toCity, setToCity] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Stable per mount — bounds the date pickers to today … +12 months (web parity).
+  const dateBounds = useMemo(() => searchDateBounds(), []);
   const [lookingFor, setLookingFor] = useState<LookingForType[]>([]);
   const [activeTab, setActiveTab] = useState<ResultsTab>("package");
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -553,6 +567,16 @@ export function SearchScreen() {
       setNotice({ title: "Invalid date", message: "To date must be YYYY-MM-DD.", variant: "error" });
       return;
     }
+    // A same-city route (Any excepted) can never match anything — block it, as
+    // the create/edit forms do.
+    if (isSameRoute(fromCountry, fromCity, toCountry, toCity)) {
+      setNotice({
+        title: "Pick different cities",
+        message: "Origin and destination cities must be different.",
+        variant: "error",
+      });
+      return;
+    }
 
     const filters: SearchFilters = { per_page: MANUAL_PER_PAGE };
     if (fromCity) filters.from_city = fromCity;
@@ -575,7 +599,7 @@ export function SearchScreen() {
     } finally {
       setConsuming(false);
     }
-  }, [fromCity, toCity, dateFrom, dateTo, lookingFor]);
+  }, [fromCity, toCity, fromCountry, toCountry, dateFrom, dateTo, lookingFor]);
 
   const handleClear = useCallback(() => {
     setFromCity("");
@@ -708,7 +732,8 @@ export function SearchScreen() {
             </View>
           </View>
 
-          {/* Date Range — tappable fields that open a calendar sheet. */}
+          {/* Date Range — tappable fields that open a calendar sheet. Bounded to
+              today … +12 months (web parity); "To" can't precede "From". */}
           <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>DATE RANGE</Text>
           <View style={styles.dateRow}>
             <DatePicker
@@ -716,12 +741,16 @@ export function SearchScreen() {
               onChange={setDateFrom}
               placeholder="From date"
               disabled={loading}
+              minDate={dateBounds.todayIso}
+              maxDate={dateBounds.maxIso}
             />
             <DatePicker
               value={dateTo}
               onChange={setDateTo}
               placeholder="To date"
               disabled={loading}
+              minDate={dateFrom && ISO_DATE.test(dateFrom) ? dateFrom : dateBounds.todayIso}
+              maxDate={dateBounds.maxIso}
             />
           </View>
 

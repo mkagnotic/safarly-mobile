@@ -77,6 +77,7 @@ import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { RateDeliveryPrompt } from "@/components/reviews/RateDeliveryPrompt";
+import { JourneyExpiryReminder } from "@/components/reminders/JourneyExpiryReminder";
 import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
@@ -434,7 +435,10 @@ export function RootNavigator() {
           (web RateDeliveryPrompt parity). Only in the fully-authed app so it
           never fetches on splash / auth / profile-setup. */}
       {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
-        <RateDeliveryPrompt />
+        <>
+          <RateDeliveryPrompt />
+          <JourneyExpiryReminder />
+        </>
       )}
       {SHOW_DATA_TOGGLE && (
         <Pressable

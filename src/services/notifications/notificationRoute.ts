@@ -52,6 +52,8 @@ export function resolveNotificationRoute(
     const m = l.match(/[?&]match=([0-9a-f-]{36})/i);
     return { screen: "Trips", params: m ? { highlightId: m[1] } : undefined };
   }
+  // Journey-expiry notices link here; "Parcels" is the tab hosting My Travels.
+  if (l.startsWith("/customer/my-trips")) return { screen: "Parcels" };
   if (l.startsWith("/customer/messages")) return { screen: "MessagesTab" };
   if (l.startsWith("/customer/bookings")) return { screen: "BookingsTab" };
   if (l.includes("/wallet")) return { screen: "WalletTab" };

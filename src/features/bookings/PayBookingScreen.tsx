@@ -17,6 +17,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
+import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
@@ -161,10 +162,7 @@ export function PayBookingScreen() {
       </View>
 
       {loading && !booking ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredBody}>Loading booking…</Text>
-        </View>
+        <DetailSkeleton />
       ) : error || !booking ? (
         <Card style={styles.panel}>
           <Ionicons name="receipt-outline" size={34} color={colors.mutedText} />

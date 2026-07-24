@@ -32,7 +32,9 @@ import { colors } from "@/theme/colors";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "FileDisputeTab">;
 
-const MAX_EVIDENCE = 5;
+// Matches the dispute-handler server cap (`files.slice(0, 8)`) and web, which
+// imposes no client cap and lets the server truncate to 8.
+const MAX_EVIDENCE = 8;
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
 
 function isPdf(file: RNUploadFile): boolean {
