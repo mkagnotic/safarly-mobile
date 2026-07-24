@@ -25,7 +25,6 @@ export type RootStackParamList = {
     | undefined;
   SendParcel: undefined;
   ListTrip: undefined;
-  Wallet: undefined;
   Reviews: undefined;
   Earnings: undefined;
   KycVerification: undefined;
@@ -48,7 +47,10 @@ export type MainTabParamList = {
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
   CreateBuddyTab: undefined;
   Profile: undefined;
-  WalletTab: undefined;
+  /** Standalone Stripe Connect payout management (web `CustomerPayoutSetup`). */
+  PayoutSetupTab: undefined;
+  /** Payments / transaction history (web `CustomerTransactions`). */
+  TransactionsTab: undefined;
   AddCardTab: undefined;
   EarningsTab: undefined;
   KycVerificationTab: undefined;

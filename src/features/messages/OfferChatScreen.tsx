@@ -38,6 +38,7 @@ import {
 import { MediaGalleryModal } from "@/components/chat/MediaGalleryModal";
 import { OfferComposerModal, type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
 import { ParcelReviewModal } from "@/components/chat/ParcelReviewModal";
+import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
@@ -58,6 +59,7 @@ import { useConversationPresence } from "@/hooks/realtime/useConversationPresenc
 import { MainTabParamList } from "@/navigation/types";
 import { setActiveConversation } from "@/store/activeConversation";
 import {
+  ApiClientError,
   getErrorMessage,
   messagesApi,
   type Conversation,
@@ -340,6 +342,8 @@ export function OfferChatScreen() {
   // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
   // pattern in `ChatActionDropdown.tsx:46`.
   const [confirmAction, setConfirmAction] = useState<"block" | "unmatch" | null>(null);
+  /** Shown when the carrier tries to accept but hasn't finished payout setup. */
+  const [payoutRequiredOpen, setPayoutRequiredOpen] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
   const flatListRef = useRef<FlatList<DisplayMessage>>(null);
   // Track newest message timestamp seen so we only auto-scroll on new arrivals,
@@ -1040,6 +1044,22 @@ export function OfferChatScreen() {
           navigation.navigate("PayBookingTab", { bookingId: booking.id });
         }
       } catch (err) {
+        // Carrier payout not set up: turn the backend dead-end into an action.
+        // If the viewer IS the carrier, show the actionable dialog; if they're
+        // the sender there's nothing they can fix — the backend already nudged
+        // the carrier, so just inform them. Web parity: ChatOfferPrompt.
+        if (err instanceof ApiClientError && err.code === "CARRIER_PAYOUT_NOT_READY") {
+          if (activeDeal?.viewer_role === "carrier") {
+            setPayoutRequiredOpen(true);
+          } else {
+            setOfferBanner({
+              variant: "info",
+              title: "Payout setup needed",
+              message: `${participantName} hasn't set up how they get paid yet. We've let them know — you'll be able to accept once they finish payout setup.`,
+            });
+          }
+          return;
+        }
         setOfferBanner({
           variant: "error",
           title: "Couldn't accept offer",
@@ -1047,7 +1067,7 @@ export function OfferChatScreen() {
         });
       }
     },
-    [acceptOffer, navigation, user?.id],
+    [acceptOffer, navigation, user?.id, activeDeal?.viewer_role, participantName],
   );
 
   const handleDeclineOffer = useCallback(
@@ -1807,6 +1827,16 @@ export function OfferChatScreen() {
           if (!confirmPending) setConfirmAction(null);
         }}
         onConfirm={() => void handleConfirmAction()}
+      />
+
+      {/* ───────── Payout-required (carrier accept gate) ───────── */}
+      <PayoutRequiredModal
+        open={payoutRequiredOpen}
+        onClose={() => setPayoutRequiredOpen(false)}
+        onSetup={() => {
+          setPayoutRequiredOpen(false);
+          navigation.navigate("PayoutSetupTab");
+        }}
       />
 
       {/* ───────── Match confirmation modal ───────── */}

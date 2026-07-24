@@ -39,9 +39,9 @@ export function PaymentFailureScreen() {
         <View style={styles.actions}>
           <AppButton label="Try Again" onPress={goBack} />
           <AppButton
-            label="Change Payment Method"
+            label="View payments"
             variant="secondary"
-            onPress={() => navigation.navigate("WalletTab")}
+            onPress={() => navigation.navigate("TransactionsTab")}
           />
           <Pressable style={styles.helpLink} onPress={() => navigation.navigate("Home")}>
             <Text style={styles.helpText}>Need help? Contact Support</Text>

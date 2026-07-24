@@ -14,23 +14,49 @@ export interface Transaction {
   method: string | null;
   reference: string | null;
   created_at: string;
+  /** Platform surcharge (the 10%). Present on rows from `GET /payment-handler/me`. */
+  platform_fee?: number | null;
+  /** Carrier net (amount minus platform fee). */
+  net_amount?: number | null;
+  /** Stripe references used on the receipt. */
+  stripe_payment_intent_id?: string | null;
+  stripe_refund_id?: string | null;
   payer?: { id: string; name: string };
   payee?: { id: string; name: string };
 }
 
 export interface CreateIntentResult {
-  client_secret: string;
+  /**
+   * Stripe-hosted Checkout page URL. Open this in a browser (the user enters
+   * their card on Stripe's page — we never touch card data). Mirrors web, which
+   * does a full-page redirect to the same URL.
+   */
+  checkout_url: string;
+  /** Checkout Session id — pass to `confirmCheckout` on return (web parity). */
+  session_id: string;
   payment_intent_id: string;
   amount: number;
   platform_fee: number;
   total: number;
-  /** Server returns the existing pending intent for a booking instead of a dup. */
+  currency: string;
+  /** Server returns the existing pending session for a booking instead of a dup. */
   reused?: boolean;
 }
 
 export interface ConfirmPaymentResult {
   status: string; // "held"
   booking_status?: string; // "awaiting_handoff"
+}
+
+/**
+ * Lifetime totals returned in `meta.summary` by `GET /payment-handler/me`
+ * (independent of the current page/filter). Drives the Payments header tiles.
+ */
+export interface TransactionsSummary {
+  total_spent: number;
+  total_refunded: number;
+  total_earned: number;
+  count: number;
 }
 
 export interface StripeConnectStatus {
@@ -52,11 +78,17 @@ export const paymentsApi = {
   createIntent: (booking_id: string) =>
     api.post<CreateIntentResult>("/payment-handler/create-intent", { booking_id }),
 
-  /** Confirm = escrow settlement; idempotency-keyed against double charges. */
-  confirmPayment: (payment_intent_id: string, idempotencyKey = newIdempotencyKey()) =>
+  /**
+   * Confirm a completed Checkout session = escrow settlement. This is the
+   * redirect-return fallback to the webhook (the webhook is authoritative). The
+   * server verifies the session is actually `paid` with Stripe before settling,
+   * so it can never settle without a real charge. Idempotency-keyed so a retried
+   * confirm can't double-credit escrow. Mirrors web's `confirmPayment`.
+   */
+  confirmCheckout: (session_id: string, idempotencyKey = newIdempotencyKey()) =>
     api.post<ConfirmPaymentResult>(
       "/payment-handler/confirm",
-      { payment_intent_id },
+      { session_id },
       { idempotencyKey },
     ),
 
