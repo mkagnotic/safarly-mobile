@@ -48,7 +48,8 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
 import { PublicProfileScreen } from "@/features/profile/PublicProfileScreen";
 import { EarningsScreen } from "@/features/earnings/EarningsScreen";
-import { WalletScreen } from "@/features/wallet/WalletScreen";
+import { PayoutSetupScreen } from "@/features/wallet/PayoutSetupScreen";
+import { TransactionsScreen } from "@/features/wallet/TransactionsScreen";
 import { AddCardScreen } from "@/features/wallet/AddCardScreen";
 import { ReviewsScreen } from "@/features/reviews/ReviewsScreen";
 import { KycVerificationScreen } from "@/features/profile/KycVerificationScreen";
@@ -114,7 +115,8 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Buddies: "chatbox-outline",
   BuddyDetailsTab: "person-outline",
   Profile: "person-outline",
-  WalletTab: "wallet-outline",
+  PayoutSetupTab: "business-outline",
+  TransactionsTab: "receipt-outline",
   AddCardTab: "card-outline",
   EarningsTab: "cash-outline",
   KycVerificationTab: "shield-checkmark-outline",
@@ -291,7 +293,8 @@ function MainTabs() {
       <Tabs.Screen name="Notifications" component={NotificationsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="BuddyDetailsTab" component={BuddyDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="CreateBuddyTab" component={CreateBuddyScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="WalletTab" component={WalletScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="PayoutSetupTab" component={PayoutSetupScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="TransactionsTab" component={TransactionsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="AddCardTab" component={AddCardScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="EarningsTab" component={EarningsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="KycVerificationTab" component={KycVerificationScreen} options={HIDDEN_TAB} />
@@ -421,7 +424,6 @@ export function RootNavigator() {
         {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="Wallet" component={WalletScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Earnings" component={EarningsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="KycVerification" component={KycVerificationScreen} options={{ headerShown: false }} />

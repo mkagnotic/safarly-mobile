@@ -60,11 +60,11 @@ export function AddCardScreen() {
       navigation.goBack();
       return;
     }
-    navigation.navigate("WalletTab");
+    navigation.navigate("Profile");
   }, [navigation]);
 
   const onDone = useCallback(() => {
-    navigation.navigate("WalletTab");
+    navigation.navigate("Profile");
   }, [navigation]);
 
   const onSave = useCallback(() => {

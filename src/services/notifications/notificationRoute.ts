@@ -56,7 +56,9 @@ export function resolveNotificationRoute(
   if (l.startsWith("/customer/my-trips")) return { screen: "Parcels" };
   if (l.startsWith("/customer/messages")) return { screen: "MessagesTab" };
   if (l.startsWith("/customer/bookings")) return { screen: "BookingsTab" };
-  if (l.includes("/wallet")) return { screen: "WalletTab" };
+  // Carrier "set up payouts to accept this delivery" nudge links here.
+  if (l.includes("/payout-setup")) return { screen: "PayoutSetupTab" };
+  if (l.includes("/wallet")) return { screen: "TransactionsTab" };
   if (l.includes("/kyc")) return { screen: "KycVerificationTab" };
   if (l.startsWith("/customer/disputes")) return { screen: "DisputesTab" };
   if (l.startsWith("/customer/buddies")) return { screen: "Buddies" };
@@ -68,7 +70,7 @@ export function resolveNotificationRoute(
     case "booking":
       return { screen: "BookingsTab" };
     case "payment":
-      return { screen: "WalletTab" };
+      return { screen: "TransactionsTab" };
     case "kyc":
       return { screen: "KycVerificationTab" };
     case "dispute":

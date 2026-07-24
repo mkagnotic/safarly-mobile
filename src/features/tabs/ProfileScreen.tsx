@@ -35,7 +35,8 @@ type ProfileMenuTarget =
   | "BookingsTab"
   | "OpportunitiesTab"
   | "DisputesTab"
-  | "WalletTab"
+  | "PayoutSetupTab"
+  | "TransactionsTab"
   | "KycVerificationTab"
   | "ReviewsTab"
   | "MessagesTab"
@@ -77,7 +78,8 @@ export function ProfileScreen() {
         items: [
           { icon: "calendar-clear", label: "My Bookings", target: "BookingsTab" },
           { icon: "alert-circle", label: "My Disputes", target: "DisputesTab" },
-          { icon: "wallet-outline", label: "Payment Methods", target: "WalletTab" },
+          { icon: "card-outline", label: "Payments", target: "TransactionsTab" },
+          { icon: "business-outline", label: "Payout setup", target: "PayoutSetupTab" },
           { icon: "shield-checkmark-outline", label: "KYC Verification", target: "KycVerificationTab" },
           { icon: "star", label: "Reviews", target: "ReviewsTab" },
           {

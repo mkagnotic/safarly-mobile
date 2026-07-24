@@ -42,6 +42,7 @@ export type {
   CreateIntentResult,
   ConfirmPaymentResult,
   StripeConnectStatus,
+  TransactionsSummary,
 } from "./payments";
 
 export { walletApi } from "./wallet";
