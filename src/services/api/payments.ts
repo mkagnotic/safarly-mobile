@@ -21,6 +21,9 @@ export interface Transaction {
   /** Stripe references used on the receipt. */
   stripe_payment_intent_id?: string | null;
   stripe_refund_id?: string | null;
+  /** Parcel route (from -> to), enriched on GET /payment-handler/me for receipts. */
+  route_from?: string | null;
+  route_to?: string | null;
   payer?: { id: string; name: string };
   payee?: { id: string; name: string };
 }
