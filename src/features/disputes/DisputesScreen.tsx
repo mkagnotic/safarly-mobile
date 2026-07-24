@@ -28,6 +28,7 @@ import {
 } from "@/features/disputes/disputeConfig";
 import { useAuth } from "@/context/AuthContext";
 import { useMyDisputes } from "@/hooks/api/useMyDisputes";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { MainTabParamList } from "@/navigation/types";
 import { disputesApi, getErrorMessage, type Dispute } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -65,6 +66,9 @@ export function DisputesScreen() {
   const userId = user?.id ?? "";
 
   const { disputes, loading, loadingMore, hasMore, error, refetch, loadMore } = useMyDisputes();
+  // Dedicated pull-to-refresh state so the spinner shows on any pull — including
+  // the empty state — instead of being tied to the initial-load `loading` flag.
+  const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
@@ -150,6 +154,7 @@ export function DisputesScreen() {
           </Pressable>
           <Text style={styles.title}>Disputes</Text>
           <Pressable onPress={goFile} style={styles.fileButton} accessibilityRole="button" accessibilityLabel="File a dispute">
+            <Ionicons name="add" size={16} color={colors.white} />
             <Text style={styles.fileButtonText}>File</Text>
           </Pressable>
         </View>
@@ -186,7 +191,7 @@ export function DisputesScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={disputes.length === 0 ? styles.listContentEmpty : styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={loading && disputes.length > 0} onRefresh={refetch} tintColor={colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         />
       </View>
@@ -462,7 +467,9 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: 20 },
   list: { flex: 1 },
   listContent: { paddingBottom: 24 },
-  listContentEmpty: { flexGrow: 1 },
+  // Center the empty / loading / error state in the available space instead of
+  // letting it hug the top with a large void below.
+  listContentEmpty: { flexGrow: 1, justifyContent: "center", paddingBottom: 40 },
   footerLoading: { paddingVertical: 16, alignItems: "center" },
 
   headerRow: { flexDirection: "row", alignItems: "center", marginTop: 8, marginBottom: 14, gap: 10 },
@@ -621,7 +628,7 @@ const styles = StyleSheet.create({
   },
 
   // States
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
+  centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 12 },
   centeredText: { color: colors.mutedText, fontSize: 14, fontWeight: "500" },
   errorCard: { borderRadius: 16, alignItems: "center", paddingVertical: 28, paddingHorizontal: 18, gap: 8 },
   errorTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
