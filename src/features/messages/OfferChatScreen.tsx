@@ -829,12 +829,19 @@ export function OfferChatScreen() {
         case "pay_grace":
           if (bookingId) navigation.navigate("PayBookingTab", { bookingId });
           return;
+        // Every post-payment step lives on the booking card (web parity): the
+        // pickup confirmation, the sender's delivery code and the carrier's
+        // code entry are all there, each labelled with its step. `verify_otp`
+        // used to open a standalone mock OTP screen backed by the local store,
+        // which never called the API — it could not confirm a delivery.
         case "verify_otp":
-          if (bookingId) navigation.navigate("OtpVerificationTab", { bookingId });
-          return;
         case "generate_otp":
         case "share_otp":
         case "accept_handoff":
+        case "set_handoff_plan":
+        case "mark_handoff_sent":
+        case "set_return_resolution":
+        case "confirm_return_sent":
           if (bookingId) navigation.navigate("BookingsTab", { expandId: bookingId });
           return;
         case "completed":
@@ -2108,8 +2115,11 @@ const SYSTEM_EVENT_LABELS: Record<string, string> = {
   travel_date_confirmed: "Travel date confirmed",
   payment_received: "Payment received",
   payment_pending: "Payment pending",
-  handoff_accepted: "Handoff accepted",
-  handoff_rejected: "Handoff rejected",
+  handoff_accepted: "Parcel picked up",
+  handoff_rejected: "Declined at handoff",
+  parcel_return_opened: "Parcel return opened",
+  return_resolution_set: "Return decision made",
+  return_completed: "Parcel sent back",
   cancelled: "Booking cancelled",
   delivered: "Delivered",
 };

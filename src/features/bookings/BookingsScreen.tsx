@@ -25,6 +25,8 @@ import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { HandoffPlanCard } from "@/features/bookings/HandoffPlanCard";
+import { ParcelReturnCard } from "@/features/bookings/ParcelReturnCard";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -33,6 +35,8 @@ import {
   bookingsApi,
   getErrorMessage,
   type Booking,
+  type HandoffPlanInput,
+  type ReturnResolution,
   type RNUploadFile,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
@@ -61,6 +65,23 @@ const STATUS_TONES: Record<string, { bg: string; fg: string }> = {
   cancelled_post_possession: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
   expired_unpaid: { bg: "rgba(120,120,120,0.12)", fg: colors.mutedText },
   disputed: { bg: "rgba(220,40,40,0.15)", fg: colors.danger },
+};
+
+// Human-readable status chips (web parity, `CustomerBookings.tsx` statusLabels).
+// The chip used to render the raw enum ("AWAITING HANDOFF" / "HANDOFF
+// REJECTED"), which is internal vocabulary — and "handoff" reads backwards to a
+// carrier, who is receiving the parcel, not giving it away.
+const STATUS_LABELS: Record<string, string> = {
+  pending_payment: "Pending payment",
+  expired_unpaid: "Expired",
+  confirmed: "Confirmed",
+  awaiting_handoff: "Awaiting handoff",
+  handoff_rejected: "Declined at handoff",
+  in_transit: "In transit",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  cancelled_post_possession: "Cancelled mid-trip",
+  disputed: "Disputed",
 };
 
 const STATUS_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -246,8 +267,10 @@ function CancelBookingModal({
 interface RejectHandoffModalProps {
   open: boolean;
   pending: boolean;
+  /** Default for "do you have it?", derived from the handoff record. */
+  parcelLikelyWithCarrier: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string, file?: RNUploadFile) => void;
+  onConfirm: (reason: string, withCarrier: boolean, file?: RNUploadFile) => void;
 }
 
 const REJECT_REASON_MIN = 10;
@@ -256,11 +279,15 @@ const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
 function RejectHandoffModal({
   open,
   pending,
+  parcelLikelyWithCarrier,
   onCancel,
   onConfirm,
 }: Readonly<RejectHandoffModalProps>) {
   const [reason, setReason] = useState("");
   const [photo, setPhoto] = useState<RNUploadFile | null>(null);
+  // Declining does not answer "where is the parcel now?" - and getting that
+  // wrong is how a real parcel ends up stranded at the carrier's address.
+  const [withCarrier, setWithCarrier] = useState(parcelLikelyWithCarrier);
 
   const handleClose = () => {
     if (pending) return;
@@ -292,7 +319,7 @@ function RejectHandoffModal({
 
   const handleConfirm = () => {
     if (!reasonOk) return;
-    onConfirm(trimmed, photo ?? undefined);
+    onConfirm(trimmed, withCarrier, photo ?? undefined);
   };
 
   return (
@@ -304,14 +331,16 @@ function RejectHandoffModal({
             <View style={styles.modalHeaderBubbleDanger}>
               <Ionicons name="close-circle" size={18} color={colors.danger} />
             </View>
-            <Text style={styles.modalTitle}>Reject handoff?</Text>
+            <Text style={styles.modalTitle}>Decline this parcel?</Text>
             <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
           </View>
           <Text style={styles.modalBody}>
-            The sender gets a full refund and the parcel re-opens for other carriers.
-            Tell us what's wrong so we can keep records.
+            Use this when the parcel has reached you but you can't carry it — unsafe,
+            oversized, or not what the listing described. The sender gets a full refund
+            with no penalty to you, and the parcel re-opens for other carriers. Tell us
+            what's wrong so we can keep records.
           </Text>
           <TextInput
             value={reason}
@@ -328,6 +357,35 @@ function RejectHandoffModal({
           />
           <Text style={styles.modalHelper}>
             {trimmed.length}/{REJECT_REASON_MIN} characters minimum
+          </Text>
+
+          <Text style={styles.modalFieldLabel}>Where is the parcel now?</Text>
+          <View style={styles.returnWhereRow}>
+            <Pressable
+              onPress={() => setWithCarrier(true)}
+              style={[styles.returnWhereOption, withCarrier && styles.returnWhereOptionActive]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: withCarrier }}
+              accessibilityLabel="I have the parcel"
+            >
+              <Text style={styles.returnWhereTitle}>I have it</Text>
+              <Text style={styles.returnWhereHint}>It reached me and has to go back.</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setWithCarrier(false)}
+              style={[styles.returnWhereOption, !withCarrier && styles.returnWhereOptionActive]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: !withCarrier }}
+              accessibilityLabel="The sender has the parcel"
+            >
+              <Text style={styles.returnWhereTitle}>The sender has it</Text>
+              <Text style={styles.returnWhereHint}>Declined at the meetup - nothing to send back.</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.modalHelper}>
+            {withCarrier
+              ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
+              : "Nothing to return - the booking closes as soon as you submit."}
           </Text>
 
           <Pressable
@@ -353,9 +411,9 @@ function RejectHandoffModal({
               disabled={pending}
               style={[styles.modalButton, styles.modalButtonSecondary]}
               accessibilityRole="button"
-              accessibilityLabel="Keep handoff"
+              accessibilityLabel="Go back"
             >
-              <Text style={styles.modalButtonSecondaryText}>Keep handoff</Text>
+              <Text style={styles.modalButtonSecondaryText}>Go back</Text>
             </Pressable>
             <Pressable
               onPress={handleConfirm}
@@ -366,12 +424,12 @@ function RejectHandoffModal({
                 (pending || !reasonOk) && styles.modalButtonDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Reject handoff"
+              accessibilityLabel="Decline and refund the sender"
             >
               {pending ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.modalButtonDangerText}>Reject handoff</Text>
+                <Text style={styles.modalButtonDangerText}>Decline and refund</Text>
               )}
             </Pressable>
           </View>
@@ -384,12 +442,17 @@ function RejectHandoffModal({
 // ─────────────── Cancel post-possession modal (carrier mid-trip) ───────────────
 
 interface CancelPostPossessionModalProps {
+  /** Only a parcel the sender pre-declared as returnable can ever earn a cash
+   *  waiver (`dispute-handler` re-checks `sender_pre_declared_eligible`), so
+   *  asking the three questions otherwise is busywork. Web parity:
+   *  `CancelPostPossessionDialog`'s `parcelIsReturnEligible`. */
+  parcelIsReturnEligible: boolean;
   open: boolean;
   pending: boolean;
   onCancel: () => void;
   onConfirm: (
     reason: string,
-    answers: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
+    answers?: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
   ) => void;
 }
 
@@ -416,6 +479,7 @@ const WAIVER_QUESTIONS: ReadonlyArray<WaiverQuestion> = [
 function CancelPostPossessionModal({
   open,
   pending,
+  parcelIsReturnEligible,
   onCancel,
   onConfirm,
 }: Readonly<CancelPostPossessionModalProps>) {
@@ -439,16 +503,26 @@ function CancelPostPossessionModal({
 
   const trimmed = reason.trim();
   const reasonOk = trimmed.length >= REJECT_REASON_MIN;
-  const allAnswered = WAIVER_QUESTIONS.every((q) => answers[q.key] !== null);
-  const allYes = WAIVER_QUESTIONS.every((q) => answers[q.key] === "yes");
+  // Unanswerable-to-no-effect questions are not required: the waiver needs the
+  // sender to have pre-declared the parcel returnable, which the backend
+  // re-checks, so for anything else we skip straight to the reason.
+  const allAnswered =
+    !parcelIsReturnEligible || WAIVER_QUESTIONS.every((q) => answers[q.key] !== null);
+  const allYes =
+    parcelIsReturnEligible && WAIVER_QUESTIONS.every((q) => answers[q.key] === "yes");
 
   const handleConfirm = () => {
     if (!reasonOk || !allAnswered) return;
-    onConfirm(trimmed, {
-      was_online_order: answers.online_order === "yes",
-      free_return_eligible: answers.seller_will_accept_return === "yes",
-      will_return: answers.seller_will_refund === "yes",
-    });
+    onConfirm(
+      trimmed,
+      parcelIsReturnEligible
+        ? {
+            was_online_order: answers.online_order === "yes",
+            free_return_eligible: answers.seller_will_accept_return === "yes",
+            will_return: answers.seller_will_refund === "yes",
+          }
+        : undefined,
+    );
   };
 
   return (
@@ -488,9 +562,12 @@ function CancelPostPossessionModal({
             {trimmed.length}/{REJECT_REASON_MIN} characters minimum
           </Text>
 
+          {parcelIsReturnEligible ? (
           <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>
             Return-eligibility check
           </Text>
+          ) : null}
+          {parcelIsReturnEligible ? (
           <View style={styles.waiverList}>
             {WAIVER_QUESTIONS.map((q) => {
               const current = answers[q.key];
@@ -535,8 +612,9 @@ function CancelPostPossessionModal({
               );
             })}
           </View>
+          ) : null}
 
-          {allAnswered ? (
+          {parcelIsReturnEligible && allAnswered ? (
             <View style={allYes ? styles.waiverHintGood : styles.waiverHintNeutral}>
               <Ionicons
                 name={allYes ? "shield-checkmark" : "information-circle-outline"}
@@ -614,6 +692,10 @@ function ExpandedBody({
     | null
     | "accept-handoff"
     | "reject-handoff"
+    | "set-handoff-plan"
+    | "mark-handoff-sent"
+    | "set-return-resolution"
+    | "complete-return"
     | "cancel"
     | "cancel-post-possession"
     | "generate-otp"
@@ -669,6 +751,10 @@ function ExpandedBody({
       key:
         | "accept-handoff"
         | "reject-handoff"
+        | "set-handoff-plan"
+        | "mark-handoff-sent"
+        | "set-return-resolution"
+        | "complete-return"
         | "cancel"
         | "cancel-post-possession"
         | "generate-otp"
@@ -718,14 +804,51 @@ function ExpandedBody({
     );
   }
 
+  // ── Handoff plan (phase 1 sub-steps) ────────────────────────────────────────
+  // The carrier says HOW the parcel reaches them; the sender then confirms it is
+  // on its way. Advisory: accept/decline stay available throughout, so a carrier
+  // already holding the parcel is never blocked by an unfinished sub-step.
+  const handleSetHandoffPlan = (plan: HandoffPlanInput) =>
+    runAction(
+      "set-handoff-plan",
+      () => bookingsApi.setHandoffPlan(booking.id, plan),
+      plan.mode === "shipped"
+        ? "Address shared - your sender can now send the parcel"
+        : "Meetup details shared with your sender",
+    );
+
+  const handleMarkHandoffSent = (args: { tracking_reference?: string; courier?: string }) =>
+    runAction(
+      "mark-handoff-sent",
+      () => bookingsApi.markHandoffDispatched(booking.id, args),
+      "Marked as sent - your carrier will inspect it on arrival",
+    );
+
+  // ── Parcel return (after a decline / mid-trip cancel) ───────────────────────
+  const handleSetReturnResolution = (args: { resolution: ReturnResolution; note?: string }) =>
+    runAction(
+      "set-return-resolution",
+      () => bookingsApi.setReturnResolution(booking.id, args),
+      "Saved - your carrier has been told what to do with the parcel",
+    );
+
+  const handleCompleteReturn = (args: { tracking_reference?: string }) =>
+    runAction(
+      "complete-return",
+      () => bookingsApi.completeReturn(booking.id, args),
+      "Thanks - the sender has been told the parcel is on its way back",
+    );
+
   const handleAcceptHandoff = () =>
     void runAction(
       "accept-handoff",
       () => bookingsApi.acceptHandoff(booking.id),
-      "Parcel accepted — trip started",
+      // Names the next phase so the delivery-code field that now appears doesn't
+      // read as "a code is required right now".
+      "Handoff complete — you're in transit. Enter the receiver's code at the destination.",
     );
 
-  const handleRejectHandoffConfirm = async (reason: string, file?: RNUploadFile) => {
+  const handleRejectHandoffConfirm = async (reason: string, withCarrier: boolean, file?: RNUploadFile) => {
     const result = await runAction(
       "reject-handoff",
       async () => {
@@ -735,9 +858,9 @@ function ExpandedBody({
           const up = await bookingsApi.uploadHandoffEvidence(booking.id, file);
           photo_path = up.path;
         }
-        return bookingsApi.rejectHandoff(booking.id, { reason, photo_path });
+        return bookingsApi.rejectHandoff(booking.id, { reason, photo_path, parcel_with_carrier: withCarrier });
       },
-      "Handoff rejected — sender refunded",
+      "Parcel declined — sender refunded in full",
     );
     if (result) setRejectHandoffOpen(false);
   };
@@ -753,7 +876,7 @@ function ExpandedBody({
 
   const handleCancelPostPossessionConfirm = async (
     reason: string,
-    answers: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
+    answers?: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
   ) => {
     const result = await runAction(
       "cancel-post-possession",
@@ -837,9 +960,11 @@ function ExpandedBody({
   const canCancel = booking.status === "pending_payment" || isAwaitingHandoff;
   const canAcceptHandoff = isAwaitingHandoff && role === "carrier";
   const canRejectHandoff = canAcceptHandoff;
-  // Sender may pre-generate the delivery code from awaiting_handoff onward.
-  const canGenerateOtp =
-    (booking.status === "in_transit" || isAwaitingHandoff) && role === "sender";
+  // Delivery code = proof of DROP-OFF, so it only appears once the parcel is
+  // actually in transit (web parity, `CustomerBookings.tsx`). Offering it at
+  // awaiting_handoff invited senders to hand the code to the carrier at pickup,
+  // which would let the carrier close the deal and release escrow immediately.
+  const canGenerateOtp = booking.status === "in_transit" && role === "sender";
   const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
   const canCancelPostPossession = booking.status === "in_transit" && role === "carrier";
   // Web parity: ratings are one-per-person-per-booking. Offer "Rate Delivery"
@@ -847,6 +972,14 @@ function ExpandedBody({
   // would 409 CONFLICT server-side).
   const canRate = booking.status === "delivered" && !booking.viewer_has_rated;
   const hasRated = booking.status === "delivered" && Boolean(booking.viewer_has_rated);
+
+  // Handoff/delivery copy adapts to the parcel: an online order is normally
+  // couriered to the carrier's local address, and a return-eligible one can go
+  // back to the seller instead of to the sender if declined.
+  const originCity = booking.parcel?.from_city?.trim() || null;
+  const destinationCity = booking.parcel?.to_city?.trim() || null;
+  const isOnlineOrder = Boolean(booking.parcel?.is_online_order);
+  const returnEligible = Boolean(booking.parcel?.return_eligible);
 
   return (
     <View style={styles.expandedRoot}>
@@ -949,36 +1082,128 @@ function ExpandedBody({
           </Pressable>
         ) : null}
 
-        {canAcceptHandoff ? (
-          <Pressable
-            style={[styles.actionButton, styles.actionPrimary]}
-            onPress={handleAcceptHandoff}
-            disabled={actionPending !== null}
-            accessibilityRole="button"
-            accessibilityLabel="Accept Handoff"
-          >
-            {actionPending === "accept-handoff" ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={14} color={colors.white} />
-                <Text style={styles.actionPrimaryText}>Accept Handoff</Text>
-              </>
-            )}
-          </Pressable>
+        {/* A declined / mid-trip-cancelled deal is not finished while the parcel
+            is still with the carrier. Rendered first: getting a real parcel home
+            outranks anything else left on the card. */}
+        {booking.return_plan ? (
+          <ParcelReturnCard
+            booking={booking}
+            role={role}
+            pending={
+              actionPending === "set-return-resolution" || actionPending === "complete-return"
+                ? actionPending
+                : null
+            }
+            onSetResolution={(args) => void handleSetReturnResolution(args)}
+            onCompleteReturn={(args) => void handleCompleteReturn(args)}
+          />
         ) : null}
 
-        {canRejectHandoff ? (
-          <Pressable
-            style={[styles.actionButton, styles.actionDanger]}
-            onPress={() => setRejectHandoffOpen(true)}
-            disabled={actionPending !== null}
-            accessibilityRole="button"
-            accessibilityLabel="Reject Handoff"
-          >
-            <Ionicons name="close-circle" size={14} color={colors.danger} />
-            <Text style={styles.actionDangerText}>Reject Handoff</Text>
-          </Pressable>
+        {/* Phase 1 sub-steps: coordinate -> send -> inspect. The card below keeps
+            accept/decline available throughout, so a carrier who already has the
+            parcel is never blocked by an unfinished sub-step. */}
+        {isAwaitingHandoff ? (
+          <HandoffPlanCard
+            booking={booking}
+            role={role}
+            pending={
+              actionPending === "set-handoff-plan" || actionPending === "mark-handoff-sent"
+                ? actionPending
+                : null
+            }
+            onSubmitPlan={(plan) => void handleSetHandoffPlan(plan)}
+            onMarkSent={(args) => void handleMarkHandoffSent(args)}
+          />
+        ) : null}
+
+        {/* PHASE 1 of 3 — Handoff: the parcel reaches the CARRIER in the origin
+            city, either couriered to their local address (the norm for an online
+            order) or handed over in person. They inspect it, then accept or
+            decline. No code exists at this phase; the receiver produces one at
+            the destination in phase 3. Both sub-steps are spelled out because
+            neither was prompted anywhere before. */}
+        {canAcceptHandoff ? (
+          <View style={styles.stepCardPrimary}>
+            <View style={styles.stepCardHeader}>
+              <Ionicons name="home-outline" size={14} color={colors.primary} />
+              <Text style={styles.stepCardEyebrowPrimary}>Step 1 of 3 · Handoff</Text>
+            </View>
+            <Text style={styles.stepCardTitle}>
+              {booking.sender?.name
+                ? `Get the parcel from ${booking.sender.name} into your hands`
+                : "Get the parcel into your hands"}
+            </Text>
+            <Text style={styles.stepCardBody}>
+              You are receiving the parcel at this step, before you travel. The payment
+              stays in escrow until you deliver it.
+            </Text>
+
+            <View style={styles.stepCardNote}>
+              <Text style={styles.stepCardNoteStrong}>First, agree the details in chat</Text>
+              <Text style={styles.stepCardNoteText}>
+                • Couriered to you — share your local address
+                {originCity ? ` in ${originCity}` : ""} and the sender ships it there
+                {isOnlineOrder ? " (the usual route for an online order)" : ""}.
+              </Text>
+              <Text style={styles.stepCardNoteText}>
+                • In person — agree a meetup{originCity ? ` in ${originCity}` : ""} and
+                collect it yourself.
+              </Text>
+            </View>
+
+            <View style={styles.stepCardNote}>
+              <Text style={styles.stepCardNoteStrong}>Then inspect it before you accept</Text>
+              <Text style={styles.stepCardNoteText}>
+                • Contents match the listing and the parcel photos you approved.
+              </Text>
+              <Text style={styles.stepCardNoteText}>
+                • Nothing restricted or prohibited; packed and sealed safely.
+              </Text>
+              <Text style={styles.stepCardNoteText}>
+                • Size and weight are what you agreed and fit your baggage allowance.
+              </Text>
+            </View>
+
+            <Text style={styles.stepCardFootnote}>
+              No code at this step. Accepting starts step 2 (In transit); the 6-digit
+              code belongs to step 3 (Delivery), from the receiver.
+            </Text>
+
+            <Pressable
+              style={[styles.actionButton, styles.actionPrimary, styles.fullWidthAction, styles.stepCardCta]}
+              onPress={handleAcceptHandoff}
+              disabled={actionPending !== null}
+              accessibilityRole="button"
+              accessibilityLabel="I have it and inspected it, accept the parcel"
+            >
+              {actionPending === "accept-handoff" ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.white} />
+                  <Text style={styles.actionPrimaryText}>I have it and inspected it — accept</Text>
+                </>
+              )}
+            </Pressable>
+            {canRejectHandoff ? (
+              <Pressable
+                style={[styles.actionButton, styles.actionDanger, styles.fullWidthAction, styles.stepCardCta]}
+                onPress={() => setRejectHandoffOpen(true)}
+                disabled={actionPending !== null}
+                accessibilityRole="button"
+                accessibilityLabel="Can't accept this parcel"
+              >
+                <Ionicons name="close-circle" size={14} color={colors.danger} />
+                <Text style={styles.actionDangerText}>Can't accept this parcel</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.stepCardFootnote}>
+              Declining refunds the sender in full with no penalty to you.{" "}
+              {returnEligible
+                ? "This order can go back to the seller — the sender arranges the return."
+                : "The sender then arranges collection of the parcel from you."}
+            </Text>
+          </View>
         ) : null}
 
         {canCancel && !canAcceptHandoff ? (
@@ -996,6 +1221,17 @@ function ExpandedBody({
 
         {canGenerateOtp ? (
           <View style={styles.fullWidthAction}>
+            <View style={styles.stepCardHeader}>
+              <Ionicons name="key-outline" size={14} color={colors.safe} />
+              <Text style={styles.stepCardEyebrowSafe}>Step 3 of 3 · Delivery</Text>
+            </View>
+            <Text style={styles.stepCardBody}>
+              Step 2 (In transit) ends when your carrier reaches
+              {destinationCity ? ` ${destinationCity}` : " the destination"}. Agree the
+              meetup point or address in chat, then generate the code and give it to
+              whoever is receiving the parcel — the carrier enters it on arrival. Never
+              send the code to the carrier yourself.
+            </Text>
             {generatedOtp ? (
               <View style={styles.otpDisplayCard}>
                 <View style={styles.otpDisplayHeader}>
@@ -1006,7 +1242,9 @@ function ExpandedBody({
                   {generatedOtp}
                 </Text>
                 <Text style={styles.otpDisplayHint}>
-                  Share this code with the carrier in person at handoff. It expires in 30 min.
+                  Give this to the person receiving the parcel at the destination — they
+                  read it out to the carrier at drop-off. It expires in 30 min; resend if
+                  it lapses.
                 </Text>
                 <View style={styles.otpDisplayActions}>
                   <Pressable
@@ -1057,37 +1295,61 @@ function ExpandedBody({
           </View>
         ) : null}
 
+        {/* PHASE 3 of 3 — Delivery. The code belongs to the RECEIVER at the
+            destination. A bare input here read as "a code is required right now",
+            which is what made handoff and delivery look like the same step. */}
         {canConfirmOtp ? (
-          <View style={styles.otpRow}>
-            <TextInput
-              value={otpCode}
-              onChangeText={setOtpCode}
-              placeholder="Enter delivery code…"
-              placeholderTextColor={colors.mutedText}
-              style={styles.otpInput}
-              keyboardType="number-pad"
-              maxLength={6}
-              accessibilityLabel="Delivery code"
-            />
-            <Pressable
-              onPress={handleConfirmOtp}
-              disabled={actionPending !== null || otpCode.trim().length === 0}
-              style={[
-                styles.otpConfirmButton,
-                (actionPending !== null || otpCode.trim().length === 0) && styles.actionDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Confirm Delivery"
-            >
-              {actionPending === "confirm-otp" ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.white} />
-                  <Text style={styles.otpConfirmText}>Confirm Delivery</Text>
-                </>
-              )}
-            </Pressable>
+          <View style={styles.stepCardSafe}>
+            <View style={styles.stepCardHeader}>
+              <Ionicons name="key-outline" size={14} color={colors.safe} />
+              <Text style={styles.stepCardEyebrowSafe}>Step 3 of 3 · Delivery</Text>
+            </View>
+            <Text style={styles.stepCardTitle}>
+              You accepted the parcel — deliver it, then enter the code
+            </Text>
+            <Text style={styles.stepCardBody}>
+              You're carrying it now (step 2). Once you reach
+              {destinationCity ? ` ${destinationCity}` : " the destination"}, agree the
+              meetup point or address in chat, then ask the person receiving the parcel
+              for their 6-digit delivery code (the sender shares it with them). Entering
+              it completes the delivery and releases your payout from escrow.
+            </Text>
+            <Text style={styles.stepCardFieldLabel}>Delivery code from the receiver</Text>
+            <View style={styles.otpRow}>
+              <TextInput
+                value={otpCode}
+                onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, ""))}
+                placeholder="6-digit code"
+                placeholderTextColor={colors.mutedText}
+                style={styles.otpInput}
+                keyboardType="number-pad"
+                maxLength={6}
+                accessibilityLabel="Delivery code from the receiver"
+              />
+              <Pressable
+                onPress={handleConfirmOtp}
+                disabled={actionPending !== null || otpCode.trim().length !== 6}
+                style={[
+                  styles.otpConfirmButton,
+                  (actionPending !== null || otpCode.trim().length !== 6) && styles.actionDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Confirm delivery"
+              >
+                {actionPending === "confirm-otp" ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.white} />
+                    <Text style={styles.otpConfirmText}>Confirm delivery</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+            <Text style={styles.stepCardFootnote}>
+              Not at the destination yet? Nothing to do — come back to this booking when
+              you hand the parcel over.
+            </Text>
           </View>
         ) : null}
 
@@ -1134,6 +1396,9 @@ function ExpandedBody({
       <RejectHandoffModal
         open={rejectHandoffOpen}
         pending={actionPending === "reject-handoff"}
+        parcelLikelyWithCarrier={
+          booking.handoff_mode === "shipped" && !!booking.handoff_dispatched_at
+        }
         onCancel={() => setRejectHandoffOpen(false)}
         onConfirm={handleRejectHandoffConfirm}
       />
@@ -1141,6 +1406,7 @@ function ExpandedBody({
       <CancelPostPossessionModal
         open={cancelPostPossessionOpen}
         pending={actionPending === "cancel-post-possession"}
+        parcelIsReturnEligible={returnEligible}
         onCancel={() => setCancelPostPossessionOpen(false)}
         onConfirm={handleCancelPostPossessionConfirm}
       />
@@ -1247,7 +1513,7 @@ function BookingRow({
           <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
             <Ionicons name={icon} size={11} color={tone.fg} />
             <Text style={[styles.statusBadgeText, { color: tone.fg }]} numberOfLines={1}>
-              {booking.status.replace(/_/g, " ").toUpperCase()}
+              {(STATUS_LABELS[booking.status] ?? booking.status.replace(/_/g, " ")).toUpperCase()}
             </Text>
           </View>
           {booking.parcel ? (
@@ -1714,6 +1980,65 @@ const styles = StyleSheet.create({
   fullWidthAction: { width: "100%" },
   helperText: { color: colors.safe, fontSize: 12, fontWeight: "500", marginTop: 6 },
 
+  // Two-step delivery cards (pickup / drop-off). Each names the step so the
+  // physical action and the delivery code can't be mistaken for each other.
+  stepCardPrimary: {
+    width: "100%",
+    backgroundColor: primaryTint.fill08,
+    borderWidth: 1,
+    borderColor: primaryTint.stroke20,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  stepCardSafe: {
+    width: "100%",
+    backgroundColor: "rgba(34,195,93,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(34,195,93,0.30)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  stepCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  stepCardEyebrowPrimary: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  stepCardEyebrowSafe: {
+    color: colors.safe,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  stepCardTitle: { color: colors.text, fontSize: 14, fontWeight: "800", lineHeight: 19 },
+  stepCardBody: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
+  stepCardNote: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  stepCardNoteText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
+  stepCardNoteStrong: { color: colors.text, fontWeight: "800" },
+  stepCardCta: { marginTop: 4 },
+  stepCardFieldLabel: {
+    color: colors.subtleText,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  stepCardFootnote: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "500" },
+
   // OTP display card — sacred per the implementation guide: the plaintext
   // code is returned by the server exactly once, so we surface it big and
   // copyable until the screen unmounts.
@@ -1828,6 +2153,20 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
+  returnWhereRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+  returnWhereOption: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  returnWhereOptionActive: { borderColor: colors.primary, backgroundColor: primaryTint.fill12 },
+  returnWhereTitle: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  returnWhereHint: { color: colors.mutedText, fontSize: 10, lineHeight: 14, fontWeight: "500" },
   photoPickerButton: {
     flexDirection: "row",
     alignItems: "center",

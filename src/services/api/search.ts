@@ -41,6 +41,9 @@ export interface PackageMatch {
   category?: string;
   fee_offered?: number;
   description?: string;
+  /** Retail purchase being forwarded: the handoff is normally a courier delivery
+   *  to the carrier's local address rather than an in-person meetup. */
+  is_online_order?: boolean;
   /**
    * Client-set (not from the server): in auto-match, flagged true when the
    * parcel's weight exceeds the carrier's luggage capacity. Web parity — a

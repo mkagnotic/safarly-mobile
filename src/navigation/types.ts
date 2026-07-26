@@ -107,7 +107,6 @@ export type MainTabParamList = {
   BookingsTab: { expandId?: string } | undefined;
   /** Escrow payment screen for a booking in `pending_payment` (sender-only). */
   PayBookingTab: { bookingId: string };
-  OtpVerificationTab: { bookingId: string };
   DeliveryReviewTab: { bookingId: string };
   /** Read-only record of a completed delivery, incl. the journey timeline. */
   DeliveryDetailsTab: { bookingId: string };
