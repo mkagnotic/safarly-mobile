@@ -55,6 +55,9 @@ function receiptHtml(tx: Transaction): string {
 
   const rows: Array<{ label: string; value: string }> = [
     { label: "Type", value: txTypeMeta(tx.type).label },
+    ...(tx.route_from || tx.route_to
+      ? [{ label: "Route", value: `${tx.route_from ?? "—"} → ${tx.route_to ?? "—"}` }]
+      : []),
     { label: "Booking", value: tx.booking_id ? `#${tx.booking_id.slice(0, 8)}` : "—" },
     { label: "Reference", value: reference },
     { label: "Currency", value: (currency || "USD").toUpperCase() },

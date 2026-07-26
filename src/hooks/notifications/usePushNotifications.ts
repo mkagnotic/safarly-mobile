@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
 import {
@@ -29,6 +30,12 @@ export function usePushNotifications(): void {
   const authenticated = useAppStore((s) => s.authenticated);
 
   useEffect(() => {
+    // expo-notifications' native methods (getLastNotificationResponseAsync,
+    // the response listener, the handler config) aren't available on web —
+    // calling them throws UnavailabilityError. Push is native-only, so no-op
+    // on web (Expo Web is a dev/testing surface only).
+    if (Platform.OS === "web") return;
+
     configureNotifications();
 
     const sub = Notifications.addNotificationResponseReceivedListener(

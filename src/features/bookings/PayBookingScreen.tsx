@@ -47,6 +47,10 @@ export function PayBookingScreen() {
     { variant: "error" | "warning" | "info"; title: string; message?: string } | null
   >(null);
   const [showKycPrompt, setShowKycPrompt] = useState(false);
+  // Terminal "this parcel/carrier is no longer available" state (exclusivity
+  // lock or trip full) — replaces the pay form with a clear escape so the user
+  // can't retry a payment that will always fail.
+  const [unavailable, setUnavailable] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(() => 0);
 
   // Tick the expiry countdown every 30s (never call Date.now() during render).
@@ -93,10 +97,17 @@ export function PayBookingScreen() {
     } else if (code === "SUSPENDED") {
       setBanner({ variant: "error", title: "Account suspended", message: payError.message });
     } else if (code === "CONFLICT") {
-      // Multi-bidder race: the charge went through but another carrier was booked
-      // (or the trip filled) first, so it was auto-refunded. Surface the server's
-      // message and refresh — the booking is now cancelled.
-      setBanner({ variant: "warning", title: "Refunded — carrier no longer available", message: payError.message });
+      // The parcel is already booked by another carrier, or the trip filled up
+      // (pre-charge exclusivity check, or a multi-bidder race at settle that
+      // auto-refunded). Either way this carrier can no longer be paid — show a
+      // terminal panel with an escape instead of leaving the pay button live.
+      setUnavailable(
+        payError.message || "This parcel is no longer available for this carrier. Please choose a different carrier.",
+      );
+      // Lock down the terminal state — clear any other in-flight prompts/banners
+      // so the only actionable control left is the panel's Back button.
+      setShowKycPrompt(false);
+      setBanner(null);
       void refetch();
     } else if (code === "PAYMENT_FAILED") {
       setBanner({ variant: "error", title: "Payment declined", message: payError.message || "Your bank declined the charge. Try again." });
@@ -185,6 +196,13 @@ export function PayBookingScreen() {
           <Text style={styles.panelBody}>
             This booking wasn’t paid in time and can no longer be confirmed.
           </Text>
+          <AppButton label="Back to bookings" onPress={goBack} style={styles.panelButton} />
+        </Card>
+      ) : unavailable ? (
+        <Card style={styles.panel}>
+          <Ionicons name="close-circle-outline" size={34} color={colors.warning} />
+          <Text style={styles.panelTitle}>Parcel no longer available</Text>
+          <Text style={styles.panelBody}>{unavailable}</Text>
           <AppButton label="Back to bookings" onPress={goBack} style={styles.panelButton} />
         </Card>
       ) : !isPayable ? (
@@ -289,8 +307,9 @@ export function PayBookingScreen() {
         </>
       )}
 
-      {/* KYC prompt */}
-      {showKycPrompt ? (
+      {/* KYC prompt — suppressed in the terminal "unavailable" state so the
+          only actionable control left is the panel's Back button. */}
+      {showKycPrompt && !unavailable ? (
         <View style={styles.kycPromptWrap}>
           <FormBanner
             variant="warning"
