@@ -36,13 +36,32 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   pay_grace: { icon: "alert-circle-outline", tone: "warn", blurb: "Payment is overdue — pay now before the deal auto-cancels." },
   await_payment: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for the sender to pay." },
   await_payment_grace: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for payment — the grace period is running." },
-  // Handoff / transit / delivery
-  accept_handoff: { icon: "cube-outline", tone: "primary", blurb: "Confirm you've collected the parcel to start the trip." },
-  await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for the carrier to collect the parcel." },
-  in_transit: { icon: "car-outline", tone: "neutral", blurb: "The parcel is on its way." },
-  share_otp: { icon: "key-outline", tone: "primary", blurb: "Share your delivery code with the carrier at handover." },
-  generate_otp: { icon: "key-outline", tone: "primary", blurb: "Generate the delivery code to confirm handover." },
-  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: "Enter the delivery code to confirm delivery." },
+  // The post-payment journey has THREE user-facing phases, and conflating them
+  // was the main source of confusion:
+  //   1 Handoff    - the parcel reaches the CARRIER in the origin city (couriered
+  //                  to their local address, or handed over in person). They
+  //                  inspect it and accept or decline. No code involved.
+  //   2 In transit - the carrier travels.
+  //   3 Delivery   - the receiver's 6-digit code is entered at the destination.
+  // So "handoff" never means delivery, and "delivery" only ever means phase 3.
+  // Handoff runs in three sub-steps of its own: agree the plan -> send it -> inspect.
+  set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): tell your sender how the parcel reaches you - couriered to your local address, or in person. No code at this step." },
+  await_handoff_plan: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): waiting for your carrier to share where to send the parcel." },
+  mark_handoff_sent: { icon: "send-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): send the parcel to the address your carrier shared, then mark it as sent." },
+  await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): waiting for the sender to send the parcel to you." },
+  await_handoff_inspection: { icon: "search-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): your carrier is checking the parcel over before accepting it." },
+  accept_handoff: { icon: "home-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): inspect the parcel - contents, nothing restricted, fits your baggage - then accept or decline. No code at this step." },
+  await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): get the parcel to your carrier - courier it to their local address or hand it over. They inspect it, then accept." },
+  in_transit: { icon: "car-outline", tone: "neutral", blurb: "Step 2 of 3 (In transit): the carrier is travelling. The delivery code is entered at the destination in step 3." },
+  share_otp: { icon: "key-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): give the code to the person receiving the parcel - never to the carrier." },
+  generate_otp: { icon: "key-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): generate the code for the person receiving the parcel." },
+  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): at the destination, ask the receiver for their 6-digit code and enter it to release your payout." },
+  // Parcel hand-back: the deal is cancelled and refunded, but a real parcel is
+  // still with the carrier. Deliberately actionable, not a terminal notice.
+  set_return_resolution: { icon: "arrow-undo-outline", tone: "warn", blurb: "The parcel is still with your carrier. Choose whether it goes back to the seller or you arrange collection." },
+  await_return_resolution: { icon: "hourglass-outline", tone: "warn", blurb: "You still have the parcel. The sender is choosing whether it goes back to the seller or they collect it - keep it safe." },
+  confirm_return_sent: { icon: "arrow-undo-outline", tone: "warn", blurb: "Send the parcel back as the sender asked, then confirm it here to close this off." },
+  await_return_sent: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for the carrier to confirm the parcel is on its way back." },
   // Terminal
   completed: { icon: "checkmark-done-outline", tone: "good", blurb: "Delivered — rate this delivery to finish." },
   return_flow: { icon: "return-up-back-outline", tone: "warn", blurb: "A return is in progress for this parcel." },
@@ -217,8 +236,17 @@ function ctaButtonText(code: string): string {
       return "Match";
     case "accept_match":
     case "accept_offer":
-    case "accept_handoff":
       return "Review";
+    case "accept_handoff":
+      return "Inspect";
+    case "set_handoff_plan":
+      return "Share";
+    case "mark_handoff_sent":
+      return "Sent";
+    case "set_return_resolution":
+      return "Choose";
+    case "confirm_return_sent":
+      return "Sent back";
     case "upload_travel_doc":
     case "upload_parcel_photos":
       return "Upload";

@@ -183,6 +183,9 @@ export function SendParcelScreen() {
   const [returnCity, setReturnCity] = useState("");
   const [returnRegion, setReturnRegion] = useState("");
   const [returnPostal, setReturnPostal] = useState("");
+  // Merchant order / RMA reference. Shown to whoever sends the parcel back so
+  // the return can be filed against the right purchase.
+  const [returnReference, setReturnReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -424,6 +427,7 @@ export function SendParcelScreen() {
               // contradicted its name. Now stored properly.
               return_state: returnRegion.trim() || undefined,
               return_postal_code: returnPostal.trim() || undefined,
+              return_reference: returnReference.trim() || undefined,
             }
           : {}),
       });
@@ -461,6 +465,7 @@ export function SendParcelScreen() {
     returnRegion,
     returnCity,
     returnPostal,
+    returnReference,
     maxLimits,
     scrollToField,
   ]);
@@ -955,9 +960,19 @@ export function SendParcelScreen() {
                     style={styles.input}
                     autoCapitalize="characters"
                   />
+                  <TextInput
+                    value={returnReference}
+                    onChangeText={setReturnReference}
+                    placeholder="Order or RMA number (optional)"
+                    placeholderTextColor={colors.subtleText}
+                    style={styles.input}
+                    maxLength={120}
+                    autoCapitalize="characters"
+                  />
                   <Text style={styles.helperText}>
-                    The carrier will only see this address if they need to return the parcel
-                    after cancelling mid-trip.
+                    Shown only if the parcel has to go back - after the carrier declines it
+                    at handoff, or cancels mid-trip. The order number lets them file the
+                    return against the right purchase.
                   </Text>
                 </View>
               ) : null}

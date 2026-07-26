@@ -69,12 +69,18 @@ export type WorkflowState =
   | "PRICE_OFFER"
   | "PAYMENT_PENDING"
   | "PAYMENT_GRACE_PERIOD"
+  // Handoff = the parcel reaching the CARRIER in the origin city, in three
+  // sub-states: agree the plan -> send it -> inspect and accept/decline.
   | "AWAITING_HANDOFF"
+  | "HANDOFF_DISPATCH"
+  | "HANDOFF_INSPECTION"
   | "IN_TRANSIT"
   | "OTP_VERIFICATION"
   | "COMPLETED"
   | "ARCHIVED"
   | "CANCELLED"
+  // A cancelled deal is not finished while the parcel is still with the carrier.
+  | "PARCEL_RETURN"
   | "RETURN_FLOW";
 
 export type WorkflowEvent =
@@ -84,8 +90,9 @@ export type WorkflowEvent =
   | "UPLOAD_PARCEL" | "ACCEPT_PARCEL" | "REJECT_PARCEL"
   | "MAKE_OFFER" | "COUNTER" | "ACCEPT_OFFER" | "REJECT_OFFER"
   | "PAY" | "PAYMENT_COMPLETED"
-  | "CONFIRM_TRAVEL_DATE" | "ACCEPT_HANDOFF" | "REJECT_HANDOFF"
+  | "CONFIRM_TRAVEL_DATE" | "SET_HANDOFF_PLAN" | "MARK_HANDOFF_SENT" | "ACCEPT_HANDOFF" | "REJECT_HANDOFF"
   | "GENERATE_OTP" | "VERIFY_OTP"
+  | "SET_RETURN_RESOLUTION" | "CONFIRM_RETURN_SENT"
   | "CANCEL";
 
 /** The single pinned CTA for the viewer, computed by the backend FSM. */
@@ -126,6 +133,24 @@ export interface ActiveDeal {
   } | null;
   booking_id: string | null;
   booking_status: string | null;
+  /** The agreed handoff plan, so the chat can show the address/tracking inline. */
+  handoff?: {
+    mode: "shipped" | "in_person" | null;
+    address: import("./bookings").HandoffAddress | null;
+    instructions: string | null;
+    expected_by: string | null;
+    dispatched_at: string | null;
+    tracking_reference: string | null;
+    courier: string | null;
+  } | null;
+  /** Outstanding parcel hand-back after a decline / mid-trip cancel. */
+  parcel_return?: {
+    plan: Record<string, unknown>;
+    resolution: string | null;
+    resolution_note: string | null;
+    tracking_reference: string | null;
+    completed_at: string | null;
+  } | null;
   travel_doc_status: "none" | "pending" | "approved" | "rejected";
   parcel_review_status: "none" | "pending" | "approved" | "rejected";
   viewer_role: "carrier" | "sender";

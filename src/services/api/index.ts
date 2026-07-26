@@ -34,7 +34,15 @@ export type {
 } from "./carriers";
 
 export { bookingsApi } from "./bookings";
-export type { Booking, BookingDetailResponse } from "./bookings";
+export type {
+  Booking,
+  BookingDetailResponse,
+  HandoffAddress,
+  HandoffMode,
+  HandoffPlanInput,
+  ReturnPlan,
+  ReturnResolution,
+} from "./bookings";
 
 export { paymentsApi, isPayoutPending } from "./payments";
 export type {

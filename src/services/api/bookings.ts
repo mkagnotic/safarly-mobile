@@ -33,6 +33,53 @@ function normalizeBooking(raw: RawBooking): Booking {
   } as unknown as Booking;
 }
 
+/** How the parcel physically reaches the carrier before they travel. */
+export type HandoffMode = "shipped" | "in_person";
+
+/** Carrier's local receiving address, used when mode = "shipped". */
+export interface HandoffAddress {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  contact_name?: string;
+  contact_phone?: string;
+}
+
+export interface HandoffPlanInput {
+  mode: HandoffMode;
+  /** Required when mode = "shipped" - a courier needs a destination. */
+  address?: HandoffAddress;
+  /** Meetup place/time for in_person, or delivery notes for shipped. */
+  instructions?: string;
+  /** YYYY-MM-DD the carrier needs it by (bounded by the travel date). */
+  expected_by?: string;
+}
+
+/** What has to happen to the parcel after a carrier gives it back. */
+export type ReturnResolution = "return_to_seller" | "sender_collects" | "sender_has_parcel";
+
+/** Snapshot taken at cancel time so the record survives parcel edits/deletes. */
+export interface ReturnPlan {
+  needed: boolean;
+  holder: "carrier" | "sender";
+  suggested: ReturnResolution;
+  is_online_order: boolean;
+  return_eligible: boolean;
+  /** The sender's declared return address - finally read, not just stored. */
+  return_address: {
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+  } | null;
+  return_reference: string | null;
+}
+
 export interface Booking {
   id: string;
   parcel_id: string;
@@ -55,6 +102,25 @@ export interface Booking {
   handoff_rejected_at?: string | null;
   handoff_rejection_reason?: string | null;
   handoff_rejection_proof_url?: string | null;
+  /** Handoff plan - how the parcel reaches the carrier in the origin city before
+   *  they travel. Splits the handoff phase into three sub-steps: agree the plan
+   *  (mode/address) -> send it (dispatched_at) -> inspect and accept/decline. */
+  handoff_mode?: HandoffMode | null;
+  handoff_address?: HandoffAddress | null;
+  handoff_instructions?: string | null;
+  handoff_expected_by?: string | null;
+  handoff_plan_set_at?: string | null;
+  handoff_dispatched_at?: string | null;
+  handoff_tracking_reference?: string | null;
+  handoff_courier?: string | null;
+  /** Parcel hand-back after a decline / mid-trip cancel. The deal is only
+   *  finished once `return_completed_at` is stamped. */
+  return_plan?: ReturnPlan | null;
+  return_resolution?: ReturnResolution | null;
+  return_resolution_note?: string | null;
+  return_resolution_set_at?: string | null;
+  return_tracking_reference?: string | null;
+  return_completed_at?: string | null;
   /**
    * Travel date the pair agreed on. Returned by `booking-handler`'s list select
    * and used by the journey tracker for the "Travel Tomorrow" / "Traveling"
@@ -81,6 +147,14 @@ export interface Booking {
     weight_kg?: number;
     description?: string | null;
     delivery_by?: string;
+    /** Retail purchase being forwarded — handoff is normally a courier delivery
+     *  to the carrier's local address rather than an in-person meetup. */
+    is_online_order?: boolean;
+    /** Can be sent back to the seller if the carrier declines it at handoff. */
+    return_eligible?: boolean;
+    return_city?: string | null;
+    return_state?: string | null;
+    return_country?: string | null;
   };
   sender?: { id?: string; name: string; avatar_url: string | null; rating?: number };
   carrier?: { id?: string; name: string; avatar_url: string | null; rating?: number };
@@ -117,6 +191,29 @@ export const bookingsApi = {
 
   markPickup: (id: string) => api.put<{ status: string }>(`/booking-handler/${id}/pickup`),
 
+  /** Carrier tells the sender HOW the parcel should reach them before travel:
+   *  couriered to their local address, or handed over in person. Advisory - it
+   *  never gates `acceptHandoff`, it just gives the sender somewhere to send it. */
+  setHandoffPlan: (id: string, body: HandoffPlanInput) =>
+    api.post<{
+      handoff_mode: HandoffMode;
+      handoff_address: HandoffAddress | null;
+      handoff_instructions: string | null;
+      handoff_expected_by: string | null;
+      handoff_plan_set_at: string;
+    }>(`/booking-handler/${id}/handoff/plan`, body),
+
+  /** Sender confirms the parcel is on its way to the carrier. */
+  markHandoffDispatched: (
+    id: string,
+    body: { tracking_reference?: string; courier?: string; note?: string },
+  ) =>
+    api.post<{
+      handoff_dispatched_at: string;
+      handoff_tracking_reference: string | null;
+      handoff_courier: string | null;
+    }>(`/booking-handler/${id}/handoff/dispatched`, body),
+
   /** Carrier takes possession at inspection: awaiting_handoff → in_transit. */
   acceptHandoff: (id: string, idempotencyKey = newIdempotencyKey()) =>
     api.post<{ status: string; handoff_accepted_at: string }>(
@@ -125,10 +222,27 @@ export const bookingsApi = {
       { idempotencyKey },
     ),
 
-  /** Carrier rejects at inspection: refunds the sender, reopens the parcel, no penalty. */
+  /** Sender decides where the parcel goes after the carrier gave it back. */
+  setReturnResolution: (id: string, body: { resolution: ReturnResolution; note?: string }) =>
+    api.post<{
+      return_resolution: ReturnResolution;
+      return_resolution_note: string | null;
+      return_resolution_set_at: string;
+      return_completed_at: string | null;
+    }>(`/booking-handler/${id}/return/resolution`, body),
+
+  /** Carrier confirms the parcel is on its way back - ends the deal. */
+  completeReturn: (id: string, body: { tracking_reference?: string; note?: string }) =>
+    api.post<{ return_completed_at: string; return_tracking_reference: string | null }>(
+      `/booking-handler/${id}/return/complete`,
+      body,
+    ),
+
+  /** Carrier rejects at inspection: refunds the sender, reopens the parcel, no penalty.
+   *  `parcel_with_carrier` decides whether a hand-back is outstanding. */
   rejectHandoff: (
     id: string,
-    body: { reason: string; photo_path?: string },
+    body: { reason: string; photo_path?: string; parcel_with_carrier?: boolean },
     idempotencyKey = newIdempotencyKey(),
   ) =>
     api.post<{

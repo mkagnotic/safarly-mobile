@@ -53,7 +53,7 @@ export const STAGE_LABELS: Record<StageKey, string> = {
   travel_tomorrow: "Travel Tomorrow",
   traveling: "Traveling",
   ready_for_delivery: "Ready for Delivery",
-  otp_verification: "OTP Verification",
+  otp_verification: "Delivery Code",
   payment_released: "Payment Released",
   review: "Review",
 };
@@ -316,7 +316,7 @@ function failedLabelFor(status: string | null): string {
     case "expired_unpaid":
       return "Payment expired";
     case "handoff_rejected":
-      return "Handoff declined";
+      return "Declined at handoff";
     default:
       return "Booking ended";
   }

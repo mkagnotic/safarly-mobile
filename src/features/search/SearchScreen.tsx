@@ -1378,12 +1378,27 @@ function PackageMatchCard({
   // Web parity: a match still shows but wears an amber pill when the parcel is
   // heavier than the carrier's capacity. Copy differs by side (carrier trip vs
   // your trip), matching web's "Exceeds capacity" / "Exceeds your capacity".
-  const warningBlock = match.exceeds_capacity ? (
-    <View style={[styles.capacityPill, nested && styles.capacityPillNested]}>
-      <Ionicons name="alert-circle" size={12} color={colors.warning} />
-      <Text style={styles.capacityPillText}>
-        {isTrip ? "Exceeds capacity" : "Exceeds your capacity"}
-      </Text>
+  // A carrier bidding on this needs to know BEFORE they commit: an online order
+  // is normally couriered to their local address rather than handed over in
+  // person, which changes what they are agreeing to.
+  const onlineOrderPill = !isTrip && match.is_online_order ? (
+    <View style={[styles.onlineOrderPill, nested && styles.capacityPillNested]}>
+      <Ionicons name="cube-outline" size={12} color={colors.primary} />
+      <Text style={styles.onlineOrderPillText}>Online order</Text>
+    </View>
+  ) : null;
+
+  const warningBlock = (match.exceeds_capacity || onlineOrderPill) ? (
+    <View style={styles.pillRow}>
+      {match.exceeds_capacity ? (
+        <View style={[styles.capacityPill, nested && styles.capacityPillNested]}>
+          <Ionicons name="alert-circle" size={12} color={colors.warning} />
+          <Text style={styles.capacityPillText}>
+            {isTrip ? "Exceeds capacity" : "Exceeds your capacity"}
+          </Text>
+        </View>
+      ) : null}
+      {onlineOrderPill}
     </View>
   ) : null;
 
@@ -2029,6 +2044,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(245, 159, 10, 0.12)",
     marginTop: 6,
   },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  onlineOrderPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    backgroundColor: primaryTint.fill12,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  onlineOrderPillText: { color: colors.primary, fontSize: 11, fontWeight: "800" },
   capacityPillNested: { alignSelf: "flex-start" },
   capacityPillText: { color: colors.warning, fontSize: 11, lineHeight: 14, fontWeight: "700" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
