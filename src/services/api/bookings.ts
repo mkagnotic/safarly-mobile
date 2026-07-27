@@ -59,7 +59,13 @@ export interface HandoffPlanInput {
 }
 
 /** What has to happen to the parcel after a carrier gives it back. */
-export type ReturnResolution = "return_to_seller" | "sender_collects" | "sender_has_parcel";
+export type ReturnResolution =
+  /** Post it to the merchant's return address (online orders only). */
+  | "return_to_seller"
+  /** Post it to an address the sender nominates now (personal items). */
+  | "return_to_sender"
+  | "sender_collects"
+  | "sender_has_parcel";
 
 /** Snapshot taken at cancel time so the record survives parcel edits/deletes. */
 export interface ReturnPlan {
@@ -121,6 +127,8 @@ export interface Booking {
   return_resolution_set_at?: string | null;
   return_tracking_reference?: string | null;
   return_completed_at?: string | null;
+  /** Address the sender nominated for the parcel to be posted back to. */
+  return_destination_address?: HandoffAddress | null;
   /**
    * Travel date the pair agreed on. Returned by `booking-handler`'s list select
    * and used by the journey tracker for the "Travel Tomorrow" / "Traveling"
@@ -223,7 +231,10 @@ export const bookingsApi = {
     ),
 
   /** Sender decides where the parcel goes after the carrier gave it back. */
-  setReturnResolution: (id: string, body: { resolution: ReturnResolution; note?: string }) =>
+  setReturnResolution: (
+    id: string,
+    body: { resolution: ReturnResolution; note?: string; address?: HandoffAddress },
+  ) =>
     api.post<{
       return_resolution: ReturnResolution;
       return_resolution_note: string | null;

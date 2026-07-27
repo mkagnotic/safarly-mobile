@@ -36,6 +36,7 @@ import {
   getErrorMessage,
   type Booking,
   type HandoffPlanInput,
+  type HandoffAddress,
   type ReturnResolution,
   type RNUploadFile,
 } from "@/services/api";
@@ -825,7 +826,7 @@ function ExpandedBody({
     );
 
   // ── Parcel return (after a decline / mid-trip cancel) ───────────────────────
-  const handleSetReturnResolution = (args: { resolution: ReturnResolution; note?: string }) =>
+  const handleSetReturnResolution = (args: { resolution: ReturnResolution; note?: string; address?: HandoffAddress }) =>
     runAction(
       "set-return-resolution",
       () => bookingsApi.setReturnResolution(booking.id, args),

@@ -6,7 +6,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
-import type { Booking, ReturnResolution } from "@/services/api";
+import type { Booking, HandoffAddress, ReturnResolution } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 /**
@@ -26,18 +26,20 @@ export interface ParcelReturnCardProps {
   booking: Booking;
   role: "sender" | "carrier" | "unknown";
   pending: "set-return-resolution" | "complete-return" | null;
-  onSetResolution: (args: { resolution: ReturnResolution; note?: string }) => void;
+  onSetResolution: (args: { resolution: ReturnResolution; note?: string; address?: HandoffAddress }) => void;
   onCompleteReturn: (args: { tracking_reference?: string }) => void;
 }
 
 const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
   return_to_seller: "Send it back to the seller",
+  return_to_sender: "Post it back to me",
   sender_collects: "I'll arrange collection from the carrier",
   sender_has_parcel: "I already have the parcel",
 };
 
 const RESOLUTION_ICON: Record<ReturnResolution, keyof typeof Ionicons.glyphMap> = {
   return_to_seller: "storefront-outline",
+  return_to_sender: "mail-outline",
   sender_collects: "hand-left-outline",
   sender_has_parcel: "home-outline",
 };
@@ -80,6 +82,17 @@ export function ParcelReturnCard({
   const setChoice = setPicked;
   const [note, setNote] = useState("");
   const [tracking, setTracking] = useState("");
+  // Where to post it back to, for `return_to_sender`. Nothing is stored for a
+  // personal item (only online orders declare a seller address), so the sender
+  // supplies this now.
+  const [myLine1, setMyLine1] = useState("");
+  const [myLine2, setMyLine2] = useState("");
+  const [myCity, setMyCity] = useState("");
+  const [myState, setMyState] = useState("");
+  const [myPostal, setMyPostal] = useState("");
+  const [myCountry, setMyCountry] = useState("");
+  const [myContact, setMyContact] = useState("");
+  const [myPhone, setMyPhone] = useState("");
 
   // `needed: false` means the carrier declined at a meetup and the sender never
   // let go of the parcel - there is nothing to hand back, so no card.
@@ -124,6 +137,39 @@ export function ParcelReturnCard({
     </View>
   ) : null;
 
+  const dest = booking.return_destination_address ?? null;
+  const destText = dest
+    ? [dest.line1, dest.line2, dest.city, dest.state, dest.postal_code, dest.country]
+        .filter((part) => !!part && String(part).trim().length > 0)
+        .join(", ")
+    : "";
+  const destinationBlock = destText ? (
+    <View style={styles.addressBlock}>
+      <View style={styles.headerRow}>
+        <Ionicons name="mail-outline" size={12} color={colors.subtleText} />
+        <Text style={styles.addressLabel}>Post it back to</Text>
+      </View>
+      <Text style={styles.addressText}>{destText}</Text>
+      <Pressable
+        onPress={() => {
+          void Clipboard.setStringAsync(destText);
+          showToast({ title: "Address copied", variant: "success" });
+        }}
+        style={styles.copyButton}
+        accessibilityRole="button"
+        accessibilityLabel="Copy return address"
+      >
+        <Ionicons name="copy-outline" size={12} color={colors.text} />
+        <Text style={styles.copyButtonText}>Copy address</Text>
+      </Pressable>
+      {dest?.contact_name || dest?.contact_phone ? (
+        <Text style={styles.meta}>
+          For the courier: {[dest?.contact_name, dest?.contact_phone].filter(Boolean).join(" \u00b7 ")}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
+
   // ── Done ──────────────────────────────────────────────────────────────────
   if (completedAt) {
     return (
@@ -149,7 +195,12 @@ export function ParcelReturnCard({
   // ── Step 1: the sender decides ────────────────────────────────────────────
   if (!resolution) {
     if (!isCarrier) {
-      const options: ReturnResolution[] = ["return_to_seller", "sender_collects", "sender_has_parcel"];
+      const options: ReturnResolution[] = [
+        "return_to_seller",
+        "return_to_sender",
+        "sender_collects",
+        "sender_has_parcel",
+      ];
       return (
         <View style={styles.card}>
           {header(`Tell ${carrierName} what to do with the parcel`)}
@@ -180,15 +231,29 @@ export function ParcelReturnCard({
                         ? canReturnToSeller
                           ? "The carrier posts it to the return address you gave when listing the parcel."
                           : "You did not declare a return address - pick another option, or add one in the note."
-                        : value === "sender_collects"
-                          ? "You book a courier or collect it yourself. Agree the details in chat."
-                          : "Nothing to move - close this off."}
+                        : value === "return_to_sender"
+                          ? "The carrier posts it to an address you give below - the usual choice for a personal item."
+                          : value === "sender_collects"
+                            ? "You book a courier or collect it yourself. Agree the details in chat."
+                            : "Nothing to move - close this off."}
                     </Text>
                   </View>
                 </Pressable>
               );
             })}
           </View>
+          {choice === "return_to_sender" ? (
+            <View style={styles.destForm}>
+              <AppInput label="Post it back to" value={myLine1} onChangeText={setMyLine1} placeholder="Street address" />
+              <AppInput value={myLine2} onChangeText={setMyLine2} placeholder="Apartment, building, landmark (optional)" />
+              <AppInput value={myCity} onChangeText={setMyCity} placeholder="City" />
+              <AppInput value={myState} onChangeText={setMyState} placeholder="State / region" />
+              <AppInput value={myPostal} onChangeText={setMyPostal} placeholder="Postal code" />
+              <AppInput value={myCountry} onChangeText={setMyCountry} placeholder="Country" />
+              <AppInput value={myContact} onChangeText={setMyContact} placeholder="Name for the parcel" />
+              <AppInput value={myPhone} onChangeText={setMyPhone} placeholder="Phone for the courier" keyboardType="phone-pad" />
+            </View>
+          ) : null}
           <AppInput
             label="Anything the carrier needs to know (optional)"
             value={note}
@@ -200,7 +265,29 @@ export function ParcelReturnCard({
             textAlignVertical="top"
           />
           <Pressable
-            onPress={() => onSetResolution({ resolution: choice, note: note.trim() || undefined })}
+            onPress={() => {
+              if (choice === "return_to_sender" && (!myLine1.trim() || !myCity.trim())) {
+                showToast({ title: "Add the street address and city to post the parcel back to", variant: "error" });
+                return;
+              }
+              onSetResolution({
+                resolution: choice,
+                note: note.trim() || undefined,
+                address:
+                  choice === "return_to_sender"
+                    ? {
+                        line1: myLine1.trim(),
+                        line2: myLine2.trim() || undefined,
+                        city: myCity.trim(),
+                        state: myState.trim() || undefined,
+                        postal_code: myPostal.trim() || undefined,
+                        country: myCountry.trim() || undefined,
+                        contact_name: myContact.trim() || undefined,
+                        contact_phone: myPhone.trim() || undefined,
+                      }
+                    : undefined,
+              });
+            }}
             disabled={pending !== null}
             style={[styles.primaryButton, pending !== null && styles.disabled]}
             accessibilityRole="button"
@@ -243,6 +330,7 @@ export function ParcelReturnCard({
             : "The sender is arranging collection. Once you have handed the parcel over, confirm it here."}
         </Text>
         {resolution === "return_to_seller" ? addressBlock : null}
+        {resolution === "return_to_sender" ? destinationBlock : null}
         {booking.return_resolution_note ? (
           <View style={styles.addressBlock}>
             <Text style={styles.meta}>
@@ -284,6 +372,7 @@ export function ParcelReturnCard({
         notified and will confirm here once it is done.
       </Text>
       {resolution === "return_to_seller" ? addressBlock : null}
+      {resolution === "return_to_sender" ? destinationBlock : null}
     </View>
   );
 }
@@ -340,6 +429,7 @@ const styles = StyleSheet.create({
   },
   copyButtonText: { color: colors.text, fontSize: 11, fontWeight: "700" },
 
+  destForm: { gap: 2, marginTop: 4 },
   optionList: { gap: 8, marginTop: 4 },
   option: {
     flexDirection: "row",
