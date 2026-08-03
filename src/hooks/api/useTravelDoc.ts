@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import {
   ApiClientError,
   carriersApi,
@@ -91,6 +92,23 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
   useRealtimeBus("carrier-requests", refetch);
   useRealtimeBus("messages", refetch);
 
+  /**
+   * After a local review action the PIN has to advance too, not just this card.
+   * `useActiveDeal` (which drives the chat pin) listens on the "carrier-requests"
+   * and "messages" topics, but nothing was bumping them locally — so the pin only
+   * caught up when the SERVER's realtime event arrived. During that window the pin
+   * still showed the old step with its button live, users read it as "nothing
+   * happened" and pressed again, and the second press hit a 409 for an action that
+   * had already succeeded. Bumping here refreshes the pin in the same tick as the
+   * card, and `pending` stays set until it is done.
+   *
+   * Costs one redundant refetch of THIS hook, which also listens on those
+   * topics. Cheap, and worth it to keep every consumer in step from one call.
+   */
+  const syncDealPin = useCallback(() => {
+    for (const t of ["carrier-requests", "messages"] as const) bumpRealtimeTopic(t);
+  }, []);
+
   const upload = useCallback(
     async (file: RNUploadFile) => {
       if (!requestId) return;
@@ -98,6 +116,7 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
       try {
         await carriersApi.uploadTravelDoc(requestId, file);
         await refetch();
+        syncDealPin();
       } finally {
         if (mountedRef.current) setPending(null);
       }
@@ -110,7 +129,14 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
     setPending("approve");
     try {
       await carriersApi.approveTravelDoc(requestId);
+      // Mark it locally the moment the server confirms, BEFORE the refetch.
+      // The card hides itself once status is "approved", so its visibility hangs
+      // on this value: if the refetch is slow, fails, or is dropped, the card
+      // otherwise stays on screen offering APPROVE for something already
+      // approved. The refetch below just reconciles the rest of the payload.
+      if (mountedRef.current) setDoc((prev) => (prev ? { ...prev, status: "approved" } : prev));
       await refetch();
+      syncDealPin();
     } finally {
       if (mountedRef.current) setPending(null);
     }
@@ -123,6 +149,7 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
       try {
         await carriersApi.rejectTravelDoc(requestId, reason);
         await refetch();
+        syncDealPin();
       } finally {
         if (mountedRef.current) setPending(null);
       }
@@ -136,6 +163,7 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
     try {
       await carriersApi.requestTravelDocAdminReview(requestId);
       await refetch();
+      syncDealPin();
     } finally {
       if (mountedRef.current) setPending(null);
     }
@@ -147,6 +175,7 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
     try {
       await carriersApi.withdrawBid(doc.parcel_id, requestId);
       await refetch();
+      syncDealPin();
     } finally {
       if (mountedRef.current) setPending(null);
     }

@@ -19,6 +19,8 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { AppInput } from "@/components/ui/AppInput";
+import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -29,6 +31,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { RETURN_COUNTRIES, statesFor, postalHint, validateReturnAddress } from "@/utils/addressOptions";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "SendParcelTab">,
@@ -42,7 +45,10 @@ type SizeUnit = "cm" | "in";
 type Currency = "USD" | "INR";
 
 /** Keys for fields that can carry an inline validation error. */
-type FieldKey = "fromCity" | "toCity" | "weight" | "deliveryBy" | "deliveryTo" | "feeOffered";
+type FieldKey =
+  | "fromCity" | "toCity" | "weight" | "deliveryBy" | "deliveryTo" | "feeOffered"
+  // Return address - only ever set while the parcel is a returnable online order.
+  | "returnLine1" | "returnCity" | "returnState" | "returnPostal" | "returnCountry";
 
 /** Form sections, named by content so reordering can't invalidate them. */
 type SectionKey = "route" | "dates" | "details" | "fee";
@@ -183,6 +189,7 @@ export function SendParcelScreen() {
   const [returnCity, setReturnCity] = useState("");
   const [returnRegion, setReturnRegion] = useState("");
   const [returnPostal, setReturnPostal] = useState("");
+  const [returnCountry, setReturnCountry] = useState("");
   // Merchant order / RMA reference. Shown to whoever sends the parcel back so
   // the return can be filed against the right purchase.
   const [returnReference, setReturnReference] = useState("");
@@ -232,6 +239,12 @@ export function SendParcelScreen() {
     deliveryBy: "dates",
     deliveryTo: "dates",
     feeOffered: "fee",
+    // The return-address block is rendered inside the fee section.
+    returnLine1: "fee",
+    returnCity: "fee",
+    returnState: "fee",
+    returnPostal: "fee",
+    returnCountry: "fee",
   };
 
   const clearFieldError = useCallback((key: FieldKey) => {
@@ -242,6 +255,23 @@ export function SendParcelScreen() {
       return next;
     });
   }, []);
+
+  // CountryPicker takes {code,name}; addressOptions speaks {value,label}.
+  const returnCountryOptions = useMemo(
+    () => RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label })),
+    [],
+  );
+  const returnStateOptions = useMemo(
+    () => statesFor(returnCountry).map((s) => ({ code: s.value, name: s.label })),
+    [returnCountry],
+  );
+
+  // Pre-fill the return country from the parcel's ORIGIN: a returnable online
+  // order almost always goes back to a seller in the country it shipped from.
+  // Only seeds an empty field, so it never overwrites a deliberate choice.
+  useEffect(() => {
+    if (isOnlineOrder && returnEligible && !returnCountry) setReturnCountry(fromCountry);
+  }, [isOnlineOrder, returnEligible, returnCountry, fromCountry]);
 
   const toggleFromCountry = useCallback(() => {
     setFromCountry((c) => (c === "IN" ? "US" : "IN"));
@@ -348,6 +378,21 @@ export function SendParcelScreen() {
     const fee = parseFloat(feeOffered);
     if (!fee || fee <= 0) errors.feeOffered = "Enter a valid amount";
 
+    // A returnable online order MUST carry an address that can actually be
+    // posted to. This block used to accept anything, including nothing at all -
+    // and it is read exactly when a carrier has cancelled holding the parcel.
+    if (isOnlineOrder && returnEligible) {
+      const ra = validateReturnAddress({
+        line1: returnLine1, city: returnCity, state: returnRegion,
+        postal: returnPostal, country: returnCountry,
+      });
+      if (ra.line1) errors.returnLine1 = ra.line1;
+      if (ra.city) errors.returnCity = ra.city;
+      if (ra.state) errors.returnState = ra.state;
+      if (ra.postal) errors.returnPostal = ra.postal;
+      if (ra.country) errors.returnCountry = ra.country;
+    }
+
     if (Object.keys(errors).length > 0 || hasSizeError) {
       setFieldErrors(errors);
       setFormError(
@@ -362,6 +407,11 @@ export function SendParcelScreen() {
         "deliveryBy",
         "deliveryTo",
         "feeOffered",
+        "returnLine1",
+        "returnCountry",
+        "returnState",
+        "returnCity",
+        "returnPostal",
       ];
       const firstKey = order.find((k) => errors[k]);
       if (firstKey) scrollToField(firstKey);
@@ -420,13 +470,16 @@ export function SendParcelScreen() {
         return_eligible: isOnlineOrder && returnEligible,
         ...(isOnlineOrder && returnEligible
           ? {
-              return_address_line1: returnLine1.trim() || undefined,
-              return_city: returnCity.trim() || undefined,
+              return_address_line1: returnLine1.trim(),
+              return_city: returnCity.trim(),
               // Was written into return_address_line2 while no state column
               // existed; that column means "second address line", so the data
               // contradicted its name. Now stored properly.
-              return_state: returnRegion.trim() || undefined,
-              return_postal_code: returnPostal.trim() || undefined,
+              return_state: returnRegion,
+              return_postal_code: returnPostal.trim(),
+              // Was never sent at all, despite the column existing and the
+              // return flow needing it to address the parcel.
+              return_country: returnCountry,
               return_reference: returnReference.trim() || undefined,
             }
           : {}),
@@ -495,6 +548,7 @@ export function SendParcelScreen() {
     setReturnCity("");
     setReturnRegion("");
     setReturnPostal("");
+    setReturnCountry("");
     setSubmitting(false);
     setSubmitted(false);
     setFormError(null);
@@ -842,7 +896,10 @@ export function SendParcelScreen() {
             title="How much will you pay?"
             subtitle="Set a fair carrier fee"
             complete={feeComplete}
-            hasError={!!fieldErrors.feeOffered}
+            hasError={
+              !!fieldErrors.feeOffered || !!fieldErrors.returnLine1 || !!fieldErrors.returnCity ||
+              !!fieldErrors.returnState || !!fieldErrors.returnPostal || !!fieldErrors.returnCountry
+            }
           >
             <View style={styles.costRow}>
               <CurrencyToggle value={currency} onChange={setCurrency} />
@@ -926,46 +983,74 @@ export function SendParcelScreen() {
               {returnEligible ? (
                 <View style={styles.returnAddressBlock}>
                   <Text style={styles.fieldLabel}>Return address</Text>
-                  <TextInput
+                  <AppInput
                     value={returnLine1}
-                    onChangeText={setReturnLine1}
-                    placeholder="Street address"
-                    placeholderTextColor={colors.subtleText}
-                    style={styles.input}
+                    onChangeText={(v) => { setReturnLine1(v); clearFieldError("returnLine1"); }}
+                    placeholder="Street address *"
                     autoCapitalize="words"
+                    error={fieldErrors.returnLine1}
                   />
-                  <View style={styles.returnAddressRow}>
-                    <TextInput
-                      value={returnCity}
-                      onChangeText={setReturnCity}
-                      placeholder="City"
-                      placeholderTextColor={colors.subtleText}
-                      style={[styles.input, styles.returnAddressCell]}
-                      autoCapitalize="words"
-                    />
-                    <TextInput
-                      value={returnRegion}
-                      onChangeText={setReturnRegion}
-                      placeholder="State / region"
-                      placeholderTextColor={colors.subtleText}
-                      style={[styles.input, styles.returnAddressCell]}
-                      autoCapitalize="words"
-                    />
-                  </View>
-                  <TextInput
+
+                  {/* Country first: it decides which states are offered and how
+                      the postal code is validated. */}
+                  <CountryPicker
+                    value={returnCountry}
+                    onChange={(v) => {
+                      setReturnCountry(v);
+                      // A state from the previous country would no longer be
+                      // valid, so drop it rather than submit a mismatch.
+                      setReturnRegion("");
+                      clearFieldError("returnCountry");
+                      clearFieldError("returnState");
+                    }}
+                    placeholder="Country *"
+                    options={returnCountryOptions}
+                    invalid={!!fieldErrors.returnCountry}
+                  />
+                  {fieldErrors.returnCountry ? (
+                    <Text style={styles.inlineError}>{fieldErrors.returnCountry}</Text>
+                  ) : null}
+
+                  <CountryPicker
+                    value={returnRegion}
+                    onChange={(v) => { setReturnRegion(v); clearFieldError("returnState"); }}
+                    placeholder={returnCountry ? "State / region *" : "Select a country first"}
+                    disabled={!returnCountry}
+                    options={returnStateOptions}
+                    invalid={!!fieldErrors.returnState}
+                  />
+                  {fieldErrors.returnState ? (
+                    <Text style={styles.inlineError}>{fieldErrors.returnState}</Text>
+                  ) : null}
+
+                  <AppInput
+                    value={returnCity}
+                    // Digits are stripped as you type - a city is never a
+                    // number, and blocking it here beats an error on submit.
+                    onChangeText={(v) => {
+                      setReturnCity(v.replace(/[0-9]/g, ""));
+                      clearFieldError("returnCity");
+                    }}
+                    placeholder="City *"
+                    autoCapitalize="words"
+                    error={fieldErrors.returnCity}
+                  />
+                  <AppInput
                     value={returnPostal}
-                    onChangeText={setReturnPostal}
-                    placeholder="ZIP / postal code"
-                    placeholderTextColor={colors.subtleText}
-                    style={styles.input}
-                    autoCapitalize="characters"
+                    onChangeText={(v) => { setReturnPostal(v); clearFieldError("returnPostal"); }}
+                    placeholder={returnCountry === "IN" ? "PIN code *" : "Postal code *"}
+                    keyboardType="number-pad"
+                    maxLength={10}
+                    error={fieldErrors.returnPostal}
                   />
-                  <TextInput
+                  {!fieldErrors.returnPostal && postalHint(returnCountry) ? (
+                    <Text style={styles.helperText}>{postalHint(returnCountry)}</Text>
+                  ) : null}
+
+                  <AppInput
                     value={returnReference}
                     onChangeText={setReturnReference}
                     placeholder="Order or RMA number (optional)"
-                    placeholderTextColor={colors.subtleText}
-                    style={styles.input}
                     maxLength={120}
                     autoCapitalize="characters"
                   />

@@ -43,7 +43,7 @@ import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
-import { showToast } from "@/feedback/appFeedback";
+import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useParcelReview } from "@/hooks/api/useParcelReview";
 import { useTravelDoc } from "@/hooks/api/useTravelDoc";
@@ -672,6 +672,33 @@ export function OfferChatScreen() {
     } catch (err) {
       // Guard may reject if the state moved (e.g. already unmatched). Resync.
       void refetchConversations();
+
+      // A blocked unmatch used to dead-end: "Cancel the booking first to end the
+      // match" with no way to reach that booking. The server now names it, so
+      // offer a route straight there - Cancel lives on the booking card.
+      const blocker =
+        err instanceof ApiClientError
+          ? (err.details?.[0] as { booking_id?: string; action?: string } | undefined)
+          : undefined;
+      if (confirmAction === "unmatch" && blocker?.booking_id) {
+        setConfirmAction(null);
+        showAppAlert({
+          title: "Can't unmatch yet",
+          message: getErrorMessage(err),
+          actions: [
+            { text: "Not now", style: "cancel" },
+            {
+              text: blocker.action === "view_dispute" ? "View dispute" : "Go to booking",
+              onPress: () => {
+                if (blocker.action === "view_dispute") navigation.navigate("DisputesTab");
+                else navigation.navigate("BookingsTab", { expandId: blocker.booking_id as string });
+              },
+            },
+          ],
+        });
+        return;
+      }
+
       showToast({
         title: confirmAction === "block" ? "Couldn't block" : "Couldn't unmatch",
         message: getErrorMessage(err),
@@ -680,7 +707,7 @@ export function OfferChatScreen() {
     } finally {
       setConfirmPending(false);
     }
-  }, [conversationId, confirmAction, refetchConversations]);
+  }, [conversationId, confirmAction, refetchConversations, navigation]);
 
   const handleUnblock = useCallback(async () => {
     if (!conversationId) return;
