@@ -333,41 +333,52 @@ const NotificationRow = memo(function NotificationRow({
   const style = styleForType(item.type);
   const created = formatDate(item.created_at);
 
+  // The card is a plain View, with the open-notification pressable and the
+  // delete pressable as SIBLINGS inside it.
+  //
+  // Delete used to sit inside the row pressable. On react-native-web an
+  // accessibilityRole="button" Pressable renders a real <button>, so that
+  // produced <button> inside <button> — invalid HTML that React warns about and
+  // that breaks hydration. It is an accessibility bug too: a nested control is
+  // not reliably reachable, and screen readers announce the pair ambiguously.
+  //
+  // Siblings also remove the need to stop propagation: tapping the trash can no
+  // longer bubble into "open the notification", because it never was a child.
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.card, shadowCard(), unread ? styles.cardUnread : styles.cardRead]}
-      accessibilityRole="button"
-      accessibilityLabel={`${unread ? "Unread: " : ""}${item.title}`}
-    >
-      <View style={[styles.typeIconWrap, { backgroundColor: style.bg }]}>
-        <Ionicons name={style.icon} size={16} color={style.fg} />
-      </View>
-      <View style={styles.cardBody}>
-        <View style={styles.cardTopRow}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
+    <View style={[styles.card, shadowCard(), unread ? styles.cardUnread : styles.cardRead]}>
+      <Pressable
+        onPress={onPress}
+        style={styles.cardMain}
+        accessibilityRole="button"
+        accessibilityLabel={`${unread ? "Unread: " : ""}${item.title}`}
+      >
+        <View style={[styles.typeIconWrap, { backgroundColor: style.bg }]}>
+          <Ionicons name={style.icon} size={16} color={style.fg} />
         </View>
-        {item.body ? (
-          <Text style={styles.cardDesc} numberOfLines={2}>
-            {item.body}
-          </Text>
-        ) : null}
-        {created ? <Text style={styles.cardTime}>{created.toUpperCase()}</Text> : null}
-      </View>
-      {/* Nested Pressable captures the touch, so deleting doesn't also open
-          the notification (web parity: the trash icon stops propagation). */}
+        <View style={styles.cardBody}>
+          <View style={styles.cardTopRow}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {item.title}
+            </Text>
+          </View>
+          {item.body ? (
+            <Text style={styles.cardDesc} numberOfLines={2}>
+              {item.body}
+            </Text>
+          ) : null}
+          {created ? <Text style={styles.cardTime}>{created.toUpperCase()}</Text> : null}
+        </View>
+      </Pressable>
       <Pressable
         onPress={onDelete}
         hitSlop={8}
         style={styles.deleteButton}
         accessibilityRole="button"
-        accessibilityLabel="Delete notification"
+        accessibilityLabel={`Delete notification: ${item.title}`}
       >
         <Ionicons name="trash-outline" size={16} color={colors.subtleText} />
       </Pressable>
-    </Pressable>
+    </View>
   );
 });
 
@@ -459,6 +470,16 @@ const styles = StyleSheet.create({
   // translucent background makes Android paint a grey box behind the elevation.
   cardUnread: { backgroundColor: colors.primarySoft, borderColor: primaryTint.stroke20 },
   cardRead: { backgroundColor: colors.card, borderColor: colors.border },
+  // The tappable "open this notification" area. Takes the row's leading icon +
+  // text and all the leftover width, so the card still feels like one target
+  // even though the trash icon beside it is now a separate control.
+  cardMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   typeIconWrap: {
     width: 36,
     height: 36,

@@ -8,15 +8,24 @@ import type { Booking, Parcel } from "@/services/api";
  * (`CustomerMyTrips.tsx` BOOKING_PROGRESS_RANK / trackerBookingFor).
  */
 
-// How far a booking has progressed — higher wins when a parcel has several
-// bookings (multi-bidder). Failed/terminal bookings rank 0 and are ignored so
-// the tracker follows the live booking, not a stale cancelled bid.
+// How far a LIVE booking has progressed — higher wins when a parcel has several
+// concurrent bookings (multi-bidder). Failed/terminal bookings rank 0 and are
+// ignored so the tracker follows the live booking, not a stale one.
+//
+// `delivered` used to sit at the top of this map, which meant a parcel being
+// re-delivered showed its PREVIOUS cycle: the new booking ranked lower than the
+// old finished one, so paying made the card read "Delivered". A completed
+// booking is not "further along" than a live one — it is out of the running. A
+// parcel whose only booking is delivered still renders correctly via the
+// `latestByParcelId` fallback below.
 const BOOKING_PROGRESS_RANK: Record<string, number> = {
   pending_payment: 1,
   confirmed: 2,
   awaiting_handoff: 3,
-  in_transit: 4,
-  delivered: 5,
+  // The parcel is coming back but the deal is still live and needs both sides.
+  unpaid_return: 4,
+  payment_secured: 5,
+  in_transit: 6,
 };
 
 export const bookingRank = (b: Booking): number => BOOKING_PROGRESS_RANK[b.status] ?? 0;

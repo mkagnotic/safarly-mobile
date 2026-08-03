@@ -48,7 +48,10 @@ export interface CreateIntentResult {
 
 export interface ConfirmPaymentResult {
   status: string; // "held"
-  booking_status?: string; // "awaiting_handoff"
+  /** The booking's ACTUAL status after settling — `payment_secured` for a
+   *  handoff-first deal, `awaiting_handoff` only for a legacy escrow-first one. */
+  booking_status?: string;
+  booking_id?: string | null;
 }
 
 /**

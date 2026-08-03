@@ -44,6 +44,42 @@ const RESOLUTION_ICON: Record<ReturnResolution, keyof typeof Ionicons.glyphMap> 
   sender_has_parcel: "home-outline",
 };
 
+/** Who pays the postage, in the words of whoever is reading it. Spec: "the
+ *  party causing the cancellation pays for return shipping" - including the
+ *  no-fault case, where it stays with the sender because it is still theirs. */
+function liabilityLine(
+  cause: string | null | undefined,
+  payer: string | null | undefined,
+  role: "sender" | "carrier" | "unknown",
+): string | null {
+  if (!payer || role === "unknown") return null;
+  const youPay = (role === "carrier") === (payer === "carrier");
+  switch (cause) {
+    case "carrier_cancelled":
+      return youPay
+        ? "You cancelled after taking the parcel, so the return postage is yours."
+        : "Your carrier cancelled after taking the parcel, so they cover the return postage.";
+    case "carrier_declined":
+      return youPay
+        ? "The parcel wasn't what your carrier agreed to carry, so the return postage is yours."
+        : "The parcel wasn't what you agreed to carry, so the sender covers the return postage.";
+    case "sender_unpaid":
+      return youPay
+        ? "Payment wasn't completed, so the return postage is yours."
+        : "The sender didn't complete payment, so they cover the return postage.";
+    case "sender_cancelled":
+      return youPay
+        ? "You called the delivery off, so the return postage is yours."
+        : "The sender called the delivery off, so they cover the return postage.";
+    case "no_fault":
+      return youPay
+        ? "Neither side caused this, so the return postage is yours - it's still your parcel."
+        : "Neither side caused this, so the sender covers the return postage.";
+    default:
+      return youPay ? "The return postage is yours." : "The other side covers the return postage.";
+  }
+}
+
 function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -102,6 +138,8 @@ export function ParcelReturnCard({
   const carrierName = booking.carrier?.name || "your carrier";
   const senderName = booking.sender?.name || "the sender";
 
+  const liability = liabilityLine(booking.return_cause, booking.return_shipping_payer, role);
+
   const header = (subtitle: string) => (
     <>
       <View style={styles.headerRow}>
@@ -109,6 +147,12 @@ export function ParcelReturnCard({
         <Text style={styles.eyebrow}>Parcel return</Text>
       </View>
       <Text style={styles.title}>{subtitle}</Text>
+      {liability ? (
+        <View style={styles.liabilityRow}>
+          <Ionicons name="wallet-outline" size={12} color={colors.warning} />
+          <Text style={styles.liabilityText}>{liability}</Text>
+        </View>
+      ) : null}
     </>
   );
 
@@ -389,6 +433,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  liabilityRow: { flexDirection: "row", alignItems: "flex-start", gap: 5, marginTop: 3 },
+  liabilityText: { flex: 1, color: colors.warning, fontSize: 11, lineHeight: 15, fontWeight: "600" },
   eyebrow: {
     color: colors.warning,
     fontSize: 11,

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { ApiClientError, usersApi, type UserProfile as ApiUserProfile } from "@/services/api";
 import { useAppStore } from "@/store/useAppStore";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseMyProfileResult {
   profile: ApiUserProfile | null;
@@ -65,6 +66,9 @@ export function useMyProfile(): UseMyProfileResult {
       mountedRef.current = false;
     };
   }, [refetch]);
+
+  // Covers admin-side changes to this user: KYC state and suspension.
+  useRealtimeBus("profile", refetch);
 
   return { profile, loading, error, refetch };
 }

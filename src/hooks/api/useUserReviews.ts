@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, ratingsApi, type Rating, type UserRatings } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseUserReviewsOptions {
   perPage?: number;
@@ -119,6 +120,9 @@ export function useUserReviews(
       mountedRef.current = false;
     };
   }, [refetch]);
+
+  // A new review from a counterpart should appear without a refresh.
+  useRealtimeBus("ratings", refetch);
 
   return {
     reviews,

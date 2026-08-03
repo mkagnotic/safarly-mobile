@@ -40,6 +40,7 @@ export type {
   HandoffAddress,
   HandoffMode,
   HandoffPlanInput,
+  JourneyDelayReason,
   ReturnPlan,
   ReturnResolution,
 } from "./bookings";

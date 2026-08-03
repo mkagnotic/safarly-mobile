@@ -653,13 +653,28 @@ const ConversationRow = memo(function ConversationRow({
         ? styles.ringBlocked
         : styles.ringDefault;
 
+  // The row is a plain View with a full-bleed press target BEHIND its content,
+  // so the tail actions (Accept / Close / Match again / Unarchive) are siblings
+  // rather than children of it.
+  //
+  // They used to be nested. On react-native-web an accessibilityRole="button"
+  // Pressable renders a real <button>, so that produced <button> inside
+  // <button> - invalid HTML that React warns about and that breaks hydration.
+  // It is an accessibility bug too: nested controls are not reliably reachable
+  // and screen readers announce the pair ambiguously.
+  //
+  // The overlay keeps the whole row tappable (plain Views never become touch
+  // responders, so a tap on the text falls through to it) while a tap on an
+  // action button hits that button first. Web does the same in
+  // CustomerNotifications.
   return (
-    <Pressable
-      onPress={() => onOpen(conversation)}
-      style={[styles.row, flags.hasUnread && styles.rowUnread]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open conversation with ${name}`}
-    >
+    <View style={[styles.row, flags.hasUnread && styles.rowUnread]}>
+      <Pressable
+        onPress={() => onOpen(conversation)}
+        style={StyleSheet.absoluteFill}
+        accessibilityRole="button"
+        accessibilityLabel={`Open conversation with ${name}`}
+      />
       {flags.hasUnread ? <View style={styles.unreadStripe} /> : null}
 
       <View style={[styles.avatarWrap, ringStyle]}>
@@ -760,7 +775,7 @@ const ConversationRow = memo(function ConversationRow({
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 });
 

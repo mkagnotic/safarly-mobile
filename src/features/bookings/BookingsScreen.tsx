@@ -27,6 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { HandoffPlanCard } from "@/features/bookings/HandoffPlanCard";
 import { ParcelReturnCard } from "@/features/bookings/ParcelReturnCard";
+import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -37,6 +38,7 @@ import {
   type Booking,
   type HandoffPlanInput,
   type HandoffAddress,
+  type JourneyDelayReason,
   type ReturnResolution,
   type RNUploadFile,
 } from "@/services/api";
@@ -59,6 +61,8 @@ const STATUS_TONES: Record<string, { bg: string; fg: string }> = {
   pending_payment: { bg: "rgba(245,159,10,0.12)", fg: colors.warning },
   awaiting_handoff: { bg: primaryTint.fill12, fg: colors.primary },
   confirmed: { bg: primaryTint.fill12, fg: colors.primary },
+  payment_secured: { bg: "rgba(34,195,93,0.12)", fg: colors.safe },
+  unpaid_return: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
   in_transit: { bg: "rgba(245,128,32,0.12)", fg: "#F08020" },
   delivered: { bg: "rgba(34,195,93,0.12)", fg: colors.safe },
   handoff_rejected: { bg: "rgba(220,40,40,0.12)", fg: colors.danger },
@@ -78,6 +82,8 @@ const STATUS_LABELS: Record<string, string> = {
   confirmed: "Confirmed",
   awaiting_handoff: "Awaiting handoff",
   handoff_rejected: "Declined at handoff",
+  payment_secured: "Ready to travel",
+  unpaid_return: "Unpaid - parcel returning",
   in_transit: "In transit",
   delivered: "Delivered",
   cancelled: "Cancelled",
@@ -89,6 +95,8 @@ const STATUS_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   pending_payment: "time-outline",
   awaiting_handoff: "hand-left-outline",
   confirmed: "checkmark-circle",
+  payment_secured: "airplane-outline",
+  unpaid_return: "return-down-back-outline",
   in_transit: "car",
   delivered: "cube-outline",
   handoff_rejected: "close-circle-outline",
@@ -701,6 +709,10 @@ function ExpandedBody({
     | "cancel-post-possession"
     | "generate-otp"
     | "confirm-otp"
+    | "confirm-ready"
+    | "start-journey"
+    | "mark-landed"
+    | "report-delay"
   >(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [rejectHandoffOpen, setRejectHandoffOpen] = useState(false);
@@ -759,7 +771,11 @@ function ExpandedBody({
         | "cancel"
         | "cancel-post-possession"
         | "generate-otp"
-        | "confirm-otp",
+        | "confirm-otp"
+        | "confirm-ready"
+        | "start-journey"
+        | "mark-landed"
+        | "report-delay",
       task: () => Promise<T>,
       successMessage: string,
       /** Optional per-action mapper for friendlier copy on specific error codes. */
@@ -839,6 +855,31 @@ function ExpandedBody({
       () => bookingsApi.completeReturn(booking.id, args),
       "Thanks - the sender has been told the parcel is on its way back",
     );
+
+  // ── Stages 8/9/10 ─────────────────────────────────────────────────────────
+  // Ready to travel -> journey started -> landed. None of them move money; each
+  // is a real signal the receiver is otherwise left guessing at.
+  const handleConfirmReady = () =>
+    runAction("confirm-ready", () => bookingsApi.confirmReadyToTravel(bookingId),
+      "Your sender knows you're ready to travel");
+
+  const handleStartJourney = () =>
+    runAction("start-journey", () => bookingsApi.startJourney(bookingId),
+      "Journey started - safe travels");
+
+  const handleMarkLanded = () =>
+    runAction("mark-landed", () => bookingsApi.markLanded(bookingId),
+      "Your receiver has been asked to coordinate pickup");
+
+  // Deliberately separate from cancelling: a delayed flight reschedules the trip
+  // and the parcel stays exactly where it is.
+  const handleReportDelay = (args: {
+    reason: JourneyDelayReason;
+    note?: string;
+    new_travel_date?: string;
+  }) =>
+    runAction("report-delay", () => bookingsApi.reportDelay(bookingId, args),
+      "Delay reported - your sender has been told");
 
   const handleAcceptHandoff = () =>
     void runAction(
@@ -967,7 +1008,29 @@ function ExpandedBody({
   // which would let the carrier close the deal and release escrow immediately.
   const canGenerateOtp = booking.status === "in_transit" && role === "sender";
   const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
-  const canCancelPostPossession = booking.status === "in_transit" && role === "carrier";
+  // Possession, not altitude, decides this: under handoff-first a carrier holding
+  // a paid parcel whose trip collapses BEFORE departure (payment_secured) is the
+  // commonest cancellation of all.
+  const canCancelPostPossession =
+    ["in_transit", "payment_secured"].includes(booking.status) &&
+    role === "carrier" &&
+    Boolean(booking.handoff_accepted_at);
+  // Stages 8/9/10 - the carrier's own journey milestones.
+  const canConfirmReady =
+    booking.status === "payment_secured" && role === "carrier" && !booking.ready_to_travel_at;
+  const canStartJourney = booking.status === "payment_secured" && role === "carrier";
+  const canMarkLanded =
+    booking.status === "in_transit" && role === "carrier" && !booking.ready_for_delivery_at;
+  // Report Delay stays available for the whole live journey - a carrier reaching
+  // for "Cancel" because their flight slipped is how a parcel goes home for no
+  // reason.
+  const canReportDelay =
+    ["pending_payment", "payment_secured", "in_transit"].includes(booking.status) &&
+    role === "carrier" &&
+    Boolean(booking.handoff_accepted_at);
+  // The carrier has the parcel but has not been paid yet.
+  const awaitingSenderPayment =
+    booking.status === "pending_payment" && role === "carrier" && Boolean(booking.handoff_accepted_at);
   // Web parity: ratings are one-per-person-per-booking. Offer "Rate Delivery"
   // only until the viewer has rated; afterwards show a done-state chip (re-rating
   // would 409 CONFLICT server-side).
@@ -1100,6 +1163,44 @@ function ExpandedBody({
           />
         ) : null}
 
+        {/* The carrier has the parcel but has not been paid. Nothing has been
+            charged yet, so this is a nudge, not a warning - the money only
+            becomes urgent once the grace period starts. */}
+        {awaitingSenderPayment ? (
+          <View style={styles.awaitingPayCard}>
+            <View style={styles.awaitingPayHeader}>
+              <Ionicons name="time-outline" size={14} color={colors.warning} />
+              <Text style={styles.awaitingPayLabel}>AWAITING PAYMENT</Text>
+            </View>
+            <Text style={styles.awaitingPayTitle}>You have the parcel - keep hold of it</Text>
+            <Text style={styles.awaitingPayBody}>
+              Your sender has 48 hours to pay and secure the delivery. Please continue holding
+              the parcel; we'll let you know as soon as the payment lands. Don't travel with it
+              until then.
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Stages 8/9/10 - ready to travel, start the journey, landed. Plus
+            Report Delay, which reschedules rather than sending the parcel home. */}
+        {canConfirmReady || canStartJourney || canMarkLanded || canReportDelay ? (
+          <JourneyActionsCard
+            booking={booking}
+            pending={
+              actionPending === "confirm-ready" ||
+              actionPending === "start-journey" ||
+              actionPending === "mark-landed" ||
+              actionPending === "report-delay"
+                ? actionPending
+                : null
+            }
+            onConfirmReady={() => void handleConfirmReady()}
+            onStartJourney={() => void handleStartJourney()}
+            onMarkLanded={() => void handleMarkLanded()}
+            onReportDelay={(args) => void handleReportDelay(args)}
+          />
+        ) : null}
+
         {/* Phase 1 sub-steps: coordinate -> send -> inspect. The card below keeps
             accept/decline available throughout, so a carrier who already has the
             parcel is never blocked by an unfinished sub-step. */}
@@ -1135,8 +1236,9 @@ function ExpandedBody({
                 : "Get the parcel into your hands"}
             </Text>
             <Text style={styles.stepCardBody}>
-              You are receiving the parcel at this step, before you travel. The payment
-              stays in escrow until you deliver it.
+              You are receiving the parcel at this step, before you travel. Accepting it
+              asks your sender to pay within 48 hours; their money is then held in escrow
+              until you deliver it.
             </Text>
 
             <View style={styles.stepCardNote}>
@@ -1166,8 +1268,8 @@ function ExpandedBody({
             </View>
 
             <Text style={styles.stepCardFootnote}>
-              No code at this step. Accepting starts step 2 (In transit); the 6-digit
-              code belongs to step 3 (Delivery), from the receiver.
+              No code at this step. Accepting starts the 48-hour payment window; the
+              6-digit code belongs to the final Delivery step, from the receiver.
             </Text>
 
             <Pressable
@@ -1771,6 +1873,20 @@ export function BookingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  awaitingPayCard: {
+    borderWidth: 1,
+    borderColor: "rgba(245,159,10,0.40)",
+    backgroundColor: "rgba(245,159,10,0.06)",
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+    width: "100%",
+  },
+  awaitingPayHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  awaitingPayLabel: { color: colors.warning, fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  awaitingPayTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  awaitingPayBody: { color: colors.mutedText, fontSize: 11, lineHeight: 16, fontWeight: "500" },
+
   headerRow: {
     flexDirection: "row",
     alignItems: "center",

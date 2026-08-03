@@ -84,7 +84,13 @@ const CANCELLED_STATUSES = new Set([
   "expired_unpaid",
   "handoff_rejected",
   "cancelled_post_possession",
+  // Non-payment while the carrier held the parcel. Unhappy, but the cross lands
+  // on Payment Secured rather than on the handoff, because the parcel DID arrive.
+  "unpaid_return",
 ]);
+
+// Statuses that mean the carrier has the parcel and the money is settled.
+const PAID_STATUSES = new Set(["payment_secured", "in_transit", "delivered", "awaiting_handoff", "confirmed"]);
 
 /** Whole days from today to an ISO date string (negative = in the past). */
 function daysUntil(dateISO: string | null | undefined, now: Date): number | null {
@@ -111,6 +117,16 @@ function shortDate(value: string | null | undefined): string | undefined {
 function nextMilestone(after: number): number {
   return MILESTONE_INDICES.find((m) => m > after) ?? STAGE_ORDER.length - 1;
 }
+
+// Statuses whose cross belongs on a specific stage rather than "wherever
+// progress stopped". `expired_unpaid` is the case that forced this: it means a
+// legacy escrow-first deal lapsed before the parcel ever moved, so the generic
+// rule puts the cross on Parcel Received - under a label reading "Payment
+// expired". Naming the stage the label is about keeps the two honest.
+const FAILURE_STAGE: Record<string, number> = {
+  expired_unpaid: STAGE_ORDER.indexOf("payment_secured"),
+  unpaid_return: STAGE_ORDER.indexOf("payment_secured"),
+};
 
 export interface JourneyResult {
   stages: JourneyStageView[];
@@ -144,16 +160,24 @@ function progressReached(
   const matched = !!booking || parcelMatched;
   if (!matched) return -1;
 
+  // Handoff-first: possession comes BEFORE money, so "Parcel Received" is
+  // reached by handoff_accepted_at and "Payment Secured" strictly after it.
+  // A booking that died at unpaid_return got the parcel but never the payment,
+  // so it must stop at index 3 - the cross then lands on Payment Secured, which
+  // is exactly what went wrong.
+  const receivedReached =
+    !!handoffAt ||
+    (!!status && PAID_STATUSES.has(status)) ||
+    phase === "pre_handoff" ||
+    phase === "post_possession" ||
+    status === "handoff_rejected";
   const paidReached =
-    !!status &&
-    (["awaiting_handoff", "in_transit", "delivered", "confirmed"].includes(status) ||
-      !!handoffAt ||
-      phase === "pre_handoff" ||
-      phase === "post_possession" ||
-      status === "handoff_rejected"); // payment happened, then refused + refunded
+    status !== "unpaid_return" &&
+    ((!!status && (PAID_STATUSES.has(status) || status === "cancelled_post_possession")) ||
+      phase === "post_possession");
   const traveledReached =
     (!!status && ["in_transit", "delivered"].includes(status)) ||
-    !!handoffAt ||
+    !!booking?.journey_started_at ||
     status === "cancelled_post_possession" ||
     phase === "post_possession";
   const deliveredReached = status === "delivered";
@@ -161,7 +185,8 @@ function progressReached(
   if (deliveredReached) return 9; // through payment_released; Review is the open frontier
   if (traveledReached) return 6; // through Traveling
   if (paidReached) return 4; // through Payment Secured
-  return 3; // set-up cluster (Matched..Parcel Received)
+  if (receivedReached) return 3; // through Parcel Received (money still outstanding)
+  return 2; // set-up cluster (Matched..Parcel Approved)
 }
 
 /**
@@ -180,7 +205,10 @@ export function computeJourney(
 
   // ---- Cancelled / expired / declined: green up to `progress`, ✗ at the break ----
   if (isCancelled) {
-    const failedIndex = nextMilestone(progress);
+    const failedIndex =
+      status && FAILURE_STAGE[status] != null && FAILURE_STAGE[status] > progress
+        ? FAILURE_STAGE[status]
+        : nextMilestone(progress);
     const label = failedLabelFor(status);
     const stages = STAGE_ORDER.map<JourneyStageView>((key, i) => {
       let state: StageState;
@@ -229,7 +257,11 @@ export function computeJourney(
   const parcelMatched =
     !!parcel && ["matched", "in_transit", "delivered", "completed"].includes(parcel.status);
   const matched = hasBooking || parcelMatched;
-  const paid = !!status && ["awaiting_handoff", "in_transit", "delivered", "confirmed"].includes(status);
+  // Handoff-first: the carrier receives the parcel, THEN the sender pays. So
+  // "received" and "paid" are now genuinely separate steps rather than two
+  // labels on the same escrow event.
+  const received = !!booking?.handoff_accepted_at;
+  const paid = !!status && ["payment_secured", "in_transit", "delivered"].includes(status);
   const traveling = !!status && ["in_transit", "delivered"].includes(status);
   const delivered = status === "delivered";
   const released = delivered && !!timelineAt(booking, "payment_released");
@@ -240,24 +272,30 @@ export function computeJourney(
 
   const travelDaysOut = daysUntil(booking?.agreed_travel_date, now);
   const travelSoon = travelDaysOut != null && travelDaysOut <= 1;
-  const travelPassed = travelDaysOut != null && travelDaysOut <= 0;
 
-  // Flight Verified is now a real signal: the carrier's travel document is approved.
-  // Payment is gated on approval, so `paid` implies it; pre-feature deals were
-  // backfilled to 'approved'. The set-up cluster (Flight Verified → Parcel Received)
-  // resolves once the deal is verified.
+  // Flight Verified is a real signal: the carrier's travel document is approved.
+  // The handoff is gated on approval, so `received` implies it; pre-feature
+  // deals were backfilled to 'approved'.
   const docApproved = booking?.carrier_request?.travel_doc_status === "approved";
-  const setupDone = docApproved || paid;
+  const setupDone = docApproved || received || paid;
+
+  // Stages 8 and 10 used to be inferred from the travel date alone, which lit
+  // "Traveling" the moment the carrier took the parcel — often days early — and
+  // "Ready for Delivery" on a date with no evidence the carrier had landed.
+  // Both are now carrier actions with their own timestamps; the date is only a
+  // fallback so legacy bookings (which have neither column) still progress.
+  const readyToTravel = !!booking?.ready_to_travel_at || travelSoon || traveling;
+  const landed = !!booking?.ready_for_delivery_at || delivered;
 
   const reached: boolean[] = [
     matched, // matched
     setupDone, // flight_verified
     setupDone, // parcel_approved
-    setupDone, // parcel_received
-    paid, // payment_secured
-    travelSoon || traveling, // travel_tomorrow
+    received || paid, // parcel_received — the carrier physically has it
+    paid, // payment_secured — the sender then pays within 48h
+    readyToTravel, // travel_tomorrow
     traveling, // traveling
-    delivered || (traveling && travelPassed), // ready_for_delivery
+    landed, // ready_for_delivery
     delivered, // otp_verification
     released || delivered, // payment_released
     rated, // review — done once this viewer has submitted their rating
@@ -292,12 +330,15 @@ function doneDetail(key: StageKey, booking: Booking | null | undefined): string 
     case "flight_verified":
       return travelLabel ? `Flight ${travelLabel}` : undefined;
     case "parcel_received":
+      return shortDate(booking?.handoff_accepted_at);
     case "payment_secured":
       return shortDate(timelineAt(booking, "payment_held"));
     case "travel_tomorrow":
-      return travelLabel;
+      return shortDate(booking?.ready_to_travel_at) ?? travelLabel;
     case "traveling":
-      return shortDate(booking?.handoff_accepted_at);
+      return shortDate(booking?.journey_started_at ?? booking?.handoff_accepted_at);
+    case "ready_for_delivery":
+      return shortDate(booking?.ready_for_delivery_at);
     case "otp_verification":
       return shortDate(booking?.delivered_at);
     case "payment_released":
@@ -315,6 +356,8 @@ function failedLabelFor(status: string | null): string {
       return "Cancelled mid-trip";
     case "expired_unpaid":
       return "Payment expired";
+    case "unpaid_return":
+      return "Unpaid — parcel returned";
     case "handoff_rejected":
       return "Declined at handoff";
     default:

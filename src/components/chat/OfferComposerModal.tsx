@@ -47,12 +47,19 @@ export function OfferComposerModal({
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
+  // Pre-fill from whatever the deal already knows — the listing's asking price,
+  // or a previously agreed figure. The composer used to open blank even when the
+  // system was holding a number, so both sides had to remember and retype it.
+  // Re-seeds on every open so a reopened composer never shows a stale draft.
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setAmount(currentAmount != null && currentAmount > 0 ? String(currentAmount) : "");
+      setNote("");
+    } else {
       setAmount("");
       setNote("");
     }
-  }, [open]);
+  }, [open, currentAmount]);
 
   const parsed = Number(amount);
   const valid = Number.isFinite(parsed) && parsed > 0;
@@ -60,7 +67,10 @@ export function OfferComposerModal({
   const title = mode === "seed" ? "Make an offer" : "Counter offer";
   const body =
     mode === "seed"
-      ? "Propose a delivery price. They can accept, counter, or decline."
+      ? currentAmount != null && currentAmount > 0
+        // Name the source: an unexplained pre-filled number is worse than none.
+        ? `${currencySymbol}${currentAmount.toFixed(2)} is what this delivery is currently priced at. Send it, or change the amount.`
+        : "Propose a delivery price. They can accept, counter, or decline."
       : currentAmount != null
         ? `Current offer is ${currencySymbol}${currentAmount.toFixed(2)}. Send your counter.`
         : "Send your counter price.";

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, kycApi, type KycSubmission } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseKycStatusResult {
   /** Raw server status string (may use either naming scheme — see flags below). */
@@ -74,6 +75,9 @@ export function useKycStatus(): UseKycStatusResult {
   // treated as action-needed by the screen, not as a blank intro (edge case 20).
   const isNotStarted = !submission && NOT_STARTED.has(normalized);
   const isRejected = !isVerified && !isPending && !isNotStarted;
+
+  // KYC approval / rejection is an admin action with no client-side trigger.
+  useRealtimeBus("profile", refetch);
 
   return {
     status,
