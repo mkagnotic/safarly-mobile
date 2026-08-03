@@ -28,6 +28,7 @@ import {
   authApi,
   getErrorMessage,
   paymentsApi,
+  PAYOUT_RETURN_URL,
   usersApi,
   type StripeConnectStatus,
   type UserProfile as ApiUserProfile,
@@ -206,11 +207,11 @@ export function ProfileSetupScreen() {
         if (mountedRef.current) setFormError("Couldn't start payout setup. Please try again.");
         return;
       }
-      // Stripe's `return_url` is built from APP_URL server-side, so it lands on
-      // the *web* payout page — there is no deep link back into the app. The
-      // browser closing is therefore our only signal, and the server is the
-      // authority on what actually happened, so we just re-read the status.
-      await WebBrowser.openBrowserAsync(url);
+      // Stripe can't redirect to a custom scheme, so its `return_url` points at
+      // the web bounce page, which forwards to PAYOUT_RETURN_URL and closes this
+      // browser automatically. Resolves early too if the user backs out, so the
+      // server stays the authority — we always re-read the status.
+      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL);
       if (!mountedRef.current) return;
       await refreshPayoutStatus();
     } catch (err) {

@@ -239,7 +239,7 @@ export function JourneyActionsCard({
           />
 
           <Pressable
-            style={[styles.primaryButton, (busy || !dateValid) && styles.disabled]}
+            style={[styles.primaryButton, styles.delaySubmit, (busy || !dateValid) && styles.disabled]}
             onPress={() => {
               if (!dateValid) return;
               onReportDelay({
@@ -266,6 +266,18 @@ export function JourneyActionsCard({
           </Pressable>
         </View>
       )}
+
+      {/* What happens if the carrier does nothing at all. Previously nowhere in
+          the UI: the stalled-delivery sweep opens a case on their behalf and holds
+          the payout, and being told that only after it fires is too late.
+          Deliberately does NOT promise an automatic refund - there isn't one.
+          A stall opens a dispute and an admin decides. */}
+      <Text style={styles.safetyNet}>
+        If this delivery stops progressing - the journey never starts, or you land and the
+        delivery is never completed - we open a support case automatically and your payout
+        stays held until it is resolved. Reporting a delay instead reschedules the trip with
+        no penalty.
+      </Text>
     </View>
   );
 }
@@ -347,6 +359,18 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   primaryButtonText: { color: colors.white, fontSize: 13, fontWeight: "800" },
+  // Standard-width and centred: it stretched to the full card, which made a
+  // secondary reschedule action the loudest thing on the screen.
+  delaySubmit: { alignSelf: "center", paddingHorizontal: 28, marginTop: 10 },
+  safetyNet: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    color: colors.mutedText,
+    fontSize: 11,
+    lineHeight: 16,
+  },
   secondaryButton: {
     flexDirection: "row",
     alignItems: "center",

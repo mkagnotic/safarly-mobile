@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { getErrorMessage, paymentsApi, type StripeConnectStatus } from "@/services/api";
+import { getErrorMessage, paymentsApi, PAYOUT_RETURN_URL, type StripeConnectStatus } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
@@ -24,9 +24,10 @@ type Nav = CompositeNavigationProp<
  * Standalone Stripe Connect (payout) management — web parity with
  * `CustomerPayoutSetup`. Carriers set up / continue / manage their payout
  * account here. Stripe's hosted onboarding + Express dashboard open in an
- * in-app browser (the same pattern the signup wizard uses); the browser
- * closing is our only signal, so we re-read the server status afterwards —
- * the server is the authority on what actually happened.
+ * in-app browser (the same pattern the signup wizard uses). Onboarding returns
+ * through the web bounce page to `safarly://payout-return`, which closes the
+ * browser on its own; we then re-read the server status, since the server is
+ * the authority on what actually happened.
  */
 export function PayoutSetupScreen() {
   const navigation = useNavigation<Nav>();
@@ -74,9 +75,12 @@ export function PayoutSetupScreen() {
         if (mountedRef.current) setError("Couldn't start payout setup. Please try again.");
         return;
       }
-      await WebBrowser.openBrowserAsync(url);
+      // Resolves as soon as Stripe bounces through /mobile-return to
+      // PAYOUT_RETURN_URL, so the browser closes itself; it also resolves if the
+      // user dismisses it early. Either way the server is the authority, so we
+      // re-read the status rather than trusting the result.
+      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL);
       if (!mountedRef.current) return;
-      // Re-read the authoritative status now the user is back.
       setLoading(true);
       await loadStatus();
     } catch (err) {

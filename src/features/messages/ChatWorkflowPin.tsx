@@ -5,6 +5,7 @@ import { ActivityIndicator, LayoutAnimation, StyleSheet, Text, View } from "reac
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { ActiveDeal, WorkflowView } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { journeyStepPrefix as P, journeyStepRef as R } from "@/utils/journeySteps";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 type Tone = "primary" | "good" | "warn" | "bad" | "neutral";
@@ -31,31 +32,36 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   make_offer: { icon: "pricetag-outline", tone: "primary", blurb: "Verification is done — send a delivery-fee offer." },
   accept_offer: { icon: "checkmark-circle-outline", tone: "good", blurb: "Review the current offer and accept, counter or decline." },
   await_offer_response: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for a response to the offer." },
-  // Payment
-  pay: { icon: "card-outline", tone: "primary", blurb: "Pay to hold the fee in escrow and confirm the booking." },
-  pay_grace: { icon: "alert-circle-outline", tone: "warn", blurb: "Payment is overdue — pay now before the deal auto-cancels." },
-  await_payment: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for the sender to pay." },
-  await_payment_grace: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for payment — the grace period is running." },
-  // The post-payment journey has THREE user-facing phases, and conflating them
-  // was the main source of confusion:
-  //   1 Handoff    - the parcel reaches the CARRIER in the origin city (couriered
-  //                  to their local address, or handed over in person). They
-  //                  inspect it and accept or decline. No code involved.
-  //   2 In transit - the carrier travels.
-  //   3 Delivery   - the receiver's 6-digit code is entered at the destination.
-  // So "handoff" never means delivery, and "delivery" only ever means phase 3.
+  // Payment — step 2, and it comes AFTER the carrier already has the parcel.
+  // ⚠️ It can never "auto-cancel": once handoff is accepted a real object belongs
+  // to someone else, so a lapsed window opens the PARCEL RETURN flow instead.
+  // Saying "auto-cancels" here told the sender the opposite of what happens.
+  pay: { icon: "card-outline", tone: "primary", blurb: `${P("payment")}your carrier has the parcel - pay within 48 hours to secure the delivery.` },
+  pay_grace: { icon: "alert-circle-outline", tone: "warn", blurb: `${P("payment")}payment is overdue. Pay now - if the grace period runs out the parcel is returned to you, not silently cancelled.` },
+  await_payment: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("payment")}waiting for the sender to pay. You keep the parcel meanwhile.` },
+  await_payment_grace: { icon: "hourglass-outline", tone: "warn", blurb: `${P("payment")}payment is overdue and the grace period is running. If it lapses you arrange the parcel's return.` },
+  // The journey the user sees, end to end (numbering: utils/journeySteps):
+  //   1 Handoff           - the parcel reaches the CARRIER in the origin city
+  //                         (couriered to their local address, or in person).
+  //                         They inspect it and accept or decline. No code.
+  //   2 Payment           - the sender pays, 48h + 24h grace.
+  //   3 Travel ready      - the carrier confirms they are packed and still flying.
+  //   4 In transit        - the carrier travels.
+  //   5 Ready for delivery- landed; the receiver generates the code.
+  //   6 Delivery          - the 6-digit code is entered at the destination.
+  // So "handoff" never means delivery, and "delivery" only ever means step 6.
   // Handoff runs in three sub-steps of its own: agree the plan -> send it -> inspect.
-  set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): tell your sender how the parcel reaches you - couriered to your local address, or in person. No code at this step." },
-  await_handoff_plan: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): waiting for your carrier to share where to send the parcel." },
-  mark_handoff_sent: { icon: "send-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): send the parcel to the address your carrier shared, then mark it as sent." },
-  await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): waiting for the sender to send the parcel to you." },
-  await_handoff_inspection: { icon: "search-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): your carrier is checking the parcel over before accepting it." },
-  accept_handoff: { icon: "home-outline", tone: "primary", blurb: "Step 1 of 3 (Handoff): inspect the parcel - contents, nothing restricted, fits your baggage - then accept or decline. No code at this step." },
-  await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: "Step 1 of 3 (Handoff): get the parcel to your carrier - courier it to their local address or hand it over. They inspect it, then accept." },
-  in_transit: { icon: "car-outline", tone: "neutral", blurb: "Step 2 of 3 (In transit): the carrier is travelling. The delivery code is entered at the destination in step 3." },
-  share_otp: { icon: "key-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): give the code to the person receiving the parcel - never to the carrier." },
-  generate_otp: { icon: "key-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): generate the code for the person receiving the parcel." },
-  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: "Step 3 of 3 (Delivery): at the destination, ask the receiver for their 6-digit code and enter it to release your payout." },
+  set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: `${P("handoff")}tell your sender how the parcel reaches you - couriered to your local address, or in person. No code at this step.` },
+  await_handoff_plan: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for your carrier to share where to send the parcel.` },
+  mark_handoff_sent: { icon: "send-outline", tone: "primary", blurb: `${P("handoff")}send the parcel to the address your carrier shared, then mark it as sent.` },
+  await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for the sender to send the parcel to you.` },
+  await_handoff_inspection: { icon: "search-outline", tone: "neutral", blurb: `${P("handoff")}your carrier is checking the parcel over before accepting it.` },
+  accept_handoff: { icon: "home-outline", tone: "primary", blurb: `${P("handoff")}inspect the parcel - contents, nothing restricted, fits your baggage - then accept or decline. No code at this step.` },
+  await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}get the parcel to your carrier - courier it to their local address or hand it over. They inspect it, then accept.` },
+  in_transit: { icon: "car-outline", tone: "neutral", blurb: `${P("inTransit")}the carrier is travelling. The delivery code is entered at the destination in ${R("delivery")}. If the delivery stops progressing we open a case automatically and the payment stays held.` },
+  share_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}give the code to the person receiving the parcel - never to the carrier.` },
+  generate_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}generate the code for the person receiving the parcel.` },
+  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: `${P("delivery")}at the destination, ask the receiver for their 6-digit code and enter it to release your payout.` },
   // Parcel hand-back: the deal is cancelled and refunded, but a real parcel is
   // still with the carrier. Deliberately actionable, not a terminal notice.
   set_return_resolution: { icon: "arrow-undo-outline", tone: "warn", blurb: "The parcel is still with your carrier. Choose whether it goes back to the seller or you arrange collection." },

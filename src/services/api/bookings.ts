@@ -139,6 +139,9 @@ export interface Booking {
   ready_to_travel_at?: string | null;
   journey_started_at?: string | null;
   ready_for_delivery_at?: string | null;
+  /** A live delivery code exists = step 6. Server-derived; the raw OTP
+   *  columns are never sent to either client. */
+  delivery_code_issued?: boolean | null;
   /** Reported delay. A delay reschedules; it never starts a return by itself. */
   delay_reason?: JourneyDelayReason | null;
   delay_note?: string | null;
@@ -365,14 +368,14 @@ export const bookingsApi = {
     }>(`/booking-handler/${id}/cancel-post-possession`, body, { idempotencyKey }),
 
   generateOtp: (id: string) =>
-    api.post<{ otp_sent: boolean; expires_in: number; otp?: string }>(
+    api.post<{ otp_sent?: boolean; expires_in: number; otp?: string; emailed?: boolean }>(
       `/booking-handler/${id}/generate-otp`,
     ),
 
   confirmOtp: (id: string, otp: string) =>
     api.post<{ confirmed: boolean }>(`/booking-handler/${id}/confirm-otp`, { otp }),
 
-  resendOtp: (id: string) => api.post<{ otp_sent: boolean }>(`/booking-handler/${id}/resend-otp`),
+  resendOtp: (id: string) => api.post<{ otp?: string; expires_in?: number; emailed?: boolean }>(`/booking-handler/${id}/resend-otp`),
 
   // --- Admin endpoints ---
   adminList: async (params?: { page?: number; per_page?: number }) => {
