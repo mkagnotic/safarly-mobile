@@ -42,6 +42,16 @@ export interface Trip {
   created_at: string;
   updated_at: string;
   open_to_buddy: boolean;
+  /** Trip Availability. Non-null locked_at = closed to new matches: hidden from
+   *  search and auto-match, no new chats. Deliveries already under way are
+   *  unaffected - the carrier still completes every one of them. */
+  locked_at?: string | null;
+  lock_reason?: "carrier" | "capacity_full" | "date_passed" | "trip_cancelled" | null;
+  is_locked?: boolean;
+  /** Transaction-derived, so it can never drift from reality. Only populated for
+   *  the owner's own list (filter=my_trips). */
+  used_capacity_kg?: number | null;
+  remaining_capacity_kg?: number | null;
   carrier?: { id: string; name: string; avatar_url: string | null; rating: number };
 }
 
@@ -133,6 +143,15 @@ export const tripsApi = {
     if (luggage_capacity_kg !== undefined) payload.luggage_capacity = luggage_capacity_kg;
     return api.put<Trip>(`/trip-handler/${id}`, payload);
   },
+
+  /** Close the trip to new matches. Reversible; existing deliveries continue. */
+  lock: (id: string) =>
+    api.post<{ is_locked: boolean; lock_reason: string | null }>(`/trip-handler/${id}/lock`, {}),
+
+  /** Reopen the trip. Refused while an automatic lock condition still holds -
+   *  otherwise the next sweep would immediately re-lock it. */
+  unlock: (id: string) =>
+    api.post<{ is_locked: boolean; lock_reason: string | null }>(`/trip-handler/${id}/unlock`, {}),
 
   delete: (id: string) => api.delete<{ deleted: boolean }>(`/trip-handler/${id}`),
 

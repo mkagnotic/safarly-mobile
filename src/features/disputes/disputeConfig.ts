@@ -47,6 +47,11 @@ export const FILE_CATEGORIES: { key: string; label: string; icon: IconName }[] =
 export const DISPUTABLE_STATUSES: ReadonlySet<string> = new Set([
   "confirmed",
   "awaiting_handoff",
+  // Both post-possession: the carrier is holding the parcel, which is precisely
+  // when a dispute is most likely. They were missing, so those bookings could
+  // not be disputed at all.
+  "payment_secured",
+  "unpaid_return",
   "handoff_rejected",
   "in_transit",
   "delivered",

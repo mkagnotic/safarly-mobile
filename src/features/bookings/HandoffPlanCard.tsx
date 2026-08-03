@@ -8,6 +8,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, HandoffMode, HandoffPlanInput } from "@/services/api/bookings";
 import { colors, primaryTint } from "@/theme/colors";
+import { parseOrigin } from "@/utils/originAddress";
 
 /**
  * Phase 1 of 3 - Handoff. The parcel has to physically reach the CARRIER in the
@@ -74,6 +75,14 @@ export function HandoffPlanCard({
   const originCity = booking.parcel?.from_city?.trim() || null;
   const carrierName = booking.carrier?.name || "your carrier";
   const senderName = booking.sender?.name || "your sender";
+  // The carrier's real name, for pre-filling "Name for the parcel". Falls back
+  // to empty rather than the "your carrier" placeholder, which must never end
+  // up printed on a shipping label.
+  const carrierProfileName = booking.carrier?.name?.trim() ?? "";
+  // The listing already knows the route, so pre-fill from it rather than making
+  // the carrier retype it. `from_city` is one string ("Mumbai, MH"), which is
+  // why the City box used to show the region too and State/Country sat empty.
+  const origin = parseOrigin(booking.parcel?.from_city, booking.parcel?.from_country);
 
   const [editing, setEditing] = useState(false);
   // An online order is normally couriered straight from the seller. The mode is
@@ -85,12 +94,13 @@ export function HandoffPlanCard({
   const setDraftMode = setPickedMode;
   const [line1, setLine1] = useState(address?.line1 ?? "");
   const [line2, setLine2] = useState(address?.line2 ?? "");
-  const [city, setCity] = useState(address?.city ?? originCity ?? "");
-  const [stateRegion, setStateRegion] = useState(address?.state ?? "");
+  const [city, setCity] = useState(address?.city ?? origin.city);
+  const [stateRegion, setStateRegion] = useState(address?.state ?? origin.state);
   const [postal, setPostal] = useState(address?.postal_code ?? "");
-  const [country, setCountry] = useState(address?.country ?? "");
-  const [contactName, setContactName] = useState(address?.contact_name ?? "");
+  const [country, setCountry] = useState(address?.country ?? origin.country);
+  const [contactName, setContactName] = useState(address?.contact_name ?? carrierProfileName);
   const [contactPhone, setContactPhone] = useState(address?.contact_phone ?? "");
+  const [touched, setTouched] = useState(false);
   const [instructions, setInstructions] = useState(booking.handoff_instructions ?? "");
   const [courier, setCourier] = useState(booking.handoff_courier ?? "");
   const [tracking, setTracking] = useState(booking.handoff_tracking_reference ?? "");
@@ -102,25 +112,51 @@ export function HandoffPlanCard({
     setPickedMode(mode ?? (isOnlineOrder ? "shipped" : "in_person"));
     setLine1(address?.line1 ?? "");
     setLine2(address?.line2 ?? "");
-    setCity(address?.city ?? originCity ?? "");
-    setStateRegion(address?.state ?? "");
+    setCity(address?.city ?? origin.city);
+    setStateRegion(address?.state ?? origin.state);
     setPostal(address?.postal_code ?? "");
-    setCountry(address?.country ?? "");
-    setContactName(address?.contact_name ?? "");
+    setCountry(address?.country ?? origin.country);
+    setContactName(address?.contact_name ?? carrierProfileName);
     setContactPhone(address?.contact_phone ?? "");
     setInstructions(booking.handoff_instructions ?? "");
+    setTouched(false);
     setEditing(true);
   };
 
   const showPlanForm = isCarrier && (!mode || editing);
 
+  // A courier label needs all of these to actually reach the carrier. They were
+  // optional before, so a plan could be shared with nothing but a street line -
+  // and the sender then had to chase the rest in chat. Everything here is
+  // pre-filled from the listing wherever the listing knows it.
+  const requiredAddressFields =
+    draftMode === "shipped"
+      ? [
+          { key: "line1", label: "Street address", value: line1 },
+          { key: "city", label: "City", value: city },
+          { key: "state", label: "State / region", value: stateRegion },
+          { key: "postal", label: "Postal code", value: postal },
+          { key: "country", label: "Country", value: country },
+          { key: "contactName", label: "Name for the parcel", value: contactName },
+          { key: "contactPhone", label: "Phone for the courier", value: contactPhone },
+        ]
+      : [];
+  const missingFields = requiredAddressFields.filter((f) => !f.value.trim());
+  const missingKeys = missingFields.map((f) => f.key);
+  const fieldError = (key: string) =>
+    touched && missingKeys.includes(key) ? "Required" : undefined;
+
   const submitPlan = () => {
-    if (draftMode === "shipped" && !line1.trim()) {
-      showToast({ title: "Add a street address so the parcel can be couriered to you", variant: "error" });
-      return;
-    }
-    if (draftMode === "shipped" && !city.trim()) {
-      showToast({ title: "Add a city for the delivery address", variant: "error" });
+    setTouched(true);
+    if (missingFields.length > 0) {
+      const labels = missingFields.map((f) => f.label);
+      showToast({
+        title: labels.length === 1
+          ? `${labels[0]} is required so the parcel can reach you`
+          : "Complete the delivery address",
+        message: labels.length === 1 ? undefined : `Still needed: ${labels.join(", ")}`,
+        variant: "error",
+      });
       return;
     }
     onSubmitPlan({
@@ -207,23 +243,35 @@ export function HandoffPlanCard({
               label={`Your local address${originCity ? ` in ${originCity}` : ""}`}
               value={line1}
               onChangeText={setLine1}
-              placeholder="Street address"
+              placeholder="Street address *"
+              error={fieldError("line1")}
             />
             <AppInput
               value={line2}
               onChangeText={setLine2}
               placeholder="Apartment, building, landmark (optional)"
             />
-            <AppInput value={city} onChangeText={setCity} placeholder="City" />
-            <AppInput value={stateRegion} onChangeText={setStateRegion} placeholder="State / region" />
-            <AppInput value={postal} onChangeText={setPostal} placeholder="Postal code" />
-            <AppInput value={country} onChangeText={setCountry} placeholder="Country" />
-            <AppInput value={contactName} onChangeText={setContactName} placeholder="Name for the parcel" />
+            <AppInput value={city} onChangeText={setCity} placeholder="City *" error={fieldError("city")} />
+            <AppInput
+              value={stateRegion}
+              onChangeText={setStateRegion}
+              placeholder="State / region *"
+              error={fieldError("state")}
+            />
+            <AppInput value={postal} onChangeText={setPostal} placeholder="Postal code *" error={fieldError("postal")} />
+            <AppInput value={country} onChangeText={setCountry} placeholder="Country *" error={fieldError("country")} />
+            <AppInput
+              value={contactName}
+              onChangeText={setContactName}
+              placeholder="Name for the parcel *"
+              error={fieldError("contactName")}
+            />
             <AppInput
               value={contactPhone}
               onChangeText={setContactPhone}
-              placeholder="Phone for the courier"
+              placeholder="Phone for the courier *"
               keyboardType="phone-pad"
+              error={fieldError("contactPhone")}
             />
           </View>
         ) : null}

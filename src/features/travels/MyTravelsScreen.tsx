@@ -29,6 +29,7 @@ import { MatchesModal, type MatchesSource } from "@/features/travels/MatchesModa
 import { JourneySummaryRow } from "@/features/travels/ParcelJourneyTracker";
 import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { TravelCard } from "@/features/travels/TravelCard";
+import { TripAvailabilityToggle } from "@/features/travels/TripAvailabilityToggle";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useBuddyConnections } from "@/hooks/api/useBuddyConnections";
@@ -1029,6 +1030,13 @@ function FlightsTab({
           onDelete={() => onDelete(t)}
           onViewMatches={() => onViewMatches(t)}
           isDeleting={deletingId === t.id}
+          footer={
+            /* Trip Availability - a carrier scanning their list can see which
+               trips are still taking parcels and close one without opening it.
+               Only the active list renders this; the `my_trips` filter already
+               excludes departed trips, which lock automatically anyway. */
+            <TripAvailabilityToggle trip={t} onChanged={() => void onRetry()} />
+          }
         />
       ))}
       <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={onLoadMore} />

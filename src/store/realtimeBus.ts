@@ -14,7 +14,14 @@ export type RealtimeTopic =
   | "buddies"
   | "carrier-requests"
   | "bookings"
-  | "transactions";
+  | "transactions"
+  | "offers"
+  | "disputes"
+  | "profile"
+  | "ratings"
+  // Anything posted by ANY user - powers Search / Home / Opportunities, which
+  // otherwise only updated on pull-to-refresh.
+  | "discovery";
 
 interface RealtimeBusState {
   /**
@@ -39,6 +46,11 @@ const INITIAL_TICKS: Record<RealtimeTopic, number> = {
   "carrier-requests": 0,
   bookings: 0,
   transactions: 0,
+  offers: 0,
+  disputes: 0,
+  profile: 0,
+  ratings: 0,
+  discovery: 0,
 };
 
 /**

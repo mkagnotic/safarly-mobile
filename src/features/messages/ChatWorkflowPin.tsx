@@ -172,13 +172,19 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
 
   return (
     <View style={styles.wrap}>
-      <Pressable
-        style={styles.bar}
-        onPress={toggle}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={label}
-      >
+      {/* Plain View + a full-bleed press target behind the content, so the CTA
+          button is a sibling rather than a child. Nested Pressables with
+          accessibilityRole="button" render <button> inside <button> on
+          react-native-web: invalid HTML, and nested controls are an
+          accessibility problem in their own right. */}
+      <View style={styles.bar}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={toggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={label}
+        />
         <View style={[styles.iconBubble, { backgroundColor: TONE_BG[tone] }]}>
           <Ionicons name={meta.icon} size={15} color={TONE_FG[tone]} />
         </View>
@@ -211,7 +217,7 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
             color={colors.mutedText}
           />
         )}
-      </Pressable>
+      </View>
 
       {expanded && meta.blurb ? (
         <View style={styles.detail}>
@@ -247,6 +253,13 @@ function ctaButtonText(code: string): string {
       return "Choose";
     case "confirm_return_sent":
       return "Sent back";
+    // Stages 8/9/10 — the carrier's journey milestones.
+    case "confirm_ready_to_travel":
+      return "Ready";
+    case "start_journey":
+      return "Start";
+    case "mark_ready_to_deliver":
+      return "Landed";
     case "upload_travel_doc":
     case "upload_parcel_photos":
       return "Upload";

@@ -5,6 +5,7 @@ import {
   messagesApi,
   type DeliveryHistoryItem,
 } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseDeliveryHistoryOptions {
   conversationId: string | null;
@@ -65,6 +66,9 @@ export function useDeliveryHistory({
       mountedRef.current = false;
     };
   }, [enabled, conversationId, refetch]);
+
+  // History gains a row the moment a delivery completes.
+  useRealtimeBus("bookings", refetch);
 
   return { items, loading, error, refetch };
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, disputesApi, type Dispute } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseMyDisputesResult {
   disputes: Dispute[];
@@ -92,6 +93,10 @@ export function useMyDisputes(): UseMyDisputesResult {
       mountedRef.current = false;
     };
   }, [refetch]);
+
+  // Dispute status is driven entirely by admin (open -> reviewing ->
+  // resolved), so without this the screen only ever updated on pull-to-refresh.
+  useRealtimeBus("disputes", refetch);
 
   return {
     disputes,

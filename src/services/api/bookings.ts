@@ -86,6 +86,14 @@ export interface ReturnPlan {
   return_reference: string | null;
 }
 
+/** Why a carrier's journey slipped. Mirrors bookings.delay_reason. */
+export type JourneyDelayReason =
+  | "flight_delayed"
+  | "missed_flight"
+  | "trip_postponed"
+  | "cancelled"
+  | "emergency";
+
 export interface Booking {
   id: string;
   parcel_id: string;
@@ -93,8 +101,12 @@ export interface Booking {
   sender_id: string;
   carrier_id: string;
   status: string;
-  /** ISO deadline (~72h after creation) for paying a `pending_payment` booking. */
+  /** ISO deadline for paying a `pending_payment` booking. Under handoff-first
+   *  this is stamped when the carrier accepts the parcel, not at booking creation. */
   payment_expires_at?: string | null;
+  /** The price both sides agreed, frozen at acceptance. This is what checkout
+   *  charges - never quote `parcel.fee_offered`, which the sender can still edit. */
+  agreed_amount?: number | null;
   pickup_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
@@ -119,6 +131,24 @@ export interface Booking {
   handoff_dispatched_at?: string | null;
   handoff_tracking_reference?: string | null;
   handoff_courier?: string | null;
+  /** The 24h grace that follows the 48h payment window. Non-null means the
+   *  parcel goes back to the sender when it runs out. */
+  payment_grace_started_at?: string | null;
+  /** Journey milestones (Stages 8/9/10). Each is a carrier action and a real
+   *  signal - the tracker no longer guesses these from the travel date. */
+  ready_to_travel_at?: string | null;
+  journey_started_at?: string | null;
+  ready_for_delivery_at?: string | null;
+  /** Reported delay. A delay reschedules; it never starts a return by itself. */
+  delay_reason?: JourneyDelayReason | null;
+  delay_note?: string | null;
+  delay_reported_at?: string | null;
+  /** When a hand-back became outstanding - anchors the 72h instruction window. */
+  return_opened_at?: string | null;
+  /** Why the parcel is going back, and therefore who pays the postage.
+   *  Spec: "the party causing the cancellation pays for return shipping". */
+  return_cause?: 'carrier_declined' | 'carrier_cancelled' | 'sender_unpaid' | 'sender_cancelled' | 'no_fault' | null;
+  return_shipping_payer?: 'sender' | 'carrier' | null;
   /** Parcel hand-back after a decline / mid-trip cancel. The deal is only
    *  finished once `return_completed_at` is stamped. */
   return_plan?: ReturnPlan | null;
@@ -148,7 +178,11 @@ export interface Booking {
   parcel?: {
     id?: string;
     from_city: string;
+    /** ISO-2 code. Feeds the handoff form's Country box so a carrier doesn't
+     *  retype what the listing already knows. */
+    from_country?: string | null;
     to_city: string;
+    to_country?: string | null;
     category: string;
     fee_offered: number;
     weight?: number;
@@ -222,12 +256,41 @@ export const bookingsApi = {
       handoff_courier: string | null;
     }>(`/booking-handler/${id}/handoff/dispatched`, body),
 
-  /** Carrier takes possession at inspection: awaiting_handoff → in_transit. */
+  /** Carrier takes possession at inspection. Handoff-first: this OPENS the
+   *  sender's 48h payment window (awaiting_handoff -> pending_payment). Legacy
+   *  escrow-first deals, already paid, go straight to in_transit instead. */
   acceptHandoff: (id: string, idempotencyKey = newIdempotencyKey()) =>
-    api.post<{ status: string; handoff_accepted_at: string }>(
+    api.post<{ status: string; handoff_accepted_at: string; payment_expires_at: string | null }>(
       `/booking-handler/${id}/handoff/accept`,
       {},
       { idempotencyKey },
+    ),
+
+  /** Stage 8 - carrier ticks the pre-flight checklist ~24h before departure. */
+  confirmReadyToTravel: (id: string) =>
+    api.post<{ ready_to_travel_at: string }>(`/booking-handler/${id}/travel/ready`, {
+      parcel_packed: true,
+      documents_ready: true,
+      traveling_confirmed: true,
+    }),
+
+  /** Stage 9 - the journey actually begins (booking -> in_transit). */
+  startJourney: (id: string) =>
+    api.post<{ status: string; journey_started_at: string }>(`/booking-handler/${id}/travel/start`, {}),
+
+  /** Stage 10 - carrier landed; the receiver's cue to coordinate pickup. */
+  markLanded: (id: string) =>
+    api.post<{ ready_for_delivery_at: string }>(`/booking-handler/${id}/travel/landed`, {}),
+
+  /** Report a delay. Reschedules rather than starting a return - a delayed
+   *  flight is explicitly not the same thing as a cancelled delivery. */
+  reportDelay: (
+    id: string,
+    body: { reason: JourneyDelayReason; note?: string; new_travel_date?: string },
+  ) =>
+    api.post<{ delay_reason: string; delay_reported_at: string; agreed_travel_date: string | null }>(
+      `/booking-handler/${id}/travel/delay`,
+      body,
     ),
 
   /** Sender decides where the parcel goes after the carrier gave it back. */

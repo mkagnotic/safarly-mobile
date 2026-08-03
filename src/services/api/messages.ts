@@ -57,6 +57,14 @@ export type MessageKind =
 // `WorkflowView` returned by `GET /conversations/:id/active-deal`.
 
 /** Canonical FSM state — mirrors `supabase/functions/_shared/fsm.ts`. */
+/** Why a carrier's journey slipped. Mirrors bookings.delay_reason. */
+export type JourneyDelayReason =
+  | "flight_delayed"
+  | "missed_flight"
+  | "trip_postponed"
+  | "cancelled"
+  | "emergency";
+
 export type WorkflowState =
   | "NEGOTIATING"
   | "MATCH_REQUESTED"
@@ -67,14 +75,18 @@ export type WorkflowState =
   | "ADMIN_REVIEW"
   | "PARCEL_REVIEW"
   | "PRICE_OFFER"
-  | "PAYMENT_PENDING"
-  | "PAYMENT_GRACE_PERIOD"
   // Handoff = the parcel reaching the CARRIER in the origin city, in three
   // sub-states: agree the plan -> send it -> inspect and accept/decline.
+  // It comes BEFORE payment: the carrier takes possession, and that is what
+  // opens the sender's 48h window to pay.
   | "AWAITING_HANDOFF"
   | "HANDOFF_DISPATCH"
   | "HANDOFF_INSPECTION"
+  | "PAYMENT_PENDING"
+  | "PAYMENT_GRACE_PERIOD"
+  | "TRAVEL_READY"
   | "IN_TRANSIT"
+  | "READY_FOR_DELIVERY"
   | "OTP_VERIFICATION"
   | "COMPLETED"
   | "ARCHIVED"
@@ -91,6 +103,8 @@ export type WorkflowEvent =
   | "MAKE_OFFER" | "COUNTER" | "ACCEPT_OFFER" | "REJECT_OFFER"
   | "PAY" | "PAYMENT_COMPLETED"
   | "CONFIRM_TRAVEL_DATE" | "SET_HANDOFF_PLAN" | "MARK_HANDOFF_SENT" | "ACCEPT_HANDOFF" | "REJECT_HANDOFF"
+  | "CONFIRM_READY_TO_TRAVEL" | "START_JOURNEY" | "MARK_READY_TO_DELIVER"
+  | "REPORT_DELAY" | "CANCEL_JOURNEY"
   | "GENERATE_OTP" | "VERIFY_OTP"
   | "SET_RETURN_RESOLUTION" | "CONFIRM_RETURN_SENT"
   | "CANCEL";
@@ -124,6 +138,20 @@ export interface ActiveDeal {
   parcel_id: string;
   parcel: { from_city: string; to_city: string; category: string | null; weight_kg: number | null } | null;
   trip_capacity_kg: number | null;
+  /** Everything the price conversation already knows, so the offer step never
+   *  starts from a blank box when the system is already holding a number. */
+  pricing?: {
+    /** The listing's stated fee - the public asking price. */
+    asking_amount: number | null;
+    currency: string;
+    /** Survives a cancelled booking: "we agreed $10 last time" is exactly the
+     *  context that goes missing when a deal restarts. */
+    last_agreed_amount: number | null;
+    last_offer_amount: number | null;
+    last_offer_status: string | null;
+    /** The most recent signal - what to pre-fill the composer with. */
+    suggested_amount: number | null;
+  } | null;
   offer: {
     offer_id: string;
     amount: number;
@@ -133,6 +161,19 @@ export interface ActiveDeal {
   } | null;
   booking_id: string | null;
   booking_status: string | null;
+  /** Stages 8/9/10 - the carrier's own journey milestones. */
+  journey?: {
+    agreed_travel_date: string | null;
+    ready_to_travel_at: string | null;
+    journey_started_at: string | null;
+    ready_for_delivery_at: string | null;
+    delay_reason: JourneyDelayReason | null;
+    delay_note: string | null;
+    delay_reported_at: string | null;
+  } | null;
+  /** The 48h window that opens when the carrier takes the parcel. */
+  payment_expires_at?: string | null;
+  payment_grace_started_at?: string | null;
   /** The agreed handoff plan, so the chat can show the address/tracking inline. */
   handoff?: {
     mode: "shipped" | "in_person" | null;

@@ -60,7 +60,14 @@ export function PayBookingScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const { fee, platformFee, total } = feeBreakdown(booking?.parcel?.fee_offered);
+  // Show the AGREED price, which is what the server charges. The parcel's
+  // `fee_offered` is only the sender's asking price and stays editable by them,
+  // so quoting it here would let the screen promise one number while checkout
+  // took another. It survives purely as a fallback for bookings created before
+  // `agreed_amount` existed.
+  const { fee, platformFee, total } = feeBreakdown(
+    booking?.agreed_amount ?? booking?.parcel?.fee_offered,
+  );
 
   const isSender = !!booking && booking.sender_id === user?.id;
   const isPayable = booking?.status === "pending_payment";
@@ -126,7 +133,7 @@ export function PayBookingScreen() {
     });
   }, [cancelled]);
 
-  // After a successful confirm, land on the booking (now awaiting_handoff).
+  // After a successful confirm, land on the booking (now payment_secured).
   useEffect(() => {
     if (phase !== "succeeded") return;
     const t = setTimeout(() => navigation.navigate("BookingsTab", { expandId: bookingId }), 2000);

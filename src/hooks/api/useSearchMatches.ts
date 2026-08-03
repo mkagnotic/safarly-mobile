@@ -7,6 +7,7 @@ import {
   type SearchFilters,
   type SearchResults,
 } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 /** Web parity: web polls search every 30s (`refetchInterval`) so freshly posted
  *  trips/parcels surface without a manual refresh. */
@@ -151,6 +152,10 @@ export function useSearchMatches({
       await runSearch(autoMatchFiltersRef.current);
     }
   }, [runSearch]);
+
+  // Anyone posting or editing a parcel / trip / buddy listing changes what
+  // this search would return. Unfiltered topic, so results stay live.
+  useRealtimeBus("discovery", refetch);
 
   return { results, loading, error, hasAppliedFilters, search, refetch, resetToAutoMatch };
 }

@@ -262,7 +262,87 @@ export function useRealtimeSync() {
           table: "transactions",
           filter: `user_id=eq.${uid}`,
         },
+        () => {
+          bumpRealtimeTopic("transactions");
+          // A payment landing changes the booking's stage, not just the ledger.
+          bumpRealtimeTopic("bookings");
+        },
+      )
+
+      // ───────── Wallet balances ─────────
+      // A payout or a cancellation penalty moves these without necessarily
+      // writing a transaction row this user's own filter would match.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "wallets", filter: `user_id=eq.${uid}` },
         () => bumpRealtimeTopic("transactions"),
+      )
+
+      // ───────── Offers ─────────
+      // Accept/counter also insert a chat message, so those looked fine; an offer
+      // EXPIRING on the cron writes no message, which left the card showing
+      // "open" until a manual refresh.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "offers" },
+        () => {
+          bumpRealtimeTopic("offers");
+          bumpRealtimeTopic("conversations");
+        },
+      )
+
+      // ───────── Disputes ─────────
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "disputes" },
+        () => {
+          bumpRealtimeTopic("disputes");
+          bumpRealtimeTopic("bookings");
+        },
+      )
+
+      // ───────── This user's profile ─────────
+      // KYC approval/rejection and suspension are admin actions with no
+      // client-side trigger of any kind.
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "user_profiles", filter: `id=eq.${uid}` },
+        () => bumpRealtimeTopic("profile"),
+      )
+
+      // ───────── Ratings ─────────
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ratings" },
+        () => {
+          bumpRealtimeTopic("ratings");
+          bumpRealtimeTopic("bookings");
+        },
+      )
+
+      // ───────── Discovery feed (web parity) ─────────
+      // Every subscription above is filtered to rows where this user is the
+      // sender/carrier/participant, which is right for personal data but means
+      // posts by OTHER people never reached Search / Home / Opportunities until
+      // a pull-to-refresh. These are deliberately unfiltered.
+      //
+      // Trade-off, same as web: every connected client receives one event per
+      // insert/update on these three tables. Fine at current scale; if volume
+      // ever bites, mount these on the feed screens only rather than globally.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "parcel_requests" },
+        () => bumpRealtimeTopic("discovery"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "travel_listings" },
+        () => bumpRealtimeTopic("discovery"),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "buddy_listings" },
+        () => bumpRealtimeTopic("discovery"),
       )
 
       .subscribe();

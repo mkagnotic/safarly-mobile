@@ -85,6 +85,11 @@ export function useActiveDeal(conversationId: string | null): UseActiveDealResul
   useRealtimeBus("carrier-requests", refetch);
   useRealtimeBus("bookings", refetch);
   useRealtimeBus("transactions", refetch);
+  // An offer expiring on the cron writes no chat message, so the messages topic
+  // alone would leave a dead offer still looking open in the pin.
+  useRealtimeBus("offers", refetch);
+  // The pin shows a dispute banner, and dispute state is admin-driven.
+  useRealtimeBus("disputes", refetch);
 
   return { activeDeal, workflow, loading, error, refetch };
 }

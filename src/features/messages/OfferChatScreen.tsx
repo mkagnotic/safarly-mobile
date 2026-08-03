@@ -1890,7 +1890,14 @@ export function OfferChatScreen() {
         open={!!offerComposer}
         mode={offerComposer?.mode ?? "seed"}
         pending={offerPending === "seed" || offerPending === "counter"}
-        currentAmount={offerComposer?.mode === "counter" ? liveOffer?.amount ?? null : null}
+        // A first offer seeds from what the deal already knows (previous
+        // agreement -> last offer -> the listing's asking price); a counter
+        // still seeds from the offer being responded to.
+        currentAmount={
+          offerComposer?.mode === "counter"
+            ? liveOffer?.amount ?? null
+            : activeDeal?.pricing?.suggested_amount ?? null
+        }
         currencySymbol={offerCurrencySymbol}
         onCancel={() => {
           if (offerPending !== "seed" && offerPending !== "counter") setOfferComposer(null);
