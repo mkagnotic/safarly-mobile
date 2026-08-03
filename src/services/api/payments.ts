@@ -80,6 +80,13 @@ export function isPayoutPending(status: StripeConnectStatus | null): boolean {
   return !!status && status.details_submitted && !status.payouts_enabled;
 }
 
+/**
+ * Deep link Stripe's hosted payout onboarding comes back to, via the web bounce
+ * page at `/mobile-return`. Pass this to `WebBrowser.openAuthSessionAsync` so the
+ * in-app browser closes by itself when Stripe finishes.
+ */
+export const PAYOUT_RETURN_URL = "safarly://payout-return";
+
 export const paymentsApi = {
   createIntent: (booking_id: string) =>
     api.post<CreateIntentResult>("/payment-handler/create-intent", { booking_id }),
@@ -113,14 +120,17 @@ export const paymentsApi = {
    * Create (or reuse) the carrier's Express account and return a hosted
    * onboarding link.
    *
-   * The link's `return_url` is built server-side from `APP_URL`, so Stripe
-   * always sends the user to the *web* payout page — there's no mobile deep
-   * link to come back to. Callers therefore treat "the browser closed" as the
-   * signal to re-read `stripeConnectStatus`, which is authoritative either way.
+   * `platform: "mobile"` makes the server point Stripe's `return_url` at the web
+   * bounce page (`/mobile-return`), which redirects to `safarly://payout-return`.
+   * Stripe won't accept a custom scheme directly, so that hop is what lets
+   * `openAuthSessionAsync` close the browser and sync the status automatically.
+   * Callers must still re-read `stripeConnectStatus` on return — the server is
+   * authoritative, and the user can always dismiss the browser early.
    */
   stripeConnectOnboard: () =>
     api.post<{ onboarding_url: string; account_id: string }>(
       "/payment-handler/stripe-connect/onboard",
+      { platform: "mobile" },
     ),
 
   /** Live status — the endpoint refreshes the flags from Stripe before replying. */

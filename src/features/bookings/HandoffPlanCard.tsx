@@ -8,10 +8,12 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, HandoffMode, HandoffPlanInput } from "@/services/api/bookings";
 import { colors, primaryTint } from "@/theme/colors";
+import { journeyStepLabel, journeyStepRef } from "@/utils/journeySteps";
 import { parseOrigin } from "@/utils/originAddress";
 
 /**
- * Phase 1 of 3 - Handoff. The parcel has to physically reach the CARRIER in the
+ * Step 1 of 6 - Handoff (numbering lives in utils/journeySteps). The parcel has
+ * to physically reach the CARRIER in the
  * origin city before they travel, and that used to be a single unexplained
  * "Accept Handoff" button: no way to tell the sender where to send it, no record
  * that it had been sent, and nothing to inspect against. Which is why carriers
@@ -190,7 +192,7 @@ export function HandoffPlanCard({
     <>
       <View style={styles.headerRow}>
         <Ionicons name="location-outline" size={14} color={colors.primary} />
-        <Text style={styles.eyebrow}>Step 1 of 3 · Handoff</Text>
+        <Text style={styles.eyebrow}>{journeyStepLabel("handoff")}</Text>
       </View>
       <Text style={styles.title}>{subtitle}</Text>
     </>
@@ -335,8 +337,8 @@ export function HandoffPlanCard({
           moment they do - nudge them in the chat if it is urgent.
         </Text>
         <Text style={styles.footnote}>
-          No code at handoff. The 6-digit code belongs to step 3 (Delivery), and goes to
-          whoever receives the parcel.
+          No code at handoff. The 6-digit code belongs to {journeyStepRef("delivery")}, and
+          goes to whoever receives the parcel.
         </Text>
       </View>
     );
@@ -400,8 +402,8 @@ export function HandoffPlanCard({
         {trackingLine}
         {!isCarrier ? (
           <Text style={styles.footnote}>
-            If they accept, this booking moves to step 2 (In transit). If they decline
-            after inspecting, you are refunded in full
+            If they accept, this booking moves to {journeyStepRef("payment")} — you will
+            have 48 hours to pay. If they decline after inspecting, you are refunded in full
             {booking.parcel?.return_eligible
               ? " and can have it returned to the seller."
               : " and arrange collection of the parcel."}

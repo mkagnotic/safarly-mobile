@@ -45,7 +45,7 @@ export type {
   ReturnResolution,
 } from "./bookings";
 
-export { paymentsApi, isPayoutPending } from "./payments";
+export { paymentsApi, isPayoutPending, PAYOUT_RETURN_URL } from "./payments";
 export type {
   Transaction,
   CreateIntentResult,

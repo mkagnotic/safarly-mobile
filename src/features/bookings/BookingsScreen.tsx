@@ -28,6 +28,8 @@ import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { HandoffPlanCard } from "@/features/bookings/HandoffPlanCard";
 import { ParcelReturnCard } from "@/features/bookings/ParcelReturnCard";
 import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
+import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
+import { JourneyProgress } from "@/features/bookings/JourneyProgress";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -262,6 +264,91 @@ function CancelBookingModal({
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
                 <Text style={styles.modalButtonDangerText}>Confirm Cancel</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─────────────── Accept handoff confirmation ───────────────
+
+interface AcceptHandoffModalProps {
+  open: boolean;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+/**
+ * Confirms the point of no return. Accepting transfers POSSESSION: from here no
+ * timeout and no cancel can end the deal (it opens a return instead), and the
+ * sender is only asked to pay AFTERWARDS. Firing that straight off a single tap
+ * gave the carrier no moment to check they really had the parcel in hand.
+ */
+function AcceptHandoffModal({
+  open,
+  pending,
+  onCancel,
+  onConfirm,
+}: Readonly<AcceptHandoffModalProps>) {
+  const handleClose = () => {
+    if (pending) return;
+    onCancel();
+  };
+
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
+      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
+      <View style={styles.modalCenter} pointerEvents="box-none">
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Take responsibility for this parcel?</Text>
+            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+              <Ionicons name="close" size={20} color={colors.mutedText} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalBody}>
+            Only accept once the parcel is physically with you and you&apos;ve checked it over.
+          </Text>
+          <Text style={styles.modalBullet}>
+            <Text style={styles.modalBulletStrong}>The parcel becomes your responsibility</Text>{" "}
+            from the moment you accept.
+          </Text>
+          <Text style={styles.modalBullet}>
+            <Text style={styles.modalBulletStrong}>Your sender is asked to pay next</Text> — within
+            48 hours, plus a 24-hour grace period. You are accepting before the money is collected.
+          </Text>
+          <Text style={styles.modalBullet}>
+            <Text style={styles.modalBulletStrong}>The deal can no longer time out or be cancelled.</Text>{" "}
+            Because you&apos;d be holding someone else&apos;s parcel, ending it from here opens a return instead.
+          </Text>
+          <Text style={styles.modalBullet}>
+            No code is needed now — the 6-digit code belongs to the final delivery step.
+          </Text>
+          <View style={styles.modalFooter}>
+            <Pressable
+              onPress={handleClose}
+              disabled={pending}
+              style={[styles.modalButton, styles.modalButtonSecondary]}
+              accessibilityRole="button"
+              accessibilityLabel="Not yet"
+            >
+              <Text style={styles.modalButtonSecondaryText}>Not yet</Text>
+            </Pressable>
+            <Pressable
+              onPress={onConfirm}
+              disabled={pending}
+              style={[styles.modalButton, styles.modalButtonPrimary, pending && styles.modalButtonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel="Yes, I have it, accept the parcel"
+            >
+              {pending ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <Text style={styles.modalButtonPrimaryText}>Yes, I have it</Text>
               )}
             </Pressable>
           </View>
@@ -715,12 +802,16 @@ function ExpandedBody({
     | "report-delay"
   >(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [acceptHandoffOpen, setAcceptHandoffOpen] = useState(false);
   const [rejectHandoffOpen, setRejectHandoffOpen] = useState(false);
   const [cancelPostPossessionOpen, setCancelPostPossessionOpen] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   // The server returns the plaintext OTP exactly once on generate-otp; if we
   // drop it here the sender can never see it again. Keep it in screen state.
   const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
+  // The plaintext code is returned ONCE, so the sender needs to know a durable
+  // copy went to their inbox rather than assuming the screen is the only copy.
+  const [otpEmailed, setOtpEmailed] = useState(false);
 
   // Inline action feedback — matches the rest of the app (see SendParcelScreen)
   // by rendering `FormBanner` at the top of the affected card instead of toasts.
@@ -881,14 +972,16 @@ function ExpandedBody({
     runAction("report-delay", () => bookingsApi.reportDelay(bookingId, args),
       "Delay reported - your sender has been told");
 
-  const handleAcceptHandoff = () =>
-    void runAction(
+  const handleAcceptHandoff = async () => {
+    await runAction(
       "accept-handoff",
       () => bookingsApi.acceptHandoff(booking.id),
       // Names the next phase so the delivery-code field that now appears doesn't
       // read as "a code is required right now".
       "Handoff complete — you're in transit. Enter the receiver's code at the destination.",
     );
+    setAcceptHandoffOpen(false);
+  };
 
   const handleRejectHandoffConfirm = async (reason: string, withCarrier: boolean, file?: RNUploadFile) => {
     const result = await runAction(
@@ -964,7 +1057,10 @@ function ExpandedBody({
       "Delivery code generated",
     );
     const otp = result?.data?.otp;
-    if (otp) setGeneratedOtp(otp);
+    if (otp) {
+      setGeneratedOtp(otp);
+      setOtpEmailed(!!result?.data?.emailed);
+    }
   };
 
   const handleCopyOtp = async () => {
@@ -1006,8 +1102,15 @@ function ExpandedBody({
   // actually in transit (web parity, `CustomerBookings.tsx`). Offering it at
   // awaiting_handoff invited senders to hand the code to the carrier at pickup,
   // which would let the carrier close the deal and release escrow immediately.
-  const canGenerateOtp = booking.status === "in_transit" && role === "sender";
-  const canConfirmOtp = booking.status === "in_transit" && role === "carrier";
+  // Only from the moment the carrier lands (step 5). These used to show
+  // throughout IN_TRANSIT so a forgotten "I've landed" tap could never strand a
+  // delivery - but that put step 4 and step 6 on screen together and read as
+  // being in two steps at once. Nothing is permanently blocked: the server still
+  // accepts generate/confirm during in-transit, and "I've landed" is the primary
+  // button on the card directly above.
+  const landed = !!booking.ready_for_delivery_at;
+  const canGenerateOtp = booking.status === "in_transit" && landed && role === "sender";
+  const canConfirmOtp = booking.status === "in_transit" && landed && role === "carrier";
   // Possession, not altitude, decides this: under handoff-first a carrier holding
   // a paid parcel whose trip collapses BEFORE departure (payment_secured) is the
   // commonest cancellation of all.
@@ -1132,6 +1235,16 @@ function ExpandedBody({
         </View>
       ) : null}
 
+      {/* One authoritative position for the whole booking. The action cards below
+          can appear out of order (the delivery card is available during transit on
+          purpose), so without this the user saw two cards each claiming to be the
+          current step. Hidden once the deal is dead - there is no journey left. */}
+      {!["cancelled", "cancelled_post_possession", "handoff_rejected", "expired_unpaid", "disputed"].includes(
+        booking.status,
+      ) ? (
+        <JourneyProgress booking={booking} />
+      ) : null}
+
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
         {canPay ? (
@@ -1228,7 +1341,7 @@ function ExpandedBody({
           <View style={styles.stepCardPrimary}>
             <View style={styles.stepCardHeader}>
               <Ionicons name="home-outline" size={14} color={colors.primary} />
-              <Text style={styles.stepCardEyebrowPrimary}>Step 1 of 3 · Handoff</Text>
+              <Text style={styles.stepCardEyebrowPrimary}>{journeyStepShort("handoff")}</Text>
             </View>
             <Text style={styles.stepCardTitle}>
               {booking.sender?.name
@@ -1274,7 +1387,7 @@ function ExpandedBody({
 
             <Pressable
               style={[styles.actionButton, styles.actionPrimary, styles.fullWidthAction, styles.stepCardCta]}
-              onPress={handleAcceptHandoff}
+              onPress={() => setAcceptHandoffOpen(true)}
               disabled={actionPending !== null}
               accessibilityRole="button"
               accessibilityLabel="I have it and inspected it, accept the parcel"
@@ -1326,7 +1439,7 @@ function ExpandedBody({
           <View style={styles.fullWidthAction}>
             <View style={styles.stepCardHeader}>
               <Ionicons name="key-outline" size={14} color={colors.safe} />
-              <Text style={styles.stepCardEyebrowSafe}>Step 3 of 3 · Delivery</Text>
+              <Text style={styles.stepCardEyebrowSafe}>{journeyStepShort(currentJourneyStep(booking))}</Text>
             </View>
             <Text style={styles.stepCardBody}>
               Step 2 (In transit) ends when your carrier reaches
@@ -1349,6 +1462,9 @@ function ExpandedBody({
                   read it out to the carrier at drop-off. It expires in 30 min; resend if
                   it lapses.
                 </Text>
+                {otpEmailed ? (
+                  <Text style={styles.otpEmailedNote}>We&apos;ve also emailed this code to you.</Text>
+                ) : null}
                 <View style={styles.otpDisplayActions}>
                   <Pressable
                     onPress={handleCopyOtp}
@@ -1405,13 +1521,13 @@ function ExpandedBody({
           <View style={styles.stepCardSafe}>
             <View style={styles.stepCardHeader}>
               <Ionicons name="key-outline" size={14} color={colors.safe} />
-              <Text style={styles.stepCardEyebrowSafe}>Step 3 of 3 · Delivery</Text>
+              <Text style={styles.stepCardEyebrowSafe}>{journeyStepShort(currentJourneyStep(booking))}</Text>
             </View>
             <Text style={styles.stepCardTitle}>
               You accepted the parcel — deliver it, then enter the code
             </Text>
             <Text style={styles.stepCardBody}>
-              You're carrying it now (step 2). Once you reach
+              You're carrying it now. Once you reach
               {destinationCity ? ` ${destinationCity}` : " the destination"}, agree the
               meetup point or address in chat, then ask the person receiving the parcel
               for their 6-digit delivery code (the sender shares it with them). Entering
@@ -1494,6 +1610,13 @@ function ExpandedBody({
         pending={actionPending === "cancel"}
         onCancel={() => setCancelOpen(false)}
         onConfirm={handleCancelConfirm}
+      />
+
+      <AcceptHandoffModal
+        open={acceptHandoffOpen}
+        pending={actionPending === "accept-handoff"}
+        onCancel={() => setAcceptHandoffOpen(false)}
+        onConfirm={() => void handleAcceptHandoff()}
       />
 
       <RejectHandoffModal
@@ -2186,6 +2309,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 6,
   },
+  otpEmailedNote: { color: colors.safe, fontSize: 12, fontWeight: "700", marginTop: 6 },
   otpDisplayHint: {
     color: colors.mutedText,
     fontSize: 12,
@@ -2376,7 +2500,11 @@ const styles = StyleSheet.create({
   modalButtonSecondaryText: { color: colors.text, fontSize: 13, fontWeight: "700" },
   modalButtonDanger: { backgroundColor: colors.danger },
   modalButtonDangerText: { color: colors.white, fontSize: 13, fontWeight: "800" },
+  modalButtonPrimary: { backgroundColor: colors.primary },
+  modalButtonPrimaryText: { color: colors.white, fontSize: 13, fontWeight: "800" },
   modalButtonDisabled: { opacity: 0.5 },
+  modalBullet: { color: colors.mutedText, fontSize: 13, lineHeight: 19, marginTop: 8 },
+  modalBulletStrong: { color: colors.text, fontWeight: "800" },
 
   // States
   loadingWrap: { alignItems: "center", justifyContent: "center", paddingVertical: 64, gap: 12 },
