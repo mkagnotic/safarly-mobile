@@ -24,10 +24,22 @@ export interface UseOffersResult {
 }
 
 /**
- * In-chat offer mutations. Display is realtime-driven (the server's offer
- * messages arrive on the thread channel); accept also bumps `bookings` for the
- * new pending_payment row.
+ * In-chat offer mutations.
+ *
+ * Every one of them moves the pinned workflow step, so every one of them wakes
+ * the local readers instead of leaving the screen to wait on the realtime
+ * round-trip — which is what made an accepted offer sit there still offering
+ * "Accept" until the user pulled to refresh. Web does the same by awaiting
+ * `invalidateConversation` in each offer mutation (`hooks/api/useMessages.ts`).
  */
+const bumpOfferTopics = (listings: boolean) => {
+  for (const t of ["messages", "offers", "conversations", "carrier-requests"] as const) {
+    bumpRealtimeTopic(t);
+  }
+  // Accepting is the only offer action that creates a booking.
+  if (listings) for (const t of ["bookings", "parcels", "trips"] as const) bumpRealtimeTopic(t);
+};
+
 export function useOffers(conversationId: string | null): UseOffersResult {
   const [pending, setPending] = useState<OfferActionKey | null>(null);
 
@@ -52,7 +64,9 @@ export function useOffers(conversationId: string | null): UseOffersResult {
     (input: SeedOfferInput) =>
       run("seed", async () => {
         const id = requireConversation();
-        return (await offersApi.seed(id, input)).data;
+        const result = (await offersApi.seed(id, input)).data;
+        bumpOfferTopics(false);
+        return result;
       }),
     [run, requireConversation],
   );
@@ -61,7 +75,9 @@ export function useOffers(conversationId: string | null): UseOffersResult {
     (input: CounterOfferInput) =>
       run("counter", async () => {
         const id = requireConversation();
-        return (await offersApi.counter(id, input)).data;
+        const result = (await offersApi.counter(id, input)).data;
+        bumpOfferTopics(false);
+        return result;
       }),
     [run, requireConversation],
   );
@@ -71,8 +87,7 @@ export function useOffers(conversationId: string | null): UseOffersResult {
       run(`accept:${offerId}`, async () => {
         const id = requireConversation();
         const result = (await offersApi.accept(id, offerId)).data;
-        bumpRealtimeTopic("bookings");
-        bumpRealtimeTopic("conversations");
+        bumpOfferTopics(true);
         return result;
       }),
     [run, requireConversation],
@@ -82,7 +97,9 @@ export function useOffers(conversationId: string | null): UseOffersResult {
     (offerId: string, note?: string) =>
       run(`reject:${offerId}`, async () => {
         const id = requireConversation();
-        return (await offersApi.reject(id, offerId, note)).data;
+        const result = (await offersApi.reject(id, offerId, note)).data;
+        bumpOfferTopics(false);
+        return result;
       }),
     [run, requireConversation],
   );

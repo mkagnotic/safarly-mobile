@@ -1,15 +1,27 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppInput } from "@/components/ui/AppInput";
+import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, HandoffMode, HandoffPlanInput } from "@/services/api/bookings";
 import { colors, primaryTint } from "@/theme/colors";
 import { journeyStepLabel, journeyStepRef } from "@/utils/journeySteps";
 import { parseOrigin } from "@/utils/originAddress";
+import {
+  RETURN_COUNTRIES,
+  countryCode,
+  labelForCountry,
+  labelForState,
+  postalHint,
+  sanitisePhone,
+  sanitisePostal,
+  statesFor,
+  validateCourierAddress,
+} from "@/utils/addressOptions";
 
 /**
  * Step 1 of 6 - Handoff (numbering lives in utils/journeySteps). The parcel has
@@ -37,13 +49,16 @@ export interface HandoffPlanCardProps {
 
 function formatAddress(address: HandoffAddress | null | undefined): string {
   if (!address) return "";
+  // Country/state are stored as codes now (US / IN / MH), same as the return
+  // address. Addresses saved before the pickers existed hold free text and pass
+  // straight through - a label must never lose a line because the form changed.
   return [
     address.line1,
     address.line2,
     address.city,
-    address.state,
+    labelForState(address.country ?? "", address.state ?? "") || address.state,
     address.postal_code,
-    address.country,
+    labelForCountry(address.country ?? "") || address.country,
   ]
     .filter((part) => !!part && String(part).trim().length > 0)
     .join(", ");
@@ -86,6 +101,12 @@ export function HandoffPlanCard({
   // why the City box used to show the region too and State/Country sat empty.
   const origin = parseOrigin(booking.parcel?.from_city, booking.parcel?.from_country);
 
+  // CountryPicker takes {code,name}; addressOptions speaks {value,label}.
+  const countryOptions = useMemo(
+    () => RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label })),
+    [],
+  );
+
   const [editing, setEditing] = useState(false);
   // An online order is normally couriered straight from the seller. The mode is
   // DERIVED until the carrier picks one: a `useState` initialiser only runs on
@@ -99,9 +120,15 @@ export function HandoffPlanCard({
   const [city, setCity] = useState(address?.city ?? origin.city);
   const [stateRegion, setStateRegion] = useState(address?.state ?? origin.state);
   const [postal, setPostal] = useState(address?.postal_code ?? "");
-  const [country, setCountry] = useState(address?.country ?? origin.country);
+  // Codes, not display names: the picker needs "IN", and `parseOrigin` hands
+  // back "India" for a label. `countryCode` accepts either.
+  const [country, setCountry] = useState(countryCode(address?.country ?? origin.country));
   const [contactName, setContactName] = useState(address?.contact_name ?? carrierProfileName);
   const [contactPhone, setContactPhone] = useState(address?.contact_phone ?? "");
+  const stateOptions = useMemo(
+    () => statesFor(country).map((st) => ({ code: st.value, name: st.label })),
+    [country],
+  );
   const [touched, setTouched] = useState(false);
   const [instructions, setInstructions] = useState(booking.handoff_instructions ?? "");
   const [courier, setCourier] = useState(booking.handoff_courier ?? "");
@@ -117,7 +144,7 @@ export function HandoffPlanCard({
     setCity(address?.city ?? origin.city);
     setStateRegion(address?.state ?? origin.state);
     setPostal(address?.postal_code ?? "");
-    setCountry(address?.country ?? origin.country);
+    setCountry(countryCode(address?.country ?? origin.country));
     setContactName(address?.contact_name ?? carrierProfileName);
     setContactPhone(address?.contact_phone ?? "");
     setInstructions(booking.handoff_instructions ?? "");
@@ -127,36 +154,34 @@ export function HandoffPlanCard({
 
   const showPlanForm = isCarrier && (!mode || editing);
 
-  // A courier label needs all of these to actually reach the carrier. They were
-  // optional before, so a plan could be shared with nothing but a street line -
-  // and the sender then had to chase the rest in chat. Everything here is
-  // pre-filled from the listing wherever the listing knows it.
-  const requiredAddressFields =
+  // A courier label needs all of these to actually reach the carrier, and it
+  // needs them to be REAL: the fields used to be free text with a bare presence
+  // check, so "test" in every box was a valid address for a parcel someone was
+  // about to post. Same rules, same shared module and same messages as the
+  // return address on Send Parcel (web parity: `lib/addressOptions.ts`).
+  const addressErrors =
     draftMode === "shipped"
-      ? [
-          { key: "line1", label: "Street address", value: line1 },
-          { key: "city", label: "City", value: city },
-          { key: "state", label: "State / region", value: stateRegion },
-          { key: "postal", label: "Postal code", value: postal },
-          { key: "country", label: "Country", value: country },
-          { key: "contactName", label: "Name for the parcel", value: contactName },
-          { key: "contactPhone", label: "Phone for the courier", value: contactPhone },
-        ]
-      : [];
-  const missingFields = requiredAddressFields.filter((f) => !f.value.trim());
-  const missingKeys = missingFields.map((f) => f.key);
-  const fieldError = (key: string) =>
-    touched && missingKeys.includes(key) ? "Required" : undefined;
+      ? validateCourierAddress({
+          line1,
+          city,
+          state: stateRegion,
+          postal,
+          country,
+          contactName,
+          contactPhone,
+        })
+      : {};
+  const hasAddressErrors = Object.keys(addressErrors).length > 0;
+  // Errors surface only once the carrier has tried to submit.
+  const fieldError = (key: keyof typeof addressErrors) =>
+    touched ? addressErrors[key] : undefined;
 
   const submitPlan = () => {
     setTouched(true);
-    if (missingFields.length > 0) {
-      const labels = missingFields.map((f) => f.label);
+    if (hasAddressErrors) {
       showToast({
-        title: labels.length === 1
-          ? `${labels[0]} is required so the parcel can reach you`
-          : "Complete the delivery address",
-        message: labels.length === 1 ? undefined : `Still needed: ${labels.join(", ")}`,
+        title: "Check the delivery address",
+        message: "The highlighted fields need fixing so the parcel can reach you.",
         variant: "error",
       });
       return;
@@ -253,26 +278,71 @@ export function HandoffPlanCard({
               onChangeText={setLine2}
               placeholder="Apartment, building, landmark (optional)"
             />
-            <AppInput value={city} onChangeText={setCity} placeholder="City *" error={fieldError("city")} />
-            <AppInput
-              value={stateRegion}
-              onChangeText={setStateRegion}
-              placeholder="State / region *"
-              error={fieldError("state")}
+            {/* Country first: it decides which states are offered and how the
+                postal code is validated. */}
+            <CountryPicker
+              value={country}
+              onChange={(v) => {
+                setCountry(v);
+                // A state from the previous country would no longer be valid.
+                setStateRegion("");
+              }}
+              placeholder="Country *"
+              options={countryOptions}
+              invalid={!!fieldError("country")}
             />
-            <AppInput value={postal} onChangeText={setPostal} placeholder="Postal code *" error={fieldError("postal")} />
-            <AppInput value={country} onChangeText={setCountry} placeholder="Country *" error={fieldError("country")} />
+            {fieldError("country") ? (
+              <Text style={styles.inlineError}>{fieldError("country")}</Text>
+            ) : null}
+
+            <CountryPicker
+              value={stateRegion}
+              onChange={setStateRegion}
+              placeholder={country ? "State / region *" : "Select a country first"}
+              disabled={!country}
+              options={stateOptions}
+              invalid={!!fieldError("state")}
+            />
+            {fieldError("state") ? (
+              <Text style={styles.inlineError}>{fieldError("state")}</Text>
+            ) : null}
+
+            <AppInput
+              value={city}
+              // Digits stripped as you type - a city is never a number, and
+              // blocking it here beats an error on submit.
+              onChangeText={(v) => setCity(v.replace(/[0-9]/g, ""))}
+              placeholder="City *"
+              autoCapitalize="words"
+              error={fieldError("city")}
+            />
+            <AppInput
+              value={postal}
+              // Filtered, not just hinted: `keyboardType` only picks the default
+              // keyboard - a paste or a hardware keyboard still gets through.
+              onChangeText={(v) => setPostal(sanitisePostal(v))}
+              placeholder={country === "IN" ? "PIN code *" : "Postal code *"}
+              keyboardType="number-pad"
+              maxLength={10}
+              error={fieldError("postal")}
+            />
+            {!fieldError("postal") && postalHint(country) ? (
+              <Text style={styles.helperText}>{postalHint(country)}</Text>
+            ) : null}
             <AppInput
               value={contactName}
               onChangeText={setContactName}
               placeholder="Name for the parcel *"
+              autoCapitalize="words"
+              maxLength={120}
               error={fieldError("contactName")}
             />
             <AppInput
               value={contactPhone}
-              onChangeText={setContactPhone}
-              placeholder="Phone for the courier *"
+              onChangeText={(v) => setContactPhone(sanitisePhone(v))}
+              placeholder={country === "IN" ? "Phone, e.g. +91 98765 43210 *" : "Phone for the courier *"}
               keyboardType="phone-pad"
+              maxLength={40}
               error={fieldError("contactPhone")}
             />
           </View>
@@ -491,6 +561,9 @@ export function HandoffPlanCard({
 }
 
 const styles = StyleSheet.create({
+  // Same inline-error / helper treatment as the return address on Send Parcel.
+  inlineError: { color: colors.danger, fontSize: 12, lineHeight: 17, fontWeight: "600", marginTop: -4 },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500", marginTop: -4 },
   card: {
     width: "100%",
     backgroundColor: primaryTint.fill08,

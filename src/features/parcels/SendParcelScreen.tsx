@@ -31,7 +31,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
-import { RETURN_COUNTRIES, statesFor, postalHint, validateReturnAddress } from "@/utils/addressOptions";
+import { RETURN_COUNTRIES, statesFor, postalHint, sanitisePostal, validateReturnAddress } from "@/utils/addressOptions";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "SendParcelTab">,
@@ -1037,7 +1037,9 @@ export function SendParcelScreen() {
                   />
                   <AppInput
                     value={returnPostal}
-                    onChangeText={(v) => { setReturnPostal(v); clearFieldError("returnPostal"); }}
+                    // Letters can never be part of a postal code, so they are
+                    // dropped as you type rather than rejected on submit.
+                    onChangeText={(v) => { setReturnPostal(sanitisePostal(v)); clearFieldError("returnPostal"); }}
                     placeholder={returnCountry === "IN" ? "PIN code *" : "Postal code *"}
                     keyboardType="number-pad"
                     maxLength={10}

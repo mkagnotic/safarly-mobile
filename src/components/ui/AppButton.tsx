@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "@/theme/colors";
 import { shadowSoft } from "@/theme/elevation";
@@ -10,6 +10,13 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   variant?: "primary" | "secondary" | "danger" | "dark";
   disabled?: boolean;
+  /**
+   * THIS button's action is in flight: swaps the icon for a spinner and blocks
+   * further presses. Disabling siblings is the caller's job — see
+   * `hooks/useActionGroup.ts`, which hands every button in a mutually-exclusive
+   * group the same `disabled` and only one of them `loading`.
+   */
+  loading?: boolean;
   leftIcon?: ReactNode;
   /**
    * Override the primary variant's [start, end] gradient (e.g. a CTA-accent
@@ -25,21 +32,30 @@ export function AppButton({
   style,
   variant = "primary",
   disabled = false,
+  loading = false,
   leftIcon,
   gradientColors,
 }: Readonly<Props>) {
+  // A button whose action is already running must not fire it again.
+  const blocked = disabled || loading;
+  const icon = loading ? (
+    <ActivityIndicator size="small" color={variant === "secondary" ? colors.text : colors.white} />
+  ) : (
+    leftIcon
+  );
+
   if (variant === "primary") {
     const grad = gradientColors ?? [colors.primary, colors.primaryGradientEnd];
     return (
       <Pressable
         android_ripple={{ color: "rgba(255,255,255,0.16)" }}
-        disabled={disabled}
+        disabled={blocked}
         onPress={onPress}
         style={({ pressed }) => [
           styles.base,
           styles.primaryOuter,
           { backgroundColor: grad[0] },
-          disabled && styles.disabled,
+          blocked && styles.disabled,
           pressed && styles.pressed,
           style,
         ]}
@@ -51,7 +67,7 @@ export function AppButton({
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.content}>
-          {leftIcon ? <View style={styles.icon}>{leftIcon}</View> : null}
+          {icon ? <View style={styles.icon}>{icon}</View> : null}
           <Text style={styles.label} numberOfLines={1}>
             {label}
           </Text>
@@ -63,19 +79,19 @@ export function AppButton({
   return (
     <Pressable
       android_ripple={{ color: "rgba(255,255,255,0.16)" }}
-      disabled={disabled}
+      disabled={blocked}
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
         styles[variant],
         variant === "secondary" ? shadowSoft() : null,
-        disabled && styles.disabled,
+        blocked && styles.disabled,
         pressed && styles.pressed,
         style,
       ]}
     >
       <View style={styles.content}>
-        {leftIcon ? <View style={styles.icon}>{leftIcon}</View> : null}
+        {icon ? <View style={styles.icon}>{icon}</View> : null}
         <Text style={[styles.label, variant === "secondary" && styles.secondaryText]} numberOfLines={1}>
           {label}
         </Text>
