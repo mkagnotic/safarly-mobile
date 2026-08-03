@@ -6,6 +6,7 @@ import {
   messagesApi,
   type Conversation,
 } from "@/services/api";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 
 export interface UseMyConversationsOptions {
   /** Items per page. Defaults to 50 (mobile-friendly; web uses default). */
@@ -132,6 +133,64 @@ export function useMyConversations({
     setRawConversations((prev) => prev.map((c) => (c.id === id ? updater(c) : c)));
   }, []);
 
+  /**
+   * Merge the server's returned row over the cached one.
+   *
+   * ⚠️ MERGE, never replace. `/match`, `/decline` and `/unmatch` return the bare
+   * `conversations` row — no `participant`, no `unread_count`, because those are
+   * assembled by the LIST endpoint. Replacing the row therefore dropped the
+   * counterpart off it, and since the dedupe above keys on `participant.id`, the
+   * conversation then vanished from the list entirely: the chat lost its header
+   * name and its match banner until a full refetch happened to arrive.
+   */
+  const mergeServerRow = useCallback(
+    (id: string, row: Conversation | undefined) => {
+      if (!row) return;
+      patch(id, (c) => ({ ...c, ...row }));
+    },
+    [patch],
+  );
+
+  /**
+   * Wake every screen the handshake moves — the pinned workflow bar
+   * (`useActiveDeal`), the inbox, My Travels — instead of waiting for the
+   * realtime round-trip to come back to us. Same idiom as `useTravelDoc` /
+   * `useParcelReview`. `listings` covers the parcel/trip/booking statuses a
+   * confirmed match flips (web does the same via `invalidateDealCaches`).
+   */
+  const bumpHandshakeTopics = useCallback((listings: boolean) => {
+    for (const t of ["conversations", "messages", "carrier-requests"] as const) bumpRealtimeTopic(t);
+    if (!listings) return;
+    for (const t of ["parcels", "trips", "bookings", "buddies"] as const) bumpRealtimeTopic(t);
+  }, []);
+
+  /**
+   * Re-read the list from the server and report whether the row now reads the
+   * way the caller's action wanted it to.
+   *
+   * A repeat press lands on a handshake that has already moved and the server
+   * correctly refuses it with a 409 ("You already requested a match", "Cannot
+   * decline: status is already 'declined'") — telling the user their action
+   * failed when it demonstrably worked. ⚠️ But 409 is NOT benign by itself:
+   * `/match` also returns it for the blockers the server was taught to REPORT
+   * rather than hide (parcel already handed to another carrier, trip marked
+   * unavailable). So the call is made on STATE, never on the error code alone.
+   */
+  const resyncSatisfies = useCallback(
+    async (conversationId: string, satisfied: (c: Conversation) => boolean) => {
+      try {
+        const res = await messagesApi.listConversations({ page: 1, per_page: perPage, archived });
+        const rows = res.data ?? [];
+        if (mountedRef.current) setRawConversations(rows);
+        const row = rows.find((c) => c.id === conversationId);
+        return !!row && satisfied(row);
+      } catch {
+        return false;
+      }
+    },
+    [perPage, archived],
+  );
+
   const acceptMatch = useCallback(
     async (conversationId: string) => {
       let snapshot: Conversation[] | null = null;
@@ -164,11 +223,25 @@ export function useMyConversations({
       setMutating(true);
       try {
         const res = await messagesApi.matchConversation(conversationId);
-        if (mountedRef.current && res.data) {
-          patch(conversationId, () => res.data);
-        }
+        if (mountedRef.current) mergeServerRow(conversationId, res.data);
+        bumpHandshakeTopics(true);
       } catch (err) {
         if (mountedRef.current) {
+          // Already accepted (a double press, or the other side got there
+          // first)? Then the action DID happen — resync and stay quiet.
+          const settled =
+            err instanceof ApiClientError &&
+            err.code === "CONFLICT" &&
+            (await resyncSatisfies(
+              conversationId,
+              (c) =>
+                c.match_status === "matched" ||
+                (!!currentUserId && c.matched_by === currentUserId),
+            ));
+          if (settled) {
+            bumpHandshakeTopics(true);
+            return;
+          }
           if (snapshot) setRawConversations(snapshot);
           // Resync if a guard rejected because the other side acted first.
           void refetch();
@@ -178,7 +251,7 @@ export function useMyConversations({
         if (mountedRef.current) setMutating(false);
       }
     },
-    [patch, currentUserId, refetch],
+    [mergeServerRow, currentUserId, refetch, resyncSatisfies, bumpHandshakeTopics],
   );
 
   const markConversationRead = useCallback((conversationId: string) => {
@@ -206,11 +279,19 @@ export function useMyConversations({
       setMutating(true);
       try {
         const res = await messagesApi.declineConversation(conversationId, reason);
-        if (mountedRef.current && res.data) {
-          patch(conversationId, () => res.data);
-        }
+        if (mountedRef.current) mergeServerRow(conversationId, res.data);
+        // No listing statuses move on a decline — only the thread and the inbox.
+        bumpHandshakeTopics(false);
       } catch (err) {
         if (mountedRef.current) {
+          const settled =
+            err instanceof ApiClientError &&
+            err.code === "CONFLICT" &&
+            (await resyncSatisfies(conversationId, (c) => c.match_status === "declined"));
+          if (settled) {
+            bumpHandshakeTopics(false);
+            return;
+          }
           if (snapshot) setRawConversations(snapshot);
           // Decline only works from `pending`; resync if the state moved.
           void refetch();
@@ -220,7 +301,7 @@ export function useMyConversations({
         if (mountedRef.current) setMutating(false);
       }
     },
-    [patch, refetch],
+    [mergeServerRow, refetch, resyncSatisfies, bumpHandshakeTopics],
   );
 
   return {

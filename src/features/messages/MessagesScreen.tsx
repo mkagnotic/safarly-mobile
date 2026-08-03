@@ -266,9 +266,18 @@ export function MessagesScreen() {
     if (!acceptTarget) return;
     setAcceptPending(true);
     try {
+      // Read off the PRE-accept row: if they had already asked, mine is the
+      // second acceptance and the deal is matched. If I'm first, all I've done
+      // is send the request — saying "Matched" there was simply wrong.
+      const theyAskedFirst = !!acceptTarget.matched_by && acceptTarget.matched_by !== user?.id;
       await acceptMatch(acceptTarget.id);
       setAcceptTarget(null);
-      showToast({ title: "Matched", variant: "success", duration: 1800 });
+      showToast({
+        title: theyAskedFirst ? "Matched" : "Match request sent",
+        message: theyAskedFirst ? undefined : "Waiting for them to accept.",
+        variant: "success",
+        duration: 1800,
+      });
     } catch (err) {
       showToast({
         title: "Couldn't accept",
@@ -278,7 +287,7 @@ export function MessagesScreen() {
     } finally {
       setAcceptPending(false);
     }
-  }, [acceptTarget, acceptMatch]);
+  }, [acceptTarget, acceptMatch, user?.id]);
 
   const handleDeclineConfirm = useCallback(
     async (reason: string) => {
@@ -1013,7 +1022,11 @@ const styles = StyleSheet.create({
   timeUnread: { color: colors.primary, fontWeight: "800" },
   actionsRow: { flexDirection: "row", gap: 6 },
   actionButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  acceptButton: { backgroundColor: colors.safe },
+  // Orange CTA (web parity: the inbox row's accept dot and the pinned match
+  // prompt both use it). `safe` stays the STATUS colour — the "Matched" pill
+  // two lines up in this same row is green, and the button must not read as
+  // another status chip.
+  acceptButton: { backgroundColor: colors.ctaAccent },
   acceptButtonText: { color: colors.white, fontSize: 11, fontWeight: "800" },
   declineButton: {
     borderWidth: 1,

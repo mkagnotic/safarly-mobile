@@ -44,6 +44,7 @@ import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
+import { useActionGroup } from "@/hooks/useActionGroup";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useParcelReview } from "@/hooks/api/useParcelReview";
 import { useTravelDoc } from "@/hooks/api/useTravelDoc";
@@ -58,6 +59,7 @@ import {
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { MainTabParamList } from "@/navigation/types";
 import { setActiveConversation } from "@/store/activeConversation";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import {
   ApiClientError,
   getErrorMessage,
@@ -295,9 +297,15 @@ export function OfferChatScreen() {
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [declineOpen, setDeclineOpen] = useState(false);
-  const [decliningPending, setDecliningPending] = useState(false);
+  // Accept / decline / match-again are one decision, so they run through one
+  // group: `busy` locks every entry point (banner, pin, both modals) and the
+  // lock inside `run` drops a second tap landing before React re-renders with
+  // the new `disabled`. Same primitive as web's `hooks/useActionGroup.ts`.
+  const matchActions = useActionGroup();
+  const matchPending = matchActions.isRunning("accept");
+  const decliningPending = matchActions.isRunning("decline");
+  const matchBusy = matchActions.busy;
   const [matchModalOpen, setMatchModalOpen] = useState(false);
-  const [matchPending, setMatchPending] = useState(false);
   const [travelDocOpen, setTravelDocOpen] = useState(false);
   const [parcelReviewOpen, setParcelReviewOpen] = useState(false);
 
@@ -607,37 +615,57 @@ export function OfferChatScreen() {
 
   const handleAccept = useCallback(async () => {
     if (!conversationId) return;
-    setMatchPending(true);
-    try {
-      await acceptMatch(conversationId);
-      setMatchModalOpen(false);
-      showToast({ title: "Matched", variant: "success", duration: 1800 });
-    } catch (err) {
-      showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
-    } finally {
-      setMatchPending(false);
-    }
-  }, [conversationId, acceptMatch]);
+    // Read off the PRE-accept snapshot: if they had already asked, mine is the
+    // second acceptance and the deal is now matched. If I am first, all I have
+    // done is send the request - saying "Matched" there was simply wrong.
+    const theyAskedFirst = !!conversation?.matched_by && conversation.matched_by !== user?.id;
+    await matchActions.run("accept", async () => {
+      try {
+        await acceptMatch(conversationId);
+        // Awaited: the pinned bar is a projection of the server FSM, so hold
+        // the confirm button busy until it HAS the next step. Ending the
+        // pending state as soon as the PUT returned re-enabled the button under
+        // a banner still showing the old step - which is what invited a second
+        // press.
+        await refetchActiveDeal();
+        setMatchModalOpen(false);
+        showToast({
+          title: theyAskedFirst ? "Matched" : "Match request sent",
+          message: theyAskedFirst ? undefined : "Waiting for them to accept.",
+          variant: "success",
+          duration: 1800,
+        });
+      } catch (err) {
+        showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
+      }
+    });
+    // matchActions is rebuilt each render by design (it closes over the current
+    // busy state), so it is deliberately not a dependency.
+
+  }, [conversationId, acceptMatch, refetchActiveDeal, conversation?.matched_by, user?.id]);
 
   const handleDeclineConfirm = useCallback(
     async (reason: string) => {
       if (!conversationId) return;
-      setDecliningPending(true);
-      try {
-        await declineMatch(conversationId, reason || undefined);
-        setDeclineOpen(false);
-        showToast({ title: "Match declined", variant: "info", duration: 1800 });
-      } catch (err) {
-        showToast({
-          title: "Couldn't decline",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
-      } finally {
-        setDecliningPending(false);
-      }
+      await matchActions.run("decline", async () => {
+        try {
+          await declineMatch(conversationId, reason || undefined);
+          // Same contract as accept: the pin must have the next state before
+          // the dialog closes and the button comes back to life.
+          await refetchActiveDeal();
+          setDeclineOpen(false);
+          showToast({ title: "Match declined", variant: "info", duration: 1800 });
+        } catch (err) {
+          showToast({
+            title: "Couldn't decline",
+            message: getErrorMessage(err),
+            variant: "error",
+          });
+        }
+      });
     },
-    [conversationId, declineMatch],
+
+    [conversationId, declineMatch, refetchActiveDeal],
   );
 
   // Both block and unmatch open the same shared ConfirmActionModal — the
@@ -667,8 +695,17 @@ export function OfferChatScreen() {
         showToast({ title: "Unmatched", variant: "info" });
       }
       setConfirmAction(null);
-      // Flip the match-state banner instantly instead of waiting on realtime.
-      void refetchConversations();
+      // Flip the match-state banner AND the pinned workflow bar instantly
+      // instead of waiting on realtime. Unmatch reverts the conversation to
+      // `pending`, so the match prompt has to come back - awaited, so the
+      // confirm button stays busy until the screen actually has that state
+      // (fire-and-forget left the old banner up and looked like nothing
+      // happened). The bump wakes the inbox and My Travels, whose listing
+      // statuses the unmatch also reverts.
+      for (const t of ["conversations", "messages", "carrier-requests", "parcels", "trips", "bookings"] as const) {
+        bumpRealtimeTopic(t);
+      }
+      await Promise.all([refetchConversations(), refetchActiveDeal()]);
     } catch (err) {
       // Guard may reject if the state moved (e.g. already unmatched). Resync.
       void refetchConversations();
@@ -707,7 +744,7 @@ export function OfferChatScreen() {
     } finally {
       setConfirmPending(false);
     }
-  }, [conversationId, confirmAction, refetchConversations, navigation]);
+  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation]);
 
   const handleUnblock = useCallback(async () => {
     if (!conversationId) return;
@@ -1325,20 +1362,34 @@ export function OfferChatScreen() {
                 {participantName} wants to match. Accept to start chatting freely.
               </Text>
             </View>
+            {/* Accept and Close are two answers to ONE question, so they share
+                a single busy flag: once either is being sent the other must be
+                dead, or the thread gets a match and a decline for the same
+                request. */}
             <View style={styles.bannerActions}>
               <Pressable
                 onPress={() => setMatchModalOpen(true)}
-                style={[styles.bannerButton, styles.bannerButtonPrimary]}
+                disabled={matchBusy}
+                style={[styles.bannerButton, styles.bannerButtonPrimary, matchBusy && styles.bannerButtonDisabled]}
                 accessibilityRole="button"
               >
-                <Text style={styles.bannerButtonPrimaryText}>Accept</Text>
+                {matchPending ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.bannerButtonPrimaryText}>Accept</Text>
+                )}
               </Pressable>
               <Pressable
                 onPress={() => setDeclineOpen(true)}
-                style={[styles.bannerButton, styles.bannerButtonOutline]}
+                disabled={matchBusy}
+                style={[styles.bannerButton, styles.bannerButtonOutline, matchBusy && styles.bannerButtonDisabled]}
                 accessibilityRole="button"
               >
-                <Text style={styles.bannerButtonOutlineText}>Close</Text>
+                {decliningPending ? (
+                  <ActivityIndicator size="small" color={colors.text} />
+                ) : (
+                  <Text style={styles.bannerButtonOutlineText}>Close</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -1366,10 +1417,15 @@ export function OfferChatScreen() {
             <View style={styles.bannerActions}>
               <Pressable
                 onPress={() => setMatchModalOpen(true)}
-                style={[styles.bannerButton, styles.bannerButtonPrimary]}
+                disabled={matchBusy}
+                style={[styles.bannerButton, styles.bannerButtonPrimary, matchBusy && styles.bannerButtonDisabled]}
                 accessibilityRole="button"
               >
-                <Text style={styles.bannerButtonPrimaryText}>Match again</Text>
+                {matchPending ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <Text style={styles.bannerButtonPrimaryText}>Match again</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -2442,8 +2498,13 @@ const styles = StyleSheet.create({
   bannerBody: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
   bannerActions: { flexDirection: "row", gap: 6 },
   bannerButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  bannerButtonPrimary: { backgroundColor: colors.safe },
+  // Orange CTA, not green: `safe` is the app's STATUS colour ("Matched",
+  // "Delivered" pills) and `ctaAccent` is the action colour the pinned bar
+  // (ChatWorkflowPin) and web's `.btn-action-primary` already use for exactly
+  // this button. Two different colours for one action read as two systems.
+  bannerButtonPrimary: { backgroundColor: colors.ctaAccent },
   bannerButtonPrimaryText: { color: colors.white, fontSize: 11, fontWeight: "800" },
+  bannerButtonDisabled: { opacity: 0.5 },
   bannerButtonOutline: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -2759,10 +2820,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // Primary — full width, solid, lifted so it clearly leads.
+  // Primary — full width, solid, lifted so it clearly leads. Orange CTA (web's
+  // OfferCard accept is the same `.cta-primary` orange); green is reserved for
+  // status.
   offerActionAccept: {
-    backgroundColor: colors.safe,
-    shadowColor: colors.safe,
+    backgroundColor: colors.ctaAccent,
+    shadowColor: colors.ctaAccent,
     shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -2812,7 +2875,9 @@ const styles = StyleSheet.create({
   offerBarBtnGhostText: { color: colors.danger, fontSize: 12, fontWeight: "800" },
   offerBarBtnOutline: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
   offerBarBtnOutlineText: { color: colors.text, fontSize: 12, fontWeight: "800" },
-  offerBarBtnPrimary: { backgroundColor: colors.safe },
+  // Pinned offer bar's accept — same orange as the card above it (web parity:
+  // ChatOfferPrompt uses `.btn-action-primary`).
+  offerBarBtnPrimary: { backgroundColor: colors.ctaAccent },
   offerBarBtnPrimaryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
 
   // Offer feedback banner wrap

@@ -1095,9 +1095,23 @@ function ExpandedBody({
   const isAwaitingHandoff =
     booking.status === "awaiting_handoff" || booking.status === "confirmed";
   const canPay = booking.status === "pending_payment" && role === "sender";
-  const canCancel = booking.status === "pending_payment" || isAwaitingHandoff;
+  // The carrier's exit at handoff is /handoff/reject, NOT the generic cancel:
+  // it asks where the parcel is and opens a return when they already hold it,
+  // which a plain cancel would skip while relisting a parcel that is in
+  // someone's hands. Offering both put two buttons with different server
+  // consequences side by side; web has always shown only the reject here.
+  const canCancel =
+    booking.status === "pending_payment" || (isAwaitingHandoff && role !== "carrier");
   const canAcceptHandoff = isAwaitingHandoff && role === "carrier";
   const canRejectHandoff = canAcceptHandoff;
+  // Wording only - same endpoint either way. Before the sender has sent it there
+  // is no parcel to inspect, so "Can't accept this parcel" described something
+  // that had not happened and carriers went looking for a "Cancel" that is not
+  // theirs at this step (web parity: `HandoffActions.tsx`).
+  const handoffDispatched = !!booking.handoff_dispatched_at;
+  const rejectHandoffLabel = handoffDispatched
+    ? "Can't accept this parcel"
+    : "Cancel - I can't do this delivery";
   // Delivery code = proof of DROP-OFF, so it only appears once the parcel is
   // actually in transit (web parity, `CustomerBookings.tsx`). Offering it at
   // awaiting_handoff invited senders to hand the code to the carrier at pickup,
@@ -1407,14 +1421,16 @@ function ExpandedBody({
                 onPress={() => setRejectHandoffOpen(true)}
                 disabled={actionPending !== null}
                 accessibilityRole="button"
-                accessibilityLabel="Can't accept this parcel"
+                accessibilityLabel={rejectHandoffLabel}
               >
                 <Ionicons name="close-circle" size={14} color={colors.danger} />
-                <Text style={styles.actionDangerText}>Can't accept this parcel</Text>
+                <Text style={styles.actionDangerText}>{rejectHandoffLabel}</Text>
               </Pressable>
             ) : null}
             <Text style={styles.stepCardFootnote}>
-              Declining refunds the sender in full with no penalty to you.{" "}
+              {handoffDispatched
+                ? "Declining refunds the sender in full with no penalty to you. "
+                : "This is how you cancel at this step - it refunds your sender in full, with no penalty to you. "}
               {returnEligible
                 ? "This order can go back to the seller — the sender arranges the return."
                 : "The sender then arranges collection of the parcel from you."}

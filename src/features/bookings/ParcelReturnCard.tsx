@@ -261,7 +261,7 @@ export function ParcelReturnCard({
                 <Pressable
                   key={value}
                   onPress={() => !disabled && setChoice(value)}
-                  disabled={disabled}
+                  disabled={disabled || pending !== null}
                   style={[styles.option, selected && styles.optionActive, disabled && styles.optionDisabled]}
                   accessibilityRole="radio"
                   accessibilityState={{ selected, disabled }}

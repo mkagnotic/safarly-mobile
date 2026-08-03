@@ -117,3 +117,67 @@ export function validateReturnAddress(input: ReturnAddressInput): ReturnAddressE
 
   return errors;
 }
+
+/** ISO-2 code from either the code or the display name ("India" -> "IN"). */
+export function countryCode(value: string | null | undefined): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  if (RETURN_COUNTRIES.some((c) => c.value === v)) return v;
+  return RETURN_COUNTRIES.find((c) => c.label.toLowerCase() === v.toLowerCase())?.value ?? "";
+}
+
+/**
+ * Digits, spaces and the usual punctuation, 7-15 digits — E.164 allows up to 15
+ * and no real number has fewer than 7. Deliberately not stricter: the number is
+ * printed on a label for a courier to ring, not dialled by us.
+ */
+const PHONE_DIGITS = /^\+?[\d\s().-]+$/;
+
+/**
+ * Strip what a postal code can never contain, as it is typed.
+ *
+ * `keyboardType="number-pad"` only picks the DEFAULT keyboard — a hardware
+ * keyboard, a paste, or a third-party IME can still put letters in the field, so
+ * the value has to be filtered rather than merely hinted. Hyphen is kept for
+ * US ZIP+4. Keep in sync with web's `lib/addressOptions.ts`.
+ */
+export function sanitisePostal(value: string): string {
+  return value.replace(/[^\d-]/g, "");
+}
+
+/** Same idea for a phone number: digits and the punctuation people really use. */
+export function sanitisePhone(value: string): string {
+  return value.replace(/[^\d+\s().-]/g, "");
+}
+
+export interface CourierAddressInput extends ReturnAddressInput {
+  contactName: string;
+  contactPhone: string;
+}
+
+export type CourierAddressErrors = Partial<Record<keyof CourierAddressInput, string>>;
+
+/**
+ * A COURIER address: the return-address rules plus the two fields a courier
+ * needs to hand the parcel over. Keep in sync with web's `lib/addressOptions.ts`.
+ *
+ * The handoff form had no format checks at all — free-text country and state,
+ * and nothing to stop a postal code that cannot exist — even though the address
+ * it produces is what a sender posts a real parcel to.
+ */
+export function validateCourierAddress(input: CourierAddressInput): CourierAddressErrors {
+  const errors: CourierAddressErrors = validateReturnAddress(input);
+  const name = input.contactName.trim();
+  const phone = input.contactPhone.trim();
+  const digits = phone.replace(/\D/g, "");
+
+  if (name.length < 2) errors.contactName = "Enter the name the parcel is addressed to.";
+
+  if (!phone) {
+    errors.contactPhone = "Enter a phone number for the courier.";
+  } else if (!PHONE_DIGITS.test(phone) || digits.length < 7 || digits.length > 15) {
+    errors.contactPhone = "Enter a valid phone number the courier can call.";
+  }
+
+  return errors;
+}
