@@ -250,7 +250,30 @@ export function OfferChatScreen() {
     () => resolveOffers(messages, user?.id ?? null),
     [messages, user?.id],
   );
-  const liveOffer = offerState.live;
+  /**
+   * Offers this screen has already settled, kept until the server's own
+   * `offer_accept` / `offer_reject` message lands.
+   *
+   * `resolveOffers` derives the live offer from the MESSAGE THREAD, so the bar keeps
+   * offering "Accept / Counter / Decline" until the refreshed messages arrive — beside
+   * the thread's own "match confirmed" line. The buttons are locked while the request
+   * runs, but a live-looking decision row for a decision already taken reads as "it
+   * didn't work", and the obvious response is to press it again.
+   *
+   * Web solves the same window by settling its cached `activeDeal.offer`
+   * (`settleCachedOffer` in `hooks/api/useMessages.ts`); mobile has no such cache, so
+   * it holds the ids locally. No cleanup needed — once the real message arrives the
+   * resolver returns null on its own.
+   */
+  const [settledOfferIds, setSettledOfferIds] = useState<string[]>([]);
+  const markOfferSettled = useCallback((offerId: string) => {
+    setSettledOfferIds((prev) => (prev.includes(offerId) ? prev : [...prev, offerId]));
+  }, []);
+
+  const liveOffer = useMemo(() => {
+    const live = offerState.live;
+    return live && settledOfferIds.includes(live.offerId) ? null : live;
+  }, [offerState.live, settledOfferIds]);
   const isMatched = matchStatus === "matched";
 
   // ───────── Server-owned workflow (pinned action bar) ─────────
@@ -1108,6 +1131,7 @@ export function OfferChatScreen() {
       setOfferBanner(null);
       try {
         const result = await acceptOffer(offerId);
+        markOfferSettled(offerId);
         setOfferBanner({ variant: "success", title: "Offer accepted — match confirmed!" });
         // Only the parcel sender is routed onward to pay (Part 3); the carrier stays here.
         const booking = result.booking;
@@ -1138,7 +1162,7 @@ export function OfferChatScreen() {
         });
       }
     },
-    [acceptOffer, navigation, user?.id, activeDeal?.viewer_role, participantName],
+    [acceptOffer, navigation, user?.id, activeDeal?.viewer_role, participantName, markOfferSettled],
   );
 
   const handleDeclineOffer = useCallback(
@@ -1146,6 +1170,7 @@ export function OfferChatScreen() {
       setOfferBanner(null);
       try {
         await rejectOffer(offerId);
+        markOfferSettled(offerId);
         setOfferBanner({ variant: "info", title: "Offer declined" });
       } catch (err) {
         setOfferBanner({
@@ -1155,7 +1180,7 @@ export function OfferChatScreen() {
         });
       }
     },
-    [rejectOffer],
+    [rejectOffer, markOfferSettled],
   );
 
   const handleSystemPress = useCallback(

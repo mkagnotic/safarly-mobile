@@ -41,6 +41,25 @@ interface TravelDocModalProps {
 }
 
 /**
+ * Plain-language upload allowance for the carrier.
+ *
+ * "3 of 3 uploads remaining" read as a used-up count and announced a retry limit to
+ * someone who had not yet tried once. So: state the rule before the first upload,
+ * and only count down once an attempt has actually been spent. Running out is not a
+ * dead end — it opens admin review — so the last-attempt line says so.
+ *
+ * ⚠️ Web `src/customer/components/ChatDocVerifyPrompt.tsx` carries the identical
+ * wording — keep the two in sync.
+ */
+function attemptsHint(attempts: number, maxAttempts: number): string {
+  const left = Math.max(0, maxAttempts - attempts);
+  if (attempts === 0) return `You can upload up to ${maxAttempts} times.`;
+  if (left <= 0) return "No attempts left — our team can review it for you.";
+  if (left === 1) return "Last attempt — after this, our team will review it.";
+  return `${left} attempts left.`;
+}
+
+/**
  * Travel-document verification, in-chat. Mobile counterpart of web's
  * `ChatDocVerifyPrompt`, opened from the workflow pin's "Upload" / "Review" CTA.
  *
@@ -285,15 +304,13 @@ function Content(props: Readonly<ContentProps>) {
   const attemptsLeft = Math.max(0, doc.max_attempts - doc.attempts);
   const exhausted = doc.status === "rejected" && attemptsLeft <= 0;
 
-  if (isCarrier) return <CarrierContent {...props} exhausted={exhausted} attemptsLeft={attemptsLeft} />;
+  if (isCarrier) return <CarrierContent {...props} exhausted={exhausted} />;
   return <SenderContent {...props} />;
 }
 
 // ───────────────────────── Carrier ─────────────────────────
 
-function CarrierContent(
-  props: Readonly<ContentProps & { exhausted: boolean; attemptsLeft: number }>,
-) {
+function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) {
   const {
     doc,
     pending,
@@ -301,7 +318,6 @@ function CarrierContent(
     file,
     previewUri,
     exhausted,
-    attemptsLeft,
     confirmCancel,
     setConfirmCancel,
     clearFile,
@@ -404,9 +420,7 @@ function CarrierContent(
             : "Add your boarding pass or flight ticket (image or PDF) so the sender can verify your trip."
         }
       />
-      <Text style={styles.attemptsText}>
-        {attemptsLeft} of {doc.max_attempts} upload{doc.max_attempts === 1 ? "" : "s"} remaining
-      </Text>
+      <Text style={styles.attemptsText}>{attemptsHint(doc.attempts, doc.max_attempts)}</Text>
 
       {file ? (
         <View style={styles.previewRow}>
