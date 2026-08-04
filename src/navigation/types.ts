@@ -31,6 +31,10 @@ export type RootStackParamList = {
   EditProfile: undefined;
   TermsOfService: undefined;
   PrivacyPolicy: undefined;
+  /** Company + platform information (web parity: `/about`). */
+  About: undefined;
+  /** Company contact details (web parity: `/contact`). */
+  Contact: undefined;
 };
 
 export type MainTabParamList = {

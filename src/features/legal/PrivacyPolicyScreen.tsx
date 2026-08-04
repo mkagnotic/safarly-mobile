@@ -1,7 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LegalScreen } from "@/features/legal/LegalScreen";
-import { privacySections } from "@/data/legal";
+import { LEGAL_EFFECTIVE_DATE, privacyIntro, privacySections } from "@/data/legal";
 import { RootStackParamList } from "@/navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "PrivacyPolicy">;
@@ -11,6 +11,8 @@ export function PrivacyPolicyScreen() {
   return (
     <LegalScreen
       title="Privacy Policy"
+      subtitle={`Effective Date: ${LEGAL_EFFECTIVE_DATE}`}
+      intro={privacyIntro}
       sections={privacySections}
       onBack={() => navigation.goBack()}
     />

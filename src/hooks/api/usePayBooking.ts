@@ -8,6 +8,7 @@ import {
   type ConfirmPaymentResult,
 } from "@/services/api";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import { PAYMENT_RETURN_URL } from "@/services/api/payments";
 
 export type PayPhase = "idle" | "paying" | "succeeded";
 
@@ -31,7 +32,6 @@ export interface UsePayBookingResult {
  * and we confirm on return anyway. Either way the flow is identical, so this is
  * forward-compatible with that server change.
  */
-const PAYMENT_RETURN_URL = "safarly://pay-return";
 
 /**
  * Settles a booking's escrow payment the same way web does: create a Stripe

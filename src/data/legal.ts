@@ -1,15 +1,38 @@
+import {
+  COMPANY_BLURB,
+  COMPANY_JURISDICTION,
+  COMPANY_NAME,
+  OWNERSHIP_STATEMENT,
+  OWNERSHIP_STATEMENT_TERMS,
+  PLATFORM_NAME,
+  SUPPORT_EMAIL,
+} from "@/constants/company";
+
 export type LegalSection = {
   title: string;
   paragraphs?: string[];
   bullets?: string[];
 };
 
-export const LEGAL_EFFECTIVE_DATE = "App Launch Date";
+/**
+ * Shown on the Privacy Policy, Terms of Service and Cookie Policy.
+ * Update this whenever the substance of those documents changes.
+ */
+export const LEGAL_EFFECTIVE_DATE = "4 August 2026";
+
+/**
+ * Legal, About and Contact copy.
+ * ⚠️ Keep in sync with web `src/data/legal.ts`.
+ */
+
+export const termsIntro = OWNERSHIP_STATEMENT_TERMS;
+export const privacyIntro = OWNERSHIP_STATEMENT;
 
 export const termsSections: LegalSection[] = [
   {
     title: "1. Overview",
     paragraphs: [
+      OWNERSHIP_STATEMENT_TERMS,
       "Safarly is a platform that connects individuals who need to send items with travelers willing to carry them, and also enables travel companionship between users.",
       "Safarly does not physically handle, transport, or store any items.",
     ],
@@ -111,6 +134,13 @@ export const termsSections: LegalSection[] = [
       "We may update these terms at any time. Continued use of the platform implies acceptance.",
     ],
   },
+  {
+    title: "13. Ownership & Company Information",
+    paragraphs: [
+      OWNERSHIP_STATEMENT_TERMS,
+      `Questions about these Terms may be sent to ${SUPPORT_EMAIL}.`,
+    ],
+  },
 ];
 
 export const privacySections: LegalSection[] = [
@@ -165,8 +195,10 @@ export const privacySections: LegalSection[] = [
   },
   {
     title: "7. Cookies & Tracking",
-    paragraphs: ["We may use cookies to:"],
-    bullets: ["Improve user experience", "Analyze usage"],
+    paragraphs: [
+      "Safarly does not set cookies and does not use analytics, advertising or tracking services. We store a small amount of information in your browser or app so you stay signed in and so one-time prompts are not repeated at you.",
+      "Our Cookie Policy lists exactly what is stored and how to clear it.",
+    ],
   },
   {
     title: "8. International Users",
@@ -181,5 +213,70 @@ export const privacySections: LegalSection[] = [
   {
     title: "10. Contact",
     paragraphs: ["For questions or concerns: admin@mysafarly.com"],
+  },
+  {
+    title: "11. Ownership & Company Information",
+    paragraphs: [
+      OWNERSHIP_STATEMENT,
+      `${COMPANY_NAME} is the data controller responsible for personal information processed through Safarly.`,
+    ],
+  },
+];
+
+/** About screen — mirrors web `/about`. */
+export const aboutSections: LegalSection[] = [
+  {
+    title: `What ${PLATFORM_NAME} is`,
+    paragraphs: [
+      `${PLATFORM_NAME} connects people who need to send something with travelers who are already going that way. Instead of paying international courier rates, a sender is matched with a verified traveler who has spare luggage capacity on the route.`,
+      `${PLATFORM_NAME} also connects travelers looking for a companion on a shared journey.`,
+    ],
+  },
+  {
+    title: "Our mission",
+    paragraphs: [
+      "International shipping is expensive, slow and impersonal, while millions of travelers cross borders every day with unused luggage capacity. We exist to close that gap.",
+      "Every delivery is verified, tracked through each stage of its journey, and paid through escrow that is only released once the receiver confirms delivery with a one-time code.",
+    ],
+  },
+  {
+    title: "How we keep it safe",
+    bullets: [
+      "Identity verification (KYC) before a user can carry or pay",
+      "Payments held in escrow and released only on confirmed delivery",
+      "A tracked journey with a record of every step",
+      "A dispute process backed by human review",
+    ],
+  },
+  {
+    title: "Who operates Safarly",
+    paragraphs: [
+      OWNERSHIP_STATEMENT,
+      COMPANY_BLURB,
+      `${COMPANY_NAME}, ${COMPANY_JURISDICTION}.`,
+    ],
+  },
+];
+
+/** Contact screen — mirrors web `/contact`. */
+export const contactSections: LegalSection[] = [
+  {
+    title: "Company information",
+    paragraphs: [
+      `Company: ${COMPANY_NAME}`,
+      `Registration: ${COMPANY_JURISDICTION.replace(/^a /, "")}`,
+      `Platform: ${PLATFORM_NAME}`,
+      `Email: ${SUPPORT_EMAIL}`,
+    ],
+  },
+  {
+    title: "We'd love to hear from you",
+    paragraphs: ["Reach out to the Safarly team about:"],
+    bullets: [
+      "General inquiries",
+      "Support",
+      "Partnership opportunities",
+      "Feedback",
+    ],
   },
 ];
