@@ -14,7 +14,11 @@ export type LegalSection = {
   bullets?: string[];
 };
 
-export const LEGAL_EFFECTIVE_DATE = "App Launch Date";
+/**
+ * Shown on the Privacy Policy, Terms of Service and Cookie Policy.
+ * Update this whenever the substance of those documents changes.
+ */
+export const LEGAL_EFFECTIVE_DATE = "4 August 2026";
 
 /**
  * Legal, About and Contact copy.
@@ -191,8 +195,10 @@ export const privacySections: LegalSection[] = [
   },
   {
     title: "7. Cookies & Tracking",
-    paragraphs: ["We may use cookies to:"],
-    bullets: ["Improve user experience", "Analyze usage"],
+    paragraphs: [
+      "Safarly does not set cookies and does not use analytics, advertising or tracking services. We store a small amount of information in your browser or app so you stay signed in and so one-time prompts are not repeated at you.",
+      "Our Cookie Policy lists exactly what is stored and how to clear it.",
+    ],
   },
   {
     title: "8. International Users",
