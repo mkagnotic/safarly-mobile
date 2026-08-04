@@ -28,6 +28,8 @@ import { ResetPasswordScreen } from "@/features/auth/ResetPasswordScreen";
 import { VerifyEmailScreen } from "@/features/auth/VerifyEmailScreen";
 import { TermsOfServiceScreen } from "@/features/legal/TermsOfServiceScreen";
 import { PrivacyPolicyScreen } from "@/features/legal/PrivacyPolicyScreen";
+import { AboutScreen } from "@/features/legal/AboutScreen";
+import { ContactScreen } from "@/features/legal/ContactScreen";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import { SendParcelScreen } from "@/features/parcels/SendParcelScreen";
 import { ParcelDetailsScreen } from "@/features/parcels/ParcelDetailsScreen";
@@ -406,6 +408,8 @@ export function RootNavigator() {
                 so the consent links on Login / Sign up can open them. */}
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Contact" component={ContactScreen} options={{ headerShown: false }} />
           </>
         )}
         {!showSplash && onboarded && authenticated && authBootstrapping && (
@@ -416,6 +420,8 @@ export function RootNavigator() {
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Contact" component={ContactScreen} options={{ headerShown: false }} />
           </>
         )}
         {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
@@ -427,6 +433,8 @@ export function RootNavigator() {
             <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Contact" component={ContactScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

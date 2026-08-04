@@ -1,17 +1,35 @@
+import type { ReactNode } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Screen } from "@/components/ui/Screen";
-import { LEGAL_EFFECTIVE_DATE, type LegalSection } from "@/data/legal";
+import { type LegalSection } from "@/data/legal";
 import { colors } from "@/theme/colors";
 
 type Props = {
   title: string;
+  /** Small line under the title — the effective date for legal documents. */
+  subtitle?: string;
+  /** Highlighted lead paragraph shown above the sections. */
+  intro?: string;
   sections: readonly LegalSection[];
   onBack: () => void;
+  /** Rendered below the card — e.g. the Contact screen's email action. */
+  footer?: ReactNode;
 };
 
-export function LegalScreen({ title, sections, onBack }: Readonly<Props>) {
+/**
+ * Shared document renderer for the Privacy Policy, Terms of Service, About
+ * and Contact screens — they differ only in their content.
+ */
+export function LegalScreen({
+  title,
+  subtitle,
+  intro,
+  sections,
+  onBack,
+  footer,
+}: Readonly<Props>) {
   return (
     <Screen
       edges={["top", "right", "left", "bottom"]}
@@ -29,7 +47,12 @@ export function LegalScreen({ title, sections, onBack }: Readonly<Props>) {
         </Pressable>
         <Text style={styles.screenTitle}>{title}</Text>
       </View>
-      <Text style={styles.subtitle}>Effective Date: {LEGAL_EFFECTIVE_DATE}</Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {intro ? (
+        <View style={styles.introCard}>
+          <Text style={styles.introText}>{intro}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         {sections.map((section, index) => (
@@ -56,6 +79,7 @@ export function LegalScreen({ title, sections, onBack }: Readonly<Props>) {
           </View>
         ))}
       </View>
+      {footer}
     </Screen>
   );
 }
@@ -80,6 +104,14 @@ const styles = StyleSheet.create({
   },
   screenTitle: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 22 },
+  introCard: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginBottom: 18,
+  },
+  introText: { color: colors.text, fontSize: 15, lineHeight: 23, fontWeight: "500" },
   card: {
     backgroundColor: colors.card,
     borderRadius: 16,

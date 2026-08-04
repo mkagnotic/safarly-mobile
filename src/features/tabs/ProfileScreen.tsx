@@ -28,8 +28,9 @@ type Nav = CompositeNavigationProp<
 >;
 
 /**
- * Subset of tab routes that take no params — required so `navigation.navigate(target)`
- * type-checks without a per-row variadic args dance.
+ * Subset of tab and root-stack routes that take no params — required so
+ * `navigation.navigate(target)` type-checks without a per-row variadic args
+ * dance. The composite nav resolves both param lists.
  */
 type ProfileMenuTarget =
   | "BookingsTab"
@@ -43,7 +44,11 @@ type ProfileMenuTarget =
   | "SecurityTab"
   | "ChangePasswordTab"
   | "Notifications"
-  | "PreferencesTab";
+  | "PreferencesTab"
+  | "About"
+  | "Contact"
+  | "TermsOfService"
+  | "PrivacyPolicy";
 
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -101,6 +106,15 @@ export function ProfileScreen() {
             badge: notificationsUnread,
           },
           { icon: "options-outline", label: "Preferences", target: "PreferencesTab" },
+        ],
+      },
+      {
+        title: "ABOUT",
+        items: [
+          { icon: "information-circle-outline", label: "About Safarly", target: "About" },
+          { icon: "mail-outline", label: "Contact Us", target: "Contact" },
+          { icon: "document-text-outline", label: "Terms of Service", target: "TermsOfService" },
+          { icon: "shield-outline", label: "Privacy Policy", target: "PrivacyPolicy" },
         ],
       },
     ],
