@@ -87,9 +87,22 @@ export function isPayoutPending(status: StripeConnectStatus | null): boolean {
  */
 export const PAYOUT_RETURN_URL = "safarly://payout-return";
 
+/**
+ * Deep link Stripe's hosted checkout comes back to, via the same `/mobile-return`
+ * bounce page. Pass this to `WebBrowser.openAuthSessionAsync` so the in-app
+ * browser closes itself the moment payment completes.
+ */
+export const PAYMENT_RETURN_URL = "safarly://pay-return";
+
 export const paymentsApi = {
+  // `platform: "mobile"` makes the server build the Stripe return URLs against
+  // the deep-link bounce page instead of the web app, so paying on a device no
+  // longer strands the user on a signed-out web page.
   createIntent: (booking_id: string) =>
-    api.post<CreateIntentResult>("/payment-handler/create-intent", { booking_id }),
+    api.post<CreateIntentResult>("/payment-handler/create-intent", {
+      booking_id,
+      platform: "mobile",
+    }),
 
   /**
    * Confirm a completed Checkout session = escrow settlement. This is the
