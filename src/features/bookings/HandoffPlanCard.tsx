@@ -152,7 +152,10 @@ export function HandoffPlanCard({
     setEditing(true);
   };
 
-  const showPlanForm = isCarrier && (!mode || editing);
+  // `!dispatchedAt` closes the form the moment the sender ships, even if the carrier
+  // already had it open - realtime can deliver the dispatch mid-edit, and a form that
+  // stays open there invites a submit the server will refuse.
+  const showPlanForm = isCarrier && !dispatchedAt && (!mode || editing);
 
   // A courier label needs all of these to actually reach the carrier, and it
   // needs them to be REAL: the fields used to be free text with a bare presence
@@ -479,16 +482,19 @@ export function HandoffPlanCard({
               : " and arrange collection of the parcel."}
           </Text>
         ) : null}
+        {/* No edit here, deliberately. The sender has already shipped to this address -
+            a label exists and the parcel is in transit - so changing it would leave them
+            having sent it somewhere the app no longer shows. The server refuses it too
+            (booking-handler, POST /:id/handoff/plan). Say why, rather than offering a
+            button that 409s. Web's HandoffPlanCard carries the same block. */}
         {isCarrier ? (
-          <Pressable
-            onPress={startEditing}
-            style={styles.ghostButton}
-            accessibilityRole="button"
-            accessibilityLabel="Correct the handoff details"
-          >
-            <Ionicons name="pencil-outline" size={13} color={colors.text} />
-            <Text style={styles.ghostButtonText}>Correct the handoff details</Text>
-          </Pressable>
+          <View style={styles.lockedNote}>
+            <Ionicons name="lock-closed-outline" size={12} color={colors.subtleText} />
+            <Text style={styles.lockedNoteText}>
+              These details are locked now that the parcel is on its way here. If something
+              is wrong, message {senderName} in the chat.
+            </Text>
+          </View>
         ) : null}
       </View>
     );
@@ -657,6 +663,19 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   ghostButtonText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  // Opaque surface: an elevated card with a translucent child bleeds its shadow
+  // through as a grey box on Android.
+  lockedNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
+  lockedNoteText: { flex: 1, color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "500" },
   disabled: { opacity: 0.5 },
 });
 
