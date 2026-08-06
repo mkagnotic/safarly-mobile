@@ -23,6 +23,7 @@ import { useBookings } from "@/hooks/api/useBookings";
 import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
 import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
+import { useAuth } from "@/context/AuthContext";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -217,6 +218,7 @@ export function ParcelDetailsScreen() {
   const route = useRoute<Route>();
   const parcelId = route.params?.parcelId;
 
+  const { user } = useAuth();
   const { parcel, error, refetch } = useParcelDetail(parcelId);
 
   // Drives the journey timeline below. No role filter — this screen is reachable
@@ -395,7 +397,13 @@ export function ParcelDetailsScreen() {
     parcel.status ?? "",
     parcel.delivery_by ?? parcel.delivery_by_to ?? parcel.delivery_by_from,
   );
-  const canModify = !isTerminal(parcel.status) && !parcelExpired;
+  // Your own parcel is not a listing you can act on. Showing the owner their own
+  // profile card under "Sender", with their own rating and a "Message Sender" button,
+  // offered them a conversation with themselves.
+  const viewerIsSender = !!user?.id && parcel.sender_id === user.id;
+  // Ownership as well as status: Edit/Delete were rendering on parcels the viewer does
+  // not own. The server refuses them, but the buttons should never have been offered.
+  const canModify = viewerIsSender && !isTerminal(parcel.status) && !parcelExpired;
 
   const editInitial: EditParcelFormValues = {
     from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
@@ -439,17 +447,19 @@ export function ParcelDetailsScreen() {
 
       <DescriptionCard description={parcel.description} />
 
-      {parcel.sender ? <SenderCard sender={parcel.sender} /> : null}
+      {parcel.sender && !viewerIsSender ? <SenderCard sender={parcel.sender} /> : null}
 
-      <Pressable
-        style={styles.messageButton}
-        onPress={handleMessageSender}
-        accessibilityRole="button"
-        accessibilityLabel="Message Sender"
-      >
-        <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
-        <Text style={styles.messageButtonText}>Message Sender</Text>
-      </Pressable>
+      {!viewerIsSender ? (
+        <Pressable
+          style={styles.messageButton}
+          onPress={handleMessageSender}
+          accessibilityRole="button"
+          accessibilityLabel="Message Sender"
+        >
+          <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
+          <Text style={styles.messageButtonText}>Message Sender</Text>
+        </Pressable>
+      ) : null}
 
       {canModify ? (
         <>

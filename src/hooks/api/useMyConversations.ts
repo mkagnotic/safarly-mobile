@@ -25,7 +25,12 @@ export interface UseMyConversationsResult {
   mutating: boolean;
   refetch: () => Promise<void>;
   /** Optimistically accept an incoming match request. */
-  acceptMatch: (conversationId: string) => Promise<void>;
+  /** Accept/request a match for ONE delivery. `deal` names which — omit it only when
+   *  the pair have a single delivery in common, or the server refuses (MATCH_AMBIGUOUS). */
+  acceptMatch: (
+    conversationId: string,
+    deal?: { parcel_id?: string; trip_id?: string },
+  ) => Promise<void>;
   /** Optimistically decline an incoming match request. */
   declineMatch: (conversationId: string, reason?: string) => Promise<void>;
   /**
@@ -191,8 +196,15 @@ export function useMyConversations({
     [perPage, archived],
   );
 
+  /**
+   * Accept (or request) a match for ONE delivery.
+   *
+   * `deal` names the parcel/trip the user acted on. A pair can have several deliveries
+   * in common, and without a name the server refuses with MATCH_AMBIGUOUS rather than
+   * picking one — that error is rethrown so the caller can show the picker.
+   */
   const acceptMatch = useCallback(
-    async (conversationId: string) => {
+    async (conversationId: string, deal?: { parcel_id?: string; trip_id?: string }) => {
       let snapshot: Conversation[] | null = null;
       setRawConversations((prev) => {
         snapshot = prev;
@@ -222,11 +234,17 @@ export function useMyConversations({
       });
       setMutating(true);
       try {
-        const res = await messagesApi.matchConversation(conversationId);
+        const res = await messagesApi.matchConversation(conversationId, deal);
         if (mountedRef.current) mergeServerRow(conversationId, res.data);
         bumpHandshakeTopics(true);
       } catch (err) {
         if (mountedRef.current) {
+          // The server refused to choose between several deliveries. Nothing happened,
+          // so undo the optimistic row and let the caller ask which one they meant.
+          if (err instanceof ApiClientError && err.code === "MATCH_AMBIGUOUS") {
+            if (snapshot) setRawConversations(snapshot);
+            throw err;
+          }
           // Already accepted (a double press, or the other side got there
           // first)? Then the action DID happen — resync and stay quiet.
           const settled =

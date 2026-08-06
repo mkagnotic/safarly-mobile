@@ -5,14 +5,25 @@ import {
   ApiClientError,
   messagesApi,
   type ActiveDeal,
+  type DealProjection,
   type WorkflowView,
 } from "@/services/api";
 
 export interface UseActiveDealResult {
-  /** The most-recent non-terminal deal driving the pinned action, or null. */
+  /** The deal currently being shown, or null. */
   activeDeal: ActiveDeal | null;
   /** Server-computed FSM view — the pin is a pure projection of this. */
   workflow: WorkflowView | null;
+  /**
+   * EVERY live deal in this thread. Two people can have several deliveries running at
+   * once, each its own deal with its own documents, price and lifecycle; the chat shows
+   * one at a time and lets the user switch.
+   */
+  deals: DealProjection[];
+  /** Which deal the server actually served (the switcher highlights it). */
+  selectedDealId: string | null;
+  /** Show a different deal. Null returns to the thread's own default. */
+  selectDeal: (dealId: string | null) => void;
   loading: boolean;
   error: ApiClientError | Error | null;
   refetch: () => Promise<void>;
@@ -31,11 +42,18 @@ export interface UseActiveDealResult {
 export function useActiveDeal(conversationId: string | null): UseActiveDealResult {
   const [activeDeal, setActiveDeal] = useState<ActiveDeal | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
+  const [deals, setDeals] = useState<DealProjection[]>([]);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [wantedDealId, setWantedDealId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(conversationId));
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  // Read inside refetch without making it a dependency: re-creating refetch on every
+  // switch would retrigger the realtime subscriptions below.
+  const wantedRef = useRef<string | null>(null);
+  wantedRef.current = wantedDealId;
 
   const refetch = useCallback(async () => {
     if (!conversationId) {
@@ -49,10 +67,12 @@ export function useActiveDeal(conversationId: string | null): UseActiveDealResul
     const promise = (async () => {
       setError(null);
       try {
-        const res = await messagesApi.getActiveDeal(conversationId);
+        const res = await messagesApi.getActiveDeal(conversationId, wantedRef.current);
         if (!mountedRef.current) return;
         setActiveDeal(res.data?.active_deal ?? null);
         setWorkflow(res.data?.workflow ?? null);
+        setDeals(res.data?.deals ?? []);
+        setSelectedDealId(res.data?.selected_deal_id ?? null);
       } catch (err) {
         if (!mountedRef.current) return;
         // A 404/403 means the conversation is gone or not ours — clear the pin
@@ -60,6 +80,8 @@ export function useActiveDeal(conversationId: string | null): UseActiveDealResul
         if (err instanceof ApiClientError && (err.status === 404 || err.status === 403)) {
           setActiveDeal(null);
           setWorkflow(null);
+          setDeals([]);
+          setSelectedDealId(null);
         } else {
           setError(err instanceof Error ? err : new Error(String(err)));
         }
@@ -80,6 +102,15 @@ export function useActiveDeal(conversationId: string | null): UseActiveDealResul
     };
   }, [refetch]);
 
+  // A different conversation is a different set of deals, so the selection resets.
+  useEffect(() => { setWantedDealId(null); }, [conversationId]);
+
+  const selectDeal = useCallback((dealId: string | null) => {
+    setWantedDealId(dealId);
+    wantedRef.current = dealId;
+    void refetch();
+  }, [refetch]);
+
   useRealtimeBus("messages", refetch);
   useRealtimeBus("conversations", refetch);
   useRealtimeBus("carrier-requests", refetch);
@@ -91,5 +122,5 @@ export function useActiveDeal(conversationId: string | null): UseActiveDealResul
   // The pin shows a dispute banner, and dispute state is admin-driven.
   useRealtimeBus("disputes", refetch);
 
-  return { activeDeal, workflow, loading, error, refetch };
+  return { activeDeal, workflow, deals, selectedDealId, selectDeal, loading, error, refetch };
 }

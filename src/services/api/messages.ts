@@ -197,11 +197,43 @@ export interface ActiveDeal {
   viewer_role: "carrier" | "sender";
   match_status: "pending" | "matched" | "declined" | "blocked";
   matched_by: string | null;
+  /** The trip this deal is paired with, so a switcher can name the route. */
+  trip_id?: string | null;
+  carrier_id?: string | null;
+  /** This deal's own request status. Tells a LIVE deal from a concluded one that is
+   *  only being shown so the thread can display its outcome. */
+  request_status?: "pending" | "accepted" | "rejected" | "withdrawn";
 }
 
+/** One deal's complete FSM projection, as returned inside `deals`. */
+export interface DealProjection {
+  workflow: WorkflowView;
+  active_deal: ActiveDeal;
+}
+
+/**
+ * A conversation is a thread between two people; the DEALS inside it are separate
+ * objects, each with its own documents, price and lifecycle. `active_deal` / `workflow`
+ * describe the SELECTED deal (kept at the top level so nothing that predates multi-deal
+ * support has to change), and `deals` carries every live one.
+ */
 export interface ActiveDealResponse {
   active_deal: ActiveDeal | null;
   workflow: WorkflowView;
+  deals?: DealProjection[];
+  selected_deal_id?: string | null;
+}
+
+/** The candidate deliveries a MATCH_AMBIGUOUS error hands back for the user to pick from. */
+export interface MatchCandidate {
+  carrier_request_id?: string;
+  parcel_id: string;
+  trip_id: string;
+  carrier_id?: string;
+  from_city?: string | null;
+  to_city?: string | null;
+  travel_date?: string | null;
+  fee_offered?: number | null;
 }
 
 export type OfferStatus = "open" | "accepted" | "superseded" | "expired" | "rejected";
@@ -334,9 +366,9 @@ export const messagesApi = {
    * The server-computed workflow view that drives the pinned action bar. Same
    * endpoint web uses; the client is a pure projection of `workflow`.
    */
-  getActiveDeal: (conversationId: string) =>
+  getActiveDeal: (conversationId: string, dealId?: string | null) =>
     api.get<ActiveDealResponse>(
-      `/message-handler/conversations/${conversationId}/active-deal`,
+      `/message-handler/conversations/${conversationId}/active-deal${dealId ? `?deal=${encodeURIComponent(dealId)}` : ""}`,
     ),
 
   getMessages: (conversationId: string, params?: { limit?: number; before?: string }) =>
@@ -383,8 +415,17 @@ export const messagesApi = {
   reportMessage: (messageId: string, reason: string, details?: string) =>
     api.post<{ report_id: string }>(`/message-handler/${messageId}/report`, { reason, details }),
 
-  matchConversation: (conversationId: string) =>
-    api.put<Conversation>(`/message-handler/conversations/${conversationId}/match`),
+  /** Request or confirm a match for ONE delivery. Naming the listings is what keeps a
+   *  pair with several deliveries in common unambiguous; omit them and the server
+   *  refuses with MATCH_AMBIGUOUS rather than guessing. */
+  matchConversation: (
+    conversationId: string,
+    deal?: { parcel_id?: string; trip_id?: string },
+  ) =>
+    api.put<Conversation & { matched_deal_id?: string | null }>(
+      `/message-handler/conversations/${conversationId}/match`,
+      deal ?? {},
+    ),
 
   declineConversation: (conversationId: string, reason?: string) =>
     api.put<Conversation>(`/message-handler/conversations/${conversationId}/decline`, { reason }),
@@ -395,9 +436,16 @@ export const messagesApi = {
   unblockUser: (conversationId: string) =>
     api.delete<{ unblocked: boolean }>(`/message-handler/conversations/${conversationId}/block`),
 
-  /** Revert matched -> pending. */
-  unmatchConversation: (conversationId: string) =>
-    api.put<Conversation>(`/message-handler/conversations/${conversationId}/unmatch`),
+  /** End ONE deal (revert matched -> pending). Name it when the thread has more than
+   *  one, or the server refuses rather than ending the wrong delivery. */
+  unmatchConversation: (
+    conversationId: string,
+    deal?: { carrier_request_id?: string; parcel_id?: string; trip_id?: string },
+  ) =>
+    api.put<Conversation & { unmatched_deal_id?: string | null }>(
+      `/message-handler/conversations/${conversationId}/unmatch`,
+      deal ?? {},
+    ),
 
   getDeliveryHistory: (conversationId: string) =>
     api.get<DeliveryHistoryItem[]>(
