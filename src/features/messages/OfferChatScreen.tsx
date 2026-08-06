@@ -209,10 +209,19 @@ export function OfferChatScreen() {
   // the pin below correctly offered "Match again" for the deal actually being viewed.
   // Blocking stays thread-level: you block a person, not a delivery.
   const conversationMatchStatus = conversation?.match_status ?? "pending";
+  // A CONCLUDED deal keeps `match_status: matched` on purpose - that is what lets the
+  // FSM resolve it to CANCELLED/COMPLETED and show the outcome instead of silently
+  // hiding it. The BADGE must not repeat it, though: a deal whose request was rejected
+  // (the sender handed the parcel to another carrier) or withdrawn is over, and a green
+  // "Matched" chip beside the person's name says the opposite.
+  const dealConcluded =
+    activeDeal?.request_status === "rejected" || activeDeal?.request_status === "withdrawn";
   const matchStatus =
     conversationMatchStatus === "blocked"
       ? "blocked"
-      : activeDeal?.match_status ?? conversationMatchStatus;
+      : dealConcluded
+        ? "pending"
+        : activeDeal?.match_status ?? conversationMatchStatus;
   const matchRequester = activeDeal ? activeDeal.matched_by : conversation?.matched_by ?? null;
 
   // The deal on screen is only worth NAMING while it is still one you could act on.
