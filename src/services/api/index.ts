@@ -78,6 +78,8 @@ export type {
   WorkflowView,
   ActiveDeal,
   ActiveDealResponse,
+  DealProjection,
+  MatchCandidate,
 } from "./messages";
 
 export { offersApi } from "./offers";

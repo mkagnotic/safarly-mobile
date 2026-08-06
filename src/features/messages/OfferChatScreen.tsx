@@ -35,12 +35,14 @@ import {
   MatchConfirmationModal,
   type MatchUserRole,
 } from "@/components/chat/MatchConfirmationModal";
+import { MatchDealPickerModal } from "@/components/chat/MatchDealPickerModal";
 import { MediaGalleryModal } from "@/components/chat/MediaGalleryModal";
 import { OfferComposerModal, type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
 import { ParcelReviewModal } from "@/components/chat/ParcelReviewModal";
 import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
+import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
@@ -65,6 +67,7 @@ import {
   getErrorMessage,
   messagesApi,
   type Conversation,
+  type MatchCandidate,
   type OfferAcceptPayload,
   type OfferCardPayload,
   type OfferStatus,
@@ -193,21 +196,48 @@ export function OfferChatScreen() {
   const participantInitials = getInitials(participantName);
   const participantId = conversation?.participant?.id ?? null;
   const participantAvatarUrl = conversation?.participant?.avatar_url ?? null;
-  const matchStatus = conversation?.match_status ?? "pending";
+  // ───────── Server-owned workflow (pinned action bar) ─────────
+  const {
+    activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
+  } = useActiveDeal(conversationId);
+  // Set only when the server refuses to choose between several deliveries in common.
+  const [matchCandidates, setMatchCandidates] = useState<MatchCandidate[] | null>(null);
+
+  // The header badge and the match banner must describe the DELIVERY ON SCREEN, not
+  // the thread. With two deliveries in one chat the thread-level flag is "any of them
+  // is matched", which showed a green "Matched" badge beside the person's name while
+  // the pin below correctly offered "Match again" for the deal actually being viewed.
+  // Blocking stays thread-level: you block a person, not a delivery.
+  const conversationMatchStatus = conversation?.match_status ?? "pending";
+  const matchStatus =
+    conversationMatchStatus === "blocked"
+      ? "blocked"
+      : activeDeal?.match_status ?? conversationMatchStatus;
+  const matchRequester = activeDeal ? activeDeal.matched_by : conversation?.matched_by ?? null;
+
+  // The deal on screen is only worth NAMING while it is still one you could act on.
+  // When a delivery ends the chat keeps showing it so its outcome is visible - and
+  // "Match again" there means start a NEW delivery, not re-match the finished one.
+  // Naming a delivered parcel asked the server to match listings that are no longer
+  // matchable and dead-ended; sending nothing lets it pair whatever these two have in
+  // common now, and ask if there is more than one.
+  const matchableDeal =
+    activeDeal &&
+    activeDeal.request_status !== "rejected" &&
+    activeDeal.request_status !== "withdrawn" &&
+    !["CANCELLED", "ARCHIVED", "COMPLETED"].includes(workflow?.state ?? "")
+      ? activeDeal
+      : null;
   const isBlocked = matchStatus === "blocked";
   const matchedByOther =
-    matchStatus === "pending" &&
-    !!conversation?.matched_by &&
-    conversation.matched_by !== user?.id;
+    matchStatus === "pending" && !!matchRequester && matchRequester !== user?.id;
   const matchedByMe =
-    matchStatus === "pending" &&
-    !!conversation?.matched_by &&
-    conversation.matched_by === user?.id;
+    matchStatus === "pending" && !!matchRequester && matchRequester === user?.id;
   // `matched_at` persists across unmatch, so its presence while pending (with no
   // current `matched_by`) marks a dissolved match vs a never-matched thread.
   const wasUnmatched =
     matchStatus === "pending" &&
-    !conversation?.matched_by &&
+    !matchRequester &&
     !!conversation?.matched_at;
   const isDeclined = matchStatus === "declined";
   const canSend = !isBlocked && !!conversationId;
@@ -276,8 +306,6 @@ export function OfferChatScreen() {
   }, [offerState.live, settledOfferIds]);
   const isMatched = matchStatus === "matched";
 
-  // ───────── Server-owned workflow (pinned action bar) ─────────
-  const { activeDeal, workflow, refetch: refetchActiveDeal } = useActiveDeal(conversationId);
   // The match banner and the live-offer bar already own some states, so the pin
   // defers to them to avoid two controls doing the same job. But it defers only
   // when that bespoke UI is ACTUALLY on screen: a conversation just opened from
@@ -644,7 +672,10 @@ export function OfferChatScreen() {
     const theyAskedFirst = !!conversation?.matched_by && conversation.matched_by !== user?.id;
     await matchActions.run("accept", async () => {
       try {
-        await acceptMatch(conversationId);
+        await acceptMatch(conversationId, {
+          parcel_id: matchableDeal?.parcel_id ?? undefined,
+          trip_id: matchableDeal?.trip_id ?? undefined,
+        });
         // Awaited: the pinned bar is a projection of the server FSM, so hold
         // the confirm button busy until it HAS the next step. Ending the
         // pending state as soon as the PUT returned re-enabled the button under
@@ -659,13 +690,42 @@ export function OfferChatScreen() {
           duration: 1800,
         });
       } catch (err) {
+        // The pair have more than one delivery in common and nothing named which one.
+        // The server refuses instead of guessing - whichever rule it used would be
+        // right for one person's intent and wrong for another's - and hands back the
+        // candidates, so ask rather than reporting a failure.
+        if (err instanceof ApiClientError && err.code === "MATCH_AMBIGUOUS") {
+          const candidates = (err.details ?? []) as MatchCandidate[];
+          if (candidates.length) {
+            setMatchModalOpen(false);
+            setMatchCandidates(candidates);
+            return;
+          }
+        }
         showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
       }
     });
     // matchActions is rebuilt each render by design (it closes over the current
     // busy state), so it is deliberately not a dependency.
 
-  }, [conversationId, acceptMatch, refetchActiveDeal, conversation?.matched_by, user?.id]);
+  }, [conversationId, acceptMatch, refetchActiveDeal, conversation?.matched_by, user?.id,
+      matchableDeal?.parcel_id, matchableDeal?.trip_id]);
+
+  /** Retry the match naming the delivery the user picked. */
+  const handlePickDeal = useCallback(async (candidate: MatchCandidate) => {
+    if (!conversationId) return;
+    try {
+      await acceptMatch(conversationId, {
+        parcel_id: candidate.parcel_id,
+        trip_id: candidate.trip_id,
+      });
+      await refetchActiveDeal();
+      setMatchCandidates(null);
+      showToast({ title: "Match sent", variant: "success", duration: 1800 });
+    } catch (err) {
+      showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
+    }
+  }, [conversationId, acceptMatch, refetchActiveDeal]);
 
   const handleDeclineConfirm = useCallback(
     async (reason: string) => {
@@ -714,7 +774,10 @@ export function OfferChatScreen() {
         await messagesApi.blockUser(conversationId);
         showToast({ title: "Blocked", variant: "info" });
       } else {
-        await messagesApi.unmatchConversation(conversationId);
+        // End the delivery on screen, not whichever one the server would have picked.
+        await messagesApi.unmatchConversation(conversationId, {
+          carrier_request_id: matchableDeal?.carrier_request_id ?? undefined,
+        });
         showToast({ title: "Unmatched", variant: "info" });
       }
       setConfirmAction(null);
@@ -1534,6 +1597,9 @@ export function OfferChatScreen() {
           )}
         </View>
 
+        {/* Only rendered when the thread actually holds more than one delivery. */}
+        <ChatDealSwitcher deals={deals} selectedDealId={selectedDealId} onSelect={selectDeal} />
+
         {/* ───────── Workflow pin (server FSM) ───────── */}
         {showWorkflowPin && workflow ? (
           <ChatWorkflowPin
@@ -1964,6 +2030,15 @@ export function OfferChatScreen() {
           if (!matchPending) setMatchModalOpen(false);
         }}
         onConfirm={() => void handleAccept()}
+      />
+
+      {/* Only opens when the server refused to choose between several deliveries. */}
+      <MatchDealPickerModal
+        open={!!matchCandidates}
+        candidates={matchCandidates ?? []}
+        pending={matchPending}
+        onCancel={() => setMatchCandidates(null)}
+        onPick={(candidate) => void handlePickDeal(candidate)}
       />
 
       {/* ───────── Travel-document verification modal ───────── */}
