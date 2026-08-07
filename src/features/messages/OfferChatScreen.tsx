@@ -231,17 +231,21 @@ export function OfferChatScreen() {
         : activeDeal?.match_status ?? conversationMatchStatus;
   const matchRequester = activeDeal ? activeDeal.matched_by : conversation?.matched_by ?? null;
 
-  // The deal on screen is only worth NAMING while it is still one you could act on.
-  // When a delivery ends the chat keeps showing it so its outcome is visible - and
-  // "Match again" there means start a NEW delivery, not re-match the finished one.
-  // Naming a delivered parcel asked the server to match listings that are no longer
-  // matchable and dead-ended; sending nothing lets it pair whatever these two have in
-  // common now, and ask if there is more than one.
+  // Only name the deal on screen when the MATCH ACTION IS ABOUT THAT DEAL.
+  //
+  // Two ways it goes wrong otherwise. A finished delivery stays on screen so its
+  // outcome is visible, and "Match again" there means start a NEW one. Worse, a thread
+  // can be showing a live delivery on a COMPLETELY DIFFERENT route: naming that one
+  // re-ran the handshake on it instead of matching the route the user had just picked,
+  // and if that other delivery ran the other way round the two of them saw the roles
+  // reversed. A deal is only the subject of a match while it is still AT the match
+  // step. Keep in sync with web CustomerMessages.tsx.
+  const MATCH_STEP_STATES = ["NEGOTIATING", "MATCH_REQUESTED", "MATCH_DECLINED"];
   const matchableDeal =
     activeDeal &&
     activeDeal.request_status !== "rejected" &&
     activeDeal.request_status !== "withdrawn" &&
-    !["CANCELLED", "ARCHIVED", "COMPLETED"].includes(workflow?.state ?? "")
+    MATCH_STEP_STATES.includes(workflow?.state ?? "")
       ? activeDeal
       : null;
   const isBlocked = matchStatus === "blocked";
