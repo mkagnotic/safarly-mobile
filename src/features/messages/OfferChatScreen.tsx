@@ -214,8 +214,15 @@ export function OfferChatScreen() {
   // hiding it. The BADGE must not repeat it, though: a deal whose request was rejected
   // (the sender handed the parcel to another carrier) or withdrawn is over, and a green
   // "Matched" chip beside the person's name says the opposite.
+  // A deal is concluded when its REQUEST was retired, or when the workflow itself has
+  // reached an outcome. Delivered is the one that bit: a completed delivery keeps its
+  // request `accepted`, and an accepted request is unconditionally "matched" (a paid
+  // delivery must never read as unmatched), so the header went on showing a green
+  // "Matched" chip long after the parcel had been handed over and the match closed.
   const dealConcluded =
-    activeDeal?.request_status === "rejected" || activeDeal?.request_status === "withdrawn";
+    activeDeal?.request_status === "rejected" ||
+    activeDeal?.request_status === "withdrawn" ||
+    ["COMPLETED", "ARCHIVED", "CANCELLED"].includes(workflow?.state ?? "");
   const matchStatus =
     conversationMatchStatus === "blocked"
       ? "blocked"
