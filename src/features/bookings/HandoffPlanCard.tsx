@@ -179,12 +179,30 @@ export function HandoffPlanCard({
   const fieldError = (key: keyof typeof addressErrors) =>
     touched ? addressErrors[key] : undefined;
 
+  // Meeting in person is an ARRANGEMENT, and the sender cannot act on "in person" alone
+  // - they need a where and a when. For the courier mode the address carries that, so
+  // the notes stay optional there. Keep in sync with web HandoffPlanCard.tsx.
+  const meetError =
+    draftMode === "in_person" && instructions.trim().length < 5
+      ? instructions.trim()
+        ? "Add a bit more detail - where, and roughly when."
+        : "Tell them where and when to meet."
+      : undefined;
+
   const submitPlan = () => {
     setTouched(true);
     if (hasAddressErrors) {
       showToast({
         title: "Check the delivery address",
         message: "The highlighted fields need fixing so the parcel can reach you.",
+        variant: "error",
+      });
+      return;
+    }
+    if (meetError) {
+      showToast({
+        title: "Where and when to meet?",
+        message: "Tell them where and when so they can bring the parcel.",
         variant: "error",
       });
       return;
@@ -353,7 +371,8 @@ export function HandoffPlanCard({
 
         <View style={styles.formBlock}>
           <AppInput
-            label={draftMode === "shipped" ? "Delivery notes (optional)" : "Where and when to meet"}
+            label={draftMode === "shipped" ? "Delivery notes (optional)" : "Where and when to meet *"}
+            error={touched ? meetError : undefined}
             value={instructions}
             onChangeText={setInstructions}
             placeholder={
