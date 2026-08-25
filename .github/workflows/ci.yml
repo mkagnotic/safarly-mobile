@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Check user-facing errors
+        run: npm run check:errors
+
+      # Pins the client-reported copy and layout fixes. Most of their unit tests are
+      # untracked, so without this the pipeline would not notice a revert.
+      - name: Check client-reported UX fixes
+        run: npm run check:ux
+
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test

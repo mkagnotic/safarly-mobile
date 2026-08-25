@@ -10,6 +10,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "check:errors": "node scripts/check-user-facing-errors.mjs",
+    "check:ux": "node scripts/check-ux-copy.mjs",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
   },
