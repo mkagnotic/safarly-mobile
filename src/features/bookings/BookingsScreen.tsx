@@ -1213,14 +1213,18 @@ function ExpandedBody({
         </View>
       ) : null}
 
-      {/* Sender / Carrier */}
+      {/* Receiver / Carrier */}
+      {/* `booking.sender` owns the parcel: they hand it to the carrier at step 1 and take
+          it back at step 6, where they inspect it and give the carrier the delivery code.
+          There is no separate receiver on a booking, so this names them by the role that
+          matters at delivery. Kept in step with the web card. */}
       {(booking.sender || booking.carrier) ? (
         <View style={styles.partiesRow}>
           {booking.sender ? (
             <View style={styles.partyItem}>
               <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} />
               <View style={{ minWidth: 0, flex: 1 }}>
-                <Text style={styles.partyKey}>Sender</Text>
+                <Text style={styles.partyKey}>Receiver</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
                   {booking.sender.name}
                 </Text>
@@ -1474,11 +1478,12 @@ function ExpandedBody({
               <Text style={styles.stepCardEyebrowSafe}>{journeyStepShort(currentJourneyStep(booking))}</Text>
             </View>
             <Text style={styles.stepCardBody}>
-              Step 2 (In transit) ends when your carrier reaches
-              {destinationCity ? ` ${destinationCity}` : " the destination"}. Agree the
-              meetup point or address in chat, then generate the code and give it to
-              whoever is receiving the parcel — the carrier enters it on arrival. Never
-              send the code to the carrier yourself.
+              Your carrier has landed
+              {destinationCity ? ` in ${destinationCity}` : " at the destination"}. Agree
+              the meetup point or address in chat, then receive and inspect your parcel.
+              If everything is good, generate the code and give it to the carrier. This
+              will mark the delivery as complete and both the users will be able to rate
+              each other.
             </Text>
             {generatedOtp ? (
               <View style={styles.otpDisplayCard}>
@@ -1555,15 +1560,12 @@ function ExpandedBody({
               <Ionicons name="key-outline" size={14} color={colors.safe} />
               <Text style={styles.stepCardEyebrowSafe}>{journeyStepShort(currentJourneyStep(booking))}</Text>
             </View>
-            <Text style={styles.stepCardTitle}>
-              You accepted the parcel — deliver it, then enter the code
-            </Text>
+            <Text style={styles.stepCardTitle}>Parcel is ready to be delivered</Text>
             <Text style={styles.stepCardBody}>
-              You're carrying it now. Once you reach
-              {destinationCity ? ` ${destinationCity}` : " the destination"}, agree the
-              meetup point or address in chat, then ask the person receiving the parcel
-              for their 6-digit delivery code (the sender shares it with them). Entering
-              it completes the delivery and releases your payout from escrow.
+              Chat with your receiver and agree on the meetup point or the address in
+              chat. Once you deliver to the person, request the 6-digit code from your
+              receiver. Entering it completes the delivery and releases your payout from
+              escrow.
             </Text>
             <Text style={styles.stepCardFieldLabel}>Delivery code from the receiver</Text>
             <View style={styles.otpRow}>

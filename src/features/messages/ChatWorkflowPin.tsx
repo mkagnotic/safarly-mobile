@@ -51,7 +51,10 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   //   6 Delivery          - the 6-digit code is entered at the destination.
   // So "handoff" never means delivery, and "delivery" only ever means step 6.
   // Handoff runs in three sub-steps of its own: agree the plan -> send it -> inspect.
-  set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: `${P("handoff")}tell your sender how the parcel reaches you - couriered to your local address, or in person. No code at this step.` },
+  // No role noun in set_handoff_plan on purpose: it is carrier-only, so "your carrier"
+  // would be self-referential, and the parcel owner is labelled Receiver elsewhere even
+  // though they are the one sending at this step. Matches the web chat pin.
+  set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: `${P("handoff")}tell them how the parcel reaches you - couriered to your local address, or in person. No code at this step.` },
   await_handoff_plan: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for your carrier to share where to send the parcel.` },
   mark_handoff_sent: { icon: "send-outline", tone: "primary", blurb: `${P("handoff")}send the parcel to the address your carrier shared, then mark it as sent.` },
   await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for the sender to send the parcel to you.` },
