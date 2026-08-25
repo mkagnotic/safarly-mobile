@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_ANON_KEY, SUPABASE_FUNCTIONS_URL } from "@/integrations/supabase/env";
+import { toUserMessage } from "@/lib/userFacingError";
 
 /**
  * Edge-function HTTP client.
@@ -346,10 +347,18 @@ export function newIdempotencyKey(): string {
   });
 }
 
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiClientError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "An unexpected error occurred";
+/**
+ * The single place a thrown value becomes copy for a person.
+ *
+ * It used to `return error.message` unchanged, which is how technical text reached
+ * users twice. Edge-function responses are already scrubbed server-side, but the app
+ * also calls Supabase auth and storage directly, and those errors never pass through an
+ * edge function -- they arrived here raw and went straight into a toast.
+ * `toUserMessage` maps what it recognises and withholds anything that merely looks
+ * like machine output. See src/lib/userFacingError.js.
+ */
+export function getErrorMessage(error: unknown, fallback?: string): string {
+  return toUserMessage(error, fallback);
 }
 
 /** True when an error came from `AbortController.abort()` — safe to swallow. */

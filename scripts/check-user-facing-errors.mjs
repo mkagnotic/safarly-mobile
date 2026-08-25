@@ -1,0 +1,329 @@
+#!/usr/bin/env node
+/**
+ * Guard: technical text must never reach a user.
+ *
+ * Three client-reported incidents, one bug class - an internal string rendered
+ * verbatim in a toast:
+ *
+ *   1. `column reference "booking_id" is ambiguous` on a mid-trip cancellation. The
+ *      backend scrubber had `column "` in its denylist; Postgres actually says
+ *      `column reference "`, so it slipped past.
+ *   2. `Unable to exchange external code: 4/0A` on Google sign-in. `mapOAuthError`
+ *      ended with `return raw`, so anything unrecognised was shown as-is.
+ *   3. The gap the first two shared: the edge functions scrub their own output, but
+ *      both apps also call Supabase auth and storage DIRECTLY. Those errors never
+ *      touch an edge function - they went to `getErrorMessage`, which returned
+ *      `error.message` unchanged.
+ *
+ * This checks every gate that text passes through on its way to a person:
+ *
+ *   1. src/lib/userFacingError.js - the client sanitiser. Imported and RUN here
+ *      against real raw samples, so the guard tests the shipping code rather than a
+ *      copy of its rules that could drift.
+ *   2. `getErrorMessage` routes through it.
+ *   3. `mapOAuthError` never falls through to the raw provider text.
+ *   4. No toast renders a raw `.message`, going around gate 1.
+ *   5. `_shared/errors.ts` catches raw database output server-side (web repo only).
+ *   6. When both repos are checked out side by side, their sanitisers are
+ *      byte-identical, so proving one proves the other.
+ *
+ * This file is byte-identical in the web and mobile repos and works from either. In
+ * CI only one repo is checked out, so the cross-repo gate reports itself as skipped
+ * instead of failing; each repo's own CI covers its own side.
+ *
+ * Run: `npm run check:errors`
+ */
+
+import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { join, relative } from "node:path";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+
+const HERE = process.cwd();
+
+// The web repo is the one carrying the edge functions. Everything else is mobile.
+const IS_WEB = existsSync(join(HERE, "supabase", "functions", "_shared", "errors.ts"));
+const SELF = IS_WEB ? "web" : "mobile";
+const SIBLING_ROOT = IS_WEB
+  ? join(HERE, "..", "..", "mobile app", "safarly-mobile")
+  : join(HERE, "..", "..", "web app", "safarly_web");
+const SIBLING = IS_WEB ? "mobile" : "web";
+
+const failures = [];
+const skipped = [];
+const note = (m) => failures.push(m);
+
+const sanitiserPath = (root) => join(root, "src", "lib", "userFacingError.js");
+
+/** Real machine output. None of these may ever be shown unchanged. */
+const MUST_SCRUB = [
+  // --- the reported incidents ---
+  'column reference "booking_id" is ambiguous',
+  "Unable to exchange external code: 4/0A",
+  // --- Postgres / PostgREST ---
+  'duplicate key value violates unique constraint "bookings_pkey"',
+  'null value in column "sender_id" violates not-null constraint',
+  'invalid input syntax for type uuid: "not-a-uuid"',
+  'relation "public.bookings" does not exist',
+  "permission denied for table bookings",
+  "PGRST200: Could not find a relationship between 'a' and 'b'",
+  '42702: column reference "x" is ambiguous',
+  "canceling statement due to statement timeout",
+  "deadlock detected",
+  "PL/pgSQL function fn_cancel_post_possession(uuid) line 4 at SQL statement",
+  "DETAIL:  It could refer to either a PL/pgSQL variable or a table column.",
+  'syntax error at or near "SELCT"',
+  'new row violates row-level security policy for table "objects"',
+  // --- Supabase JS SDK, which never passes through an edge function ---
+  "AuthApiError: Invalid Refresh Token: Refresh Token Not Found",
+  "AuthRetryableFetchError: Failed to fetch",
+  "StorageApiError: Bucket not found",
+  "FunctionsHttpError: Edge Function returned a non-2xx status code",
+  "JWT expired",
+  // --- the JavaScript runtime ---
+  "Cannot read properties of undefined (reading 'id')",
+  "undefined is not an object (evaluating 'x.y')",
+  "toUserMessage is not a function",
+  "Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON",
+  "TypeError: Load failed",
+  "Converting circular structure to JSON",
+  "at handleSubmit (bundle.js:1442:19)",
+  // --- transport / infrastructure leaking a URL or host ---
+  "request to https://rbtdkdbmtecungdthujf.supabase.co/rest/v1/bookings failed",
+  "connect ECONNREFUSED 127.0.0.1:54321",
+];
+
+/** Copy we deliberately show. None of these may be altered. */
+const MUST_KEEP = [
+  "Could not secure this parcel. Please try again.",
+  "Payments are not configured",
+  "Payouts are not configured",
+  "Failed to store parcel photos",
+  "Failed to store document",
+  "User email not found",
+  "An unexpected error occurred",
+  "Email service is not configured",
+  "Timeout sweep failed",
+  "Failed to update password",
+  "This email is registered with a password. Please sign in with email and password.",
+  "That sign-in link had already been used or expired. Please try signing in again.",
+  "Parcel is ready to be delivered",
+  "You cannot book your own parcel.",
+  "This trip no longer has room for that parcel.",
+  "Enter the 6-digit code from your receiver.",
+  "Please accept the terms to continue.",
+];
+
+// ---------------------------------------------------------------------------
+// 1. The client sanitiser, executed for real
+// ---------------------------------------------------------------------------
+const selfSanitiser = sanitiserPath(HERE);
+let tempDir = null;
+
+if (!existsSync(selfSanitiser)) {
+  note(`${SELF}: src/lib/userFacingError.js is missing - the client sanitiser is gone.`);
+} else {
+  // The mobile repo is a CommonJS package, so Node would refuse to `import()` a `.js`
+  // file containing ESM syntax. Copying the source to a temporary `.mjs` makes the
+  // guard work identically in both repos, whatever their package type says.
+  tempDir = mkdtempSync(join(tmpdir(), "safarly-guard-"));
+  const tempModule = join(tempDir, "userFacingError.mjs");
+  writeFileSync(tempModule, readFileSync(selfSanitiser, "utf8"), "utf8");
+
+  const { toUserMessage } = await import(pathToFileURL(tempModule).href);
+
+  // The sanitiser logs withheld text; keep the guard's own output readable.
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    for (const sample of MUST_SCRUB) {
+      if (toUserMessage(sample) === sample) {
+        note(`userFacingError: technical text would be shown verbatim -> ${sample}`);
+      }
+    }
+    for (const sample of MUST_KEEP) {
+      const shown = toUserMessage(sample);
+      if (shown !== sample) {
+        note(`userFacingError: real copy was altered -> ${sample}\n      became -> ${shown}`);
+      }
+    }
+    // Non-strings must not crash it or produce "undefined" / "[object Object]".
+    for (const odd of [null, undefined, 0, {}, [], new Error(""), { message: 42 }]) {
+      const shown = toUserMessage(odd);
+      if (typeof shown !== "string" || !shown || /undefined|\[object/i.test(shown)) {
+        note(`userFacingError: bad output for ${JSON.stringify(odd)} -> ${shown}`);
+      }
+    }
+  } finally {
+    console.warn = realWarn;
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. getErrorMessage routes through the sanitiser
+// ---------------------------------------------------------------------------
+const clientPath = join(HERE, "src", "services", "api", "client.ts");
+if (!existsSync(clientPath)) {
+  note(`${SELF}: src/services/api/client.ts not found.`);
+} else {
+  const src = readFileSync(clientPath, "utf8");
+  const fn = /export function getErrorMessage[\s\S]*?\n}/.exec(src);
+  if (!fn) {
+    note(`${SELF}: getErrorMessage not found - has the client error funnel moved?`);
+  } else {
+    if (!/toUserMessage\(/.test(fn[0])) {
+      note(
+        `${SELF}: getErrorMessage does not call toUserMessage. It is the funnel every ` +
+          "toast uses; returning error.message unchanged is how raw Supabase and " +
+          "JavaScript errors reached users.",
+      );
+    }
+    if (/return\s+error\.message\s*;/.test(fn[0])) {
+      note(`${SELF}: getErrorMessage still returns error.message unchanged.`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. The OAuth mapper
+// ---------------------------------------------------------------------------
+const oauthPath = join(HERE, "src", "services", "auth", "oauthErrors.ts");
+if (!existsSync(oauthPath)) {
+  note(`${SELF}: src/services/auth/oauthErrors.ts not found.`);
+} else {
+  const oauth = readFileSync(oauthPath, "utf8");
+  if (/\breturn\s+raw\s*;/.test(oauth)) {
+    note(
+      `${SELF}: mapOAuthError falls through to \`return raw\` - that is how ` +
+        '"Unable to exchange external code: 4/0A" reached a user. Map it, or return ' +
+        "the generic message.",
+    );
+  }
+  if (!/unable to exchange external code/i.test(oauth)) {
+    note(`${SELF}: mapOAuthError no longer handles the code-exchange failure.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Nothing renders a raw .message, going around the sanitiser
+// ---------------------------------------------------------------------------
+// Rendering a raw `.message` is the bug. COMPARING one is fine and common
+// (`error.message === "Invalid login credentials"`), so a comparison does not count.
+//
+// Deliberately matches ANY `.message`, not just `err.message`: a cast such as
+// `(err as Error).message` or a rename such as `caught.message` is the same leak, and
+// an earlier version of this pattern let `(err as Error)?.message` straight through.
+// `showToast` is mobile's toast API and `toast.*` is web's; both repos run this file,
+// so both spellings have to be here.
+const BYPASS =
+  /(?:toast\.(?:error|warning|info|success)|showToast|Alert\.alert|setError|setErrorMessage)\s*\([^;]{0,200}?\.\s*message\b(?!\s*(?:[!=]=|\?\.\s*(?:includes|startsWith|match)))/;
+
+const walk = (dir, out = []) => {
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry.startsWith(".")) continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (/\.(ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) out.push(full);
+  }
+  return out;
+};
+
+let scanned = 0;
+const srcDir = join(HERE, "src");
+if (existsSync(srcDir)) {
+  for (const file of walk(srcDir)) {
+    scanned++;
+    // The sanitiser and the OAuth mapper legitimately handle raw text.
+    if (/userFacingError|oauthErrors/.test(file)) continue;
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      // Wide enough to span a multi-line toast call and see its getErrorMessage.
+      const window = lines.slice(i, i + 8).join(" ");
+      if (BYPASS.test(window) && !/getErrorMessage|toUserMessage|mapOAuthError/.test(window)) {
+        note(
+          `${SELF}: ${relative(HERE, file)}:${i + 1} shows a raw .message, going around ` +
+            "getErrorMessage. Wrap it: getErrorMessage(err).",
+        );
+        break;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. The server-side scrubber (web repo only - it owns the edge functions)
+// ---------------------------------------------------------------------------
+if (!IS_WEB) {
+  skipped.push("server scrubber (edge functions live in the web repo)");
+} else {
+  const src = readFileSync(join(HERE, "supabase", "functions", "_shared", "errors.ts"), "utf8");
+
+  /** Pull an array literal out of the TS source and evaluate it as JS. */
+  const extractArray = (name) => {
+    const i = src.indexOf(`const ${name}`);
+    if (i === -1) return null;
+    // Start at the `=`, so a type annotation like `: RegExp[]` is not mistaken for
+    // the start of the array literal.
+    const eq = src.indexOf("=", i);
+    const open = src.indexOf("[", eq);
+    const close = src.indexOf("];", open);
+    if (eq === -1 || open === -1 || close === -1) return null;
+    const body = src.slice(open, close + 1).replace(/^\s*\/\/.*$/gm, "");
+    return new Function(`return ${body};`)();
+  };
+
+  const signatures = extractArray("RAW_DB_SIGNATURES");
+  const shapes = extractArray("RAW_DB_SHAPES") ?? [];
+  if (!signatures) {
+    note("errors.ts: RAW_DB_SIGNATURES not found - has the scrubber been removed?");
+  } else {
+    const caught = (m) =>
+      signatures.some((s) => m.toLowerCase().includes(String(s).toLowerCase())) ||
+      shapes.some((re) => re.test(m));
+
+    // Only the database-shaped samples reach the server-side scrubber.
+    const DB_SHAPED =
+      /column|constraint|relation|permission|PGRST|syntax|deadlock|statement|PL\/pgSQL|DETAIL|row-level|input syntax/i;
+    for (const m of MUST_SCRUB.filter((s) => DB_SHAPED.test(s))) {
+      if (!caught(m)) note(`errors.ts: raw DB output would reach the user -> ${m}`);
+    }
+    for (const m of MUST_KEEP) {
+      if (caught(m)) note(`errors.ts: a real user message would be scrubbed -> ${m}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Cross-repo parity, when both are checked out
+// ---------------------------------------------------------------------------
+const siblingSanitiser = sanitiserPath(SIBLING_ROOT);
+if (!existsSync(siblingSanitiser)) {
+  // Normal in CI, where only one repo is cloned. The other repo's CI runs this same
+  // file against its own tree, so nothing goes unchecked.
+  skipped.push(`${SIBLING} parity (that repo is not checked out here)`);
+} else if (
+  existsSync(selfSanitiser) &&
+  readFileSync(selfSanitiser, "utf8") !== readFileSync(siblingSanitiser, "utf8")
+) {
+  note(
+    `web and mobile copies of userFacingError.js differ. They must stay byte-identical ` +
+      `so that proving one proves the other. Copy one over the other:\n` +
+      `      ${selfSanitiser}\n      ${siblingSanitiser}`,
+  );
+}
+
+console.log(
+  `check:errors [${SELF}] - ${MUST_SCRUB.length} raw samples, ${MUST_KEEP.length} real ` +
+    `messages, ${scanned} source files scanned`,
+);
+for (const s of skipped) console.log(`check:errors [${SELF}] - skipped: ${s}`);
+
+if (failures.length > 0) {
+  console.error("\nTechnical text could reach a user:\n");
+  for (const f of failures) console.error(`  - ${f}`);
+  console.error("");
+  process.exit(1);
+}
+
+console.log(`check:errors [${SELF}] - every path to a user is gated. OK`);
