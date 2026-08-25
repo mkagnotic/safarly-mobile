@@ -57,16 +57,33 @@ export function JourneyProgress({
       </View>
 
       {/* Named steps, so the ones with no action card of their own are still
-          visible as part of the journey. */}
-      <View style={styles.labelRow}>
+          visible as part of the journey.
+
+          STACKED, one per row, matching what web now does at phone widths.
+          They used to sit inline under their segment in six flex:1 cells at
+          fontSize 9 with numberOfLines={1}, which on a phone is ~45dp of room per
+          label - about nine characters. "Ready for delivery" and "Travel ready"
+          were therefore ellipsised on every device, and on a 320dp screen so was
+          "In transit". Six unreadable stubs under the bar are no better than the
+          bar on its own, which is exactly what was reported. */}
+      <View style={styles.labelList}>
         {JOURNEY_STEP_ORDER.map((key, i) => {
           const done = isDone || i < currentIdx;
           const active = !isDone && i === currentIdx;
           return (
-            <View key={key} style={styles.labelCell}>
-              {done ? <Ionicons name="checkmark" size={9} color={colors.safe} /> : null}
+            <View key={key} style={styles.labelRow}>
+              {/* Fixed-width marker column so the names line up whatever the
+                  marker is, and the rows read as a list rather than ragged text. */}
+              <View style={styles.marker}>
+                {done ? (
+                  <Ionicons name="checkmark" size={12} color={colors.safe} />
+                ) : (
+                  <View style={[styles.dot, active ? styles.dotActive : styles.dotTodo]} />
+                )}
+              </View>
+              {/* No numberOfLines: a long name is allowed to wrap. Cutting it off
+                  is the whole reason this row exists. */}
               <Text
-                numberOfLines={1}
                 style={[
                   styles.labelText,
                   active ? styles.labelActive : done ? styles.labelDone : styles.labelTodo,
@@ -74,6 +91,7 @@ export function JourneyProgress({
               >
                 {JOURNEY_STEP[key].name}
               </Text>
+              {active ? <Text style={styles.nowChip}>NOW</Text> : null}
             </View>
           );
         })}
@@ -91,12 +109,19 @@ const styles = StyleSheet.create({
   segmentActive: { backgroundColor: colors.primary },
   segmentTodo: { backgroundColor: colors.border },
 
-  labelRow: { flexDirection: "row", gap: 4, marginTop: 5 },
-  labelCell: { flex: 1, flexDirection: "row", alignItems: "center", gap: 2, minWidth: 0 },
-  labelText: { fontSize: 9, lineHeight: 12, flexShrink: 1 },
+  labelList: { marginTop: 8, gap: 4 },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  marker: { width: 14, alignItems: "center", justifyContent: "center" },
+  dot: { width: 6, height: 6, borderRadius: 999 },
+  dotActive: { backgroundColor: colors.primary },
+  dotTodo: { backgroundColor: colors.border },
+  // 11px, matching web's phone layout - 9px was only ever a way to squeeze six
+  // labels onto one line, and that line is gone.
+  labelText: { flex: 1, fontSize: 11, lineHeight: 15 },
   labelActive: { color: colors.primary, fontWeight: "800" },
   labelDone: { color: colors.safe },
   labelTodo: { color: colors.mutedText },
+  nowChip: { color: colors.primary, fontSize: 9, fontWeight: "800", letterSpacing: 0.5 },
 });
 
 export default JourneyProgress;

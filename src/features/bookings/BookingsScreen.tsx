@@ -24,7 +24,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
-import { formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { bookingFee, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { HandoffPlanCard } from "@/features/bookings/HandoffPlanCard";
 import { ParcelReturnCard } from "@/features/bookings/ParcelReturnCard";
 import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
@@ -792,6 +792,7 @@ function ExpandedBody({
     | "mark-handoff-sent"
     | "set-return-resolution"
     | "complete-return"
+    | "confirm-return-received"
     | "cancel"
     | "cancel-post-possession"
     | "generate-otp"
@@ -859,6 +860,8 @@ function ExpandedBody({
         | "mark-handoff-sent"
         | "set-return-resolution"
         | "complete-return"
+        | "confirm-return-received"
+    | "confirm-return-received"
         | "cancel"
         | "cancel-post-possession"
         | "generate-otp"
@@ -945,6 +948,16 @@ function ExpandedBody({
       "complete-return",
       () => bookingsApi.completeReturn(booking.id, args),
       "Thanks - the sender has been told the parcel is on its way back",
+    );
+
+  // ⚠️ What actually CLOSES a hand-back. The carrier's step above only says they
+  // posted it; before this the deal ended right there, so a parcel lost in the post
+  // looked exactly like one that got home and its owner was never asked.
+  const handleConfirmReturnReceived = () =>
+    runAction(
+      "confirm-return-received",
+      () => bookingsApi.confirmReturnReceived(booking.id),
+      "Thanks - this delivery is now closed",
     );
 
   // ── Stages 8/9/10 ─────────────────────────────────────────────────────────
@@ -1185,7 +1198,7 @@ function ExpandedBody({
             <View style={styles.parcelCell}>
               <Text style={styles.parcelCellKey}>Fee: </Text>
               <Text style={[styles.parcelCellValue, { color: colors.primary }]}>
-                ${booking.parcel.fee_offered}
+                ${bookingFee(booking).toFixed(2)}
               </Text>
             </View>
             {booking.agreed_travel_date ? (
@@ -1269,7 +1282,7 @@ function ExpandedBody({
             accessibilityLabel="Pay now"
           >
             <Ionicons name="card" size={14} color={colors.white} />
-            <Text style={styles.actionPrimaryText}>Pay now · ${booking.parcel?.fee_offered ?? ""}</Text>
+            <Text style={styles.actionPrimaryText}>Pay now · ${bookingFee(booking).toFixed(2)}</Text>
           </Pressable>
         ) : null}
 
@@ -1281,10 +1294,13 @@ function ExpandedBody({
             booking={booking}
             role={role}
             pending={
-              actionPending === "set-return-resolution" || actionPending === "complete-return"
+              actionPending === "set-return-resolution" ||
+              actionPending === "complete-return" ||
+              actionPending === "confirm-return-received"
                 ? actionPending
                 : null
             }
+            onConfirmReturnReceived={handleConfirmReturnReceived}
             onSetResolution={(args) => void handleSetReturnResolution(args)}
             onCompleteReturn={(args) => void handleCompleteReturn(args)}
           />
@@ -1759,7 +1775,7 @@ function BookingRow({
             </Text>
           </View>
           {booking.parcel ? (
-            <Text style={styles.feeText}>${booking.parcel.fee_offered}</Text>
+            <Text style={styles.feeText}>${bookingFee(booking).toFixed(2)}</Text>
           ) : null}
         </View>
       </Pressable>

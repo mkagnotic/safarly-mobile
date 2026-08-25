@@ -1,4 +1,5 @@
-import { MainTabParamList } from "@/navigation/types";
+// Type-only: this module is pure and must stay importable without a bundler.
+import type { MainTabParamList } from "@/navigation/types";
 
 export interface NotificationTarget {
   screen: keyof MainTabParamList;
@@ -50,7 +51,14 @@ export function resolveNotificationRoute(
   // hosts the Search screen.
   if (l.startsWith("/customer/search")) {
     const m = l.match(/[?&]match=([0-9a-f-]{36})/i);
-    return { screen: "Trips", params: m ? { highlightId: m[1] } : undefined };
+    // `tab` is what actually gets the user to the right list. The id alone only
+    // works once that row has loaded, and the "N parcels match your trip" notices
+    // carry no id at all — those used to land on the default Package tab.
+    const t = l.match(/[?&]tab=(package|receiver|buddy)(?:&|$)/i);
+    const params: { highlightId?: string; tab?: "package" | "receiver" | "buddy" } = {};
+    if (m) params.highlightId = m[1];
+    if (t) params.tab = t[1].toLowerCase() as "package" | "receiver" | "buddy";
+    return { screen: "Trips", params: Object.keys(params).length ? params : undefined };
   }
   // Journey-expiry notices link here; "Parcels" is the tab hosting My Travels.
   if (l.startsWith("/customer/my-trips")) return { screen: "Parcels" };

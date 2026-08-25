@@ -113,6 +113,59 @@ function shortDate(value: string | null | undefined): string | undefined {
   return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/**
+ * THE journey's travel date, as a short label.
+ *
+ * Precedence, and every step is load-bearing:
+ *   1. `agreed_travel_date` — the carrier PINNED this exact day in chat, so it
+ *      beats anything the listing said.
+ *   2. the trip's own dates. `agreed_travel_date` is NULL until that confirmation
+ *      happens, which is the normal state for most of a deal's life — and without
+ *      this fallback the travel milestones had no date at all, leaving set-up
+ *      timestamps as the only dates on screen. A carrier flying on the 16th saw
+ *      nothing but the 12th they were matched on.
+ *   3. nothing. Never a non-travel timestamp standing in for a travel date.
+ *
+ * A trip listed as a RANGE with no pinned day genuinely has no single date, so the
+ * window is shown rather than inventing certainty by picking one end of it.
+ *
+ * ⚠️ Every value here is DATE-ONLY (`YYYY-MM-DD`), and `shortDate` parses those at
+ * LOCAL midnight on purpose: `new Date("2026-08-16")` is parsed as UTC and renders
+ * as Aug 15 for every viewer west of Greenwich.
+ */
+function travelDateLabel(booking: Booking | null | undefined): string | undefined {
+  const agreed = shortDate(booking?.agreed_travel_date);
+  if (agreed) return agreed;
+
+  const trip = booking?.trip;
+  const from = (trip?.travel_date ?? trip?.travel_date_from ?? null)?.slice(0, 10) ?? null;
+  const to = trip?.travel_date_to?.slice(0, 10) ?? null;
+  const start = shortDate(from);
+  if (!start) return undefined;
+  if (!to || to === from) return start;
+
+  // ⚠️ `formatRange` and NOT a hand-spliced "Aug 16–18". Splicing the end day onto
+  // the end of the start label assumes a month-first locale; in a day-first one
+  // (en-IN, which this project's own users are on) it produced "16 Aug–18", which
+  // reads as a different month. `formatRange` collapses the shared parts the way the
+  // locale actually wants — "16–18 Aug" / "Aug 16 – 18".
+  //
+  // Guarded because it is missing on some React Native engines; the fallback spells
+  // both dates out in full, which is longer but never wrong.
+  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+  const d1 = new Date(`${from}T00:00:00`);
+  const d2 = new Date(`${to}T00:00:00`);
+  if (typeof fmt.formatRange === "function") {
+    try {
+      return fmt.formatRange(d1, d2);
+    } catch {
+      // fall through to the explicit form
+    }
+  }
+  const end = shortDate(to);
+  return end ? `${start} – ${end}` : start;
+}
+
 /** Smallest milestone index strictly greater than `after` (clamped to the last stage). */
 function nextMilestone(after: number): number {
   return MILESTONE_INDICES.find((m) => m > after) ?? STAGE_ORDER.length - 1;
@@ -323,7 +376,7 @@ export function computeJourney(
 
 /** Per-stage detail text (a date it happened, or a forward hint). */
 function doneDetail(key: StageKey, booking: Booking | null | undefined): string | undefined {
-  const travelLabel = shortDate(booking?.agreed_travel_date);
+  const travelLabel = travelDateLabel(booking);
   switch (key) {
     case "matched":
       return shortDate(booking?.created_at);
@@ -336,7 +389,11 @@ function doneDetail(key: StageKey, booking: Booking | null | undefined): string 
     case "travel_tomorrow":
       return shortDate(booking?.ready_to_travel_at) ?? travelLabel;
     case "traveling":
-      return shortDate(booking?.journey_started_at ?? booking?.handoff_accepted_at);
+      // NOT `handoff_accepted_at`. Taking the parcel is a different event on a
+      // different day, and standing it in here stamped the handoff date onto a
+      // milestone about the flight — which is how a carrier travelling on the
+      // 16th read "Traveling · Aug 12", the day the deal was set up.
+      return shortDate(booking?.journey_started_at) ?? travelLabel;
     case "ready_for_delivery":
       return shortDate(booking?.ready_for_delivery_at);
     case "otp_verification":

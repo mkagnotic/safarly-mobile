@@ -183,7 +183,11 @@ export function SearchScreen() {
   // Stable per mount — bounds the date pickers to today … +12 months (web parity).
   const dateBounds = useMemo(() => searchDateBounds(), []);
   const [lookingFor, setLookingFor] = useState<LookingForType[]>([]);
-  const [activeTab, setActiveTab] = useState<ResultsTab>("package");
+  // ⚠️ The notification's tab is the INITIAL value, not an effect: it must apply
+  // before any results arrive, and the summary notifications carry no match id to
+  // infer it from.
+  const requestedTab = route.params?.tab;
+  const [activeTab, setActiveTab] = useState<ResultsTab>(requestedTab ?? "package");
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // null `appliedFilters` = auto-match mode; per-list pages re-fire it for free.
@@ -236,7 +240,10 @@ export function SearchScreen() {
         setDateFrom(snap.dateFrom);
         setDateTo(snap.dateTo);
         setLookingFor(snap.lookingFor);
-        setActiveTab(snap.activeTab);
+        // ⚠️ A notification's tab outranks the restored one. Otherwise the async
+        // restore lands after mount and drags the user back to whichever tab they
+        // last used, undoing the deep-link they just tapped.
+        if (!requestedTab) setActiveTab(snap.activeTab);
         setPkgPage(snap.pkgPage);
         setRcvPage(snap.rcvPage);
         setBuddyPage(snap.buddyPage);
@@ -581,6 +588,10 @@ export function SearchScreen() {
     const filters: SearchFilters = { per_page: MANUAL_PER_PAGE };
     if (fromCity) filters.from_city = fromCity;
     if (toCity) filters.to_city = toCity;
+    // The country the cities were picked from. This is what bounds a listing that
+    // ticked "Any City" - without it, such a listing answers every city filter.
+    filters.from_country = fromCountry;
+    filters.to_country = toCountry;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
     if (lookingFor.length > 0) filters.looking_for = lookingFor.join(",");

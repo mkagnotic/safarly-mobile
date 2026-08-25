@@ -149,8 +149,14 @@ export interface ActiveDeal {
     last_agreed_amount: number | null;
     last_offer_amount: number | null;
     last_offer_status: string | null;
-    /** The most recent signal - what to pre-fill the composer with. */
+    /** The most recent signal - what to pre-fill the composer with.
+     *  A DECLINED offer is skipped server-side: the one amount both sides now know
+     *  does not work is not the number to put one tap away, so a decline falls back
+     *  to the previous agreement or the listing's asking price. */
     suggested_amount: number | null;
+    /** Which input produced `suggested_amount`. Unused here - the composer only needs
+     *  the number - but sent by the same endpoint the web chat reads. */
+    suggested_source?: "offer" | "agreed" | "asking" | null;
   } | null;
   offer: {
     offer_id: string;
@@ -230,8 +236,22 @@ export interface MatchCandidate {
   parcel_id: string;
   trip_id: string;
   carrier_id?: string;
+  /** The PARCEL's route — what is being delivered. */
   from_city?: string | null;
   to_city?: string | null;
+  from_country?: string | null;
+  to_country?: string | null;
+  any_from?: boolean;
+  any_to?: boolean;
+  /** The TRIP's route — the journey it rides on, and the discriminator when one
+   *  parcel can pair with more than one trip. Without it every row of a flexible
+   *  listing renders the same string ("Any → Any") and the picker cannot pick. */
+  trip_from_city?: string | null;
+  trip_to_city?: string | null;
+  trip_from_country?: string | null;
+  trip_to_country?: string | null;
+  trip_any_from?: boolean;
+  trip_any_to?: boolean;
   travel_date?: string | null;
   fee_offered?: number | null;
 }

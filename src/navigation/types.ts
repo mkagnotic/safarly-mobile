@@ -44,8 +44,11 @@ export type MainTabParamList = {
   Notifications: undefined;
   Parcels: undefined;
   /** `highlightId` deep-links a specific match card from a match-found
-   *  notification (web parity: `/customer/search?match=<id>`). */
-  Trips: { highlightId?: string } | undefined;
+   *  notification (web parity: `/customer/search?match=<id>`).
+   *  `tab` says WHICH results tab the notification is about — a carrier told
+   *  "3 parcels match your trip" must land on Receiver Requests, not the default
+   *  Package Delivery Matches (web parity: `&tab=receiver`). */
+  Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy" } | undefined;
   Buddies: undefined;
   BuddyDetailsTab: { buddyName: string };
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */

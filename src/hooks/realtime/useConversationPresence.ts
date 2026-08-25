@@ -3,6 +3,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { watchPresence } from "@/lib/presenceRegistry";
 
 interface BroadcastFromPayload {
   from?: string;
@@ -37,25 +38,28 @@ export function useConversationPresence(
   const outgoingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAt = useRef<number>(0);
 
-  // Participant presence — open one channel per participant. Don't mix with the
-  // conversation channel: presence keys collide if two participants share one.
+  // Participant presence — through the shared registry rather than opening a
+  // channel directly. A React effect tears down and re-subscribes in the same tick
+  // (participant id arriving late, switching chats, a remount) while
+  // `removeChannel` is still async, so the re-join was refused and `online` stuck
+  // at false: "offline" for someone demonstrably online.
+  //
+  // ⚠️ `selfKey` is MY id, not the id being watched — a presence key identifies the
+  // client that is tracking, never its subject.
   useEffect(() => {
-    if (!participantId) return;
-    const channel = supabase.channel(`presence:user:${participantId}`, {
-      config: { presence: { key: participantId } },
+    const me = user?.id;
+    if (!participantId || !me) return;
+
+    const unwatch = watchPresence(`presence:user:${participantId}`, me, (keys) => {
+      // Only THIS participant counts — watchers share the topic.
+      setOnline(keys.includes(participantId));
     });
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        setOnline(Object.keys(state).length > 0);
-      })
-      .subscribe();
 
     return () => {
-      void supabase.removeChannel(channel);
+      unwatch();
       setOnline(false);
     };
-  }, [participantId]);
+  }, [participantId, user?.id]);
 
   // Conversation-scoped typing channel — independent of the messages-table
   // postgres_changes channel in `useChatMessages`, so realtime stays decoupled.

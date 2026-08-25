@@ -17,7 +17,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
-import { feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { bookingFee, feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useKycGate } from "@/hooks/api/useKycGate";
 import { usePayBooking } from "@/hooks/api/usePayBooking";
@@ -65,9 +65,7 @@ export function PayBookingScreen() {
   // so quoting it here would let the screen promise one number while checkout
   // took another. It survives purely as a fallback for bookings created before
   // `agreed_amount` existed.
-  const { fee, platformFee, total } = feeBreakdown(
-    booking?.agreed_amount ?? booking?.parcel?.fee_offered,
-  );
+  const { fee, platformFee, total } = feeBreakdown(bookingFee(booking));
 
   const isSender = !!booking && booking.sender_id === user?.id;
   const isPayable = booking?.status === "pending_payment";

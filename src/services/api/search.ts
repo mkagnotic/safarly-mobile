@@ -3,6 +3,11 @@ import { api } from "./client";
 export interface SearchFilters {
   from_city?: string;
   to_city?: string;
+  /** The searcher's countries. These bound any listing that ticked "Any City":
+   *  "Any" means any city inside the owner's country, so without these a flexible
+   *  listing falls back to matching every filter (the old, unbounded behaviour). */
+  from_country?: string;
+  to_country?: string;
   date_from?: string;
   date_to?: string;
   /** comma-separated: travel_buddy,carrier,receive_request */

@@ -160,6 +160,8 @@ export interface Booking {
   return_resolution_set_at?: string | null;
   return_tracking_reference?: string | null;
   return_completed_at?: string | null;
+  /** When the SENDER confirmed the parcel arrived back. Null while outstanding. */
+  return_received_at?: string | null;
   /** Address the sender nominated for the parcel to be posted back to. */
   return_destination_address?: HandoffAddress | null;
   /**
@@ -209,6 +211,10 @@ export interface Booking {
     parcel_review_status?: "none" | "pending" | "approved" | "rejected";
   } | null;
   timeline?: { event: string; description: string | null; created_at: string }[];
+  /** The carrier's listed journey dates. Both GET /bookings and GET /bookings/:id
+   *  send it. Used as the tracker's travel date whenever `agreed_travel_date` has
+   *  not been pinned yet - which is the normal state for most of a deal's life. */
+  trip?: { travel_date: string | null; travel_date_from: string | null; travel_date_to: string | null } | null;
 }
 
 export interface BookingDetailResponse {
@@ -313,6 +319,16 @@ export const bookingsApi = {
     api.post<{ return_completed_at: string; return_tracking_reference: string | null }>(
       `/booking-handler/${id}/return/complete`,
       body,
+    ),
+
+  /** Sender confirms the returned parcel actually arrived. THIS closes the hand-back:
+   *  the carrier's completeReturn only says they posted it, so before this existed a
+   *  parcel lost in the post looked exactly like one that got home. Sender-only,
+   *  enforced server-side. */
+  confirmReturnReceived: (id: string, body?: { note?: string }) =>
+    api.post<{ return_received_at: string }>(
+      `/booking-handler/${id}/return/received`,
+      body ?? {},
     ),
 
   /** Carrier rejects at inspection: refunds the sender, reopens the parcel, no penalty.

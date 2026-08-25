@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { bookingFee } from "@/features/bookings/paymentMath";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -147,8 +148,8 @@ export function DeliveryReviewScreen() {
           <Text style={styles.bookingRoute}>
             {booking.parcel.from_city} {"→"} {booking.parcel.to_city}
           </Text>
-          {booking.parcel.fee_offered != null ? (
-            <Text style={styles.bookingFee}>USD ${booking.parcel.fee_offered}</Text>
+          {bookingFee(booking) > 0 ? (
+            <Text style={styles.bookingFee}>USD ${bookingFee(booking).toFixed(2)}</Text>
           ) : null}
         </Card>
       ) : null}

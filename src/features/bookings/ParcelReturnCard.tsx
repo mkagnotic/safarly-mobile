@@ -25,9 +25,11 @@ import { colors } from "@/theme/colors";
 export interface ParcelReturnCardProps {
   booking: Booking;
   role: "sender" | "carrier" | "unknown";
-  pending: "set-return-resolution" | "complete-return" | null;
+  pending: "set-return-resolution" | "complete-return" | "confirm-return-received" | null;
   onSetResolution: (args: { resolution: ReturnResolution; note?: string; address?: HandoffAddress }) => void;
   onCompleteReturn: (args: { tracking_reference?: string }) => void;
+  /** Sender confirms the parcel arrived back - this is what closes the hand-back. */
+  onConfirmReturnReceived: () => void;
 }
 
 const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
@@ -93,10 +95,12 @@ export function ParcelReturnCard({
   pending,
   onSetResolution,
   onCompleteReturn,
+  onConfirmReturnReceived,
 }: Readonly<ParcelReturnCardProps>) {
   const plan = booking.return_plan ?? null;
   const resolution = booking.return_resolution ?? null;
   const completedAt = booking.return_completed_at ?? null;
+  const receivedAt = booking.return_received_at ?? null;
 
   const address = plan?.return_address ?? null;
   const addressText = address
@@ -214,6 +218,39 @@ export function ParcelReturnCard({
     </View>
   ) : null;
 
+  // ── Step 3: on its way back - the SENDER confirms it arrived ──────────────
+  //
+  // The hand-back does NOT end when the carrier posts it. It used to, which closed the
+  // deal on their word alone: a parcel lost in the post looked exactly like one that
+  // got home. `sender_has_parcel` is the exception - nothing was ever sent.
+  if (completedAt && !receivedAt && resolution !== "sender_has_parcel") {
+    return (
+      <View style={styles.card}>
+        {header("On its way back - confirm when it arrives")}
+        <Text style={styles.body}>
+          {resolution ? RESOLUTION_LABEL[resolution] : "Resolved"} · sent {formatDateTime(completedAt)}
+        </Text>
+        {booking.return_tracking_reference ? (
+          <Text style={styles.meta}>Return tracking: {booking.return_tracking_reference}</Text>
+        ) : null}
+        {isCarrier ? (
+          <Text style={styles.meta}>
+            Waiting for the sender to confirm the parcel arrived. The delivery closes then.
+          </Text>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            disabled={pending !== null}
+            onPress={onConfirmReturnReceived}
+            style={[styles.primaryButton, pending !== null ? styles.disabled : null]}
+          >
+            <Text style={styles.primaryButtonText}>I&apos;ve got the parcel back</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
   // ── Done ──────────────────────────────────────────────────────────────────
   if (completedAt) {
     return (
@@ -221,7 +258,9 @@ export function ParcelReturnCard({
         {header(
           resolution === "sender_has_parcel"
             ? "Closed - the parcel never left the sender"
-            : "The parcel is on its way back",
+            : receivedAt
+              ? "Returned safely - this delivery is closed"
+              : "The parcel is on its way back",
         )}
         <Text style={styles.body}>
           {resolution ? RESOLUTION_LABEL[resolution] : "Resolved"} · {formatDateTime(completedAt)}

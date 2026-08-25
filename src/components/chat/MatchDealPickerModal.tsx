@@ -4,6 +4,7 @@ import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { MatchCandidate } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatCandidateDate, parcelRouteOf, tripRouteOf } from "@/utils/matchCandidateLabel";
 
 interface Props {
   open: boolean;
@@ -13,13 +14,6 @@ interface Props {
   onPick: (candidate: MatchCandidate) => void;
 }
 
-const fmtDate = (iso: string | null | undefined) => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? null
-    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-};
 
 /**
  * Which delivery is this match for?
@@ -56,7 +50,11 @@ export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPi
 
         <ScrollView style={styles.list} contentContainerStyle={styles.listInner}>
           {candidates.map((c) => {
-            const when = fmtDate(c.travel_date);
+            const when = formatCandidateDate(c.travel_date);
+            // The TRIP is what differs when one parcel pairs with several trips, so
+            // it is always shown. Without it every row of a flexible listing read
+            // "Any -> Any" and the picker could not actually be used to pick.
+            const tripRoute = tripRouteOf(c);
             return (
               <Pressable
                 key={`${c.parcel_id}:${c.trip_id}`}
@@ -67,9 +65,12 @@ export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPi
               >
                 <Ionicons name="cube-outline" size={16} color={colors.subtleText} />
                 <View style={styles.rowText}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {c.from_city || "—"} → {c.to_city || "—"}
+                  <Text style={styles.rowTitle} numberOfLines={2}>
+                    {parcelRouteOf(c)}
                   </Text>
+                  {tripRoute ? (
+                    <Text style={styles.rowVia} numberOfLines={2}>via {tripRoute}</Text>
+                  ) : null}
                   <Text style={styles.rowMeta} numberOfLines={1}>
                     {when ? `Travelling ${when}` : "Travel date not set"}
                     {c.fee_offered != null ? ` · asking $${c.fee_offered}` : ""}
@@ -137,6 +138,7 @@ const styles = StyleSheet.create({
   rowDim: { opacity: 0.6 },
   rowText: { flex: 1 },
   rowTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
+  rowVia: { color: colors.text, fontSize: 11, lineHeight: 15, marginTop: 2 },
   rowMeta: { marginTop: 2, fontSize: 12, color: colors.subtleText },
   cancel: { marginTop: 12, alignItems: "center", paddingVertical: 10 },
   cancelText: { fontSize: 14, fontWeight: "600", color: colors.subtleText },

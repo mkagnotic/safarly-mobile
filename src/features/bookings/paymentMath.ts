@@ -6,6 +6,24 @@ export interface FeeBreakdown {
   total: number;
 }
 
+/**
+ * The base amount for a booking: the AGREED price.
+ *
+ * ⚠️ Never `parcel.fee_offered` on its own. That is only the sender's ASKING price
+ * and stays editable after the deal is agreed, so a screen quoting it promises one
+ * number while checkout (and the server) take another - the reported "Pay $71.50" in
+ * chat against "$110.00" at the till. `fee_offered` survives purely as a fallback for
+ * bookings made before `agreed_amount` existed.
+ */
+export function bookingFee(
+  booking: { agreed_amount?: number | string | null; parcel?: { fee_offered?: number | string | null } | null } | null | undefined,
+): number {
+  const agreed = booking?.agreed_amount;
+  const raw = agreed != null ? agreed : booking?.parcel?.fee_offered;
+  const n = Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Carrier fee + 10% platform fee = total, rounded to cents like the server. */
 export function feeBreakdown(feeOffered: number | null | undefined): FeeBreakdown {
   const fee = Number(feeOffered ?? 0);

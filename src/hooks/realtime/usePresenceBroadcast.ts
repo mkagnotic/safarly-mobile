@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { AppState } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { refreshPresence, trackPresence } from "@/lib/presenceRegistry";
 
 /**
  * Broadcasts the current user's online status via Supabase Realtime Presence.
@@ -22,28 +22,20 @@ export function usePresenceBroadcast() {
     const uid = user?.id;
     if (!uid) return;
 
-    const channel = supabase.channel(`presence:user:${uid}`, {
-      config: { presence: { key: uid } },
-    });
+    const topic = `presence:user:${uid}`;
+    // Through the shared registry so a remount can never open a second channel on
+    // a topic this client has already joined. Re-tracking after a reconnect is
+    // handled there, by the single subscribe callback.
+    const release = trackPresence(topic, uid);
 
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        // Fire-and-forget. The promise rejects only if the channel is closed
-        // before the track lands, which we don't need to surface to the UI.
-        void channel.track({ online_at: new Date().toISOString() });
-      }
-    });
-
+    // Unchanged behaviour: re-announce when the app returns to the foreground.
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") {
-        void channel.track({ online_at: new Date().toISOString() });
-      }
+      if (next === "active") refreshPresence(topic);
     });
 
     return () => {
       subscription.remove();
-      void channel.untrack().catch(() => {});
-      void supabase.removeChannel(channel);
+      release();
     };
   }, [user?.id]);
 }
