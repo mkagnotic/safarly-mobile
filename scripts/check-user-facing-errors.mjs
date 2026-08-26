@@ -24,10 +24,12 @@
  *   3. `mapOAuthError` never falls through to the raw provider text.
  *   4. No toast renders a raw `.message`, going around gate 1.
  *   5. `_shared/errors.ts` catches raw database output server-side (web repo only).
- *   6. When both repos are checked out side by side, their sanitisers are
- *      byte-identical, so proving one proves the other.
+ *   6. When both repos are checked out side by side, their sanitisers have the same
+ *      CONTENT, so proving one proves the other. Line endings are ignored: the repos
+ *      are cloned independently, so on Windows one copy can be CRLF and the other LF
+ *      while both are the same file in Git.
  *
- * This file is byte-identical in the web and mobile repos and works from either. In
+ * This file is kept identical in the web and mobile repos and works from either. In
  * CI only one repo is checked out, so the cross-repo gate reports itself as skipped
  * instead of failing; each repo's own CI covers its own side.
  *
@@ -54,6 +56,10 @@ const skipped = [];
 const note = (m) => failures.push(m);
 
 const sanitiserPath = (root) => join(root, "src", "lib", "userFacingError.js");
+
+/** True when the two files DIFFER in content, ignoring line endings / trailing newline. */
+const contentDiffers = (a, b) =>
+  a.replace(/\r\n/g, "\n").trimEnd() !== b.replace(/\r\n/g, "\n").trimEnd();
 
 /** Real machine output. None of these may ever be shown unchanged. */
 const MUST_SCRUB = [
@@ -219,6 +225,25 @@ if (!existsSync(oauthPath)) {
 const BYPASS =
   /(?:toast\.(?:error|warning|info|success)|showToast|Alert\.alert|setError|setErrorMessage)\s*\([^;]{0,200}?\.\s*message\b(?!\s*(?:[!=]=|\?\.\s*(?:includes|startsWith|match)))/;
 
+/**
+ * The same leak, in the two shapes the call-expression scan above cannot see.
+ *
+ * Found in production code by a failure-mode test, not by this guard: BookingsScreen
+ * rendered `{error instanceof Error ? error.message : "Unknown error"}` straight into
+ * JSX, so a failing backend printed `column reference "booking_id" is ambiguous ...
+ * SQLSTATE 42702` on screen. AvatarUpload piped a raw Supabase Storage error into a
+ * status banner the same way.
+ *
+ * A line may opt out with `user-facing-ok` when the value is a CURATED backend
+ * message (a known ApiClientError code) rather than raw driver output.
+ */
+const RENDER_BYPASS = [
+  // {...err.message...} rendered in JSX
+  /\{[^{}]{0,160}\b\w*[Ee]rr(?:or)?\w*\s*\??\.\s*message\b[^{}]{0,160}\}/,
+  // message: err.message  — banner / status / alert payloads
+  /\bmessage:\s*\w*[Ee]rr(?:or)?\w*\s*\??\.\s*message\b/,
+];
+
 const walk = (dir, out = []) => {
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry.startsWith(".")) continue;
@@ -240,10 +265,37 @@ if (existsSync(srcDir)) {
     for (let i = 0; i < lines.length; i++) {
       // Wide enough to span a multi-line toast call and see its getErrorMessage.
       const window = lines.slice(i, i + 8).join(" ");
-      if (BYPASS.test(window) && !/getErrorMessage|toUserMessage|mapOAuthError/.test(window)) {
+      const wrapped = /getErrorMessage|toUserMessage|mapOAuthError|user-facing-ok/.test(window);
+      if (BYPASS.test(window) && !wrapped) {
         note(
           `${SELF}: ${relative(HERE, file)}:${i + 1} shows a raw .message, going around ` +
             "getErrorMessage. Wrap it: getErrorMessage(err).",
+        );
+        break;
+      }
+      // JSX / banner payloads are checked on the LINE, not an 8-line window: a wide
+      // window straddles neighbouring branches and one wrapped call would mask an
+      // unwrapped sibling three lines away — which is how the BookingsScreen leak sat
+      // undetected next to a correct getErrorMessage call.
+      const line = lines[i];
+      // `errors.message` (PLURAL) is form-validation state for a field named "message"
+      // — react-hook-form / formik convention — not an Error object. ContactUs has a
+      // literal message field, so this would flag on every form in the app.
+      const formState = /\berrors\s*\??\.\s*message\b/.test(line);
+      // The opt-out marker is honoured on the line itself OR in the six lines above:
+      // the natural place to justify it is a comment over the code, and a real
+      // justification runs to several lines.
+      const optOutScope = lines.slice(Math.max(0, i - 6), i + 1).join(" ");
+      const lineWrapped =
+        formState ||
+        /getErrorMessage|toUserMessage|mapOAuthError/.test(line) ||
+        /user-facing-ok/.test(optOutScope);
+      if (!lineWrapped && RENDER_BYPASS.some((re) => re.test(line))) {
+        note(
+          `${SELF}: ${relative(HERE, file)}:${i + 1} renders a raw .message.\n` +
+            `      ${line.trim().slice(0, 110)}\n` +
+            "      Wrap it: getErrorMessage(err) — or mark the line `user-facing-ok` if it " +
+            "is a curated backend message, not raw driver output.",
         );
         break;
       }
@@ -304,11 +356,16 @@ if (!existsSync(siblingSanitiser)) {
   skipped.push(`${SIBLING} parity (that repo is not checked out here)`);
 } else if (
   existsSync(selfSanitiser) &&
-  readFileSync(selfSanitiser, "utf8") !== readFileSync(siblingSanitiser, "utf8")
+  // Compare CONTENT, not raw bytes. The two repos are checked out independently, so
+  // on Windows (`core.autocrlf=true`) one working copy can be CRLF and the other LF
+  // while both are the same file in Git. A byte comparison failed on exactly that and
+  // would have been an unreproducible red build. Line endings are not drift.
+  contentDiffers(readFileSync(selfSanitiser, "utf8"), readFileSync(siblingSanitiser, "utf8"))
 ) {
   note(
-    `web and mobile copies of userFacingError.js differ. They must stay byte-identical ` +
-      `so that proving one proves the other. Copy one over the other:\n` +
+    `web and mobile copies of userFacingError.js differ in CONTENT (line endings are ` +
+      `ignored). They must stay identical so that proving one proves the other. ` +
+      `Copy one over the other:\n` +
       `      ${selfSanitiser}\n      ${siblingSanitiser}`,
   );
 }

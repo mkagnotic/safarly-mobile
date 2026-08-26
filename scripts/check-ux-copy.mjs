@@ -144,6 +144,78 @@ const CHECKS = [
     mustNot: [],
   },
 
+  // --------------------------------------------------- the user's own email wraps
+  {
+    repo: "mobile",
+    file: "src/features/profile/SecurityScreen.tsx",
+    id: "security-row-subtitle-wraps",
+    why: "At 320dp a single line ellipsised the user's own address ('mahesh.k+user1@agnotic.com') and 'Update the password you use to sign in'. Web truncates neither, so one line was also a parity gap.",
+    must: ["styles.rowSubtitle} numberOfLines={2}"],
+    mustNot: ["styles.rowSubtitle} numberOfLines={1}"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/profile/ChangeEmailScreen.tsx",
+    id: "change-email-shows-full-address",
+    why: "Showing the current address IS this screen's job; at 320dp it was ellipsised away. No numberOfLines at all here.",
+    must: ["styles.emailText}>{email}"],
+    mustNot: ["styles.emailText} numberOfLines={1}"],
+  },
+
+  // ------------------------------------------------------------ touch targets
+  {
+    repo: "mobile",
+    file: "src/features/messages/ChatWorkflowPin.tsx",
+    id: "handoff-pin-no-role-noun-blurb",
+    why: "The set_handoff_plan blurb is carrier-only, so 'your carrier' would be self-referential and 'your sender' clashes with the Receiver label used elsewhere.",
+    must: ["tell them how the parcel reaches you"],
+    mustNot: ["tell your sender how the parcel reaches you"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/MessagesScreen.tsx",
+    id: "inbox-filter-chip-touch-target",
+    why: "The Inbox filter chips paint 30dp tall — under the 44pt minimum — and unlike every neighbouring control carried no hitSlop at all. react-native-web does not implement hitSlop, so this cannot be caught by a browser probe; it has to be pinned in source.",
+    must: ["hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}"],
+    mustNot: [],
+  },
+
+  // ------------------------------------------------------- notification titles
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerNotifications.tsx",
+    id: "notification-title-wraps",
+    why: "`truncate` is one line at ANY width, so on a phone the title lost the word carrying the meaning: 'Your parcel delivery is tomor…', 'Travel verification under revi…'. Two lines, matching the body. Fixed on BOTH platforms together so no parity gap is created.",
+    must: ["text-sm text-foreground line-clamp-2"],
+    mustNot: ["text-sm text-foreground truncate"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/tabs/NotificationsScreen.tsx",
+    id: "notification-title-wraps",
+    why: "Same as web: the title was capped at one line and lost its final word at 390dp.",
+    must: ["styles.cardTitle} numberOfLines={2}"],
+    mustNot: ["styles.cardTitle} numberOfLines={1}"],
+  },
+
+  // ---------------------------------------------------------- primary nav parity
+  {
+    repo: "mobile",
+    file: "src/navigation/RootNavigator.tsx",
+    id: "tab-order-matches-web",
+    why: "Web's primary nav is Home, Search, My Travels, Inbox (CustomerNavbar NAV_LINKS). Mobile had the middle two transposed, so a user moving between the site and the app found them swapped. Order is positional: the Search screen (route name 'Trips') must come BEFORE the My-travels screen (route name 'Parcels').",
+    must: [
+      '<Tabs.Screen name="Trips" component={SearchScreen}',
+      '<Tabs.Screen name="Parcels" component={MyTravelsScreen}',
+    ],
+    mustNot: [],
+    // Positional rule the plain string checks cannot express.
+    ordered: [
+      '<Tabs.Screen name="Trips" component={SearchScreen}',
+      '<Tabs.Screen name="Parcels" component={MyTravelsScreen}',
+    ],
+  },
+
   // ------------------------------------------------- journey progress step names
   {
     repo: "web",
@@ -198,6 +270,19 @@ for (const c of CHECKS) {
       failures.push(
         `${c.id}  (${c.file})\n      REVERTED TO: ${needle}\n      why: ${c.why}`,
       );
+    }
+  }
+  // `ordered` pins RELATIVE POSITION, which a contains-check cannot express —
+  // the tab-order gap was two registrations in the wrong sequence, both present.
+  if (c.ordered) {
+    const at = c.ordered.map((n) => code.indexOf(norm(n)));
+    for (let i = 1; i < at.length; i++) {
+      if (at[i - 1] === -1 || at[i] === -1) break; // already reported by `must`
+      if (at[i - 1] > at[i]) {
+        failures.push(
+          `${c.id}  (${c.file})\n      OUT OF ORDER: "${c.ordered[i - 1]}" must come BEFORE "${c.ordered[i]}"\n      why: ${c.why}`,
+        );
+      }
     }
   }
 }
