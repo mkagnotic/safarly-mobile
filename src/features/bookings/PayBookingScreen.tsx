@@ -100,12 +100,17 @@ export function PayBookingScreen() {
       setBanner({ variant: "error", title: "Payment window expired", message: "This booking can no longer be paid." });
       void refetch();
     } else if (code === "SUSPENDED") {
+      // user-facing-ok: reached only for a known ApiClientError CODE, so the message is
+      // copy the edge function wrote for this case (already scrubbed server-side), not
+      // raw driver output. The `else` branch below is the one that takes anything
+      // unrecognised, and it routes through getErrorMessage.
       setBanner({ variant: "error", title: "Account suspended", message: payError.message });
     } else if (code === "CONFLICT") {
       // The parcel is already booked by another carrier, or the trip filled up
       // (pre-charge exclusivity check, or a multi-bidder race at settle that
       // auto-refunded). Either way this carrier can no longer be paid — show a
       // terminal panel with an escape instead of leaving the pay button live.
+      // user-facing-ok: CONFLICT is a known code; the backend explains which race lost.
       setUnavailable(
         payError.message || "This parcel is no longer available for this carrier. Please choose a different carrier.",
       );
@@ -115,6 +120,8 @@ export function PayBookingScreen() {
       setBanner(null);
       void refetch();
     } else if (code === "PAYMENT_FAILED") {
+      // user-facing-ok: this is the Stripe decline reason, which the payer needs to see
+      // verbatim ("insufficient funds", "card expired") to know what to do next.
       setBanner({ variant: "error", title: "Payment declined", message: payError.message || "Your bank declined the charge. Try again." });
     } else {
       setBanner({ variant: "error", title: "Payment failed", message: getErrorMessage(payError) });

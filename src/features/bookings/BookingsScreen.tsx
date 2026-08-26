@@ -1889,8 +1889,13 @@ export function BookingsScreen() {
         <Card style={styles.errorCard}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
           <Text style={styles.errorTitle}>Failed to load bookings</Text>
+          {/* Was `error.message` rendered raw. A failing backend put
+              `column reference "booking_id" is ambiguous ... SQLSTATE 42702` on screen
+              here — the exact leak the scrubbing work exists to stop. The sibling
+              branch above already routed through getErrorMessage; this one was missed
+              because it renders in JSX rather than calling a toast. */}
           <Text style={styles.errorBody}>
-            {error instanceof Error ? error.message : "Unknown error"}
+            {getErrorMessage(error, "Please try again.")}
           </Text>
           <Pressable
             onPress={() => void refetch()}

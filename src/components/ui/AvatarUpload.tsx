@@ -4,6 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { supabase } from "@/integrations/supabase/client";
+import { getErrorMessage } from "@/services/api/client";
 import { colors } from "@/theme/colors";
 
 type Props = {
@@ -78,7 +79,10 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
           upsert: true,
         });
       if (uploadError) {
-        setStatus({ kind: "error", title: "Upload failed", message: uploadError.message });
+        // Storage errors never pass through an edge function, so they arrive raw:
+        // "StorageApiError: Bucket not found", RLS denials, size limits. Route them
+        // through the sanitiser like every other user-facing error.
+        setStatus({ kind: "error", title: "Upload failed", message: getErrorMessage(uploadError) });
         return;
       }
 
