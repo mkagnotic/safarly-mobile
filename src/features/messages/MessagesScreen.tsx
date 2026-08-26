@@ -532,6 +532,10 @@ const ListHeader = memo(function ListHeader({
                 key={f.key}
                 onPress={() => onFilter(f.key)}
                 style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+                // The chip paints 30dp tall, under the 44pt minimum, and unlike the
+                // other controls on this screen it carried no hitSlop at all. This
+                // lifts the touch target to 46dp without changing the visual design.
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Filter: ${f.label}`}
                 accessibilityState={{ selected: active }}

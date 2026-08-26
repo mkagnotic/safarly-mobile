@@ -273,8 +273,18 @@ function MainTabs() {
         <Tabs.Navigator backBehavior="history" screenOptions={tabScreenOptions}>
           {/* Visible tabs */}
           <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t(language, "tabs.home") }} />
-      <Tabs.Screen name="Parcels" component={MyTravelsScreen} options={{ tabBarLabel: t(language, "tabs.parcels") }} />
-      <Tabs.Screen name="Trips" component={SearchScreen} options={{ tabBarLabel: t(language, "tabs.trips") }} />
+          {/* Order matches web's primary nav exactly (CustomerNavbar `NAV_LINKS`):
+              Home, Search, My Travels, Inbox. These two used to be transposed, so a
+              user moving between the site and the app found the middle two
+              destinations swapped.
+
+              ⚠️ The ROUTE names are legacy and do not describe their screens —
+              "Parcels" renders My travels and "Trips" renders Search. Renaming them
+              would touch ~12 navigate() call sites for no user-visible gain, so the
+              user-facing labels (tabs.parcels = "My travels", tabs.trips = "Search")
+              are what to trust here. Order is by position below, not by name. */}
+          <Tabs.Screen name="Trips" component={SearchScreen} options={{ tabBarLabel: t(language, "tabs.trips") }} />
+          <Tabs.Screen name="Parcels" component={MyTravelsScreen} options={{ tabBarLabel: t(language, "tabs.parcels") }} />
       <Tabs.Screen
         name="Buddies"
         component={MessagesScreen}

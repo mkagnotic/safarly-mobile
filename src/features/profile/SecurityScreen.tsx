@@ -76,7 +76,10 @@ export function SecurityScreen() {
             </View>
             <View style={styles.rowTextWrap}>
               <Text style={styles.rowTitle}>{row.title}</Text>
-              <Text style={styles.rowSubtitle} numberOfLines={1}>{row.subtitle}</Text>
+              {/* Two lines: at 320dp one line ellipsised the user's own address
+                  ("mahesh.k+user1@agnotic.com") and "Update the password you use to
+                  sign in". Web truncates neither. */}
+              <Text style={styles.rowSubtitle} numberOfLines={2}>{row.subtitle}</Text>
             </View>
             <Ionicons name="chevron-forward" size={17} color={colors.mutedText} />
           </Pressable>

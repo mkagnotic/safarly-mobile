@@ -357,7 +357,11 @@ const NotificationRow = memo(function NotificationRow({
         </View>
         <View style={styles.cardBody}>
           <View style={styles.cardTopRow}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
+            {/* Two lines, not one: at 390dp the title lost the word that carried the
+                meaning — "Your parcel delivery is tomor…", "Travel verification under
+                revi…". Narrower is a reason to change the layout, never a reason to
+                drop the words. Kept in step with web. */}
+            <Text style={styles.cardTitle} numberOfLines={2}>
               {item.title}
             </Text>
           </View>

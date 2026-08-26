@@ -41,7 +41,10 @@ export function ChangeEmailScreen() {
         <View style={styles.emailIcon}>
           <Ionicons name="mail-outline" size={18} color={colors.primary} />
         </View>
-        <Text style={styles.emailText} numberOfLines={1}>{email}</Text>
+        {/* No numberOfLines: showing the current address IS this screen's job, and at
+            320dp a normal address ("mahesh.k+user1@agnotic.com") was ellipsised away.
+            Web renders it with no truncation at all, so this also closes a parity gap. */}
+        <Text style={styles.emailText}>{email}</Text>
         <Ionicons name="lock-closed" size={15} color={colors.mutedText} />
       </View>
 
