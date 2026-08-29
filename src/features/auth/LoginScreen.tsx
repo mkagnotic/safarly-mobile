@@ -24,7 +24,7 @@ import { LegalConsentText } from "@/components/ui/LegalConsentText";
 import { Screen } from "@/components/ui/Screen";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
-import { authApi, getErrorMessage } from "@/services/api";
+import { getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
@@ -40,6 +40,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // room flows into a larger hero illustration so the layout stays balanced.
 const HERO_SIZE = Platform.OS === "ios" ? 260 : 300;
 const HERO_MARGIN_TOP = Platform.OS === "ios" ? 32 : 40;
+
+/**
+ * Shown for ANY failed email/password sign-in. Deliberately identical whether
+ * or not the address is registered. Kept word-for-word in sync with web
+ * `RoleLogin.tsx`.
+ */
+const SIGN_IN_FAILED_MESSAGE =
+  'Incorrect email or password. If you signed up with Google, use "Sign in with Google".';
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
@@ -118,23 +126,20 @@ export function LoginScreen() {
       if (loginNotice) clearPendingNotice();
       // Navigation flips via AuthContext → store → RootNavigator.
     } catch (err) {
-      // A Google-only account (no password set) that tries password login gets a
-      // misleading "incorrect credentials" otherwise — probe the auth method and
-      // point them to Google (web parity). The "no account" case stays generic
-      // so we don't leak which emails are registered (anti-enumeration).
+      // One reply for every credential failure - wrong password, unknown
+      // address, or a Google-only account.
+      //
+      // This used to probe auth-methods and say which case it was. Even limited
+      // to the Google-only branch that confirms an address is registered, which
+      // is exactly the account ENUMERATION signal the generic "no account"
+      // handling was already avoiding. The Google hint is now stated
+      // unconditionally: useful to a Google user, silent about everyone else.
+      // Mirrors web `RoleLogin.tsx`.
       const raw = getErrorMessage(err).toLowerCase();
       const looksLikeBadCreds = raw.includes("invalid") && (raw.includes("credential") || raw.includes("login"));
       if (looksLikeBadCreds) {
-        try {
-          const info = await authApi.checkAuthMethod(normalizedEmail);
-          const method = info.data;
-          if (method?.exists && !method.has_password && method.providers.includes("google")) {
-            setFormError("This account uses Google sign-in. Please continue with Google.");
-            return;
-          }
-        } catch {
-          // Probe failed — fall through to the generic mapped message.
-        }
+        setFormError(SIGN_IN_FAILED_MESSAGE);
+        return;
       }
       const mapped = mapAuthError(err, "signin");
       if (mapped.target === "email") {

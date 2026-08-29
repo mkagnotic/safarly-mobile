@@ -118,16 +118,55 @@ export function dateRangesOverlap(
  * window is `[delivery_by_from, delivery_by_to || delivery_by]`; every parcel in the
  * database carries both bounds.
  */
+/**
+ * The window during which a parcel can still be picked up and carried.
+ *
+ * A SINGLE delivery date is a DEADLINE ("deliver by the 25th"), not an
+ * appointment, and single mode stores delivery_by_from === delivery_by_to. A
+ * symmetric overlap test therefore demanded the trip depart on EXACTLY that day
+ * and hid every carrier travelling earlier - the opposite of what the sender
+ * wants. Such a window has no lower bound.
+ *
+ * Rows written before `delivery_date_mode` existed are read the same way: two
+ * DIFFERENT bounds is a real window and keeps its lower bound, a single date is
+ * a deadline. Never rely on the mode alone.
+ *
+ * Mirrors `parcelCarryWindow` in
+ * `supabase/functions/search-handler/index.ts`. Keep the two in step: this one
+ * only regroups what the server already returned, so if they disagree the UI
+ * silently drops rows the server matched.
+ */
+function parcelCarryWindow(parcel: {
+  delivery_by?: string | null;
+  delivery_by_from?: string | null;
+  delivery_by_to?: string | null;
+  delivery_date_mode?: string | null;
+}) {
+  const from = parcel.delivery_by_from || null;
+  const to = parcel.delivery_by_to || parcel.delivery_by || from || null;
+  const isWindow =
+    parcel.delivery_date_mode === "range" || (!!from && !!to && from !== to);
+  return { start: isWindow ? from : null, end: to };
+}
+
+/** True when a trip travels no later than the parcel's deadline (and, for an
+ *  explicit window, does not finish before that window opens). */
 function datesMatch(
   trip: { travel_date?: string | null; travel_date_from?: string | null; travel_date_to?: string | null },
-  parcel: { delivery_by?: string | null; delivery_by_from?: string | null; delivery_by_to?: string | null },
+  parcel: {
+    delivery_by?: string | null;
+    delivery_by_from?: string | null;
+    delivery_by_to?: string | null;
+    delivery_date_mode?: string | null;
+  },
 ): boolean {
   const tripStart = trip.travel_date_from || trip.travel_date;
   const tripEnd = trip.travel_date_to || trip.travel_date;
-  const parcelStart = parcel.delivery_by_from || parcel.delivery_by;
-  const parcelEnd = parcel.delivery_by_to || parcel.delivery_by;
-  if (!tripStart || !parcelEnd) return false;
-  return dateRangesOverlap(tripStart, tripEnd, parcelStart, parcelEnd);
+  const { start, end } = parcelCarryWindow(parcel);
+  if (!tripStart || !tripEnd || !end) return false;
+  if (tripStart > end) return false;
+  if (start && tripEnd < start) return false;
+  return true;
 }
 
 export function parcelMatchesTrip(

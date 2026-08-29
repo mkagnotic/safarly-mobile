@@ -31,6 +31,14 @@ export interface UseSearchMatchesResult {
   hasAppliedFilters: boolean;
   /** Run a fresh search with the given filters. Resolves on success. */
   search: (filters: SearchFilters) => Promise<void>;
+  /**
+   * Replace the BASE (unfiltered) query and re-run it, without marking
+   * explicit filters as applied. This is how the screen switches between
+   * browsing every listing and matching against the user's own routes:
+   * `search()` would flip `hasAppliedFilters` and make the results render as a
+   * filtered result set instead.
+   */
+  setBaseQuery: (filters: SearchFilters) => Promise<void>;
   /** Re-run the most recent successful query. Useful for pull-to-refresh. */
   refetch: () => Promise<void>;
   /** Drop applied filters and reload the free auto-match results. */
@@ -146,6 +154,15 @@ export function useSearchMatches({
     }
   }, [runSearch]);
 
+  const setBaseQuery = useCallback(
+    async (filters: SearchFilters) => {
+      autoMatchFiltersRef.current = filters;
+      setHasAppliedFilters(false);
+      await runSearch(filters);
+    },
+    [runSearch],
+  );
+
   const resetToAutoMatch = useCallback(async () => {
     setHasAppliedFilters(false);
     if (autoMatchFiltersRef.current) {
@@ -157,5 +174,5 @@ export function useSearchMatches({
   // this search would return. Unfiltered topic, so results stay live.
   useRealtimeBus("discovery", refetch);
 
-  return { results, loading, error, hasAppliedFilters, search, refetch, resetToAutoMatch };
+  return { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch };
 }

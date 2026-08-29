@@ -26,8 +26,14 @@ export interface PersistedSearch {
   dateTo: string;
   lookingFor: LookingForType[];
   activeTab: ResultsTab;
-  /** null = auto-match mode; object = restored manual search. */
+  /** null = the base query (browse or route-match); object = restored manual search. */
   appliedFilters: SearchFilters | null;
+  /**
+   * Which base query was active: browse everything (false, the default) or the
+   * route-matching lens (true). Optional so a snapshot written before this
+   * field existed still restores - it simply falls back to browsing.
+   */
+  matchMyRoutes?: boolean;
   pkgPage: number;
   rcvPage: number;
   buddyPage: number;

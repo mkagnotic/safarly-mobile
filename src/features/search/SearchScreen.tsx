@@ -39,12 +39,10 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import {
   getErrorMessage,
   messagesApi,
-  searchApi,
   type BuddySearchMatch,
   type PackageMatch,
   type Parcel,
   type SearchFilters,
-  type SearchQuota,
   type Trip,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
@@ -86,8 +84,12 @@ function searchDateBounds(): { todayIso: string; maxIso: string } {
 }
 
 /** Web parity: 3/day cap, 10 per manual page (auto-match uses 50). */
-const DAILY_SEARCH_LIMIT = 3;
 const MANUAL_PER_PAGE = 10;
+
+/** Default view: everything on the marketplace, paged. */
+const BROWSE_QUERY = { per_page: MANUAL_PER_PAGE } as const;
+/** Opt-in lens: only listings that fit the user's own trips and parcels. */
+const MATCH_MY_ROUTES_QUERY = { per_page: 50, match_my_routes: true } as const;
 /** Client-side page sizes for auto-match lists (mirrors web). */
 const AUTO_PER_PAGE = 5;
 const AUTO_BUDDY_PER_PAGE = 10;
@@ -199,18 +201,18 @@ export function SearchScreen() {
   const [autoPkgPage, setAutoPkgPage] = useState(1);
   const [autoRcvPage, setAutoRcvPage] = useState(1);
   const [autoBuddyPage, setAutoBuddyPage] = useState(1);
-  const [quota, setQuota] = useState<SearchQuota | null>(null);
-  const [consuming, setConsuming] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Auto-match on mount returns results before the user touches a filter.
-  const { results, loading, error, hasAppliedFilters, search, refetch, resetToAutoMatch } =
-    useSearchMatches();
-
-  // Trust the server's quota: every search response carries a fresh snapshot.
-  useEffect(() => {
-    if (results?.search_quota) setQuota(results.search_quota);
-  }, [results?.search_quota]);
+  /**
+   * The screen used to open on route-matching ONLY: with no listings of your own
+   * you saw an empty screen and had no way to simply look at what the
+   * marketplace was carrying. Browsing everything is now the default, the way a
+   * listings app behaves, and route-matching is an opt-in lens. Mirrors web
+   * `CustomerSearch.tsx`.
+   */
+  const [matchMyRoutes, setMatchMyRoutes] = useState(false);
+  const { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch } =
+    useSearchMatches({ initialFilters: BROWSE_QUERY });
 
   // Manual search + page changes re-fire here; pagination is free (the unit was
   // already spent in handleApply).
@@ -252,6 +254,10 @@ export function SearchScreen() {
         setAutoBuddyPage(snap.autoBuddyPage);
         // Set applied filters LAST: the pagination effect above then replays the
         // manual search for FREE (no quota) with the restored pages already set.
+        if (snap.matchMyRoutes) {
+          setMatchMyRoutes(true);
+          void setBaseQuery(MATCH_MY_ROUTES_QUERY);
+        }
         if (snap.appliedFilters) setAppliedFilters(snap.appliedFilters);
       }
       hydratedRef.current = true;
@@ -275,6 +281,7 @@ export function SearchScreen() {
       lookingFor,
       activeTab,
       appliedFilters,
+      matchMyRoutes,
       pkgPage,
       rcvPage,
       buddyPage,
@@ -292,6 +299,7 @@ export function SearchScreen() {
     lookingFor,
     activeTab,
     appliedFilters,
+    matchMyRoutes,
     pkgPage,
     rcvPage,
     buddyPage,
@@ -433,7 +441,7 @@ export function SearchScreen() {
     if (!inBuddy && !inCarrier && !inReceiver) return; // not in this result set (yet)
 
     highlightHandledRef.current = highlightId;
-    const autoMatch = !hasAppliedFilters; // isAutoMatch is declared below this effect
+    const autoMatch = !hasAppliedFilters && matchMyRoutes; // isAutoMatch is declared below this effect
 
     if (inBuddy) {
       setActiveTab("buddy");
@@ -474,7 +482,7 @@ export function SearchScreen() {
 
   // Auto-match counts = sum of nested matches under user listings; manual
   // filter counts = flat result length. Buddies is always flat.
-  const isAutoMatch = !hasAppliedFilters;
+  const isAutoMatch = !hasAppliedFilters && matchMyRoutes;
   const packageTabCount = useMemo(() => {
     if (!isAutoMatch) return results?.carrier_total ?? carrierTrips.length;
     let total = 0;
@@ -596,21 +604,30 @@ export function SearchScreen() {
     if (dateTo) filters.date_to = dateTo;
     if (lookingFor.length > 0) filters.looking_for = lookingFor.join(",");
 
-    // Spend one daily unit first; only run the search (via the effect) on success.
-    setConsuming(true);
-    try {
-      const res = await searchApi.consumeSearchQuota();
-      setQuota(res.data);
+    // Filtering no longer spends a daily unit - see web `CustomerSearch.tsx`.
+    // Every listing is browsable and pageable for free now, so rationing the
+    // filter that narrows them only pushed people into scrolling.
+    setPkgPage(1);
+    setRcvPage(1);
+    setBuddyPage(1);
+    setAppliedFilters(filters);
+  }, [fromCity, toCity, fromCountry, toCountry, dateFrom, dateTo, lookingFor]);
+
+  /** Switch between browsing everything and matching against my own routes. */
+  const applyMode = useCallback(
+    (next: boolean) => {
+      setMatchMyRoutes(next);
+      setAppliedFilters(null);
       setPkgPage(1);
       setRcvPage(1);
       setBuddyPage(1);
-      setAppliedFilters(filters);
-    } catch (err) {
-      setNotice({ title: "Search limit", message: getErrorMessage(err), variant: "error" });
-    } finally {
-      setConsuming(false);
-    }
-  }, [fromCity, toCity, fromCountry, toCountry, dateFrom, dateTo, lookingFor]);
+      setAutoPkgPage(1);
+      setAutoRcvPage(1);
+      setAutoBuddyPage(1);
+      void setBaseQuery(next ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY);
+    },
+    [setBaseQuery],
+  );
 
   const handleClear = useCallback(() => {
     setFromCity("");
@@ -645,16 +662,7 @@ export function SearchScreen() {
   const hasActiveFilters = Boolean(
     fromCity || toCity || dateFrom || dateTo || lookingFor.length || appliedFilters,
   );
-  const limit = quota?.limit ?? DAILY_SEARCH_LIMIT;
-  const remaining = quota?.remaining ?? null;
-  const atLimit = remaining === 0;
-  const searchBusy = loading || consuming;
-  const quotaText =
-    remaining == null
-      ? "Max 3 searches per day. Use filters wisely for best results."
-      : atLimit
-        ? `Daily search limit reached (${limit}/day). Resets tomorrow — browse auto-matches meanwhile.`
-        : `${remaining} of ${limit} searches left today. Use filters wisely for best results.`;
+  const searchBusy = loading;
 
   return (
     <Screen scroll={false}>
@@ -801,15 +809,41 @@ export function SearchScreen() {
               />
             ) : null}
             <AppButton
-              label={consuming ? "Checking…" : loading ? "Searching…" : "Apply Filters & Search"}
+              label={loading ? "Searching…" : "Apply Filters & Search"}
               onPress={() => void handleApply()}
-              disabled={searchBusy || atLimit}
+              disabled={searchBusy}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.applyButtonFlex}
             />
           </View>
 
-          <Text style={[styles.noteText, atLimit && styles.noteTextError]}>{quotaText}</Text>
+          <View style={styles.modeToggleRow}>
+            <Pressable
+              onPress={() => applyMode(false)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !matchMyRoutes }}
+              style={[styles.modeToggleButton, !matchMyRoutes && styles.modeToggleButtonActive]}
+            >
+              <Text style={[styles.modeToggleLabel, !matchMyRoutes && styles.modeToggleLabelActive]}>
+                All listings
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => applyMode(true)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: matchMyRoutes }}
+              style={[styles.modeToggleButton, matchMyRoutes && styles.modeToggleButtonActive]}
+            >
+              <Text style={[styles.modeToggleLabel, matchMyRoutes && styles.modeToggleLabelActive]}>
+                Matches for my routes
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.noteText}>
+            {matchMyRoutes
+              ? "Showing only listings that fit the trips and parcels you have posted."
+              : "Showing everything posted on Safarly. Add filters above to narrow it down."}
+          </Text>
         </Card>
 
         {hasAppliedFilters && appliedFilters ? (
@@ -1070,7 +1104,7 @@ function PackageTabResults({
                 <MatchCardSkeleton />
               ) : matched.length === 0 ? (
                 <Text style={styles.nestedEmpty}>
-                  No matched carriers yet for this route or date.
+                  No matching carriers yet for this route or date.
                 </Text>
               ) : (
                 <View>
@@ -1842,6 +1876,34 @@ const styles = StyleSheet.create({
   checkboxLabel: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
   applyRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   applyButtonFlex: { flex: 1 },
+  modeToggleRow: {
+    flexDirection: "row",
+    alignSelf: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    padding: 3,
+    marginBottom: 8,
+  },
+  modeToggleButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  modeToggleButtonActive: {
+    backgroundColor: colors.card,
+  },
+  modeToggleLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.subtleText,
+  },
+  modeToggleLabelActive: {
+    color: colors.text,
+  },
   noteText: {
     color: colors.mutedText,
     fontSize: 11,
@@ -1850,7 +1912,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
   },
-  noteTextError: { color: colors.danger, fontWeight: "700" },
 
   tabsRow: {
     flexDirection: "row",

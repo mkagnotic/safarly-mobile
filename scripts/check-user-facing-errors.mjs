@@ -97,6 +97,26 @@ const MUST_SCRUB = [
   // --- transport / infrastructure leaking a URL or host ---
   "request to https://rbtdkdbmtecungdthujf.supabase.co/rest/v1/bookings failed",
   "connect ECONNREFUSED 127.0.0.1:54321",
+  // --- body-less gateway failures: supabase-js stringifies the empty body ---
+  "{}",
+  "[object Object]",
+  '{"code":"PGRST116","details":null}',
+];
+
+/**
+ * Gateway-class failures. The body is EMPTY, so supabase-js falls back to
+ * `JSON.stringify(body)` and `error.message` arrives as the literal string "{}".
+ * Only the status says what actually happened. On 2026-08-29 a 504 during sign-in
+ * put a toast reading "{}" in front of a user on production; pinned so that the
+ * status is always consulted and that string can never surface again.
+ */
+const STATUS_CASES = [
+  { error: { message: "{}", status: 504 }, want: "busy" },
+  { error: { message: "{}", status: 502 }, want: "busy" },
+  { error: { message: "", status: 503 }, want: "busy" },
+  { error: { message: "", statusCode: "504" }, want: "busy" },
+  // A status that DOES come with real copy must not be overridden by it.
+  { error: { message: "Invalid login credentials", status: 400 }, want: "keep" },
 ];
 
 /** Copy we deliberately show. None of these may be altered. */
@@ -136,7 +156,9 @@ if (!existsSync(selfSanitiser)) {
   const tempModule = join(tempDir, "userFacingError.mjs");
   writeFileSync(tempModule, readFileSync(selfSanitiser, "utf8"), "utf8");
 
-  const { toUserMessage } = await import(pathToFileURL(tempModule).href);
+  const { toUserMessage, SERVER_BUSY_MESSAGE } = await import(
+    pathToFileURL(tempModule).href,
+  );
 
   // The sanitiser logs withheld text; keep the guard's own output readable.
   const realWarn = console.warn;
@@ -151,6 +173,17 @@ if (!existsSync(selfSanitiser)) {
       const shown = toUserMessage(sample);
       if (shown !== sample) {
         note(`userFacingError: real copy was altered -> ${sample}\n      became -> ${shown}`);
+      }
+    }
+    for (const { error, want } of STATUS_CASES) {
+      const shown = toUserMessage(error);
+      const expected = want === "busy" ? SERVER_BUSY_MESSAGE : error.message;
+      if (shown !== expected) {
+        note(
+          `userFacingError: status ${error.status ?? error.statusCode} with message ` +
+            `${JSON.stringify(error.message)} was shown as ${JSON.stringify(shown)}, ` +
+            `expected ${JSON.stringify(expected)}.`,
+        );
       }
     }
     // Non-strings must not crash it or produce "undefined" / "[object Object]".
@@ -371,7 +404,8 @@ if (!existsSync(siblingSanitiser)) {
 }
 
 console.log(
-  `check:errors [${SELF}] - ${MUST_SCRUB.length} raw samples, ${MUST_KEEP.length} real ` +
+  `check:errors [${SELF}] - ${MUST_SCRUB.length} raw samples, ${STATUS_CASES.length} ` +
+    `gateway cases, ${MUST_KEEP.length} real ` +
     `messages, ${scanned} source files scanned`,
 );
 for (const s of skipped) console.log(`check:errors [${SELF}] - skipped: ${s}`);
