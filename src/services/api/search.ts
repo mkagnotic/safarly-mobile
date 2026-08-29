@@ -38,7 +38,13 @@ export interface PackageMatch {
   any_from?: boolean;
   any_to?: boolean;
   travel_date?: string;
+  travel_date_from?: string;
+  travel_date_to?: string;
   delivery_by?: string;
+  delivery_by_from?: string;
+  delivery_by_to?: string;
+  /** "single" = a deadline, "range" = an explicit delivery window. */
+  delivery_date_mode?: string;
   luggage_capacity_kg?: number;
   airline?: string;
   open_to_buddy?: boolean;

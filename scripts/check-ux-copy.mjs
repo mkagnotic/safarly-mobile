@@ -233,6 +233,104 @@ const CHECKS = [
     must: ["labelList", "JOURNEY_STEP[key].name"],
     mustNot: ["numberOfLines"],
   },
+  // ------------------------------------------------- sign-in anti-enumeration
+  {
+    repo: "web",
+    file: "src/components/auth/RoleLogin.tsx",
+    id: "signin-no-user-enumeration",
+    why: "A distinct 'No account found with this email' reply turned the sign-in form into an account enumeration oracle: anyone with a list of addresses could learn which are registered. One message now covers a wrong password, an unknown address and a Google-only account.",
+    must: ["SIGN_IN_FAILED_MESSAGE", "Incorrect email or password"],
+    mustNot: ["No account found with this email", "This account uses Google sign-in"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/auth/LoginScreen.tsx",
+    id: "signin-no-user-enumeration",
+    why: "Same anti-enumeration rule as web - the two platforms must not drift.",
+    must: ["SIGN_IN_FAILED_MESSAGE", "Incorrect email or password"],
+    mustNot: ["No account found with this email", "This account uses Google sign-in"],
+  },
+
+  // ------------------------------------------- carriers, not senders, are missing
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerSearch.tsx",
+    id: "empty-state-names-carriers",
+    why: "Shown under a card for a parcel the user is SENDING, so the missing party is a CARRIER. It read 'No matched senders yet', naming the opposite side of the deal.",
+    must: ["No matching carriers yet for this route or date."],
+    mustNot: ["No matched senders"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/SearchScreen.tsx",
+    id: "empty-state-names-carriers",
+    why: "Same empty-state wording as web, word for word.",
+    must: ["No matching carriers yet for this route or date."],
+    mustNot: ["No matched senders"],
+  },
+
+  // ------------------------------------------------ search browses everything first
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerSearch.tsx",
+    id: "search-browses-all-by-default",
+    why: "Search used to open on route-matching ONLY, so a user with no listings of their own saw an empty screen and had no way to browse the marketplace. Browsing everything is the default; route-matching is an opt-in lens.",
+    must: ["matchMyRoutes", "All listings", "Matches for my routes", "Showing everything posted on Safarly"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/SearchScreen.tsx",
+    id: "search-browses-all-by-default",
+    why: "Same default and the same two toggle labels as web.",
+    must: ["BROWSE_QUERY", "MATCH_MY_ROUTES_QUERY", "All listings", "Matches for my routes", "Showing everything posted on Safarly"],
+    mustNot: [],
+  },
+
+  // --------------------------------------------- validation never fails silently
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerListTrip.tsx",
+    id: "trip-validation-speaks-up",
+    why: "The submit handler ended in a bare `return`. With only a size problem - whose warning renders sections above the button - pressing Submit produced no request, no toast and no focus change, which reads as a dead button.",
+    must: ["focusFirstFormError()", "Size exceeds airline carry-on limit"],
+    mustNot: ["if (Object.keys(errs).length > 0 || hasSizeError) return;"],
+  },
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerSendParcel.tsx",
+    id: "parcel-validation-speaks-up",
+    why: "Same silent-return bug as the trip form; mobile already scrolled to the offending field.",
+    must: ["focusFirstFormError()", "Size exceeds airline carry-on limit"],
+    mustNot: ["if (Object.keys(errs).length > 0 || hasSizeError) return;"],
+  },
+
+  // ------------------------------------------------------- one rating per booking
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerRateDelivery.tsx",
+    id: "rating-reflects-existing",
+    why: "The API already returns `viewer_has_rated`; the page ignored it and offered a blank star rating to someone who had already reviewed, who then hit a CONFLICT after filling it in.",
+    must: ["booking.viewer_has_rated", "You already reviewed this delivery"],
+    mustNot: [],
+  },
+  // ------------------------------------------- a listing's owner can act on it
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerParcelDetail.tsx",
+    id: "parcel-detail-owner-actions",
+    why: "The owner of a parcel reached this page and found nothing to do - a visitor got 'Message Sender' and the sender got no action at all. The sibling trip detail page has always offered Edit and Cancel; mobile's parcel screen had them too. Web was the outlier.",
+    must: ["EditParcelDialog", "customer.cancelParcel", "customer.editParcel", "Cancel this parcel request?"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/parcels/ParcelDetailsScreen.tsx",
+    id: "parcel-detail-owner-actions",
+    why: "Mobile already offered Edit and Cancel here; pinned so the platforms stay level.",
+    must: ["EditParcelModal", "setCancelOpen"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

@@ -36,6 +36,32 @@
 export const GENERIC_MESSAGE = "Something went wrong. Please try again.";
 
 /**
+ * Shown when the backend is reachable but cannot answer right now: a gateway
+ * timeout, an overloaded instance, a restart. Deliberately distinct from the
+ * "check your connection" copy, because the user's connection is fine and trying
+ * again shortly genuinely does work.
+ */
+export const SERVER_BUSY_MESSAGE =
+  "Our servers are busy right now. Please try again in a moment.";
+
+/**
+ * Statuses whose response body never carries anything worth reading, so the status
+ * is the only trustworthy signal.
+ *
+ * This exists because of a real incident. A 504 from the API gateway has an EMPTY
+ * body; supabase-js falls back to `JSON.stringify(body)`, so `error.message`
+ * arrives as the literal two-character string "{}" - which matched no mapping, did
+ * not look technical, and was rendered verbatim in the sign-in toast.
+ */
+export const HTTP_STATUS_MESSAGES = {
+  408: "That took too long. Please try again.",
+  429: "Too many attempts. Please wait a few minutes and try again.",
+  502: SERVER_BUSY_MESSAGE,
+  503: SERVER_BUSY_MESSAGE,
+  504: SERVER_BUSY_MESSAGE,
+};
+
+/**
  * Failures we can recognise and give real guidance for. Order matters: the first
  * match wins, so keep the specific patterns above the broad ones.
  */
@@ -62,6 +88,13 @@ export const FRIENDLY_MAPPINGS = [
   {
     match: /bucket not found|payload too large|exceeded the maximum allowed size|entity too large/i,
     message: "That file couldn't be uploaded. Please try a smaller file.",
+  },
+  {
+    // The gateway answered instead of the service: overloaded, restarting, or the
+    // request outlived the upstream deadline. Above the generic timeout rule so
+    // "gateway timeout" gets copy that tells the user it is us, not them.
+    match: /bad gateway|gateway time-?out|service unavailable|upstream (?:connect|request|timeout)/i,
+    message: SERVER_BUSY_MESSAGE,
   },
   {
     match: /\btimed out\b|statement timeout|etimedout|\babortederror\b/i,
@@ -136,6 +169,10 @@ export const TECHNICAL_SHAPES = [
   /\b(?:https?|postgres(?:ql)?):\/\/\S+/i,
   /<!doctype|<html/i,
   /^\s*[{[]"/,
+  // A whole serialised object or array, including the empty "{}" that supabase-js
+  // produces from a body-less gateway error. Nothing written for a person to read
+  // both opens with a brace and closes with one.
+  /^\s*[{[][\s\S]*[}\]]\s*$/,
   /\b[A-Z][A-Za-z]*Error:\s/,
   /\berrno\b|\beconnrefused\b|\benotfound\b/i,
 ];
@@ -158,6 +195,25 @@ export function looksTechnical(message) {
 }
 
 /**
+ * Dig the HTTP status out of whichever Supabase error class we were handed. They
+ * each put it somewhere different: `status` on AuthApiError, `statusCode` (as a
+ * string) on StorageApiError, and on the wrapped Response for FunctionsHttpError.
+ *
+ * @param {unknown} error
+ * @returns {number} the status, or 0 when there isn't one
+ */
+export function readStatus(error) {
+  if (!error || typeof error !== "object") return 0;
+  const e = /** @type {Record<string, any>} */ (error);
+  const candidates = [e.status, e.statusCode, e.context?.status, e.response?.status];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n >= 100 && n <= 599) return n;
+  }
+  return 0;
+}
+
+/**
  * Turn any thrown value into copy that is safe and useful to display.
  *
  * @param {unknown} error - anything at all: an Error, a string, null, a random object.
@@ -175,11 +231,18 @@ export function toUserMessage(error, fallback) {
     if (typeof maybe === "string") raw = maybe;
   }
   raw = raw.trim();
-  if (!raw) return generic;
 
   for (const rule of FRIENDLY_MAPPINGS) {
-    if (rule.match.test(raw)) return rule.message;
+    if (raw && rule.match.test(raw)) return rule.message;
   }
+
+  // Checked after the text rules, so a service that DID explain itself still wins,
+  // and before the raw text is trusted, so a body-less gateway failure can never
+  // reach a user as "{}".
+  const status = readStatus(error);
+  if (status && HTTP_STATUS_MESSAGES[status]) return HTTP_STATUS_MESSAGES[status];
+
+  if (!raw) return generic;
 
   if (looksTechnical(raw)) {
     // Keep the real text reachable for whoever has to diagnose it. If a new failure
