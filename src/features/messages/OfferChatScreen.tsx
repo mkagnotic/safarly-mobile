@@ -43,6 +43,7 @@ import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
+import { labelDeals, selectableDeals } from "@/utils/dealLabel";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
@@ -83,20 +84,21 @@ type ChatRoute = RouteProp<MainTabParamList, "OfferChatTab">;
 /** 10 MB — same cap as web (`MAX_FILE_SIZE` in CustomerMessages). */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-function getBackTarget(source: "home" | "offers" | "messages" | "buddies" | "travels") {
+function getBackTarget(source: "home" | "messages" | "buddies" | "travels") {
   switch (source) {
     case "home":
       return "Home" as const;
-    case "messages":
-      return "MessagesTab" as const;
     case "buddies":
       return "Buddies" as const;
     // "Parcels" is the My Travels tab — chats opened from a parcel card there
-    // should return to it rather than dropping the user on Offers.
+    // should return to it rather than dropping the user on the inbox.
     case "travels":
       return "Parcels" as const;
+    // The inbox is where a chat belongs when the caller gave no context —
+    // a notification tap, a deep link, anything that arrives without `source`.
+    case "messages":
     default:
-      return "OffersTab" as const;
+      return "MessagesTab" as const;
   }
 }
 
@@ -176,7 +178,7 @@ export function OfferChatScreen() {
 
   const conversationId = route.params?.conversationId ?? null;
   const fallbackName = route.params?.name ?? "Conversation";
-  const source = route.params?.source ?? "offers";
+  const source = route.params?.source ?? "messages";
   const fallbackBackTarget = getBackTarget(source);
 
   const {
@@ -319,6 +321,22 @@ export function OfferChatScreen() {
   const markOfferSettled = useCallback((offerId: string) => {
     setSettledOfferIds((prev) => (prev.includes(offerId) ? prev : [...prev, offerId]));
   }, []);
+
+  /**
+   * Which delivery is the pinned action about?
+   *
+   * ⚠️ The pinned prompts are deal-scoped but named none of them. With two deliveries
+   * in one thread - and the pair CAN hold opposite roles in each - "Upload your travel
+   * document" read as being about the OTHER delivery, and was reported as the app
+   * asking the wrong person. It was asking correctly; nothing on screen said which
+   * deal it meant. Only shown for a thread with more than one, so the ordinary
+   * single-delivery chat is untouched. See `utils/dealLabel.ts`.
+   */
+  // ⚠️ Gated on the SELECTABLE deals, exactly as the switcher is - see web.
+  const selectedDealLabel = useMemo(() => {
+    if (selectableDeals(deals ?? [], selectedDealId).length < 2) return null;
+    return labelDeals(deals ?? []).get(selectedDealId ?? "") ?? null;
+  }, [deals, selectedDealId]);
 
   const liveOffer = useMemo(() => {
     const live = offerState.live;
@@ -1620,6 +1638,14 @@ export function OfferChatScreen() {
         {/* Only rendered when the thread actually holds more than one delivery. */}
         <ChatDealSwitcher deals={deals} selectedDealId={selectedDealId} onSelect={selectDeal} />
 
+        {selectedDealLabel ? (
+          <View style={styles.dealContext}>
+            <Text style={styles.dealContextText}>
+              This step is for <Text style={styles.dealContextName}>{selectedDealLabel.full}</Text>
+            </Text>
+          </View>
+        ) : null}
+
         {/* ───────── Workflow pin (server FSM) ───────── */}
         {showWorkflowPin && workflow ? (
           <ChatWorkflowPin
@@ -2076,6 +2102,9 @@ export function OfferChatScreen() {
       />
 
       {/* ───────── Parcel-photo review modal ───────── */}
+      {/* `counterpartName` is the RAW name, not `participantName` - that falls back
+          to the literal "Conversation", which would read "Awaiting Conversation's
+          parcel photos". Absent means the card falls back to the role instead. */}
       <ParcelReviewModal
         open={parcelReviewOpen}
         review={parcelReview.review}
@@ -2086,6 +2115,7 @@ export function OfferChatScreen() {
         onApprove={() => void handleParcelApprove()}
         onReject={(reason, note) => void handleParcelReject(reason, note)}
         onCancelRequest={() => void handleParcelCancel()}
+        counterpartName={conversation?.participant?.name}
       />
 
       {/* ───────── Offer composer modal ───────── */}
@@ -2968,6 +2998,14 @@ const styles = StyleSheet.create({
   offerActionDeclineText: { color: colors.danger, fontSize: 14, fontWeight: "800", flexShrink: 1 },
 
   // Offer bar (above the composer)
+  dealContext: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  dealContextText: { fontSize: 11, lineHeight: 15, color: colors.subtleText },
+  dealContextName: { fontWeight: "700", color: colors.mutedText },
   offerBar: {
     flexDirection: "row",
     alignItems: "center",

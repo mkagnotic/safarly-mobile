@@ -20,7 +20,7 @@ export type RootStackParamList = {
         /** Display name + parcel kept for legacy callers (mock flow). */
         name: string;
         parcel?: string;
-        source?: "home" | "offers" | "messages" | "buddies" | "travels";
+        source?: "home" | "messages" | "buddies" | "travels";
       }
     | undefined;
   SendParcel: undefined;
@@ -42,7 +42,9 @@ export type MainTabParamList = {
   ActivityTab: undefined;
   MessagesTab: undefined;
   Notifications: undefined;
-  Parcels: undefined;
+  /** My Travels. `tab` opens it on a specific list - a new parcel belongs in
+   *  "packages", not the default "flights". */
+  Parcels: { tab?: "flights" | "packages" | "partners" | "archive" } | undefined;
   /** `highlightId` deep-links a specific match card from a match-found
    *  notification (web parity: `/customer/search?match=<id>`).
    *  `tab` says WHICH results tab the notification is about — a carrier told
@@ -88,7 +90,6 @@ export type MainTabParamList = {
   ListTripTab: { source?: "home" | "trips" } | undefined;
   ListTripSuccessTab: undefined;
   TripDetailsTab: { tripId: string };
-  OffersTab: undefined;
   OfferChatTab:
     | {
         /** Real Supabase conversation id — when set, the chat loads server messages. */
@@ -96,7 +97,7 @@ export type MainTabParamList = {
         /** Display name + parcel kept for legacy callers (mock flow). */
         name: string;
         parcel?: string;
-        source?: "home" | "offers" | "messages" | "buddies" | "travels";
+        source?: "home" | "messages" | "buddies" | "travels";
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };

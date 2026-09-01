@@ -1,26 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { DealProjection } from "@/services/api";
+import { isDealFinished, labelDeals, selectableDeals } from "@/utils/dealLabel";
 import { colors } from "@/theme/colors";
 
 interface Props {
   deals: DealProjection[];
   selectedDealId: string | null;
   onSelect: (dealId: string) => void;
-}
-
-/** Short, human label for a deal — the route is how people actually tell them apart. */
-function routeLabel(deal: DealProjection): string {
-  const p = deal.active_deal.parcel;
-  if (!p) return "Delivery";
-  const trim = (v: string | null | undefined) => (v || "").split(",")[0].trim();
-  const from = trim(p.from_city);
-  const to = trim(p.to_city);
-  if (from && to) return `${from} → ${to}`;
-  return to || from || "Delivery";
 }
 
 /**
@@ -30,11 +20,10 @@ function routeLabel(deal: DealProjection): string {
  * COMPLETED is deliberately NOT here: a delivered deal still has a last step - rating
  * the other party - so hiding it would strand that action. Only dead deals go.
  */
-function isFinished(deal: DealProjection): boolean {
-  return deal.active_deal.request_status === "rejected" ||
-    deal.active_deal.request_status === "withdrawn" ||
-    ["CANCELLED", "ARCHIVED"].includes(deal.workflow.state);
-}
+// Delegates rather than repeating the rule: `selectableDeals` below decides which
+// deals the switcher SHOWS, and the pinned context line uses the same helper. Two
+// copies of "is this finished" is how the switcher and that line came to disagree.
+const isFinished = (deal: DealProjection): boolean => isDealFinished(deal);
 
 /**
  * Which delivery is this chat showing?
@@ -51,9 +40,14 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
   // A cancelled or expired delivery is history - keep it out of the picker. The one
   // exception is the deal currently on screen: removing the chip you just tapped would
   // leave the switcher pointing at nothing.
-  const shown = (deals ?? []).filter(
-    (d) => !isFinished(d) || d.active_deal.carrier_request_id === selectedDealId,
-  );
+  const shown = selectableDeals(deals ?? [], selectedDealId);
+
+  // Labelled over EVERY deal, not only the visible ones, so a chip here and the
+  // pinned line below can never disagree about what a delivery is called. The label
+  // used to be the ROUTE alone, and two deals on one route rendered an identical
+  // chip - see `utils/dealLabel.ts` for the incident that caused.
+  const labels = useMemo(() => labelDeals(deals ?? []), [deals]);
+
   if (shown.length < 2) return null;
 
   return (
@@ -78,7 +72,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
               key={id}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={`Show ${routeLabel(deal)}`}
+              accessibilityLabel={`Show ${labels.get(id)?.chip ?? "delivery"}`}
               onPress={() => onSelect(id)}
               style={[
                 styles.chip,
@@ -87,7 +81,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
               ]}
             >
               <Text style={[styles.chipText, selected ? styles.chipTextOn : styles.chipTextOff]}>
-                {routeLabel(deal)}
+                {labels.get(id)?.chip ?? "Delivery"}
                 {finished ? "  · ended" : ""}
               </Text>
             </Pressable>

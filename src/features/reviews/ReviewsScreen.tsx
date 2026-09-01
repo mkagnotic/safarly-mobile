@@ -6,12 +6,13 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
 import { useUserReviews } from "@/hooks/api/useUserReviews";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { type Rating, getErrorMessage } from "@/services/api";
+import { type Rating } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
@@ -155,24 +156,10 @@ function LoadingState() {
 }
 
 function ErrorView({
-  message,
+  error,
   onRetry,
-}: Readonly<{ message: string; onRetry: () => void }>) {
-  return (
-    <Card style={styles.errorCard}>
-      <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-      <Text style={styles.errorTitle}>Failed to load reviews</Text>
-      {message ? <Text style={styles.errorBody}>{message}</Text> : null}
-      <Pressable
-        onPress={onRetry}
-        style={styles.retryButton}
-        accessibilityRole="button"
-        accessibilityLabel="Try again"
-      >
-        <Text style={styles.retryButtonText}>Try again</Text>
-      </Pressable>
-    </Card>
-  );
+}: Readonly<{ error: unknown; onRetry: () => void }>) {
+  return <ErrorState error={error} subject="your reviews" onRetry={onRetry} style={styles.errorCard} />;
 }
 
 function EmptyView({ tab }: Readonly<{ tab: ReviewTab }>) {
@@ -220,7 +207,7 @@ export function ReviewsScreen() {
       {received.loading && received.reviews.length === 0 ? (
         <LoadingState />
       ) : received.error && received.reviews.length === 0 ? (
-        <ErrorView message={getErrorMessage(received.error)} onRetry={() => void received.refetch()} />
+        <ErrorView error={received.error} onRetry={() => void received.refetch()} />
       ) : (
         <>
           {/* Summary always reflects reviews RECEIVED about this user (web parity). */}
@@ -240,7 +227,7 @@ export function ReviewsScreen() {
           {active.loading && active.reviews.length === 0 ? (
             <LoadingState />
           ) : active.error && active.reviews.length === 0 ? (
-            <ErrorView message={getErrorMessage(active.error)} onRetry={() => void active.refetch()} />
+            <ErrorView error={active.error} onRetry={() => void active.refetch()} />
           ) : active.reviews.length === 0 ? (
             <EmptyView tab={tab} />
           ) : (

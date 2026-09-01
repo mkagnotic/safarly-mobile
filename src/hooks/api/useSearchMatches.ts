@@ -11,7 +11,13 @@ import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 /** Web parity: web polls search every 30s (`refetchInterval`) so freshly posted
  *  trips/parcels surface without a manual refresh. */
-const POLL_INTERVAL_MS = 30_000;
+// Web parity: both platforms poll at the same slow cadence. This was 30s on
+// each, which meant a screen left open issued 120 of the heaviest read in the
+// app every hour, per device, with nobody touching anything - enough to matter
+// on a nano instance. Realtime already invalidates search the moment a listing
+// is posted or edited, and the screen refetches on focus, so this is only a
+// safety net for an event the socket missed.
+const POLL_INTERVAL_MS = 180_000;
 
 export interface UseSearchMatchesOptions {
   /**

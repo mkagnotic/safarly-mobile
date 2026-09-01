@@ -62,7 +62,7 @@ export function DeliveryDetailsScreen() {
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Parcels"); // My Travels lives on the "Parcels" tab key
+    else navigation.navigate("Parcels", { tab: "packages" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
   const handleRate = useCallback(() => {

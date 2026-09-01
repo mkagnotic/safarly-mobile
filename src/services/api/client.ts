@@ -367,3 +367,31 @@ export function isAbortError(error: unknown): boolean {
     ? error.name === "AbortError"
     : error instanceof Error && error.name === "AbortError";
 }
+
+/**
+ * Reject a promise that never settles.
+ *
+ * The direct Supabase auth calls do not go through `send()` and carry no
+ * deadline of their own. Acceptance testing caught the consequence: a POST to
+ * `/auth/v1/token` was issued and simply never answered, and because
+ * `signInWithPassword` neither resolved nor rejected, the sign-in button sat on
+ * "Signing in..." indefinitely - no message, no way back, nothing to retry.
+ *
+ * A deadline turns that silence into an ordinary rejection, which every caller
+ * already handles by showing `getErrorMessage(error)`. It is deliberately
+ * generous: a slow network should still succeed, and only a genuine hang should
+ * trip it. If the call does land afterwards, supabase-js still stores the
+ * session and the auth listener signs the user in as normal.
+ */
+export function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
+/** How long a person will stare at a blocking spinner before it must give up. */
+export const AUTH_TIMEOUT_MS = 30000;

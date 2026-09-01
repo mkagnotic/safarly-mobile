@@ -55,6 +55,8 @@ interface ParcelReviewModalProps {
   onApprove: () => void;
   onReject: (reason: ParcelReviewReason, note?: string) => void;
   onCancelRequest: () => void;
+  /** The other party's display name. Falls back to the role when unknown. */
+  counterpartName?: string;
 }
 
 /**
@@ -75,6 +77,7 @@ export function ParcelReviewModal({
   onApprove,
   onReject,
   onCancelRequest,
+  counterpartName,
 }: Readonly<ParcelReviewModalProps>) {
   const [files, setFiles] = useState<RNUploadFile[]>([]);
   const [rejecting, setRejecting] = useState(false);
@@ -263,6 +266,7 @@ export function ParcelReviewModal({
               setNote={setNote}
               onApprove={onApprove}
               onReject={() => onReject(reason, note.trim() || undefined)}
+              counterpartName={counterpartName}
             />
           ) : (
             <SenderView
@@ -302,6 +306,7 @@ function CarrierView({
   setNote,
   onApprove,
   onReject,
+  counterpartName,
 }: Readonly<{
   review: ParcelReviewState;
   pending: ParcelReviewPending;
@@ -314,7 +319,17 @@ function CarrierView({
   setNote: (v: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  counterpartName?: string;
 }>) {
+  // Name the person where we know it, fall back to the role where we do not.
+  //
+  // Safe in THIS component: it renders only for `viewer_role === "carrier"`, so the
+  // reader is always the carrier and the other party is always the sender. Naming
+  // them cannot be misread as naming the reader - the trap that keeps the price line
+  // role-neutral. Kept in step with web `ChatParcelReviewPrompt`.
+  const who = counterpartName?.trim() || "the sender";
+  const Who = counterpartName?.trim() || "The sender";
+
   if (review.status === "none" || review.status === "rejected") {
     return (
       <InfoBlock
@@ -322,10 +337,10 @@ function CarrierView({
         tone="muted"
         title={
           review.status === "rejected"
-            ? "Waiting for the sender to update the parcel"
-            : "Awaiting the sender's parcel photos"
+            ? `Waiting for ${who} to update the parcel`
+            : `Awaiting ${who}'s parcel photos`
         }
-        body="The sender needs to add photos of the parcel before you can approve it."
+        body={`${Who} needs to add photos of the parcel before you can approve it.`}
       />
     );
   }
@@ -336,7 +351,7 @@ function CarrierView({
       <InfoBlock
         icon="shield-checkmark"
         tone="primary"
-        title="The sender shared photos of the parcel."
+        title={`${Who} shared photos of the parcel.`}
         body="Review them, then accept or request changes."
       />
       <PhotoStrip photos={review.photos} />

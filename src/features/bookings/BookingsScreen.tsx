@@ -20,6 +20,7 @@ import {
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
@@ -1885,28 +1886,11 @@ export function BookingsScreen() {
       return <ListSkeleton />;
     }
     if (error && bookings.length === 0) {
-      return (
-        <Card style={styles.errorCard}>
-          <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-          <Text style={styles.errorTitle}>Failed to load bookings</Text>
-          {/* Was `error.message` rendered raw. A failing backend put
-              `column reference "booking_id" is ambiguous ... SQLSTATE 42702` on screen
-              here — the exact leak the scrubbing work exists to stop. The sibling
-              branch above already routed through getErrorMessage; this one was missed
-              because it renders in JSX rather than calling a toast. */}
-          <Text style={styles.errorBody}>
-            {getErrorMessage(error, "Please try again.")}
-          </Text>
-          <Pressable
-            onPress={() => void refetch()}
-            style={styles.retryButton}
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-          >
-            <Text style={styles.retryButtonText}>Try again</Text>
-          </Pressable>
-        </Card>
-      );
+      // `error.message` was once rendered raw here and put
+      // `column reference "booking_id" is ambiguous ... SQLSTATE 42702` on screen.
+      // ErrorState routes every message through the same scrubber, so that cannot
+      // come back, and the heading now names the actual failure.
+      return <ErrorState error={error} subject="your bookings" onRetry={() => void refetch()} style={styles.errorCard} />;
     }
     return (
       <Card style={styles.emptyCard}>
@@ -1923,7 +1907,7 @@ export function BookingsScreen() {
         {filterIdx === 0 ? (
           <View style={styles.emptyActions}>
             <Pressable
-              onPress={() => navigation.navigate("Parcels")}
+              onPress={() => navigation.navigate("Parcels", { tab: "packages" })}
               style={[styles.emptyActionButton, styles.emptyActionPrimary]}
               accessibilityRole="button"
               accessibilityLabel="Browse parcels"

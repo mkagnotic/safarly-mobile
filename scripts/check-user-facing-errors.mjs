@@ -56,6 +56,7 @@ const skipped = [];
 const note = (m) => failures.push(m);
 
 const sanitiserPath = (root) => join(root, "src", "lib", "userFacingError.js");
+const fallbackPath = (root) => join(root, "src", "lib", "errorFallback.js");
 
 /** True when the two files DIFFER in content, ignoring line endings / trailing newline. */
 const contentDiffers = (a, b) =>
@@ -66,6 +67,10 @@ const MUST_SCRUB = [
   // --- the reported incidents ---
   'column reference "booking_id" is ambiguous',
   "Unable to exchange external code: 4/0A",
+  // The API client's placeholder when an error body carries no message. Found on
+  // screen during acceptance testing as "Request failed with status 403".
+  "Request failed with status 403",
+  "Request failed with status 500",
   // --- Postgres / PostgREST ---
   'duplicate key value violates unique constraint "bookings_pkey"',
   'null value in column "sender_id" violates not-null constraint',
@@ -196,6 +201,90 @@ if (!existsSync(selfSanitiser)) {
   } finally {
     console.warn = realWarn;
     rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1b. The fallback classifier, executed for real
+//
+// Every list screen used to say "We couldn't load this content. Please try again."
+// for a dead radio, a deleted record and a missing permission alike. These cases
+// pin the six kinds apart, so a regression in the regexes shows up as a failing
+// build rather than as three different problems wearing one message.
+// ---------------------------------------------------------------------------
+const selfFallback = fallbackPath(HERE);
+
+/** message | {message,status} -> the kind a person is actually in. */
+const KIND_CASES = [
+  ["Failed to fetch", "offline"],
+  ["Network request failed", "offline"],
+  ["net::ERR_INTERNET_DISCONNECTED", "offline"],
+  [{ message: "nope", status: 401 }, "permission"],
+  [{ message: "nope", status: 403 }, "permission"],
+  ["new row violates row-level security policy", "permission"],
+  ["Your session has expired. Please sign in again.", "permission"],
+  [{ message: "gone", status: 404 }, "notFound"],
+  [{ message: "gone", status: 410 }, "notFound"],
+  ["This trip is no longer available.", "notFound"],
+  [{ message: "boom", status: 500 }, "server"],
+  [{ message: "boom", status: 503 }, "server"],
+  [{ message: "boom", status: 429 }, "server"],
+  ["Our servers are busy right now. Please try again in a moment.", "server"],
+  [{ message: "Weight is required.", status: 400 }, "validation"],
+  ["That email is already taken.", "validation"],
+];
+
+if (!existsSync(selfFallback)) {
+  note(`${SELF}: src/lib/errorFallback.js is missing - the shared fallback is gone.`);
+} else {
+  const dir = mkdtempSync(join(tmpdir(), "safarly-guard-fb-"));
+  try {
+    // It imports the sanitiser by relative path, so both files travel together.
+    writeFileSync(join(dir, "userFacingError.js"), readFileSync(selfSanitiser, "utf8"), "utf8");
+    const mod = join(dir, "errorFallback.mjs");
+    writeFileSync(mod, readFileSync(selfFallback, "utf8"), "utf8");
+    const { classifyError, fallbackFor } = await import(pathToFileURL(mod).href);
+
+    const realWarn = console.warn;
+    console.warn = () => {};
+    try {
+      for (const [input, want] of KIND_CASES) {
+        const got = classifyError(typeof input === "string" ? new Error(input) : input);
+        if (got !== want) {
+          note(
+            `errorFallback: ${JSON.stringify(input)} was classified as ${got}, expected ${want}. ` +
+              `The user would be told the wrong thing to do about it.`,
+          );
+        }
+      }
+      // An expired session must send the user to sign in, not tell them they
+      // lack a permission they have always had. Found on screen during
+      // acceptance testing as "It belongs to someone else".
+      for (const m of ["JWT expired", "invalid refresh token", "Your session has expired. Please sign in again."]) {
+        const f = fallbackFor({ message: m, status: 401 });
+        if (!/sign in again/i.test(f.body) || /belongs to someone else/i.test(f.body)) {
+          note(`errorFallback: an expired session was explained as ${JSON.stringify(f.title + " / " + f.body)}`);
+        }
+      }
+      // Whatever it is handed, it must produce something a person can read.
+      for (const odd of [null, undefined, 0, "", {}, [], new Error("")]) {
+        const f = fallbackFor(odd);
+        if (!f || typeof f.title !== "string" || typeof f.body !== "string" || f.body.length < 10) {
+          note(`errorFallback: unusable fallback for ${JSON.stringify(odd)} -> ${JSON.stringify(f)}`);
+        }
+      }
+      // And it must never become a new way for machine output to reach a user.
+      for (const sample of MUST_SCRUB) {
+        const f = fallbackFor({ message: sample, status: 500 });
+        if (f.body.includes(sample)) {
+          note(`errorFallback: technical text reached the body -> ${sample}`);
+        }
+      }
+    } finally {
+      console.warn = realWarn;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
@@ -403,10 +492,27 @@ if (!existsSync(siblingSanitiser)) {
   );
 }
 
+const siblingFallback = fallbackPath(SIBLING_ROOT);
+if (
+  existsSync(siblingFallback) &&
+  existsSync(selfFallback) &&
+  contentDiffers(readFileSync(selfFallback, "utf8"), readFileSync(siblingFallback, "utf8"))
+) {
+  note(
+    `web and mobile copies of errorFallback.js differ in CONTENT (line endings are ` +
+      `ignored). Both apps must classify a failure the same way, or the two platforms ` +
+      `tell the same user two different things. Copy one over the other:
+` +
+      `      ${selfFallback}
+      ${siblingFallback}`,
+  );
+}
+
 console.log(
   `check:errors [${SELF}] - ${MUST_SCRUB.length} raw samples, ${STATUS_CASES.length} ` +
     `gateway cases, ${MUST_KEEP.length} real ` +
-    `messages, ${scanned} source files scanned`,
+    `messages, ${KIND_CASES.length} failure kinds, ` +
+    `${scanned} source files scanned`,
 );
 for (const s of skipped) console.log(`check:errors [${SELF}] - skipped: ${s}`);
 

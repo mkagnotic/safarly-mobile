@@ -184,7 +184,7 @@ export function PartnerDetailsScreen() {
   const route = useRoute<Route>();
   const listingId = route.params?.listingId;
 
-  const { listing, error, refetch } = useBuddyListingDetail(listingId);
+  const { listing, loading, error, refetch } = useBuddyListingDetail(listingId);
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -194,7 +194,7 @@ export function PartnerDetailsScreen() {
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Parcels"); // My Travels lives on the "Parcels" tab key
+    else navigation.navigate("Parcels", { tab: "partners" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
   const handleEditOpen = useCallback(() => setEditOpen(true), []);
@@ -264,7 +264,12 @@ export function PartnerDetailsScreen() {
     }
   }, [listingId, handleBack]);
 
-  if (!listing && !error) {
+  // Only a request that is actually in flight earns the skeleton. This used to
+  // read `!listing && !error`, which is exactly the shape of the ordinary
+  // not-found case - a listing that was cancelled or removed, or a link that
+  // arrived without a `listingId` - so those left the screen on a skeleton
+  // forever, with nothing to read and nothing to tap.
+  if (loading && !listing && !error) {
     return (
       <Screen onRefresh={refetch}>
         <DetailsHeader onBack={handleBack} />

@@ -176,6 +176,12 @@ export function PayBookingScreen() {
     );
   }
 
+  const serverMessage = error ? getErrorMessage(error) : "";
+  const notFoundDetail =
+    serverMessage && serverMessage.toLowerCase() !== "booking not found"
+      ? serverMessage
+      : "We couldn't load this booking. It may have been cancelled, or it isn't yours to pay.";
+
   return (
     <Screen contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -191,7 +197,10 @@ export function PayBookingScreen() {
         <Card style={styles.panel}>
           <Ionicons name="receipt-outline" size={34} color={colors.mutedText} />
           <Text style={styles.panelTitle}>Booking not found</Text>
-          <Text style={styles.panelBody}>{error ? getErrorMessage(error) : "We couldn't load this booking."}</Text>
+          {/* The server's message for a missing booking is the heading itself,
+              which read as "Booking not found / Booking not found". Only show
+              the server's wording when it actually adds something. */}
+          <Text style={styles.panelBody}>{notFoundDetail}</Text>
           <AppButton label="Back to bookings" onPress={goBack} style={styles.panelButton} />
         </Card>
       ) : !isSender ? (

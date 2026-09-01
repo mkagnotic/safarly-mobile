@@ -1,6 +1,6 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
+import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -86,7 +86,19 @@ function uniqueBy<T>(items: T[], keyOf: (item: T) => string | undefined): T[] {
 
 export function MyTravelsScreen() {
   const navigation = useNavigation<Nav>();
-  const [activeTab, setActiveTab] = useState<TabKey>("flights");
+  const route = useRoute<RouteProp<MainTabParamList, "Parcels">>();
+  const requestedTab = route.params?.tab;
+  const [activeTab, setActiveTab] = useState<TabKey>(requestedTab ?? "flights");
+
+  // ⚠️ Unlike Search, which is pushed fresh and can read its tab as initial
+  // state, My Travels is a BOTTOM TAB: it stays mounted, so arriving here a
+  // second time with a new `tab` does not remount and an initial-only read
+  // would be silently ignored. Posting a parcel would then drop you on
+  // whichever tab you happened to leave open. Deliberately keyed on the param
+  // alone, so a tab the user picks by hand afterwards is left alone.
+  useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab);
+  }, [requestedTab]);
 
   // Each tab gets its own list hook so loading/error/refetch are independent.
   const flights = useTrips({ filter: "my_trips" });

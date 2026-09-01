@@ -26,7 +26,7 @@ export function BuddyDetailsScreen() {
     }
     // "Buddies" tab is now Inbox; buddy listings live under My Travels' Partners
     // tab (registered as the "Parcels" route key).
-    navigation.navigate("Parcels");
+    navigation.navigate("Parcels", { tab: "partners" });
   }, [navigation]);
 
   if (!buddy) {

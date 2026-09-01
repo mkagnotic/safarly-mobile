@@ -493,7 +493,7 @@ export function ListTripScreen() {
           <View style={styles.successButtons}>
             <AppButton
               label="View my travels"
-              onPress={() => navigation.navigate("Parcels")}
+              onPress={() => navigation.navigate("Parcels", { tab: "flights" })}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.successButtonFlex}
             />

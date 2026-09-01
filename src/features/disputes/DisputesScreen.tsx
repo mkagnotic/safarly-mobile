@@ -18,6 +18,7 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import {
@@ -117,14 +118,7 @@ export function DisputesScreen() {
     }
     if (error && disputes.length === 0) {
       return (
-        <Card style={styles.errorCard}>
-          <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-          <Text style={styles.errorTitle}>Failed to load disputes</Text>
-          <Text style={styles.errorBody}>{getErrorMessage(error)}</Text>
-          <Pressable onPress={() => void refetch()} style={styles.retryButton} accessibilityRole="button">
-            <Text style={styles.retryButtonText}>Try again</Text>
-          </Pressable>
-        </Card>
+        <ErrorState error={error} subject="your disputes" onRetry={() => void refetch()} style={styles.errorCard} />
       );
     }
     return (

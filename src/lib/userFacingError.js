@@ -175,6 +175,11 @@ export const TECHNICAL_SHAPES = [
   /^\s*[{[][\s\S]*[}\]]\s*$/,
   /\b[A-Z][A-Za-z]*Error:\s/,
   /\berrno\b|\beconnrefused\b|\benotfound\b/i,
+  // The API client's own placeholder for an error body that carried no message.
+  // It is not copy - it is the absence of copy - and it reached users on screen as
+  // "Request failed with status 403" for any edge-function error whose
+  // `error.message` was empty. Recognising it here lets the caller show real guidance.
+  /^\s*request failed with status \d+\s*$/i,
 ];
 
 /**

@@ -310,7 +310,7 @@ export function CreateBuddyScreen() {
           <View style={styles.successButtons}>
             <AppButton
               label="View in my travels"
-              onPress={() => navigation.navigate("Parcels")}
+              onPress={() => navigation.navigate("Parcels", { tab: "partners" })}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.successButtonFlex}
             />

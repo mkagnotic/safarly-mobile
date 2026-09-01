@@ -14,6 +14,7 @@ import {
 } from "react-native";
 
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Screen } from "@/components/ui/Screen";
 import { showToast } from "@/feedback/appFeedback";
 import { useOpportunities } from "@/hooks/api/useOpportunities";
@@ -570,19 +571,7 @@ export function OpportunitiesScreen() {
           <Text style={styles.centeredText}>Loading opportunities…</Text>
         </View>
       ) : error && opportunities.length === 0 ? (
-        <Card style={styles.errorCard}>
-          <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-          <Text style={styles.errorTitle}>Failed to load opportunities</Text>
-          <Text style={styles.errorBody}>{getErrorMessage(error)}</Text>
-          <Pressable
-            onPress={() => void refetch()}
-            style={styles.retryButton}
-            accessibilityRole="button"
-            accessibilityLabel="Try again"
-          >
-            <Text style={styles.retryButtonText}>Try again</Text>
-          </Pressable>
-        </Card>
+        <ErrorState error={error} subject="delivery opportunities" onRetry={() => void refetch()} style={styles.errorCard} />
       ) : filtered.length === 0 ? (
         <Card style={styles.emptyCard}>
           <View style={styles.emptyIconBox}>

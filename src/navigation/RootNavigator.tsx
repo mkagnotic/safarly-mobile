@@ -38,7 +38,6 @@ import { PaymentSuccessScreen } from "@/features/parcels/PaymentSuccessScreen";
 import { PaymentFailureScreen } from "@/features/parcels/PaymentFailureScreen";
 import { ListTripScreen } from "@/features/trips/ListTripScreen";
 import { ListTripSuccessScreen } from "@/features/trips/ListTripSuccessScreen";
-import { ParcelOffersScreen } from "@/features/trips/ParcelOffersScreen";
 import { TripDetailsScreen } from "@/features/trips/TripDetailsScreen";
 import { OfferChatScreen } from "@/features/messages/OfferChatScreen";
 import { MessagesScreen } from "@/features/messages/MessagesScreen";
@@ -136,7 +135,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   ListTripTab: "airplane-outline",
   ListTripSuccessTab: "checkmark-circle",
   TripDetailsTab: "document-text-outline",
-  OffersTab: "list-outline",
   OfferChatTab: "chatbubble-outline",
   ParcelDetailsTab: "cube-outline",
   PartnerDetailsTab: "people-outline",
@@ -323,7 +321,6 @@ function MainTabs() {
       <Tabs.Screen name="ListTripTab" component={ListTripScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ListTripSuccessTab" component={ListTripSuccessScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TripDetailsTab" component={TripDetailsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="OffersTab" component={ParcelOffersScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="OfferChatTab" component={OfferChatScreen} options={FULLSCREEN_TAB} />
       <Tabs.Screen name="ParcelDetailsTab" component={ParcelDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PartnerDetailsTab" component={PartnerDetailsScreen} options={HIDDEN_TAB} />

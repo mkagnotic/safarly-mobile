@@ -595,7 +595,7 @@ export function SendParcelScreen() {
           <View style={styles.successButtons}>
             <AppButton
               label="View my parcels"
-              onPress={() => navigation.navigate("Parcels")}
+              onPress={() => navigation.navigate("Parcels", { tab: "packages" })}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.successButtonFlex}
             />

@@ -129,7 +129,7 @@ export function TripDetailsScreen() {
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Parcels"); // My Travels lives on the "Parcels" tab key
+    else navigation.navigate("Parcels", { tab: "flights" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
   const handleEditOpen = useCallback(() => setEditOpen(true), []);

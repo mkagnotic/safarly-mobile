@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-import { api } from "./client";
+import { AUTH_TIMEOUT_MS, api, withTimeout } from "./client";
 
 export interface AuthUser {
   id: string;
@@ -63,7 +63,11 @@ export const authApi = {
 
   /** Customer login via Supabase Auth (email/password). */
   customerLogin: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await withTimeout(
+      supabase.auth.signInWithPassword({ email, password }),
+      AUTH_TIMEOUT_MS,
+      "Signing in is taking longer than usual. Check your connection and try again.",
+    );
     if (error) throw error;
     return data;
   },
@@ -90,7 +94,11 @@ export const authApi = {
 
   /** Customer signup via Supabase Auth. */
   customerSignup: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await withTimeout(
+      supabase.auth.signUp({ email, password }),
+      AUTH_TIMEOUT_MS,
+      "Creating your account is taking longer than usual. Check your connection and try again.",
+    );
     if (error) throw error;
     return data;
   },
