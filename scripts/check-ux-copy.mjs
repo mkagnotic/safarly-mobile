@@ -705,6 +705,15 @@ const CHECKS = [
     must: [],
     mustNot: ["toggleBuddyConnection", "addReview", "seedBuddies", "seedReviews"],
   },
+  // ------------------------- a 4xx must never be retried, for EVERY query
+  {
+    repo: "web",
+    file: "src/lib/queryClient.ts",
+    id: "queries-do-not-retry-a-4xx",
+    why: "React Query retries three times with backoff by default, which is right for a flaky connection and wrong for 'this record is not yours'. Measured on a forced 401: eight requests and 10.4 seconds before the screen could say 'Your session has expired'. Six hooks had set the policy individually and forty-two had not. Putting it on the QueryClient fixes the class rather than the instances and covers hooks nobody has written yet. Safe for a transient 401 because send() already refreshes the session and re-issues once before React Query ever sees it.",
+    must: ["retry: retryUnlessClientError", "refetchOnWindowFocus: false"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
