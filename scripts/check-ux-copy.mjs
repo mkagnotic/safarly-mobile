@@ -671,6 +671,40 @@ const CHECKS = [
     must: ["const POLL_INTERVAL_MS = 180_000;"],
     mustNot: ["const POLL_INTERVAL_MS = 30_000;"],
   },
+  // ------------- travel buddy: the connect action that was never wired to the UI
+  {
+    repo: "web",
+    file: "src/customer/pages/CustomerSearch.tsx",
+    id: "buddy-match-can-connect",
+    why: "The whole Travel Buddy lifecycle - request, accept, connection, two-tap journey completion, mutual rating - was built and deployed in buddy-handler, and `useSendBuddyRequest` existed, but NOTHING in either app ever called it. A buddy match offered only View profile and Start chat, and a chat creates no connection. Production proved it: 0 buddy_requests, 0 buddy_connections and 0 buddy ratings against 12 delivery ratings. Remove this and the feature dead-ends again.",
+    must: ["useSendBuddyRequest", "buddyListingId", "handleConnect"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/SearchScreen.tsx",
+    id: "buddy-match-can-connect",
+    why: "Same missing entry point on mobile - the two platforms must not drift on the only action that starts a buddy connection.",
+    must: ["buddiesApi.sendRequest", "handleConnect"],
+    mustNot: [],
+  },
+  // ---------------- travel buddy: exactly one production path, no local fakes
+  {
+    repo: "mobile",
+    file: "src/navigation/RootNavigator.tsx",
+    id: "no-fake-buddy-screens",
+    why: "Two unreachable screens shipped inside the app and both lied. BuddyDetailsScreen had a Connect button that called `toggleBuddyConnection(name)` - a local zustand toggle over seed data that never touched the server. BuddyCompletionScreen defaulted the buddy to the seed name 'Sarah K.', hardcoded the reviewer as 'Alex Johnson', wrote the review with `addReview` into local state and toasted 'Review submitted!' while nothing reached the API. Both were registered in the navigator, so any deep link or future wiring would expose them. The real paths are SearchScreen -> buddiesApi.sendRequest and MyTravelsScreen -> ratingsApi.rateBuddy.",
+    must: [],
+    mustNot: ["BuddyDetailsTab", "BuddyDetailsScreen", "BuddyCompletionTab", "BuddyCompletionScreen"],
+  },
+  {
+    repo: "mobile",
+    file: "src/store/useAppStore.ts",
+    id: "no-local-buddy-or-review-state",
+    why: "`toggleBuddyConnection` and `addReview` let a screen fake a connection and a review in local state. A buddy connection may only come from buddy-handler, and a review only from rating-handler.",
+    must: [],
+    mustNot: ["toggleBuddyConnection", "addReview", "seedBuddies", "seedReviews"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

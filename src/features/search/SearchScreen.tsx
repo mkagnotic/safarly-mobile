@@ -37,6 +37,7 @@ import { useSearchMatches } from "@/hooks/api/useSearchMatches";
 import { useTrips } from "@/hooks/api/useTrips";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import {
+  buddiesApi,
   getErrorMessage,
   messagesApi,
   type BuddySearchMatch,
@@ -1515,6 +1516,33 @@ function BuddyMatchCard({
       ? formatDateLabel(dateFrom)
       : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`;
 
+  // Connect is the point of a travel-buddy match, and until now there was no way
+  // to do it on either platform: `buddiesApi.sendRequest` existed, and the whole
+  // request -> accept -> connection -> two-tap completion -> rating chain was
+  // built and deployed behind it, but nothing ever called it. Production had 0
+  // buddy requests, 0 connections and 0 buddy ratings against 12 delivery
+  // ratings. Chat was all a buddy match offered, and a chat creates no
+  // connection - so journey completion and reviews were unreachable.
+  const [connecting, setConnecting] = useState(false);
+  const handleConnect = useCallback(async () => {
+    if (!match.id || connecting) return;
+    setConnecting(true);
+    try {
+      await buddiesApi.sendRequest(match.id);
+      setNotice({
+        title: "Buddy request sent",
+        message: `${match.user?.name ?? "They"} will see it in My travels → Partners.`,
+        variant: "success",
+      });
+    } catch (err) {
+      // The server already explains the ordinary refusals in plain words -
+      // already connected, already sent, or they sent you one first.
+      setNotice({ title: "Couldn't send request", message: getErrorMessage(err), variant: "error" });
+    } finally {
+      setConnecting(false);
+    }
+  }, [match.id, match.user?.name, connecting, setNotice]);
+
   const details: { label: string; value: string }[] = [
     ...(match.age != null ? [{ label: "AGE", value: `${match.age} yrs` }] : []),
     ...(match.languages?.length
@@ -1611,6 +1639,12 @@ function BuddyMatchCard({
         ) : null}
       </View>
 
+      <AppButton
+        label={connecting ? "Sending…" : "Connect"}
+        onPress={() => void handleConnect()}
+        disabled={connecting || !match.id}
+        style={styles.connectButton}
+      />
       <View style={styles.actionsRow}>
         <AppButton
           label="View profile"
@@ -2200,5 +2234,6 @@ const styles = StyleSheet.create({
   },
 
   actionsRow: { flexDirection: "row", gap: 10 },
+  connectButton: { marginTop: 12 },
   actionButtonFlex: { flex: 1 },
 });

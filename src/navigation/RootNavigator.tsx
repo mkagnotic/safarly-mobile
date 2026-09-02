@@ -12,8 +12,6 @@ import { useShallow } from "zustand/react/shallow";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { ScreenBackgroundContext } from "@/components/ui/Screen";
-// BuddiesScreen kept on disk but no longer rendered — Buddies bottom tab now
-// hosts the Inbox (MessagesScreen) to match web's `Home / Search / My Travels / Inbox` nav.
 import { HomeScreen } from "@/features/tabs/HomeScreen";
 import { NotificationsScreen } from "@/features/tabs/NotificationsScreen";
 import { MyTravelsScreen } from "@/features/travels/MyTravelsScreen";
@@ -41,7 +39,6 @@ import { ListTripSuccessScreen } from "@/features/trips/ListTripSuccessScreen";
 import { TripDetailsScreen } from "@/features/trips/TripDetailsScreen";
 import { OfferChatScreen } from "@/features/messages/OfferChatScreen";
 import { MessagesScreen } from "@/features/messages/MessagesScreen";
-import { BuddyDetailsScreen } from "@/features/buddies/BuddyDetailsScreen";
 import { CreateBuddyScreen } from "@/features/buddies/CreateBuddyScreen";
 import { PartnerDetailsScreen } from "@/features/buddies/PartnerDetailsScreen";
 import { SplashScreen } from "@/features/splash/SplashScreen";
@@ -69,7 +66,6 @@ import { DisputesScreen } from "@/features/disputes/DisputesScreen";
 import { FileDisputeScreen } from "@/features/disputes/FileDisputeScreen";
 import { SafetyAlertsScreen } from "@/features/safety/SafetyAlertsScreen";
 import { MatchScreen } from "@/features/matching/MatchScreen";
-import { BuddyCompletionScreen } from "@/features/matching/BuddyCompletionScreen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAppStore } from "@/store/useAppStore";
 import { useStoreHydrated } from "@/hooks/useStoreHydrated";
@@ -113,7 +109,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Parcels: "cube-outline",
   Trips: "search-outline",
   Buddies: "chatbox-outline",
-  BuddyDetailsTab: "person-outline",
   Profile: "person-outline",
   PayoutSetupTab: "business-outline",
   TransactionsTab: "receipt-outline",
@@ -148,7 +143,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   FileDisputeTab: "flag",
   SafetyAlertsTab: "shield-outline",
   MatchTab: "people-circle",
-  BuddyCompletionTab: "checkmark-done-circle",
 };
 
 /** Filled variants for focused tabs. `search` has no filled glyph in Ionicons. */
@@ -299,7 +293,6 @@ function MainTabs() {
       <Tabs.Screen name="ActivityTab" component={AllActivityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="MessagesTab" component={MessagesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="Notifications" component={NotificationsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="BuddyDetailsTab" component={BuddyDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="CreateBuddyTab" component={CreateBuddyScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PayoutSetupTab" component={PayoutSetupScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TransactionsTab" component={TransactionsScreen} options={HIDDEN_TAB} />
@@ -336,7 +329,6 @@ function MainTabs() {
       <Tabs.Screen name="FileDisputeTab" component={FileDisputeScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SafetyAlertsTab" component={SafetyAlertsScreen} options={HIDDEN_TAB} />
           <Tabs.Screen name="MatchTab" component={MatchScreen} options={HIDDEN_TAB} />
-          <Tabs.Screen name="BuddyCompletionTab" component={BuddyCompletionScreen} options={HIDDEN_TAB} />
         </Tabs.Navigator>
       </View>
     </ScreenBackgroundContext.Provider>

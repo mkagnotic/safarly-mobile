@@ -8,9 +8,7 @@ import type {
   NotificationItem,
   Opportunity,
   Parcel,
-  Review,
   SafetyAlert,
-  TravelBuddy,
   Trip,
   UserRole,
 } from "@/types/models";
@@ -69,14 +67,12 @@ export interface AppState {
   userProfile: UserProfile;
   parcels: Parcel[];
   trips: Trip[];
-  buddies: TravelBuddy[];
   messages: MessageThread[];
   notifications: NotificationItem[];
   bookings: Booking[];
   disputes: Dispute[];
   bids: Bid[];
   opportunities: Opportunity[];
-  reviews: Review[];
   safetyAlerts: SafetyAlert[];
   paymentMethods: PaymentMethod[];
   walletBalance: number;
@@ -117,7 +113,6 @@ export interface AppState {
   setUserProfileFromApi: (apiProfile: ApiUserProfile, email: string) => void;
   addParcel: (parcel: Parcel) => void;
   addTrip: (trip: Trip) => void;
-  toggleBuddyConnection: (buddyName: string) => void;
   addBooking: (booking: Booking) => void;
   updateBookingStatus: (bookingId: string, status: BookingStatus) => void;
   verifyOtp: (bookingId: string, otp: string) => boolean;
@@ -125,7 +120,6 @@ export interface AppState {
   updateDisputeStatus: (disputeId: string, status: Dispute["status"]) => void;
   addBid: (bid: Bid) => void;
   updateBidStatus: (bidId: string, status: Bid["status"]) => void;
-  addReview: (review: Review) => void;
   dismissSafetyAlert: (alertId: string) => void;
   addMessageToThread: (threadName: string, message: { from: "me" | "them"; text: string; time: string }) => void;
   updateThreadStatus: (threadName: string, status: MessageThread["status"]) => void;

@@ -52,7 +52,6 @@ export type MainTabParamList = {
    *  Package Delivery Matches (web parity: `&tab=receiver`). */
   Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy" } | undefined;
   Buddies: undefined;
-  BuddyDetailsTab: { buddyName: string };
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
   CreateBuddyTab: undefined;
   Profile: undefined;
@@ -124,5 +123,4 @@ export type MainTabParamList = {
   FileDisputeTab: { bookingId?: string } | undefined;
   SafetyAlertsTab: undefined;
   MatchTab: { type?: "parcel" | "buddy"; matchName?: string; route?: string };
-  BuddyCompletionTab: { buddyName: string };
 };

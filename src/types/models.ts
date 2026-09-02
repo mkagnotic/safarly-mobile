@@ -46,19 +46,6 @@ export interface Trip {
   buddyAvailable?: boolean;
 }
 
-export interface TravelBuddy {
-  name: string;
-  route: string;
-  date: string;
-  rating: number;
-  trips: number;
-  avatar: string;
-  bio: string;
-  connected: boolean;
-  languages?: string[];
-  verified?: boolean;
-}
-
 export interface ChatAttachment {
   id: string;
   type: "image" | "pdf" | "document";
@@ -162,16 +149,6 @@ export interface Opportunity {
   category: string;
   senderName: string;
   senderRating: number;
-}
-
-export interface Review {
-  id: string;
-  bookingId: string;
-  reviewerName: string;
-  reviewerAvatar: string;
-  rating: number;
-  text: string;
-  date: string;
 }
 
 export interface SafetyAlert {

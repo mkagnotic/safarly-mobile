@@ -6,9 +6,7 @@ import type {
   NotificationItem,
   Opportunity,
   Parcel,
-  Review,
   SafetyAlert,
-  TravelBuddy,
   Trip,
 } from "@/types/models";
 
@@ -25,13 +23,6 @@ export const seedParcels: Parcel[] = [
 export const seedTrips: Trip[] = [
   { id: "T1", from: "Seattle", to: "Hyderabad", date: "Mar 30", capacity: "5 kg", offers: 3, earnings: "$135", buddyAvailable: true },
   { id: "T2", from: "NYC", to: "Mumbai", date: "Apr 8", capacity: "3 kg", offers: 1, earnings: "$45", buddyAvailable: false },
-];
-
-export const seedBuddies: TravelBuddy[] = [
-  { name: "Sarah K.", route: "NYC \u2192 Mumbai", date: "Mar 25", rating: 4.8, trips: 12, avatar: "S", bio: "Frequent flyer between NYC and Mumbai.", connected: true, languages: ["English", "Hindi"], verified: true },
-  { name: "Rahul M.", route: "SF \u2192 Bangalore", date: "Mar 28", rating: 4.9, trips: 24, avatar: "R", bio: "Software engineer, travel 4x/year to India.", connected: false, languages: ["English", "Kannada", "Hindi"], verified: true },
-  { name: "Emily W.", route: "Chicago \u2192 Delhi", date: "Apr 1", rating: 4.7, trips: 8, avatar: "E", bio: "Graduate student flying between Chicago and Delhi.", connected: false, languages: ["English"], verified: true },
-  { name: "Fatima A.", route: "Dubai \u2192 Karachi", date: "Apr 5", rating: 4.6, trips: 5, avatar: "F", bio: "Business traveler, Dubai-Karachi route.", connected: false, languages: ["Arabic", "Urdu"], verified: false },
 ];
 
 export const seedMessages: MessageThread[] = [
@@ -208,13 +199,6 @@ export const seedOpportunities: Opportunity[] = [
   { id: "OPP-002", parcelId: "PKG-2846", from: "San Francisco", to: "Bangalore", weight: "1.2 kg", fee: "$32", date: "Mar 17", category: "Documents", senderName: "Anita Desai", senderRating: 4.3 },
   { id: "OPP-003", parcelId: "PKG-NEW1", from: "NYC", to: "Mumbai", weight: "1.8 kg", fee: "$38", date: "Apr 5", category: "Gifts", senderName: "Ritu Patel", senderRating: 4.6 },
   { id: "OPP-004", parcelId: "PKG-NEW2", from: "Seattle", to: "Hyderabad", weight: "2.0 kg", fee: "$42", date: "Mar 28", category: "Medicines", senderName: "Kiran V.", senderRating: 4.8 },
-];
-
-export const seedReviews: Review[] = [
-  { id: "REV-001", bookingId: "BK-002", reviewerName: "Mike Chen", reviewerAvatar: "M", rating: 5, text: "Excellent service! Package delivered safely and on time.", date: "Mar 16" },
-  { id: "REV-002", bookingId: "BK-005", reviewerName: "Sarah K.", reviewerAvatar: "S", rating: 5, text: "Great travel companion. Very helpful at transit.", date: "Mar 10" },
-  { id: "REV-003", bookingId: "BK-006", reviewerName: "Neha Kapoor", reviewerAvatar: "N", rating: 4, text: "Good communication. Slight delay but overall good experience.", date: "Mar 5" },
-  { id: "REV-004", bookingId: "BK-007", reviewerName: "James W.", reviewerAvatar: "J", rating: 5, text: "Very professional. Would use again.", date: "Feb 28" },
 ];
 
 export const seedSafetyAlerts: SafetyAlert[] = [

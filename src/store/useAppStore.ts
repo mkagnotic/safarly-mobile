@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
-  seedBuddies,
   seedMessages,
   seedNotifications,
   seedParcels,
@@ -11,13 +10,12 @@ import {
   seedDisputes,
   seedBids,
   seedOpportunities,
-  seedReviews,
   seedSafetyAlerts,
 } from "@/store/seedData";
 import type { AppState, KycStatus, PaymentMethod, UserProfile } from "@/store/types";
 import type { AppLanguage } from "@/i18n/translations";
 import type { AppTimeFormat, AppTimeZone } from "@/features/profile/preferencesConfig";
-import type { MessageThread, NotificationItem, Parcel, TravelBuddy } from "@/types/models";
+import type { MessageThread, NotificationItem, Parcel } from "@/types/models";
 
 function normalizeArrows(text: string): string {
   return text.replaceAll("\u002d\u003e", "\u2192");
@@ -41,13 +39,6 @@ function normalizeNotifications(existing: NotificationItem[] = []): Notification
     title: normalizeArrows(item.title),
     desc: normalizeArrows(item.desc),
   }));
-}
-
-function mergeSeedBuddies(existing: TravelBuddy[] = []): TravelBuddy[] {
-  const normalizedExisting = existing.map((buddy) => ({ ...buddy, connected: Boolean(buddy.connected) }));
-  const seen = new Set(normalizedExisting.map((buddy) => buddy.name));
-  const missingSeed = seedBuddies.filter((buddy) => !seen.has(buddy.name));
-  return [...normalizedExisting, ...missingSeed];
 }
 
 const defaultUserProfile: UserProfile = {
@@ -96,14 +87,12 @@ const initialState = {
   timeZone: "America/New_York" as AppTimeZone,
   parcels: seedParcels,
   trips: seedTrips,
-  buddies: seedBuddies,
   messages: seedMessages,
   notifications: seedNotifications,
   bookings: seedBookings,
   disputes: seedDisputes,
   bids: seedBids,
   opportunities: seedOpportunities,
-  reviews: seedReviews,
   safetyAlerts: seedSafetyAlerts,
   // Excluded from `partialize` below — never survives a relaunch by design.
   pendingNotice: null as AppState["pendingNotice"],
@@ -175,12 +164,6 @@ export const useAppStore = create<AppState>()(
         })),
       addParcel: (parcel) => set((state) => ({ parcels: [parcel, ...state.parcels] })),
       addTrip: (trip) => set((state) => ({ trips: [trip, ...state.trips] })),
-      toggleBuddyConnection: (buddyName) =>
-        set((state) => ({
-          buddies: state.buddies.map((buddy) =>
-            buddy.name === buddyName ? { ...buddy, connected: !buddy.connected } : buddy
-          ),
-        })),
       addBooking: (booking) => set((state) => ({ bookings: [booking, ...state.bookings] })),
       updateBookingStatus: (bookingId, status) =>
         set((state) => ({
@@ -227,7 +210,6 @@ export const useAppStore = create<AppState>()(
             b.id === bidId ? { ...b, status } : b
           ),
         })),
-      addReview: (review) => set((state) => ({ reviews: [review, ...state.reviews] })),
       dismissSafetyAlert: (alertId) =>
         set((state) => ({
           safetyAlerts: state.safetyAlerts.map((a) =>
@@ -276,14 +258,12 @@ export const useAppStore = create<AppState>()(
           profileSetupDone: state.profileSetupDone ?? false,
           paymentMethods: normalizePaymentMethods(state.paymentMethods),
           parcels: mergeSeedParcels(state.parcels),
-          buddies: mergeSeedBuddies(state.buddies),
           messages: mergeSeedMessages(state.messages),
           notifications: normalizeNotifications(state.notifications),
           bookings: state.bookings ?? seedBookings,
           disputes: state.disputes ?? seedDisputes,
           bids: state.bids ?? seedBids,
           opportunities: state.opportunities ?? seedOpportunities,
-          reviews: state.reviews ?? seedReviews,
           safetyAlerts: state.safetyAlerts ?? seedSafetyAlerts,
           language: (state.language as AppLanguage | undefined) ?? "en-US",
           timeFormat: (state.timeFormat as AppTimeFormat | undefined) ?? "12h",
@@ -300,14 +280,12 @@ export const useAppStore = create<AppState>()(
         paymentMethods: state.paymentMethods,
         parcels: state.parcels,
         trips: state.trips,
-        buddies: state.buddies,
         messages: state.messages,
         notifications: state.notifications,
         bookings: state.bookings,
         disputes: state.disputes,
         bids: state.bids,
         opportunities: state.opportunities,
-        reviews: state.reviews,
         safetyAlerts: state.safetyAlerts,
         walletBalance: state.walletBalance,
         language: state.language,
