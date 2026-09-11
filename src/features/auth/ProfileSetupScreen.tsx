@@ -30,11 +30,12 @@ import {
   paymentsApi,
   PAYOUT_RETURN_URL,
   usersApi,
-  type StripeConnectStatus,
+  type PayoutStatus,
   type UserProfile as ApiUserProfile,
 } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { useAppStore } from "@/store/useAppStore";
+import { RazorpayPayoutForm } from "@/features/wallet/RazorpayPayoutForm";
 import { colors } from "@/theme/colors";
 
 const TERMS_VERSION = "v1";
@@ -72,7 +73,7 @@ export function ProfileSetupScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   // Payout step
-  const [payoutStatus, setPayoutStatus] = useState<StripeConnectStatus | null>(null);
+  const [payoutStatus, setPayoutStatus] = useState<PayoutStatus | null>(null);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -169,7 +170,7 @@ export function ProfileSetupScreen() {
   /** Non-fatal: the payout screen in Profile re-checks this later anyway. */
   const refreshPayoutStatus = useCallback(async () => {
     try {
-      const res = await paymentsApi.stripeConnectStatus();
+      const res = await paymentsApi.payoutStatus();
       if (mountedRef.current) setPayoutStatus(res.data ?? null);
     } catch {
       // Leave the step in its default "not set up" state.
@@ -201,10 +202,18 @@ export function ProfileSetupScreen() {
     setSubmitting(true);
     try {
       if (!(await commitTerms())) return;
-      const res = await paymentsApi.stripeConnectOnboard();
+      const res = await paymentsApi.payoutOnboard();
       const url = res.data?.onboarding_url;
       if (!url) {
-        if (mountedRef.current) setFormError("Couldn't start payout setup. Please try again.");
+        // A provider with no hosted onboarding (Razorpay): the bank-details form
+        // rendered in this step IS the setup surface, so there is nothing to
+        // open and nothing has gone wrong. Refresh so the form appears.
+        if (mountedRef.current) {
+          if (res.data?.setup_kind !== "bank_details") {
+            setFormError("Couldn't start payout setup. Please try again.");
+          }
+          await refreshPayoutStatus();
+        }
         return;
       }
       // Stripe can't redirect to a custom scheme, so its `return_url` points at
@@ -308,6 +317,7 @@ export function ProfileSetupScreen() {
             onBack={goBack}
             onSetUp={handleSetUpPayouts}
             onFinish={handleFinishSetup}
+            onRefresh={refreshPayoutStatus}
           />
         ) : null}
       </View>
@@ -600,18 +610,23 @@ function ProfileStep({
 // ───────────────────────────── Payout step ─────────────────────────────
 
 interface PayoutStepProps {
-  status: StripeConnectStatus | null;
+  status: PayoutStatus | null;
   submitting: boolean;
   formError: string | null;
   onBack: () => void;
   onSetUp: () => void;
   onFinish: () => void;
+  /** Re-read payout status after the inline (non-hosted) form saves. */
+  onRefresh: () => void | Promise<void>;
 }
 
 /**
- * Optional final step: connect a Stripe account so this user can be paid for
+ * Optional final step: connect a payout account so this user can be paid for
  * carrying parcels. Anyone can skip — senders never need it, and carriers are
  * prompted again at the point it actually blocks them (accepting an offer).
+ *
+ * The provider and how its setup is collected both come from the server: Stripe
+ * Connect opens a hosted page, Razorpay collects a bank account / UPI id inline.
  */
 function PayoutStep({
   status,
@@ -620,9 +635,12 @@ function PayoutStep({
   onBack,
   onSetUp,
   onFinish,
+  onRefresh,
 }: Readonly<PayoutStepProps>) {
   const connected = !!status?.connected;
   const pending = !connected && !!status?.details_submitted;
+  const isHostedSetup = (status?.setup_kind ?? "hosted") === "hosted";
+  const providerLabel = status?.provider_label ?? "Stripe";
 
   return (
     <ScrollView
@@ -672,14 +690,15 @@ function PayoutStep({
           <Text style={styles.payoutNoticeText}>
             {pending ? (
               <>
-                <Text style={styles.payoutNoticeStrong}>Verification in progress.</Text> Stripe is
-                still reviewing your details — this usually takes a few minutes.
+                <Text style={styles.payoutNoticeStrong}>Verification in progress.</Text>{" "}
+                {providerLabel} is still reviewing your details — this usually takes a few minutes.
               </>
             ) : (
               <>
                 Payouts are handled securely by{" "}
-                <Text style={styles.payoutNoticeStrong}>Stripe</Text>. It's free to connect, and you
-                only need it when someone books you to carry their parcel. Senders don't need this.
+                <Text style={styles.payoutNoticeStrong}>{providerLabel}</Text>. It's free to connect,
+                and you only need it when someone books you to carry their parcel. Senders don't need
+                this.
               </>
             )}
           </Text>
@@ -690,11 +709,15 @@ function PayoutStep({
         <PrimaryButton label="Continue" onPress={onFinish} loading={submitting} />
       ) : (
         <>
-          <PrimaryButton
-            label={pending ? "Continue setup" : "Set up payouts"}
-            onPress={onSetUp}
-            loading={submitting}
-          />
+          {isHostedSetup ? (
+            <PrimaryButton
+              label={pending ? "Continue setup" : "Set up payouts"}
+              onPress={onSetUp}
+              loading={submitting}
+            />
+          ) : (
+            <RazorpayPayoutForm hasAccount={!!status?.account_id} onSaved={onRefresh} />
+          )}
           <Pressable
             onPress={onFinish}
             disabled={submitting}

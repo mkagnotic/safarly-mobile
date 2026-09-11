@@ -4,10 +4,15 @@ import * as Clipboard from "expo-clipboard";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppInput } from "@/components/ui/AppInput";
+import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, ReturnResolution } from "@/services/api";
+import { RETURN_COUNTRIES } from "@/utils/addressOptions";
 import { colors } from "@/theme/colors";
+
+// CountryPicker takes {code,name}; addressOptions speaks {value,label}.
+const RETURN_COUNTRY_OPTIONS = RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label }));
 
 /**
  * The parcel hand-back, after a carrier declines it at handoff or cancels
@@ -332,7 +337,18 @@ export function ParcelReturnCard({
               <AppInput value={myCity} onChangeText={setMyCity} placeholder="City" />
               <AppInput value={myState} onChangeText={setMyState} placeholder="State / region" />
               <AppInput value={myPostal} onChangeText={setMyPostal} placeholder="Postal code" />
-              <AppInput value={myCountry} onChangeText={setMyCountry} placeholder="Country" />
+              {/*
+                  A picker, not free text. Safarly ships US<->India only, and
+                  every other address form already enforces that with this same
+                  list — this screen was left as a text field, so a sender could
+                  type "Brazil" and have it stored. Mirrors the web card.
+               */}
+              <CountryPicker
+                value={myCountry}
+                onChange={setMyCountry}
+                placeholder="Country"
+                options={RETURN_COUNTRY_OPTIONS}
+              />
               <AppInput value={myContact} onChangeText={setMyContact} placeholder="Name for the parcel" />
               <AppInput value={myPhone} onChangeText={setMyPhone} placeholder="Phone for the courier" keyboardType="phone-pad" />
             </View>

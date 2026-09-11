@@ -4,8 +4,8 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "dev": "expo start",
-    "start": "expo start",
+    "dev": "node scripts/start-env.mjs production",
+    "start": "node scripts/start-env.mjs production",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
@@ -13,7 +13,9 @@
     "check:errors": "node scripts/check-user-facing-errors.mjs",
     "check:ux": "node scripts/check-ux-copy.mjs",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "start:staging": "node scripts/start-env.mjs staging",
+    "dev:staging": "node scripts/start-env.mjs staging"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
