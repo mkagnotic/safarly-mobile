@@ -22,7 +22,7 @@ import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useKycGate } from "@/hooks/api/useKycGate";
 import { usePayBooking } from "@/hooks/api/usePayBooking";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { ApiClientError, getErrorMessage } from "@/services/api";
+import { ApiClientError, getErrorMessage, paymentsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
@@ -52,6 +52,26 @@ export function PayBookingScreen() {
   // can't retry a payment that will always fail.
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [nowTs, setNowTs] = useState(() => 0);
+  // Which processor will charge — Stripe (US) or Razorpay (India). Server-
+  // resolved, purely so the copy below can name it; the payment flow itself is
+  // identical either way. Falls back to "Stripe", which is what every existing
+  // booking resolves to, so a failed lookup changes nothing visible.
+  const [providerLabel, setProviderLabel] = useState("Stripe");
+
+  useEffect(() => {
+    if (!bookingId) return;
+    let cancelledLookup = false;
+    void paymentsApi
+      .getGateway(bookingId)
+      .then((res) => {
+        if (!cancelledLookup && res.data?.provider_label) setProviderLabel(res.data.provider_label);
+      })
+      // Cosmetic copy only — a failure just leaves the default in place.
+      .catch(() => undefined);
+    return () => {
+      cancelledLookup = true;
+    };
+  }, [bookingId]);
 
   // Tick the expiry countdown every 30s (never call Date.now() during render).
   useEffect(() => {
@@ -120,7 +140,7 @@ export function PayBookingScreen() {
       setBanner(null);
       void refetch();
     } else if (code === "PAYMENT_FAILED") {
-      // user-facing-ok: this is the Stripe decline reason, which the payer needs to see
+      // user-facing-ok: this is the processor’s decline reason, which the payer needs to see
       // verbatim ("insufficient funds", "card expired") to know what to do next.
       setBanner({ variant: "error", title: "Payment declined", message: payError.message || "Your bank declined the charge. Try again." });
     } else {
@@ -128,7 +148,7 @@ export function PayBookingScreen() {
     }
   }, [payError, kyc, refetch]);
 
-  // The user closed Stripe before finishing — a soft "not completed" prompt.
+  // The user closed the checkout page before finishing — a soft "not completed" prompt.
   useEffect(() => {
     if (!cancelled) return;
     setBanner({
@@ -302,12 +322,12 @@ export function PayBookingScreen() {
             </Pressable>
           ) : null}
 
-          {/* How payment works — Stripe hosted checkout */}
+          {/* How payment works — the processor's hosted checkout */}
           <View style={styles.stripeCard}>
             <View style={styles.stripeRow}>
               <Ionicons name="card-outline" size={18} color={colors.primary} />
               <Text style={styles.stripeText}>
-                You’ll enter your card on Stripe’s secure checkout, then come right back to the app.
+                You’ll enter your card on {providerLabel}’s secure checkout, then come right back to the app.
               </Text>
             </View>
             <View style={styles.stripeRow}>

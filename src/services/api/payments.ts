@@ -1,5 +1,11 @@
 import { api, newIdempotencyKey } from "./client";
 
+/**
+ * Which payment processor handled a transaction. Chosen SERVER-SIDE — the app
+ * never derives it from the user's country, it only renders what it is told.
+ */
+export type PaymentProvider = "stripe" | "razorpay";
+
 export interface Transaction {
   id: string;
   booking_id: string | null;
@@ -21,6 +27,11 @@ export interface Transaction {
   /** Stripe references used on the receipt. */
   stripe_payment_intent_id?: string | null;
   stripe_refund_id?: string | null;
+  /** Which processor moved this money — 'stripe' (US) or 'razorpay' (India). */
+  payment_provider?: PaymentProvider | null;
+  /** Provider-neutral references; populated for both processors. */
+  provider_payment_id?: string | null;
+  provider_refund_id?: string | null;
   /** Parcel route (from -> to), enriched on GET /payment-handler/me for receipts. */
   route_from?: string | null;
   route_to?: string | null;
@@ -30,14 +41,20 @@ export interface Transaction {
 
 export interface CreateIntentResult {
   /**
-   * Stripe-hosted Checkout page URL. Open this in a browser (the user enters
-   * their card on Stripe's page — we never touch card data). Mirrors web, which
-   * does a full-page redirect to the same URL.
+   * Hosted checkout page URL — a Stripe Checkout Session (US) or a Razorpay
+   * Payment Link (India). Open it in a browser; the user enters their card on
+   * the processor's page and we never touch card data. Both providers return
+   * the same shape, so this flow has ONE code path. Mirrors web, which does a
+   * full-page redirect to the same URL.
    */
   checkout_url: string;
-  /** Checkout Session id — pass to `confirmCheckout` on return (web parity). */
+  /** Provider order handle (Stripe Checkout Session id / Razorpay Payment Link
+   *  id) — pass to `confirmCheckout` on return (web parity). */
   session_id: string;
   payment_intent_id: string;
+  /** Which processor is charging. For copy only — the flow is identical. */
+  provider?: PaymentProvider;
+  provider_label?: string;
   amount: number;
   platform_fee: number;
   total: number;
@@ -64,6 +81,23 @@ export interface TransactionsSummary {
   total_earned: number;
   count: number;
 }
+
+/**
+ * Payout status for whichever processor pays THIS carrier — Stripe Connect in
+ * the US, RazorpayX in India. `setup_kind` says HOW setup is collected:
+ * 'hosted' means open `onboarding_url` in a browser; 'bank_details' means show
+ * the bank-account / UPI form. Decided server-side, never from the country.
+ */
+export interface PayoutStatus extends StripeConnectStatus {
+  provider: PaymentProvider;
+  provider_label: string;
+  setup_kind: "hosted" | "bank_details";
+}
+
+/** Bank account or UPI id for an Indian carrier's RazorpayX payouts. */
+export type RazorpayFundAccountInput =
+  | { mode: "bank_account"; account_holder_name: string; account_number: string; ifsc: string }
+  | { mode: "vpa"; vpa: string; account_holder_name?: string };
 
 export interface StripeConnectStatus {
   /** Both charges AND payouts enabled — the only state that clears the payout gate. */
@@ -95,6 +129,14 @@ export const PAYOUT_RETURN_URL = "safarly://payout-return";
 export const PAYMENT_RETURN_URL = "safarly://pay-return";
 
 export const paymentsApi = {
+  /** Which processor will charge this booking. Lets the pay screen name it in
+   *  its copy without the app inspecting the user's country. */
+  getGateway: (booking_id: string) =>
+    api.get<{ provider: PaymentProvider; provider_label: string; currency: string }>(
+      "/payment-handler/gateway",
+      { booking_id },
+    ),
+
   // `platform: "mobile"` makes the server build the Stripe return URLs against
   // the deep-link bounce page instead of the web app, so paying on a device no
   // longer strands the user on a signed-out web page.
@@ -153,6 +195,24 @@ export const paymentsApi = {
   /** Stripe Express dashboard link, for an already-onboarded carrier. */
   stripeConnectDashboardLink: () =>
     api.get<{ url: string }>("/payment-handler/stripe-connect/dashboard-link"),
+
+  // --- Provider-neutral payouts (Stripe Connect or RazorpayX) ---
+  // These supersede the stripe-connect/* calls above, which stay for
+  // compatibility with already-shipped builds.
+
+  /** Payout status for this carrier's own provider, including how to set it up. */
+  payoutStatus: () => api.get<PayoutStatus>("/payment-handler/payout/status"),
+
+  /** Starts setup. A hosted provider returns an `onboarding_url` to open. */
+  payoutOnboard: () =>
+    api.post<{ provider: PaymentProvider; setup_kind: "hosted" | "bank_details"; onboarding_url: string | null }>(
+      "/payment-handler/payout/onboard",
+      { platform: "mobile" },
+    ),
+
+  /** Razorpay only: submit the carrier's bank account / UPI id. */
+  submitRazorpayFundAccount: (input: RazorpayFundAccountInput) =>
+    api.post<PayoutStatus>("/payment-handler/payout/razorpay/fund-account", input),
 
   // --- Admin endpoints ---
   adminListPayouts: (params?: { page?: number; per_page?: number }) =>

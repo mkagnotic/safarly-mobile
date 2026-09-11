@@ -12,7 +12,8 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { getErrorMessage, paymentsApi, PAYOUT_RETURN_URL, type StripeConnectStatus } from "@/services/api";
+import { getErrorMessage, paymentsApi, PAYOUT_RETURN_URL, type PayoutStatus } from "@/services/api";
+import { RazorpayPayoutForm } from "./RazorpayPayoutForm";
 import { colors } from "@/theme/colors";
 
 type Nav = CompositeNavigationProp<
@@ -21,18 +22,27 @@ type Nav = CompositeNavigationProp<
 >;
 
 /**
- * Standalone Stripe Connect (payout) management — web parity with
- * `CustomerPayoutSetup`. Carriers set up / continue / manage their payout
- * account here. Stripe's hosted onboarding + Express dashboard open in an
- * in-app browser (the same pattern the signup wizard uses). Onboarding returns
- * through the web bounce page to `safarly://payout-return`, which closes the
- * browser on its own; we then re-read the server status, since the server is
- * the authority on what actually happened.
+ * Standalone payout management — web parity with `CustomerPayoutSetup`.
+ * Carriers set up / continue / manage their payout account here.
+ *
+ * The SERVER decides which processor pays this carrier (Stripe Connect in the
+ * US, RazorpayX in India) and how its setup is collected — this screen renders
+ * that answer and never looks at the user's country:
+ *
+ *   setup_kind 'hosted'       -> Stripe's hosted onboarding + Express dashboard
+ *                                open in an in-app browser (the same pattern the
+ *                                signup wizard uses). Onboarding returns through
+ *                                the web bounce page to `safarly://payout-return`,
+ *                                which closes the browser on its own.
+ *   setup_kind 'bank_details' -> the bank-account / UPI form is shown inline.
+ *
+ * Either way we re-read the server status afterwards, since the server is the
+ * authority on what actually happened.
  */
 export function PayoutSetupScreen() {
   const navigation = useNavigation<Nav>();
 
-  const [status, setStatus] = useState<StripeConnectStatus | null>(null);
+  const [status, setStatus] = useState<PayoutStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +57,7 @@ export function PayoutSetupScreen() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await paymentsApi.stripeConnectStatus();
+      const res = await paymentsApi.payoutStatus();
       if (mountedRef.current) setStatus(res.data ?? null);
     } catch (err) {
       if (mountedRef.current) setError(getErrorMessage(err));
@@ -63,13 +73,18 @@ export function PayoutSetupScreen() {
   const isConnected = !!status?.connected;
   const hasAccount = !!status?.account_id;
   const isPending = !!status?.details_submitted && !isConnected;
+  // 'hosted' = open the provider's onboarding in a browser; 'bank_details' =
+  // collect the destination account here. Defaults to hosted so the screen keeps
+  // behaving exactly as before while the status request is in flight.
+  const isHostedSetup = (status?.setup_kind ?? "hosted") === "hosted";
+  const providerLabel = status?.provider_label ?? "Stripe";
 
   const openOnboarding = useCallback(async () => {
     if (busy) return;
     setError(null);
     setBusy(true);
     try {
-      const res = await paymentsApi.stripeConnectOnboard();
+      const res = await paymentsApi.payoutOnboard();
       const url = res.data?.onboarding_url;
       if (!url) {
         if (mountedRef.current) setError("Couldn't start payout setup. Please try again.");
@@ -98,7 +113,7 @@ export function PayoutSetupScreen() {
       const res = await paymentsApi.stripeConnectDashboardLink();
       const url = res.data?.url;
       if (url) await WebBrowser.openBrowserAsync(url);
-      else if (mountedRef.current) setError("The Stripe dashboard isn't available yet.");
+      else if (mountedRef.current) setError(`The ${providerLabel} dashboard isn't available yet.`);
     } catch (err) {
       if (mountedRef.current) setError(getErrorMessage(err));
     } finally {
@@ -115,7 +130,7 @@ export function PayoutSetupScreen() {
   const statusMeta = isConnected
     ? { icon: "checkmark-circle" as const, tint: colors.safe, title: "Payouts connected", body: "Your account is ready to receive earnings. Payouts land in your bank automatically." }
     : isPending
-      ? { icon: "time" as const, tint: colors.warning, title: "Verification pending", body: "Stripe is reviewing your details. This usually takes 1–2 business days." }
+      ? { icon: "time" as const, tint: colors.warning, title: "Verification pending", body: `${providerLabel} is reviewing your details. This usually takes 1–2 business days.` }
       : { icon: "card" as const, tint: colors.primary, title: "Set up payouts", body: "Connect your bank so earnings can be paid out to you automatically." };
 
   return (
@@ -157,38 +172,46 @@ export function PayoutSetupScreen() {
           {/* Benefits — only before an account exists */}
           {!hasAccount ? (
             <Card style={styles.card}>
-              <Benefit icon="lock-closed-outline" title="Secure verification" body="Stripe verifies your identity and bank details — we never see them." />
+              <Benefit icon="lock-closed-outline" title="Secure verification" body={`${providerLabel} verifies your identity and bank details — we never see them.`} />
               <Benefit icon="cash-outline" title="Direct bank deposits" body="Earnings are deposited straight to your bank account." />
               <Benefit icon="pricetag-outline" title="No fees to connect" body="Setting up payouts is free." last />
             </Card>
           ) : null}
 
           {/* Actions */}
-          {isConnected ? (
-            <>
+          {isHostedSetup ? (
+            isConnected ? (
+              <>
+                <AppButton
+                  label={`View ${providerLabel} dashboard`}
+                  onPress={() => void openDashboard()}
+                  disabled={busy}
+                  leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
+                  style={styles.action}
+                />
+                <AppButton
+                  label="Update bank details"
+                  variant="secondary"
+                  onPress={() => void openOnboarding()}
+                  disabled={busy}
+                  style={styles.action}
+                />
+              </>
+            ) : (
               <AppButton
-                label="View Stripe dashboard"
-                onPress={() => void openDashboard()}
+                label={hasAccount ? (isPending ? "Continue setup" : "Complete setup") : "Set up payouts"}
+                onPress={() => void openOnboarding()}
                 disabled={busy}
                 leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
                 style={styles.action}
               />
-              <AppButton
-                label="Update bank details"
-                variant="secondary"
-                onPress={() => void openOnboarding()}
-                disabled={busy}
-                style={styles.action}
-              />
-            </>
+            )
           ) : (
-            <AppButton
-              label={hasAccount ? (isPending ? "Continue setup" : "Complete setup") : "Set up payouts"}
-              onPress={() => void openOnboarding()}
-              disabled={busy}
-              leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
-              style={styles.action}
-            />
+            // Razorpay: no hosted flow and no carrier-facing dashboard — entering
+            // (or updating) the destination account IS the whole surface.
+            <Card style={styles.card}>
+              <RazorpayPayoutForm hasAccount={hasAccount} onSaved={loadStatus} />
+            </Card>
           )}
 
           {/* FAQ */}
@@ -196,7 +219,7 @@ export function PayoutSetupScreen() {
             <Text style={styles.faqHeading}>How payouts work</Text>
             <Faq q="When do I get paid?" a="Earnings pay out automatically to your linked bank 2–7 business days after each delivery (your first payout can take 7–14 days)." />
             <Faq q="What's the platform fee?" a="Safarly adds a 10% platform fee on top of the delivery fee, paid by the sender — you receive your full quoted fee." />
-            <Faq q="What do I need?" a="A government ID and your bank details, entered securely on Stripe." last />
+            <Faq q="What do I need?" a={`A government ID and your bank details, entered securely on ${providerLabel}.`} last />
           </Card>
         </>
       )}

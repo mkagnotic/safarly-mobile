@@ -51,6 +51,9 @@ export type {
   CreateIntentResult,
   ConfirmPaymentResult,
   StripeConnectStatus,
+  PayoutStatus,
+  PaymentProvider,
+  RazorpayFundAccountInput,
   TransactionsSummary,
 } from "./payments";
 
