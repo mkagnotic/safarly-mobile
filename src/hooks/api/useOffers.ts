@@ -18,7 +18,9 @@ export interface UseOffersResult {
   /** The action currently running, or `null`. */
   pending: OfferActionKey | null;
   seedOffer: (input: SeedOfferInput) => Promise<SeedOfferResult>;
-  postOffer: (input: CounterOfferInput) => Promise<CounterOfferResult>;
+  /** Pass the same `idempotencyKey` for every submit of ONE offer (the composer keeps
+   *  one per opening) so a repeat is replayed by the server, not posted twice. */
+  postOffer: (input: CounterOfferInput, idempotencyKey?: string) => Promise<CounterOfferResult>;
   acceptOffer: (offerId: string) => Promise<AcceptOfferResult>;
   rejectOffer: (offerId: string, note?: string) => Promise<RejectOfferResult>;
 }
@@ -72,10 +74,10 @@ export function useOffers(conversationId: string | null): UseOffersResult {
   );
 
   const postOffer = useCallback(
-    (input: CounterOfferInput) =>
+    (input: CounterOfferInput, idempotencyKey?: string) =>
       run("counter", async () => {
         const id = requireConversation();
-        const result = (await offersApi.counter(id, input)).data;
+        const result = (await offersApi.counter(id, input, idempotencyKey)).data;
         bumpOfferTopics(false);
         return result;
       }),

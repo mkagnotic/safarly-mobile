@@ -63,10 +63,21 @@ export function JourneyExpiryReminder() {
     decidedRef.current = true;
     void (async () => {
       const seen = await readSeen();
-      const fresh = notifications.filter((n) => isExpiryNotice(n) && !seen.has(n.id));
-      if (fresh.length > 0) {
+      const notices = notifications.filter(isExpiryNotice);
+      // One entry per listing, and only its newest notice (the list is newest
+      // first). A listing gets a "tomorrow" reminder and later an "expired" notice;
+      // showing both put "has expired" beside "is tomorrow" for the same parcel.
+      const latestByEntity = new Map<string, Notification>();
+      for (const n of notices) {
+        const entity = (n.data as { entity_id?: string } | null)?.entity_id ?? n.id;
+        if (!latestByEntity.has(entity)) latestByEntity.set(entity, n);
+      }
+      const fresh = [...latestByEntity.values()].filter((n) => !seen.has(n.id));
+      if (notices.length > 0) {
         const next = new Set(seen);
-        fresh.forEach((n) => next.add(n.id));
+        // Superseded notices are marked seen too, so an older reminder can never
+        // resurface on its own later.
+        notices.forEach((n) => next.add(n.id));
         await persistSeen(next);
       }
       if (mountedRef.current) setItems(fresh);

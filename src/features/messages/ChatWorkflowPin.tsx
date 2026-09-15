@@ -94,11 +94,11 @@ const TONE_BG: Record<Tone, string> = {
 /** Web parity (`ChatCountdown.tsx` LABEL). */
 const COUNTDOWN_LABEL: Record<string, string> = {
   match_auto_decline: "Auto-declines in",
-  travel_verify_escalate: "Sent for review in",
-  parcel_review_reminder: "Reminder in",
+  travel_verify_escalate: "Goes to our team for review in",
+  parcel_review_reminder: "We'll send a reminder in",
   payment_grace: "Payment due in",
   payment_cancel: "Auto-cancels in",
-  otp_reminder: "Reminder in",
+  otp_reminder: "We'll send a reminder in",
   archive: "Archives in",
 };
 
