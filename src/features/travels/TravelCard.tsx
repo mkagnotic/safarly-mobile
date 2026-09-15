@@ -131,16 +131,16 @@ export const TravelCard = memo(function TravelCard({
   const handleDeletePress = useCallback(() => {
     if (!onDelete) return;
     showAppAlert({
-      title: type === "flight" ? "Cancel this flight?" : "Remove this package?",
+      title: type === "flight" ? "Cancel this trip?" : "Cancel this parcel?",
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
         (type === "flight"
-          ? "This will cancel your flight listing and remove it from search results. Any pending carrier requests will be withdrawn. This cannot be undone."
-          : "This will cancel your package request and notify any interested carriers. You won't be able to restore it."),
+          ? "Your trip will be removed from search. This can't be undone."
+          : "Carriers won't see it any more, and any match or offer on it will be closed. This can't be undone."),
       actions: [
         { text: "Keep it", style: "cancel" },
         {
-          text: type === "flight" ? "Yes, cancel flight" : "Yes, remove package",
+          text: type === "flight" ? "Yes, cancel trip" : "Yes, cancel parcel",
           style: "destructive",
           onPress: onDelete,
         },

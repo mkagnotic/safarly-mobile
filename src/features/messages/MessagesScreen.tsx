@@ -688,9 +688,14 @@ const ConversationRow = memo(function ConversationRow({
         accessibilityRole="button"
         accessibilityLabel={`Open conversation with ${name}`}
       />
-      {flags.hasUnread ? <View style={styles.unreadStripe} /> : null}
+      {flags.hasUnread ? <View style={styles.unreadStripe} pointerEvents="none" /> : null}
 
-      <View style={[styles.avatarWrap, ringStyle]}>
+      {/* pointerEvents is what makes the overlay above reachable on native. A
+          touch is hit-tested to the deepest view under the finger and then only
+          bubbles to that view's ANCESTORS - never to a sibling - so without it a
+          tap on the avatar, name or preview landed on these Views, found no
+          responder, and the row did nothing on Android. */}
+      <View style={[styles.avatarWrap, ringStyle]} pointerEvents="none">
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
         ) : (
@@ -701,7 +706,7 @@ const ConversationRow = memo(function ConversationRow({
         {flags.hasUnread ? <View style={styles.unreadDot} /> : null}
       </View>
 
-      <View style={styles.body}>
+      <View style={styles.body} pointerEvents="none">
         <View style={styles.topRow}>
           <Text
             style={[styles.name, flags.hasUnread && styles.nameUnread]}
@@ -725,8 +730,12 @@ const ConversationRow = memo(function ConversationRow({
         </Text>
       </View>
 
-      <View style={styles.tail}>
-        <Text style={[styles.timeText, flags.hasUnread && styles.timeUnread]}>{time}</Text>
+      {/* box-none: the tail's own buttons stay tappable, everything else in it
+          passes the touch through to the row overlay. */}
+      <View style={styles.tail} pointerEvents="box-none">
+        <View pointerEvents="none">
+          <Text style={[styles.timeText, flags.hasUnread && styles.timeUnread]}>{time}</Text>
+        </View>
         {/*
          * Tail action precedence (web parity):
          *   1. Awaiting-mine → Accept (green) + Close (outline)
@@ -781,7 +790,7 @@ const ConversationRow = memo(function ConversationRow({
             <Text style={styles.acceptButtonText}>Match again</Text>
           </Pressable>
         ) : flags.hasUnread ? (
-          <View style={styles.unreadCountBadge}>
+          <View style={styles.unreadCountBadge} pointerEvents="none">
             <Text style={styles.unreadCountText}>
               {conversation.unread_count > 9 ? "9+" : conversation.unread_count}
             </Text>

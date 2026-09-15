@@ -25,6 +25,8 @@ function normalizeTrip(raw: RawTrip): Trip {
 export interface Trip {
   id: string;
   user_id: string;
+  /** The traveler who listed the trip. Returned by trip-handler; drives owner-only controls. */
+  carrier_id?: string;
   from_city: string;
   from_country: string;
   to_city: string;

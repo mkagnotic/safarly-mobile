@@ -14,6 +14,7 @@ import { ANY_CITY } from "@/features/search/CityPicker";
 import { isListingExpired, isTerminal, labelForStatus } from "@/features/travels/statusLabels";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
+import { useAuth } from "@/context/AuthContext";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, tripsApi, type Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -120,6 +121,7 @@ export function TripDetailsScreen() {
   const tripId = route.params?.tripId;
 
   const { trip, error, refetch } = useTripDetail(tripId);
+  const { user } = useAuth();
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -273,7 +275,10 @@ export function TripDetailsScreen() {
     trip.status ?? "",
     trip.travel_date_to ?? trip.travel_date ?? trip.travel_date_from,
   );
-  const canModify = !isTerminal(trip.status ?? "") && !expired;
+  // Edit / Cancel belong to the trip's owner. This screen had no owner check at
+  // all, so anyone who could open a trip was offered both (the server refuses).
+  const isOwner = !!user?.id && trip.carrier_id === user.id;
+  const canModify = isOwner && !isTerminal(trip.status ?? "") && !expired;
 
   return (
     <Screen onRefresh={refetch}>
@@ -313,7 +318,7 @@ export function TripDetailsScreen() {
             <Text style={styles.cancelButtonText}>Cancel trip</Text>
           </Pressable>
         </>
-      ) : (
+      ) : isOwner ? (
         <View style={styles.closedNotice}>
           <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} />
           <Text style={styles.closedNoticeText}>
@@ -321,7 +326,7 @@ export function TripDetailsScreen() {
             longer be changed.
           </Text>
         </View>
-      )}
+      ) : null}
 
       <EditTripModal
         open={editOpen}

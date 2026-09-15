@@ -67,6 +67,7 @@ import {
   ApiClientError,
   getErrorMessage,
   messagesApi,
+  newIdempotencyKey,
   type Conversation,
   type MatchCandidate,
   type OfferAcceptPayload,
@@ -957,9 +958,19 @@ export function OfferChatScreen() {
     setOfferComposer({ mode: liveOffer?.carrierRequestId ? "counter" : "seed" });
   }, [liveOffer]);
 
+  // One key per attempt at an offer: a double tap, or a retry after a dropped
+  // response, is answered by the server with the offer it already made instead of
+  // creating a second one. The ref also stops a second tap that lands before
+  // `pending` has re-rendered the composer's button as disabled.
+  const offerAttemptKeyRef = useRef<string | null>(null);
+  const offerSubmittingRef = useRef(false);
+
   const handleSubmitOffer = useCallback(
     async ({ amount, note }: OfferComposerSubmit) => {
-      if (!offerComposer) return;
+      if (!offerComposer || offerSubmittingRef.current) return;
+      offerSubmittingRef.current = true;
+      if (!offerAttemptKeyRef.current) offerAttemptKeyRef.current = newIdempotencyKey();
+      const attemptKey = offerAttemptKeyRef.current;
       // Post into the EXISTING deal whenever one exists. Web always sends the
       // offer with `activeDeal.carrier_request_id` (`ChatOfferPrompt`), even for
       // the very first fee offer. `seed-offer` instead auto-detects a brand-new
@@ -969,7 +980,7 @@ export function OfferChatScreen() {
         liveOffer?.carrierRequestId ?? activeDeal?.carrier_request_id ?? null;
       try {
         if (carrierRequestId) {
-          await postOffer({ carrier_request_id: carrierRequestId, amount, note });
+          await postOffer({ carrier_request_id: carrierRequestId, amount, note }, attemptKey);
         } else {
           await seedOffer({ amount, note });
         }
@@ -985,6 +996,11 @@ export function OfferChatScreen() {
           title: "Couldn't send offer",
           message: getErrorMessage(err),
         });
+      } finally {
+        // The attempt is over either way (the composer closes on both paths), so the
+        // next offer gets its own key and the guard is released.
+        offerSubmittingRef.current = false;
+        offerAttemptKeyRef.current = null;
       }
     },
     [offerComposer, liveOffer, activeDeal?.carrier_request_id, postOffer, seedOffer],
@@ -1526,9 +1542,10 @@ export function OfferChatScreen() {
           <View style={[styles.banner, styles.bannerWaiting]}>
             <Ionicons name="hourglass" size={16} color={colors.warning} />
             <View style={styles.bannerTextWrap}>
-              <Text style={styles.bannerTitle}>Waiting for {participantName.split(" ")[0]}</Text>
+              <Text style={styles.bannerTitle}>Match request sent</Text>
+              {/* The viewer SENT the request — they have not accepted anything yet. */}
               <Text style={styles.bannerBody}>
-                You accepted! They'll see your request and decide next.
+                Waiting for {participantName.split(" ")[0]} to accept.
               </Text>
             </View>
           </View>
@@ -1877,7 +1894,10 @@ export function OfferChatScreen() {
                 }}
               />
             ) : null}
-            {matchStatus === "pending" ? (
+            {/* Decline answers a request, so it is offered only while the other
+                person has one waiting. On a fresh thread there is nothing to decline
+                and the server refuses. */}
+            {matchedByOther ? (
               <ActionRow
                 icon="close-circle"
                 label="Decline match"
