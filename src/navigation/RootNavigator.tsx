@@ -43,6 +43,8 @@ import { CreateBuddyScreen } from "@/features/buddies/CreateBuddyScreen";
 import { PartnerDetailsScreen } from "@/features/buddies/PartnerDetailsScreen";
 import { SplashScreen } from "@/features/splash/SplashScreen";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { AccountDeletedScreen } from "@/features/profile/AccountDeletedScreen";
+import { DeleteAccountScreen } from "@/features/profile/DeleteAccountScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
 import { PublicProfileScreen } from "@/features/profile/PublicProfileScreen";
 import { EarningsScreen } from "@/features/earnings/EarningsScreen";
@@ -68,6 +70,7 @@ import { SafetyAlertsScreen } from "@/features/safety/SafetyAlertsScreen";
 import { MatchScreen } from "@/features/matching/MatchScreen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAppStore } from "@/store/useAppStore";
+import { usePendingDeepLink } from "@/hooks/usePendingDeepLink";
 import { useStoreHydrated } from "@/hooks/useStoreHydrated";
 import { usePushNotifications } from "@/hooks/notifications/usePushNotifications";
 import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
@@ -122,6 +125,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   PreferencesTab: "options-outline",
   ChangePasswordTab: "lock-closed-outline",
   ChangeEmailTab: "mail-open-outline",
+  DeleteAccountTab: "trash-outline",
   ForgotPasswordTab: "mail-outline",
   SendParcelTab: "cube-outline",
   ReviewPayTab: "card-outline",
@@ -306,6 +310,7 @@ function MainTabs() {
       <Tabs.Screen name="PreferencesTab" component={PreferencesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangePasswordTab" component={ChangePasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangeEmailTab" component={ChangeEmailScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="DeleteAccountTab" component={DeleteAccountScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ForgotPasswordTab" component={ForgotPasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SendParcelTab" component={SendParcelScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ReviewPayTab" component={ReviewPayScreen} options={HIDDEN_TAB} />
@@ -342,13 +347,14 @@ export function RootNavigator() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const transitionBackground = colorScheme === "dark" ? "#0B0B0C" : screenCanvas;
-  const { splashDone, onboarded, profileSetupDone, authenticated, authBootstrapping, showLiveData, toggleLiveDataVisibility } = useAppStore(
+  const { splashDone, onboarded, profileSetupDone, authenticated, authBootstrapping, accountDeleted, showLiveData, toggleLiveDataVisibility } = useAppStore(
     useShallow((s) => ({
       splashDone: s.splashDone,
       onboarded: s.onboarded,
       profileSetupDone: s.profileSetupDone,
       authenticated: s.authenticated,
       authBootstrapping: s.authBootstrapping,
+      accountDeleted: s.accountDeleted,
       showLiveData: s.showLiveData,
       toggleLiveDataVisibility: s.toggleLiveDataVisibility,
     }))
@@ -360,6 +366,16 @@ export function RootNavigator() {
   // until both its timer fired AND the store is hydrated.
   const hydrated = useStoreHydrated();
   const showSplash = !splashDone || !hydrated;
+
+  // A link that opened the app from cold is parked by `linking.getInitialURL`
+  // until the stack holding its destination actually exists. That is true once
+  // the splash is gone and either the auth stack is up (signed out) or the tab
+  // navigator is (signed in).
+  usePendingDeepLink(
+    !showSplash &&
+      onboarded &&
+      (!authenticated || (!authBootstrapping && profileSetupDone)),
+  );
 
   // Web parity: broadcast our presence so other users see us as "online" in
   // their chat headers (`useConversationPresence.online`). Hook self-guards on
@@ -398,6 +414,11 @@ export function RootNavigator() {
         {!showSplash && !onboarded && <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />}
         {!showSplash && onboarded && !authenticated && (
           <>
+            {/* First screen of the signed-out stack only right after a deletion,
+                so the user sees it confirmed rather than landing on Login. */}
+            {accountDeleted ? (
+              <Stack.Screen name="AccountDeleted" component={AccountDeletedScreen} options={{ headerShown: false, gestureEnabled: false }} />
+            ) : null}
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Signup" component={SignupScreenWrapper} options={{ headerShown: false, animation: "slide_from_bottom" }} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />

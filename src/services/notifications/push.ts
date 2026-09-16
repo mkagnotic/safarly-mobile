@@ -75,6 +75,36 @@ function pushSupported(): boolean {
   return Platform.OS !== "web" && Device.isDevice;
 }
 
+/**
+ * Whether push can work at all on this build and device, before asking the OS
+ * for anything.
+ *
+ * - `unsupported`: web, a simulator or emulator — no push token can be minted.
+ * - `not-configured`: the build is not linked to an EAS project, so there is no
+ *   Expo push token to register (see `.env.example`).
+ *
+ * Screens use this to disable the push toggle with an explanation, rather than
+ * letting someone switch it on only to watch it switch itself back off.
+ */
+export type PushAvailability = "available" | "unsupported" | "not-configured";
+
+export function getPushAvailability(): PushAvailability {
+  if (!pushSupported()) return "unsupported";
+  if (!getProjectId()) return "not-configured";
+  return "available";
+}
+
+/** The OS notification permission, without prompting. */
+export async function getPushPermission(): Promise<{ granted: boolean; canAskAgain: boolean }> {
+  if (!pushSupported()) return { granted: false, canAskAgain: false };
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    return { granted: status === "granted", canAskAgain: canAskAgain !== false };
+  } catch {
+    return { granted: false, canAskAgain: true };
+  }
+}
+
 /** Fetches the Expo token, registers it with the backend, and caches it. */
 async function acquireAndRegister(projectId: string): Promise<void> {
   await ensureAndroidChannel();
@@ -145,6 +175,46 @@ export async function unregisterPushToken(): Promise<void> {
     // eslint-disable-next-line no-console
     console.warn("[push] unregisterPushToken failed", err);
   }
+}
+
+/**
+ * Forget this device's cached token locally, without a server call. Used after
+ * account deletion: the server has already removed every token for the account
+ * and the session is gone, so the DELETE in `unregisterPushToken` would only 401.
+ */
+export async function clearCachedPushToken(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(LAST_TOKEN_KEY);
+  } catch {
+    // Nothing useful to do; the stale key is harmless once the account is gone.
+  }
+}
+
+/**
+ * Re-registers when the OS rotates this device's push token (reinstalls,
+ * restores, FCM/APNs refreshes). Without it the server keeps sending to a dead
+ * token and the user silently stops receiving pushes. Only acts for a device
+ * that registered before and still has permission. Returns an unsubscribe.
+ */
+export function watchPushTokenRefresh(): () => void {
+  if (getPushAvailability() !== "available") return () => {};
+  const projectId = getProjectId();
+  const sub = Notifications.addPushTokenListener(() => {
+    void (async () => {
+      try {
+        if (!projectId) return;
+        const previous = await AsyncStorage.getItem(LAST_TOKEN_KEY);
+        if (!previous) return; // never opted in on this device
+        const { granted } = await getPushPermission();
+        if (!granted) return;
+        await acquireAndRegister(projectId);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[push] token refresh re-registration failed", err);
+      }
+    })();
+  });
+  return () => sub.remove();
 }
 
 // ───────────────────────── Tap → navigation bridge ─────────────────────────

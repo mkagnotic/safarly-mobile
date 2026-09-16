@@ -96,6 +96,8 @@ const initialState = {
   safetyAlerts: seedSafetyAlerts,
   // Excluded from `partialize` below — never survives a relaunch by design.
   pendingNotice: null as AppState["pendingNotice"],
+  // Also excluded from `partialize`: see `accountDeleted` in types.
+  accountDeleted: false,
   kycWelcomePending: false,
 };
 
@@ -110,6 +112,7 @@ export const useAppStore = create<AppState>()(
       setAuthBootstrapping: (bootstrapping) => set({ authBootstrapping: bootstrapping }),
       setPendingNotice: (notice) => set({ pendingNotice: notice }),
       clearPendingNotice: () => set({ pendingNotice: null }),
+      setAccountDeleted: (accountDeleted) => set({ accountDeleted }),
       setKycWelcomePending: (kycWelcomePending) => set({ kycWelcomePending }),
       login: () => set({ authenticated: true }),
       logout: () => set({ authenticated: false, profileSetupDone: false }),
