@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 
+import { AppleSignInButton } from "@/components/auth/AppleSignInButton";
 import { SafarlyMark } from "@/components/brand/SafarlyMark";
 import { GoogleG } from "@/components/icons/GoogleG";
 import { AppButton } from "@/components/ui/AppButton";
@@ -26,6 +27,7 @@ import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
+import { isGoogleSignInConfigured } from "@/services/auth/googleOAuth";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
@@ -51,7 +53,7 @@ const SIGN_IN_FAILED_MESSAGE =
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { signInWithPassword, signInWithGoogle } = useAuth();
+  const { signInWithPassword, signInWithGoogle, signInWithApple } = useAuth();
 
   // Cross-screen notice handed in by another auth screen that's about to
   // unmount — currently ResetPasswordScreen ("Password updated").
@@ -67,6 +69,7 @@ export function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [appleSubmitting, setAppleSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   /** Form-level (server) error — wrong credentials, network, etc. */
   const [formError, setFormError] = useState<string | null>(null);
@@ -179,6 +182,24 @@ export function LoginScreen() {
       setGoogleSubmitting(false);
     }
   }, [googleSubmitting, signInWithGoogle]);
+
+  const handleAppleSignIn = useCallback(async () => {
+    if (appleSubmitting) return;
+    setFormError(null);
+    setAppleSubmitting(true);
+    try {
+      await signInWithApple();
+    } catch (err) {
+      // Dismissed the Apple sheet — not an error.
+      if (err instanceof AuthCancelledError) return;
+      const rawMessage = getErrorMessage(err);
+      const code = (err as { code?: unknown })?.code;
+      const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null, "Apple");
+      setFormError(oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signin").message);
+    } finally {
+      setAppleSubmitting(false);
+    }
+  }, [appleSubmitting, signInWithApple]);
 
   // Clear stale banner when switching between Welcome and the Email form.
   useEffect(() => {
@@ -334,11 +355,15 @@ export function LoginScreen() {
   // bottom area so the hero doesn't float.
   const showAppleSignIn = Platform.OS === "ios";
   const appleBlockHeight = showAppleSignIn ? 58 : 0;
+  // Hidden where this build has no Google client for the platform (see
+  // isGoogleSignInConfigured); its 58px is reclaimed the same way.
+  const showGoogleSignIn = isGoogleSignInConfigured();
+  const googleBlockHeight = showGoogleSignIn ? 58 : 0;
 
   // Reserve room for the absolutely-positioned `actions` block; bump when a
   // banner is showing so the hero doesn't get overlapped.
   const hasWelcomeBanner = !!(formError || loginNotice);
-  const bottomBlockHeight = 232 + appleBlockHeight + (hasWelcomeBanner ? 80 : 0);
+  const bottomBlockHeight = 174 + googleBlockHeight + appleBlockHeight + (hasWelcomeBanner ? 80 : 0);
   return (
     <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
       <View style={[styles.wrap, { paddingTop: 8 }]}>
@@ -381,7 +406,7 @@ export function LoginScreen() {
             label="Continue with Email"
             variant="primary"
             onPress={() => setMode("email")}
-            disabled={googleSubmitting}
+            disabled={googleSubmitting || appleSubmitting}
             style={styles.ctaButton}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             leftIcon={<Ionicons name="mail-outline" size={18} color={colors.white} />}
@@ -391,34 +416,31 @@ export function LoginScreen() {
             <Text style={styles.or}>or</Text>
             <View style={styles.separator} />
           </View>
-          <AppButton
-            label={googleSubmitting ? "Signing in…" : "Continue with Google"}
-            onPress={handleGoogleSignIn}
-            variant="dark"
-            disabled={googleSubmitting}
-            style={styles.ctaButton}
-            leftIcon={
-              googleSubmitting ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <GoogleG size={18} />
-              )
-            }
-          />
-          {showAppleSignIn ? (
-            // Apple sign-in not yet wired up; iOS only per App Store Guideline 4.8.
+          {showGoogleSignIn ? (
             <AppButton
-              label="Continue with Apple (coming soon)"
-              onPress={() => {}}
+              label={googleSubmitting ? "Signing in…" : "Continue with Google"}
+              onPress={handleGoogleSignIn}
               variant="dark"
-              disabled
-              style={[styles.ctaButton, styles.gap]}
-              leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
+              disabled={googleSubmitting || appleSubmitting}
+              style={styles.ctaButton}
+              leftIcon={
+                googleSubmitting ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : (
+                  <GoogleG size={18} />
+                )
+              }
             />
           ) : null}
+          <AppleSignInButton
+            onPress={handleAppleSignIn}
+            busy={appleSubmitting}
+            disabled={googleSubmitting || appleSubmitting}
+            style={styles.gap}
+          />
           <View style={styles.switchRow}>
             <Text style={styles.switchText}>New to Safarly? </Text>
-            <Pressable onPress={goToSignup} disabled={googleSubmitting} hitSlop={4}>
+            <Pressable onPress={goToSignup} disabled={googleSubmitting || appleSubmitting} hitSlop={4}>
               <Text style={[styles.switchLink, googleSubmitting && styles.switchLinkDisabled]}>
                 Create an account
               </Text>
@@ -427,7 +449,7 @@ export function LoginScreen() {
           <LegalConsentText
             prefix="By continuing, you agree to our"
             style={styles.terms}
-            disabled={googleSubmitting}
+            disabled={googleSubmitting || appleSubmitting}
           />
         </View>
       </View>

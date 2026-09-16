@@ -7,6 +7,7 @@
 // at module evaluation and take the whole app down.
 
 import type * as GoogleSigninModule from "@react-native-google-signin/google-signin";
+import { Platform } from "react-native";
 
 import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from "@/integrations/google/env";
 import { authApi } from "@/services/api/auth";
@@ -46,6 +47,17 @@ function loadNativeModule(): GoogleSigninNative {
     if (isNativeModuleMissing(err)) throw nativeUnavailableError();
     throw err;
   }
+}
+
+/**
+ * Whether this build can offer Google sign-in at all. iOS needs its own OAuth
+ * client (and the matching URL scheme, injected by app.config.js); without it
+ * the button is hidden rather than shown and failing — App Store review treats
+ * a control that cannot work as an incomplete app.
+ */
+export function isGoogleSignInConfigured(): boolean {
+  if (!GOOGLE_WEB_CLIENT_ID) return false;
+  return Platform.OS !== "ios" || GOOGLE_IOS_CLIENT_ID.length > 0;
 }
 
 let configured = false;
