@@ -6,6 +6,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/services/api/client";
 import { colors } from "@/theme/colors";
+import { permissionDeniedBanner } from "@/utils/permissionBanner";
 
 type Props = {
   userId: string;
@@ -16,8 +17,14 @@ type Props = {
 };
 
 type Status =
-  | { kind: "warning"; title: string; message: string }
-  | { kind: "error"; title: string; message: string }
+  | {
+      kind: "warning" | "error";
+      title: string;
+      message: string;
+      /** Set for a permanently-denied permission, which can only be fixed in Settings. */
+      actionLabel?: string;
+      onAction?: () => void;
+    }
   | null;
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -42,11 +49,16 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        setStatus({
-          kind: "warning",
-          title: "Permission needed",
-          message: "Allow photo access to upload a profile picture.",
-        });
+        {
+          const denied = permissionDeniedBanner("photos", perm, "upload a profile picture");
+          setStatus({
+            kind: "warning",
+            title: denied.title,
+            message: denied.message,
+            actionLabel: denied.actionLabel,
+            onAction: denied.onAction,
+          });
+        }
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -177,6 +189,17 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
           </Text>
         </View>
       ) : null}
+      {status?.actionLabel && status.onAction ? (
+        <Pressable
+          onPress={status.onAction}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={status.actionLabel}
+          style={styles.statusAction}
+        >
+          <Text style={styles.statusActionText}>{status.actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -252,4 +275,11 @@ const styles = StyleSheet.create({
   statusIcon: { marginTop: 1 },
   statusText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: "500" },
   statusTitle: { fontWeight: "800" },
+  statusAction: { alignSelf: "center", paddingVertical: 6 },
+  statusActionText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.warning,
+    textDecorationLine: "underline",
+  },
 });

@@ -18,6 +18,7 @@ import { KYC_PDF_MIME, kycExtFromMime, validateKycAsset } from "@/features/profi
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type KycDocType } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { permissionDeniedBanner } from "@/utils/permissionBanner";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "KycVerification">;
 
@@ -28,7 +29,14 @@ const DOC_TYPES: { value: KycDocType; label: string; icon: keyof typeof Ionicons
 ];
 
 type PickedFile = { uri: string; mimeType: string | null; ext: string; name: string; isPdf: boolean };
-type Banner = { variant: "error" | "warning" | "success" | "info"; title: string; message?: string };
+type Banner = {
+  variant: "error" | "warning" | "success" | "info";
+  title: string;
+  message?: string;
+  /** Set for a permanently-denied permission, which can only be fixed in Settings. */
+  actionLabel?: string;
+  onAction?: () => void;
+};
 type Slot = "doc" | "selfie";
 
 function docLabel(value: string): string {
@@ -96,7 +104,7 @@ export function KycVerificationScreen() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        setBanner({ variant: "warning", title: "Permission needed", message: "Allow photo access to upload your document." });
+        setBanner(permissionDeniedBanner("photos", perm, "upload your document"));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
@@ -114,7 +122,7 @@ export function KycVerificationScreen() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
-        setBanner({ variant: "warning", title: "Permission needed", message: "Allow camera access to take a photo." });
+        setBanner(permissionDeniedBanner("camera", perm, "take a photo"));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -209,6 +217,8 @@ export function KycVerificationScreen() {
             variant={banner.variant}
             title={banner.title}
             message={banner.message}
+            actionLabel={banner.actionLabel}
+            onAction={banner.onAction}
             onDismiss={() => setBanner(null)}
           />
         </View>

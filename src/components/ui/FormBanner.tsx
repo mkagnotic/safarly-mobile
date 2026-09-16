@@ -9,6 +9,13 @@ type Props = {
   title?: string | null;
   variant?: Variant;
   onDismiss?: () => void;
+  /**
+   * Optional inline action. Added for permission banners, where telling someone
+   * their camera is blocked is useless without a way to unblock it — a denied
+   * permission can only be restored from the OS settings app.
+   */
+  actionLabel?: string | null;
+  onAction?: () => void;
 };
 
 interface Accent {
@@ -18,7 +25,14 @@ interface Accent {
   border: string;
 }
 
-export function FormBanner({ message, title, variant = "error", onDismiss }: Readonly<Props>) {
+export function FormBanner({
+  message,
+  title,
+  variant = "error",
+  onDismiss,
+  actionLabel,
+  onAction,
+}: Readonly<Props>) {
   if (!message && !title) return null;
   const accent = accentFor(variant);
   return (
@@ -34,6 +48,17 @@ export function FormBanner({ message, title, variant = "error", onDismiss }: Rea
           <Text style={[styles.text, { color: accent.fg }, title ? styles.textWithTitle : null]}>
             {message}
           </Text>
+        ) : null}
+        {actionLabel && onAction ? (
+          <Pressable
+            onPress={onAction}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={actionLabel}
+            style={styles.actionBtn}
+          >
+            <Text style={[styles.actionText, { color: accent.fg }]}>{actionLabel}</Text>
+          </Pressable>
         ) : null}
       </View>
       {onDismiss ? (
@@ -101,4 +126,6 @@ const styles = StyleSheet.create({
   text: { fontSize: 13, lineHeight: 19, fontWeight: "500" },
   textWithTitle: { marginTop: 2 },
   closeBtn: { padding: 2, marginTop: 1 },
+  actionBtn: { alignSelf: "flex-start", paddingVertical: 6, marginTop: 2 },
+  actionText: { fontSize: 13, fontWeight: "800", textDecorationLine: "underline" },
 });

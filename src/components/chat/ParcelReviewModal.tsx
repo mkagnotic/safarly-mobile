@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Image,
   Linking,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +14,8 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
+import { notifyPermissionDenied } from "@/utils/permissionBanner";
 import { showToast } from "@/feedback/appFeedback";
 import {
   getErrorMessage,
@@ -113,11 +114,7 @@ export function ParcelReviewModal({
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        showToast({
-          title: "Permission needed",
-          message: "Allow photo access to add parcel photos.",
-          variant: "warning",
-        });
+        notifyPermissionDenied("photos", perm, "add parcel photos");
         return;
       }
       const remaining = Math.max(1, maxPhotos - files.length);
@@ -150,11 +147,7 @@ export function ParcelReviewModal({
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
-        showToast({
-          title: "Permission needed",
-          message: "Allow camera access to take a photo.",
-          variant: "warning",
-        });
+        notifyPermissionDenied("camera", perm, "take a photo");
         return;
       }
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -203,23 +196,15 @@ export function ParcelReviewModal({
   };
 
   return (
-    <Modal
+    // KeyboardAwareSheet keeps the note field above the keyboard on both
+    // platforms; it cannot be dismissed while an upload or review is running.
+    <KeyboardAwareSheet
       visible={open}
-      transparent
-      animationType="fade"
-      onRequestClose={() => {
-        if (!busy) onClose();
-      }}
+      onClose={onClose}
+      dismissible={!busy}
+      maxHeightRatio={0.88}
+      handle={false}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!busy) onClose();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.sheet}>
         <View style={styles.header}>
           <View style={styles.headerIcon}>
             <Ionicons name="cube" size={20} color={colors.primary} />
@@ -287,8 +272,7 @@ export function ParcelReviewModal({
             />
           )}
         </ScrollView>
-      </View>
-    </Modal>
+    </KeyboardAwareSheet>
   );
 }
 
@@ -687,21 +671,6 @@ function PickerChip({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,15,25,0.45)",
-  },
-  sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: "88%",
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    overflow: "hidden",
-  },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
