@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Branded launch screen. Composed from the existing launcher artwork rather than
+  a separate bitmap so the splash can never drift from the app icon. `expo
+  prebuild` regenerates this from `expo.splash` in app.json; keep the two in step.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@color/splashscreen_background" />
+  <item>
+    <bitmap
+      android:src="@mipmap/ic_launcher"
+      android:gravity="center"
+      android:tileMode="disabled" />
+  </item>
+</layer-list>

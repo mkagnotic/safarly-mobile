@@ -8,6 +8,7 @@
     "scheme": "safarly",
     "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FAECF3"
     },
@@ -16,17 +17,62 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.anonymous.safarlymobile"
+      "bundleIdentifier": "com.mysafarly.app",
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Safarly uses the camera so you can photograph your ID document, take a verification selfie, and capture parcel photos for the carrier.",
+        "NSPhotoLibraryUsageDescription": "Safarly needs your photo library so you can attach an ID document, parcel photos, or a profile picture from photos you already have."
+      },
+      "associatedDomains": [
+        "applinks:mysafarly.com",
+        "applinks:www.mysafarly.com"
+      ]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAECF3"
       },
-      "package": "com.anonymous.safarlymobile"
+      "package": "com.mysafarly.app",
+      "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/app"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "plugins": [
       "@react-native-google-signin/google-signin",
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Safarly needs your photo library so you can attach an ID document, parcel photos, or a profile picture from photos you already have.",
+          "cameraPermission": "Safarly uses the camera so you can photograph your ID document, take a verification selfie, and capture parcel photos for the carrier.",
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-notifications",
         {

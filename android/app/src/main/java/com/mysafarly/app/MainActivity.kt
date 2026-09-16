@@ -1,4 +1,4 @@
-package com.anonymous.safarlymobile
+package com.mysafarly.app
 
 import android.os.Build
 import android.os.Bundle

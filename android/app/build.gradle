@@ -5,6 +5,35 @@ apply plugin: "com.facebook.react"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
 /**
+ * Release signing secrets, read from a Gradle property first and the environment
+ * second so the same build works locally and on CI. Never hard-code these and
+ * never commit the keystore — `*.keystore` is gitignored.
+ */
+def resolveSigningProp(String name) {
+    def value = findProperty(name) ?: System.getenv(name)
+    return value?.toString()?.trim() ?: null
+}
+
+/** True only when every upload-key secret is present. */
+def hasUploadKey() {
+    return ['SAFARLY_UPLOAD_STORE_FILE',
+            'SAFARLY_UPLOAD_STORE_PASSWORD',
+            'SAFARLY_UPLOAD_KEY_ALIAS',
+            'SAFARLY_UPLOAD_KEY_PASSWORD'].every { resolveSigningProp(it) != null }
+}
+
+// A release APK signed with the debug key installs and runs but Play rejects it.
+// Say so at configuration time rather than letting it surface at upload.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasUploadKey() && graph.allTasks.any { it.name.toLowerCase().contains('release') }) {
+        logger.warn('\nSafarly: no upload key configured — this release build is DEBUG-SIGNED ' +
+                    'and Play will reject it. Set SAFARLY_UPLOAD_STORE_FILE, ' +
+                    'SAFARLY_UPLOAD_STORE_PASSWORD, SAFARLY_UPLOAD_KEY_ALIAS and ' +
+                    'SAFARLY_UPLOAD_KEY_PASSWORD to sign it properly.\n')
+    }
+}
+
+/**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
@@ -93,9 +122,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.safarlymobile'
+    namespace 'com.mysafarly.app'
     defaultConfig {
-        applicationId 'com.anonymous.safarlymobile'
+        applicationId 'com.mysafarly.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -108,15 +137,32 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Upload key for Play App Signing. The keystore and its passwords are
+        // never committed: point SAFARLY_UPLOAD_STORE_FILE at the file and supply
+        // the three secrets through ~/.gradle/gradle.properties or the
+        // environment. When they are absent — a contributor checkout, or CI that
+        // only builds debug — `release` silently falls back to the debug key and
+        // produces a runnable but unshippable APK, which is better than failing
+        // every build for everyone who is not cutting a release.
+        release {
+            def storePath = resolveSigningProp('SAFARLY_UPLOAD_STORE_FILE')
+            def storePass = resolveSigningProp('SAFARLY_UPLOAD_STORE_PASSWORD')
+            def alias = resolveSigningProp('SAFARLY_UPLOAD_KEY_ALIAS')
+            def keyPass = resolveSigningProp('SAFARLY_UPLOAD_KEY_PASSWORD')
+            if (storePath && storePass && alias && keyPass) {
+                storeFile file(storePath)
+                storePassword storePass
+                keyAlias alias
+                keyPassword keyPass
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig hasUploadKey() ? signingConfigs.release : signingConfigs.debug
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -180,4 +226,17 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+}
+
+// Firebase Cloud Messaging. expo-notifications needs the google-services plugin
+// to turn `google-services.json` into the FCM sender id the app registers with.
+// The credential file is gitignored (it is per-project, not per-developer), so
+// apply the plugin only when it is present — otherwise a fresh checkout cannot
+// build at all. Without it push registration short-circuits cleanly in
+// `src/services/notifications/push.ts`; everything else works.
+if (file('google-services.json').exists()) {
+    apply plugin: "com.google.gms.google-services"
+} else {
+    logger.lifecycle('Safarly: android/app/google-services.json missing — building without FCM. ' +
+                     'Remote push will not be delivered on this build.')
 }
