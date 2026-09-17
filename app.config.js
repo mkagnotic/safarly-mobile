@@ -12,6 +12,8 @@
  *   button on iOS rather than showing one that cannot work. Android is
  *   unaffected either way: the plugin only touches iOS, and android/ is
  *   committed.
+ * - google-services.json, which is gitignored: EAS supplies it as the file
+ *   variable GOOGLE_SERVICES_JSON (see scripts/eas-google-services.mjs).
  * - The EAS project id, which push token registration requires. `eas init`
  *   cannot write into a dynamic config, so it is supplied as EAS_PROJECT_ID.
  * - The iOS push environment. expo-notifications writes aps-environment
@@ -40,6 +42,12 @@ module.exports = ({ config }) => {
   return {
     ...config,
     plugins,
+    android: {
+      ...config.android,
+      // On EAS the gitignored file arrives through a file-type environment
+      // variable; locally the checked-out path in app.json is used.
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? config.android?.googleServicesFile,
+    },
     extra: {
       ...config.extra,
       ...(easProjectId ? { eas: { ...config.extra?.eas, projectId: easProjectId } } : {}),
