@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
-import { supabase } from "@/integrations/supabase/client";
+import { hasStoredSession, supabase } from "@/integrations/supabase/client";
 import { authApi } from "@/services/api/auth";
 import { usersApi } from "@/services/api/users";
 import {
@@ -112,6 +112,13 @@ export function AuthProvider({ children }: Readonly<Props>) {
 
     const applySession = async (next: Session | null) => {
       if (!mountedRef.current) return;
+      // No session in hand, but one is still stored: the token couldn't be
+      // refreshed just now (offline at launch, auth briefly down). That used to
+      // run store.logout() and put the user on the Login screen. supabase-js
+      // keeps retrying, and TOKEN_REFRESHED (or SIGNED_OUT, which deletes the
+      // stored session first) arrives through onAuthStateChange.
+      if (!next && (await hasStoredSession())) return;
+      if (!mountedRef.current) return;
       setSession(next);
       const store = useAppStore.getState();
 
@@ -216,7 +223,12 @@ export function AuthProvider({ children }: Readonly<Props>) {
         // blocks sign-out.
         await unregisterPushToken();
         // signOut() also fires onAuthStateChange — the store flag flips there.
-        const { error } = await supabase.auth.signOut();
+        //
+        // Scope "local": supabase-js defaults to "global", which revokes the
+        // user's sessions on EVERY device, so logging out on the phone silently
+        // logged the same person out of mysafarly.com. Web has always used local
+        // scope for exactly this reason; the two now match.
+        const { error } = await supabase.auth.signOut({ scope: "local" });
         if (error) throw error;
       },
     }),

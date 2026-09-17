@@ -128,7 +128,8 @@ export const authApi = {
 
   /** Logout — clears the local session, then notifies the server. */
   logout: async () => {
-    await supabase.auth.signOut();
+    // Local scope: a default (global) signOut also ends the user's web sessions.
+    await supabase.auth.signOut({ scope: "local" });
     return api.post("/auth-handler/logout");
   },
 
