@@ -2,6 +2,7 @@
   "expo": {
     "name": "Safarly",
     "slug": "safarly",
+    "owner": "mysafarly",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
