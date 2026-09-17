@@ -114,14 +114,44 @@ interface RequestOptions {
   idempotencyKey?: string;
 }
 
+const FORCED_REFRESH_COOLDOWN_MS = 10_000;
+let forcedRefresh: Promise<boolean> | null = null;
+let forcedRefreshStartedAt = -Infinity;
+
+/**
+ * One forced token refresh for a burst of 401s, not one per request.
+ * Mirrors web's `refreshAfterUnauthorized` in src/services/api/client.ts.
+ *
+ * A screen fires several requests at once, and on resume with an expired token
+ * each came back 401 and called refreshSession() itself, rotating the refresh
+ * token once per request: wasted load on an auth server that was already
+ * timing out, and counted against its per-IP refresh rate limit. Concurrent
+ * callers now share one refresh; a 401 just after it retries with its token.
+ */
+async function refreshAfterUnauthorized(): Promise<boolean> {
+  if (forcedRefresh) return forcedRefresh;
+  if (Date.now() - forcedRefreshStartedAt < FORCED_REFRESH_COOLDOWN_MS) {
+    const { data } = await supabase.auth.getSession();
+    return !!data.session?.access_token;
+  }
+  forcedRefreshStartedAt = Date.now();
+  forcedRefresh = supabase.auth
+    .refreshSession()
+    .then(({ data }) => !!data.session?.access_token)
+    .catch(() => false)
+    .finally(() => {
+      forcedRefresh = null;
+    });
+  return forcedRefresh;
+}
+
 async function send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
   let response = await fetch(url, { ...init, signal });
 
   // Stale token race: supabase-js may serve a JWT that just expired before its
   // own refresh fires. Force a refresh and retry exactly once.
   if (response.status === 401) {
-    const { data } = await supabase.auth.refreshSession();
-    if (data?.session?.access_token) {
+    if (await refreshAfterUnauthorized()) {
       const retryHeaders = await authHeaders(
         // Preserve any non-auth headers the caller set (Content-Type, etc.).
         Object.fromEntries(
