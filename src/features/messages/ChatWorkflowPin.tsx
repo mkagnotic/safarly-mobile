@@ -24,10 +24,14 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   // Travel document
   upload_travel_doc: { icon: "document-attach-outline", tone: "primary", blurb: "Upload your travel document so the sender can verify the trip." },
   review_travel_doc: { icon: "shield-checkmark-outline", tone: "primary", blurb: "The carrier uploaded their travel document — review it." },
+  await_travel_doc: { icon: "time-outline", tone: "neutral", blurb: "The traveler needs to upload a boarding pass or flight ticket before you can pay." },
+  await_travel_doc_reupload: { icon: "time-outline", tone: "neutral", blurb: "You asked for a new document. Waiting for the traveler to upload it." },
   await_admin_review: { icon: "time-outline", tone: "neutral", blurb: "An admin is reviewing the travel document." },
   // Parcel photos
   upload_parcel_photos: { icon: "images-outline", tone: "primary", blurb: "Add parcel photos so the carrier can review what they'll carry." },
   review_parcel_photos: { icon: "eye-outline", tone: "primary", blurb: "The sender added parcel photos — review and approve them." },
+  await_parcel_photos: { icon: "time-outline", tone: "neutral", blurb: "The sender needs to add parcel photos before you can review them." },
+  await_parcel_update: { icon: "time-outline", tone: "neutral", blurb: "You asked for changes. Waiting for the sender to update the parcel photos." },
   // Offer
   make_offer: { icon: "pricetag-outline", tone: "primary", blurb: "Verification is done — send a delivery-fee offer." },
   accept_offer: { icon: "checkmark-circle-outline", tone: "good", blurb: "Review the current offer and accept, counter or decline." },
@@ -162,7 +166,8 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
   pending,
 }: ChatWorkflowPinProps) {
   const [expanded, setExpanded] = useState(false);
-  const { cta, expires_at: expiresAt, timeout_kind: timeoutKind } = workflow;
+  const { expires_at: expiresAt, timeout_kind: timeoutKind } = workflow;
+  const cta = reviewerCta(workflow.cta, activeDeal);
 
   // Nothing to surface: no CTA and no countdown. MATCHED sits here between the
   // handshake and the first verification step.
@@ -242,6 +247,25 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
     </View>
   );
 });
+
+/**
+ * The server names one CTA per state and role, so the reviewer at a verification
+ * step is told to "Review" before anything exists to review. Web decides this from
+ * the upload status (ChatDocVerifyPrompt / ChatParcelReviewPrompt); do the same here
+ * so the collapsed bar never offers a review of a document that was never uploaded.
+ */
+function reviewerCta(cta: WorkflowView["cta"], deal: ActiveDeal | null | undefined): WorkflowView["cta"] {
+  const waiting = (code: string, label: string): WorkflowView["cta"] => ({ ...cta, code, label, kind: "waiting", event: null });
+  if (cta.code === "review_travel_doc") {
+    if (deal?.travel_doc_status === "none") return waiting("await_travel_doc", "Awaiting the traveler's document");
+    if (deal?.travel_doc_status === "rejected") return waiting("await_travel_doc_reupload", "Re-upload requested");
+  }
+  if (cta.code === "review_parcel_photos") {
+    if (deal?.parcel_review_status === "none") return waiting("await_parcel_photos", "Awaiting parcel photos");
+    if (deal?.parcel_review_status === "rejected") return waiting("await_parcel_update", "Waiting for the sender to update the parcel");
+  }
+  return cta;
+}
 
 /** Short button verb per CTA code (the bar label carries the full sentence). */
 function ctaButtonText(code: string): string {
