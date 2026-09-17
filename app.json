@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Safarly",
-    "slug": "safarly-mobile",
+    "slug": "safarly",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
