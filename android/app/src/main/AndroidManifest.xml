@@ -40,13 +40,17 @@
         https://mysafarly.com/.well-known/assetlinks.json lists this package and
         its signing fingerprint; until then these URLs still open through the
         chooser rather than silently failing.
+
+        Only hosts that serve that file directly belong here. www.mysafarly.com
+        redirects to the apex, verifiers do not follow redirects, and on
+        Android 11 and older one unverifiable host fails verification for all.
       -->
       <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/app"/>
-        <data android:scheme="https" android:host="www.mysafarly.com" android:pathPrefix="/app"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/app"/>
       </intent-filter>
     </activity>
   </application>

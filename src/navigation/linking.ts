@@ -6,7 +6,7 @@ import type { RootStackParamList } from "./types";
 const PREFIXES = [
   "safarly://",
   "https://mysafarly.com/app",
-  "https://www.mysafarly.com/app",
+  "https://app.mysafarly.com/app",
 ];
 
 /**

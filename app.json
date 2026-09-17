@@ -29,7 +29,7 @@
       },
       "associatedDomains": [
         "applinks:mysafarly.com",
-        "applinks:www.mysafarly.com"
+        "applinks:app.mysafarly.com"
       ]
     },
     "android": {
@@ -52,6 +52,11 @@
             {
               "scheme": "https",
               "host": "mysafarly.com",
+              "pathPrefix": "/app"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
               "pathPrefix": "/app"
             }
           ],
