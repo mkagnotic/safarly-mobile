@@ -14,8 +14,9 @@
  *   committed.
  * - google-services.json, which is gitignored: EAS supplies it as the file
  *   variable GOOGLE_SERVICES_JSON (see scripts/eas-google-services.mjs).
- * - The EAS project id, which push token registration requires. `eas init`
- *   cannot write into a dynamic config, so it is supplied as EAS_PROJECT_ID.
+ * - The EAS project id, which push token registration requires, lives in
+ *   app.json (extra.eas.projectId). EAS_PROJECT_ID can override it, e.g. to
+ *   point a build at a separate staging project.
  * - The iOS push environment. expo-notifications writes aps-environment
  *   "development" unless told otherwise; store builds are pointed at APNs
  *   production explicitly rather than relying on the export step to rewrite
