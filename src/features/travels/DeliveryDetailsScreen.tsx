@@ -22,6 +22,7 @@ import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -151,7 +152,7 @@ export function DeliveryDetailsScreen() {
             <Fact label="Weight" value={`${parcel.weight_kg} kg`} />
           ) : null}
           {parcel?.fee_offered != null ? (
-            <Fact label="Fee" value={`$${parcel.fee_offered}`} />
+            <Fact label="Fee" value={formatMoneyShort(parcel.fee_offered, parcel.fee_currency)} />
           ) : null}
         </View>
 

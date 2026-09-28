@@ -5,6 +5,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { MatchCandidate } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatCandidateDate, parcelRouteOf, tripRouteOf } from "@/utils/matchCandidateLabel";
+import { formatMoneyShort } from "@/utils/money";
 
 interface Props {
   open: boolean;
@@ -73,7 +74,7 @@ export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPi
                   ) : null}
                   <Text style={styles.rowMeta} numberOfLines={1}>
                     {when ? `Travelling ${when}` : "Travel date not set"}
-                    {c.fee_offered != null ? ` · asking $${c.fee_offered}` : ""}
+                    {c.fee_offered != null ? ` · asking ${formatMoneyShort(c.fee_offered, c.fee_currency)}` : ""}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.subtleText} />

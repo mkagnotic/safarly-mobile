@@ -22,6 +22,7 @@ import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Parcel } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowFab, shadowSoft } from "@/theme/elevation";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "Parcels">;
 
@@ -353,9 +354,7 @@ const ParcelRow = memo(function ParcelRow({ parcel, onPress }: Readonly<ParcelRo
             <Text style={styles.metaText}>{parcel.category}</Text>
           </View>
           <Text style={styles.price}>
-            {parcel.fee_currency === "USD" ? "$" : ""}
-            {parcel.fee_offered}
-            {parcel.fee_currency !== "USD" ? ` ${parcel.fee_currency}` : ""}
+            {formatMoneyShort(parcel.fee_offered, parcel.fee_currency)}
           </Text>
         </View>
 

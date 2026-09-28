@@ -28,6 +28,7 @@ import {
   type Trip,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "OpportunitiesTab">,
@@ -329,7 +330,7 @@ function OpportunityCard({
       </View>
 
       <View style={styles.feeRow}>
-        <Text style={styles.feeAmount}>${parcel.fee_offered}</Text>
+        <Text style={styles.feeAmount}>{formatMoneyShort(parcel.fee_offered, parcel.fee_currency)}</Text>
         <Text style={styles.feeLabel}> offered</Text>
       </View>
 

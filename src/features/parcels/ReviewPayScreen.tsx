@@ -14,6 +14,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import type { PaymentMethod } from "@/store/types";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
+import { formatMoney } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "ReviewPayTab">,
@@ -57,10 +58,15 @@ export function ReviewPayScreen() {
     visibleMethods = paymentMethods.length > 0 ? paymentMethods : [...FALLBACK_PAYMENT_METHODS];
   }
 
-  const feeLabel = useMemo(() => `$${deliveryFee.toFixed(2)}`, [deliveryFee]);
-  const platformFeeLabel = useMemo(() => `$${platformFee.toFixed(2)}`, [platformFee]);
-  const totalLabel = useMemo(() => `$${total.toFixed(2)}`, [total]);
-  const balanceLabel = useMemo(() => `$${availableBalance.toFixed(2)} available`, [availableBalance]);
+  // No caller navigates here and it reads the mock store, so this screen is not
+  // the live payment path — that goes through payment-handler/create-intent and
+  // Stripe Checkout. Formatted properly anyway: a hardcoded "$" left lying in a
+  // pay screen is exactly how the rupee bug spread in the first place.
+  const draftCurrency = (params.draft as { currency?: string }).currency;
+  const feeLabel = useMemo(() => formatMoney(deliveryFee, draftCurrency), [deliveryFee, draftCurrency]);
+  const platformFeeLabel = useMemo(() => formatMoney(platformFee, draftCurrency), [platformFee, draftCurrency]);
+  const totalLabel = useMemo(() => formatMoney(total, draftCurrency), [total, draftCurrency]);
+  const balanceLabel = useMemo(() => `${formatMoney(availableBalance, draftCurrency)} available`, [availableBalance, draftCurrency]);
   const routeLabel = hasData ? `${params.draft.from.trim()} \u2192 ${params.draft.to.trim()}` : "\u2014 \u2192 \u2014";
   const categoryLabel = hasData ? params.draft.category.trim() : "Electronics";
   const weightLabel = hasData ? params.draft.weight.trim() : "\u2014";

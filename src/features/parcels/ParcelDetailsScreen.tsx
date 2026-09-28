@@ -28,6 +28,7 @@ import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
+import { formatMoneyShort } from "@/utils/money";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -39,13 +40,6 @@ interface Notice {
 type Nav = BottomTabNavigationProp<MainTabParamList, "ParcelDetailsTab">;
 type Route = RouteProp<MainTabParamList, "ParcelDetailsTab">;
 
-const CURRENCY_SYMBOL: Record<string, string> = {
-  USD: "$",
-  INR: "₹",
-  EUR: "€",
-  GBP: "£",
-};
-
 function formatDeliveryDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -53,11 +47,11 @@ function formatDeliveryDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// Was a local CURRENCY_SYMBOL map. Four screens each had their own version of
+// this and five more hardcoded "$" — that spread is what let ₹3600 render as
+// $3600. One helper now, shared with the web app.
 function formatFee(parcel: Parcel): string {
-  const symbol = CURRENCY_SYMBOL[parcel.fee_currency] ?? "";
-  const amount = `${parcel.fee_offered}`;
-  if (symbol) return `${symbol}${amount}`;
-  return `${amount} ${parcel.fee_currency}`;
+  return formatMoneyShort(parcel.fee_offered, parcel.fee_currency);
 }
 
 function senderInitial(name: string): string {

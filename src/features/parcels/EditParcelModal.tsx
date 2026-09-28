@@ -20,6 +20,7 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import type { DeliveryDateMode } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { currencySymbol } from "@/utils/money";
 
 type Country = "IN" | "US";
 type Currency = "USD" | "INR";
@@ -404,7 +405,7 @@ export function EditParcelModal({
             </View>
             {suggestedFee != null ? (
               <Text style={styles.hint}>
-                Suggested for {form.weight_kg} kg: {form.fee_currency === "USD" ? "$" : "₹"}
+                Suggested for {form.weight_kg} kg: {currencySymbol(form.fee_currency)}
                 {suggestedFee}
               </Text>
             ) : null}

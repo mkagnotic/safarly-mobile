@@ -81,6 +81,7 @@ import {
   type SystemEventPayload,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { currencySymbol } from "@/utils/money";
 
 type ChatNav = BottomTabNavigationProp<MainTabParamList, "OfferChatTab">;
 type ChatRoute = RouteProp<MainTabParamList, "OfferChatTab">;
@@ -371,7 +372,7 @@ export function OfferChatScreen() {
   }, [workflow, liveOffer, matchBannerVisible]);
   // Delivery offers only exist in a booking context, never for buddy matches.
   const supportsOffers = isMatched && conversation?.context_type !== "buddy";
-  const offerCurrencySymbol = liveOffer?.currency === "INR" ? "₹" : "$";
+  const offerCurrencySymbol = currencySymbol(liveOffer?.currency);
 
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<RNUploadFile | null>(null);
@@ -2175,7 +2176,7 @@ export function OfferChatScreen() {
 
 function formatMoney(amount?: number, currency?: string): string {
   if (typeof amount !== "number") return "";
-  const sym = currency === "INR" ? "₹" : "$";
+  const sym = currencySymbol(currency);
   return `${sym}${amount.toFixed(2)}`;
 }
 

@@ -59,6 +59,9 @@ export interface Trip {
 
 /** A parcel that matches a trip — from `/trip-handler/find-parcels`. */
 export interface TripParcelMatch {
+  /** Read with `fee_offered`, never apart from it — a rupee fee rendered as a
+   *  dollar amount overstated one offer roughly eightyfold. Mirrors web. */
+  fee_currency?: string;
   parcel_id: string;
   sender_id: string;
   sender_name: string;

@@ -25,6 +25,7 @@ import {
   tripsApi,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -135,7 +136,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
                 metaParts: [
                   m.category?.trim() ?? "",
                   weight != null ? `${weight} kg` : "",
-                  m.fee_offered != null ? `$${m.fee_offered}` : "",
+                  m.fee_offered != null ? formatMoneyShort(m.fee_offered, m.fee_currency) : "",
                 ].filter(Boolean),
               };
             }),
