@@ -1,10 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET"/>
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!--
+    expo-image-picker's own manifest contributes RECORD_AUDIO (it supports video
+    capture) and React Native contributes SYSTEM_ALERT_WINDOW (the dev overlay).
+    Safarly records no audio and draws no overlays, and Play surfaces both as
+    sensitive permissions on the store listing, so strip them at merge time.
+    Storage is capped above for the same reason: on API 33+ the photo picker
+    grants scoped access and neither permission is consulted.
+  -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
@@ -26,6 +34,23 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="safarly"/>
+      </intent-filter>
+      <!--
+        App Links. `autoVerify` only takes effect once
+        https://mysafarly.com/.well-known/assetlinks.json lists this package and
+        its signing fingerprint; until then these URLs still open through the
+        chooser rather than silently failing.
+
+        Only hosts that serve that file directly belong here. www.mysafarly.com
+        redirects to the apex, verifiers do not follow redirects, and on
+        Android 11 and older one unverifiable host fails verification for all.
+      -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/app"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/app"/>
       </intent-filter>
     </activity>
   </application>

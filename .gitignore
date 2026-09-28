@@ -58,3 +58,7 @@ e2e/
 
 # Web export output
 dist/
+
+# Firebase / FCM credentials — per-project, supplied out of band
+google-services.json
+GoogleService-Info.plist

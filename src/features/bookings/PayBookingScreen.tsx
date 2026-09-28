@@ -24,6 +24,7 @@ import { usePayBooking } from "@/hooks/api/usePayBooking";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, paymentsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoney } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "PayBookingTab">,
@@ -31,7 +32,10 @@ type Nav = CompositeNavigationProp<
 >;
 type Route = RouteProp<MainTabParamList, "PayBookingTab">;
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+// The charge is made in the LISTING's currency — payment-handler resolves it
+// from parcel_requests.fee_currency. Printing "$" here told a sender paying
+// ₹3600 that they owed $3600, on the screen where they commit to paying.
+const money = (n: number, currency?: string | null) => formatMoney(n, currency);
 
 export function PayBookingScreen() {
   const navigation = useNavigation<Nav>();
@@ -86,6 +90,7 @@ export function PayBookingScreen() {
   // took another. It survives purely as a fallback for bookings created before
   // `agreed_amount` existed.
   const { fee, platformFee, total } = feeBreakdown(bookingFee(booking));
+  const bookingCurrency = booking?.parcel?.fee_currency;
 
   const isSender = !!booking && booking.sender_id === user?.id;
   const isPayable = booking?.status === "pending_payment";
@@ -187,7 +192,7 @@ export function PayBookingScreen() {
           </View>
           <Text style={styles.successTitle}>Payment secured 🎉</Text>
           <Text style={styles.successBody}>
-            {money(total)} is held safely in escrow. The funds release automatically to the
+            {money(total, bookingCurrency)} is held safely in escrow. The funds release automatically to the
             carrier once you confirm delivery.
           </Text>
           <ActivityIndicator color={colors.primary} style={{ marginTop: 18 }} />
@@ -295,12 +300,12 @@ export function PayBookingScreen() {
               <Ionicons name="cash-outline" size={15} color={colors.primary} />
               <Text style={styles.sectionTitle}>Payment</Text>
             </View>
-            <Row label="Carrier fee" value={money(fee)} strong />
-            <Row label="Platform fee (10%)" value={money(platformFee)} strong />
+            <Row label="Carrier fee" value={money(fee, bookingCurrency)} strong />
+            <Row label="Platform fee (10%)" value={money(platformFee, bookingCurrency)} strong />
             <View style={styles.divider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total due now</Text>
-              <Text style={styles.totalValue}>{money(total)}</Text>
+              <Text style={styles.totalValue}>{money(total, bookingCurrency)}</Text>
             </View>
           </Card>
 

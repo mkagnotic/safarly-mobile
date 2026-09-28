@@ -34,6 +34,7 @@ import { ListSkeleton } from "@/components/ui/Skeletons";
 import { MainTabParamList } from "@/navigation/types";
 import { disputesApi, getErrorMessage, type Dispute } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "DisputesTab">;
 type BannerVariant = "success" | "error" | "info" | "warning";
@@ -262,7 +263,7 @@ function DisputeCard({
         title: "Penalty waived — carrier refunded",
         message:
           typeof refunded === "number"
-            ? `$${refunded} returned to the carrier. The strike record stays.`
+            ? `${formatMoneyShort(refunded)} returned to the carrier. The strike record stays.`
             : "The cash penalty was waived; the strike record stays.",
       });
       await onRefetch();

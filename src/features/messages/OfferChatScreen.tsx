@@ -6,12 +6,13 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useKeyboardMetrics } from "@/hooks/useKeyboardMetrics";
 import {
   ActivityIndicator,
   BackHandler,
   FlatList,
   Image,
-  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -20,6 +21,7 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
   type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -47,6 +49,7 @@ import { labelDeals, selectableDeals } from "@/utils/dealLabel";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
+import { notifyPermissionDenied } from "@/utils/permissionBanner";
 import { useActionGroup } from "@/hooks/useActionGroup";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useParcelReview } from "@/hooks/api/useParcelReview";
@@ -78,6 +81,7 @@ import {
   type SystemEventPayload,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { currencySymbol } from "@/utils/money";
 
 type ChatNav = BottomTabNavigationProp<MainTabParamList, "OfferChatTab">;
 type ChatRoute = RouteProp<MainTabParamList, "OfferChatTab">;
@@ -141,41 +145,43 @@ export function OfferChatScreen() {
   // The conversation hides the tab bar (FULLSCREEN_TAB), so the composer is now
   // the bottom-most element and has to clear the gesture bar itself.
   const insets = useSafeAreaInsets();
-  /**
-   * Height the keyboard currently occupies, straight from the OS.
-   *
-   * We reserve this as padding rather than relying on KeyboardAvoidingView,
-   * which cannot work on Android under edge-to-edge (the window is never
-   * resized, so it has nothing to measure). Reading the real height is exact on
-   * both platforms and is what makes the composer sit flush on the keyboard.
-   *
-   * iOS uses the `Will` events so the layout moves with the system animation
-   * instead of snapping after it; Android only fires `Did` reliably.
-   */
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const show = Keyboard.addListener(showEvent, (e) =>
-      setKeyboardHeight(e?.endCoordinates?.height ?? 0),
-    );
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  const keyboardOpen = keyboardHeight > 0;
+  // Keyboard reach comes from the shared hook, which already corrects for
+  // Android reporting the keyboard without the navigation bar.
+  const { visible: keyboardOpen, screenOverlap } = useKeyboardMetrics();
   // With the keyboard up the gesture bar is behind it, so reserving that inset
   // too would float the composer on a band of dead space.
   const composerBottomPad = keyboardOpen
     ? 10
     : Math.max(insets.bottom, Platform.OS === "ios" ? 18 : 10);
-  // Only iOS needs a manual lift: it never resizes the window for the keyboard.
-  // On Android under Expo 54 edge-to-edge the OS DOES resize now (the IME inset
-  // is consumed), so the layout already ends above the keyboard — adding
-  // keyboardHeight there double-counts and floats the composer up with a big gap.
-  const containerKeyboardPad = Platform.OS === "ios" ? keyboardHeight : 0;
+  // How much of the keyboard the OS has already made room for.
+  //
+  // iOS never resizes the window for the keyboard, so it always needs the full
+  // lift. Android is inconsistent: some versions resize the window under Expo's
+  // edge-to-edge (lift by the full reach there and the composer floats on a
+  // large empty band), while Android 15 with targetSdk 35+ enforces
+  // edge-to-edge and does NOT resize, which left the composer entirely under
+  // the keyboard. Hard-coding either assumption breaks the other, so measure:
+  // remember the container's height with the keyboard closed, and lift only by
+  // whatever the OS did not already take off it.
+  const [restContainerHeight, setRestContainerHeight] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const onContainerLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const h = e.nativeEvent.layout.height;
+      setContainerHeight(h);
+      if (!keyboardOpen) setRestContainerHeight(h);
+    },
+    [keyboardOpen],
+  );
+  const containerKeyboardPad = (() => {
+    if (!keyboardOpen) return 0;
+    if (Platform.OS === "ios") return screenOverlap;
+    const absorbedByResize =
+      restContainerHeight > 0 && containerHeight > 0
+        ? Math.max(0, restContainerHeight - containerHeight)
+        : 0;
+    return Math.max(0, screenOverlap - absorbedByResize);
+  })();
 
   const conversationId = route.params?.conversationId ?? null;
   const fallbackName = route.params?.name ?? "Conversation";
@@ -366,7 +372,7 @@ export function OfferChatScreen() {
   }, [workflow, liveOffer, matchBannerVisible]);
   // Delivery offers only exist in a booking context, never for buddy matches.
   const supportsOffers = isMatched && conversation?.context_type !== "buddy";
-  const offerCurrencySymbol = liveOffer?.currency === "INR" ? "₹" : "$";
+  const offerCurrencySymbol = currencySymbol(liveOffer?.currency);
 
   const [draft, setDraft] = useState("");
   const [pendingFile, setPendingFile] = useState<RNUploadFile | null>(null);
@@ -555,11 +561,7 @@ export function OfferChatScreen() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (perm.status !== "granted") {
-        showToast({
-          title: "Permission needed",
-          message: "Allow photo access to attach images.",
-          variant: "warning",
-        });
+        notifyPermissionDenied("photos", perm, "attach images");
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -590,11 +592,7 @@ export function OfferChatScreen() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
-        showToast({
-          title: "Permission needed",
-          message: "Allow camera access to take photos.",
-          variant: "warning",
-        });
+        notifyPermissionDenied("camera", perm, "take photos");
         return;
       }
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -1434,17 +1432,17 @@ export function OfferChatScreen() {
         Keyboard handling, WhatsApp-style: the composer sits flush on the
         keyboard with no gap.
 
-        - Android (Expo 54 edge-to-edge): the OS resizes the window on keyboard
-          open, so this container already ends above the keyboard — we add NO
-          padding. (Reserving keyboardHeight here on top of the resize was what
-          floated the composer up with a large empty band.)
-        - iOS: the window is never resized for the keyboard, so we lift the whole
-          container by the real keyboard height instead.
+        - iOS: the window is never resized for the keyboard, so the whole
+          container is lifted by the real keyboard height.
+        - Android: lifted by whatever part of the keyboard the OS did not
+          already absorb by resizing — see `containerKeyboardPad`. That is zero
+          where the window resizes and the full height on Android 15, where
+          enforced edge-to-edge stops it resizing.
 
-        `keyboardOpen`/`keyboardHeight` are still read from the OS to drive the
+        `keyboardOpen` (from useKeyboardMetrics) still drives the
         composer's bottom padding and the scroll-to-newest on open.
       */}
-      <View style={[styles.flex, { paddingBottom: containerKeyboardPad }]}>
+      <View style={[styles.flex, { paddingBottom: containerKeyboardPad }]} onLayout={onContainerLayout}>
         {/* ───────── Header ───────── */}
         <View style={styles.headerRow}>
           <Pressable
@@ -2178,7 +2176,7 @@ export function OfferChatScreen() {
 
 function formatMoney(amount?: number, currency?: string): string {
   if (typeof amount !== "number") return "";
-  const sym = currency === "INR" ? "₹" : "$";
+  const sym = currencySymbol(currency);
   return `${sym}${amount.toFixed(2)}`;
 }
 

@@ -32,6 +32,7 @@ import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 import { RETURN_COUNTRIES, statesFor, postalHint, sanitisePostal, validateReturnAddress } from "@/utils/addressOptions";
+import { currencySymbol } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "SendParcelTab">,
@@ -905,7 +906,7 @@ export function SendParcelScreen() {
               <CurrencyToggle value={currency} onChange={setCurrency} />
               <View style={styles.costInputWrap}>
                 <Text style={styles.costSymbol}>
-                  {currency === "USD" ? "$" : "₹"}
+                  {currencySymbol(currency)}
                 </Text>
                 <TextInput
                   value={feeOffered}
@@ -926,7 +927,7 @@ export function SendParcelScreen() {
             ) : (
               <Text style={styles.helperText}>
                 {suggestedFee != null
-                  ? `Suggested for ${weight} ${weightUnit}: ${currency === "USD" ? "$" : "₹"}${suggestedFee}. You can offer more or less.`
+                  ? `Suggested for ${weight} ${weightUnit}: ${currencySymbol(currency)}${suggestedFee}. You can offer more or less.`
                   : "The amount you're willing to pay the carrier for delivery."}
               </Text>
             )}

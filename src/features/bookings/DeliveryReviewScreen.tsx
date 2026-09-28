@@ -17,6 +17,7 @@ import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, ratingsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatMoney } from "@/utils/money";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "DeliveryReviewTab">;
 
@@ -149,7 +150,7 @@ export function DeliveryReviewScreen() {
             {booking.parcel.from_city} {"→"} {booking.parcel.to_city}
           </Text>
           {bookingFee(booking) > 0 ? (
-            <Text style={styles.bookingFee}>USD ${bookingFee(booking).toFixed(2)}</Text>
+            <Text style={styles.bookingFee}>{formatMoney(bookingFee(booking), booking.parcel?.fee_currency)}</Text>
           ) : null}
         </Card>
       ) : null}

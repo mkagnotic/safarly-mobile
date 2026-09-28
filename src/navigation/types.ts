@@ -11,6 +11,8 @@ export type RootStackParamList = {
   /** Signup email confirmation — enter the 6-digit code from the welcome email. */
   VerifyEmail: { email: string };
   AuthBootstrap: undefined;
+  /** One-shot confirmation shown right after an account is deleted. */
+  AccountDeleted: undefined;
   ProfileSetup: undefined;
   MainTabs: undefined;
   OfferChatTab:
@@ -70,6 +72,7 @@ export type MainTabParamList = {
   PreferencesTab: undefined;
   ChangePasswordTab: undefined;
   ChangeEmailTab: undefined;
+  DeleteAccountTab: undefined;
   /** Same screen as the root stack's `ForgotPassword`, reached from Change Password. */
   ForgotPasswordTab: { email?: string } | undefined;
   SendParcelTab: undefined;

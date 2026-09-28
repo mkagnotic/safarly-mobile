@@ -53,6 +53,7 @@ import {
   parcelMatchesTrip,
 } from "@/utils/routeMatch";
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
+import { formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -1377,7 +1378,7 @@ function PackageMatchCard({
     : {
         label: "FEE",
         value:
-          match.fee_offered != null ? `USD $${match.fee_offered}` : "—",
+          match.fee_offered != null ? formatMoneyShort(match.fee_offered, match.fee_currency) : "—",
       };
 
   const inlineSubtitle = isTrip

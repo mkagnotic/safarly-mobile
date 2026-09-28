@@ -254,6 +254,10 @@ export interface MatchCandidate {
   trip_any_to?: boolean;
   travel_date?: string | null;
   fee_offered?: number | null;
+  /** Read with `fee_offered`, never apart from it — a rupee fee rendered as a
+   *  dollar amount overstated one offer roughly eightyfold on the carrier's
+   *  screen. Mirrors the web type. */
+  fee_currency?: string;
 }
 
 export type OfferStatus = "open" | "accepted" | "superseded" | "expired" | "rejected";

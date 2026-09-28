@@ -4,7 +4,6 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 } from "react-native";
 
 import { GoogleG } from "@/components/icons/GoogleG";
+import { AppleSignInButton } from "@/components/auth/AppleSignInButton";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -29,6 +29,7 @@ import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import type { RootStackParamList } from "@/navigation/types";
 import { authApi, getErrorMessage, type AuthMethodInfo } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
+import { isGoogleSignInConfigured } from "@/services/auth/googleOAuth";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
@@ -48,7 +49,7 @@ interface FormErrors {
 
 export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { signUpWithPassword, signInWithGoogle } = useAuth();
+  const { signUpWithPassword, signInWithGoogle, signInWithApple } = useAuth();
   const setKycWelcomePending = useAppStore((s) => s.setKycWelcomePending);
 
   const [fullName, setFullName] = useState("");
@@ -58,13 +59,13 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [appleSubmitting, setAppleSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   /** Form-level (server) error — already-registered, network, etc. */
   const [formError, setFormError] = useState<string | null>(null);
 
   // Apple Sign In is iOS-only per App Store Guideline 4.8.
-  const showAppleSignIn = Platform.OS === "ios";
-  const busy = submitting || googleSubmitting;
+  const busy = submitting || googleSubmitting || appleSubmitting;
 
   const fullNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
@@ -114,6 +115,25 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
       setGoogleSubmitting(false);
     }
   }, [busy, signInWithGoogle]);
+
+  const handleAppleSignUp = useCallback(async () => {
+    if (busy) return;
+    setFormError(null);
+    setAppleSubmitting(true);
+    try {
+      await signInWithApple();
+    } catch (err) {
+      if (err instanceof AuthCancelledError) return;
+      const rawMessage = getErrorMessage(err);
+      const code = (err as { code?: unknown })?.code;
+      const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null, "Apple");
+      setFormError(
+        oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signup").message,
+      );
+    } finally {
+      setAppleSubmitting(false);
+    }
+  }, [busy, signInWithApple]);
 
   const handleSubmit = useCallback(async () => {
     if (busy) return;
@@ -338,28 +358,26 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               <Text style={styles.or}>or</Text>
               <View style={styles.separator} />
             </View>
-            <AppButton
-              label={googleSubmitting ? "Connecting…" : "Continue with Google"}
-              onPress={handleGoogleSignUp}
-              variant="dark"
-              disabled={busy}
-              leftIcon={
-                googleSubmitting ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : (
-                  <GoogleG size={18} />
-                )
-              }
-            />
-            {showAppleSignIn ? (
+            {isGoogleSignInConfigured() ? (
               <AppButton
-                label="Continue with Apple (coming soon)"
-                onPress={() => {}}
+                label={googleSubmitting ? "Connecting…" : "Continue with Google"}
+                onPress={handleGoogleSignUp}
                 variant="dark"
-                disabled
-                leftIcon={<Ionicons name="logo-apple" size={18} color={colors.white} />}
+                disabled={busy}
+                leftIcon={
+                  googleSubmitting ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <GoogleG size={18} />
+                  )
+                }
               />
             ) : null}
+            <AppleSignInButton
+              onPress={handleAppleSignUp}
+              busy={appleSubmitting}
+              disabled={busy && !appleSubmitting}
+            />
             <View style={styles.switchRow}>
               <Text style={styles.switchText}>Already have an account? </Text>
               <Pressable onPress={onSwitchToLogin} disabled={busy} hitSlop={4}>

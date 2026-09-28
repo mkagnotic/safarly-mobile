@@ -46,6 +46,7 @@ import {
   type RNUploadFile,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
+import { formatMoney } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "BookingsTab">,
@@ -1056,7 +1057,7 @@ function ExpandedBody({
       showBanner(
         {
           variant: "warning",
-          title: `Penalty applied: $${data.penalty_amount}`,
+          title: `Penalty applied: ${formatMoney(data.penalty_amount, (data as { currency?: string }).currency)}`,
           message: `Tier: ${data.tier}. The sender has been refunded in full.`,
         },
         7000,

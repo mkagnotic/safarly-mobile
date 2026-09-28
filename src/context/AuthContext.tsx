@@ -6,8 +6,10 @@ import { authApi } from "@/services/api/auth";
 import { usersApi } from "@/services/api/users";
 import {
   syncPushRegistrationOnLogin,
+  clearCachedPushToken,
   unregisterPushToken,
 } from "@/services/notifications/push";
+import { performAppleOAuth } from "@/services/auth/appleOAuth";
 import { performGoogleOAuth } from "@/services/auth/googleOAuth";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -47,12 +49,24 @@ interface AuthContextValue {
    * that as a no-op, not an error.
    */
   signInWithGoogle: () => Promise<void>;
+  /**
+   * Sign in with Apple. iOS only — `isAppleSignInAvailable()` gates the button,
+   * so this is never reachable elsewhere. Throws `AuthCancelledError` on
+   * dismissal, exactly like the Google path.
+   */
+  signInWithApple: () => Promise<void>;
   signUpWithPassword: (
     email: string,
     password: string,
     metadata?: SignUpMetadata,
   ) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
+  /**
+   * Clears this device's session after the account itself has been deleted.
+   * Makes no server calls: the account, its sessions and its push tokens are
+   * already gone, so a normal sign-out would only fail against a dead token.
+   */
+  signOutAfterAccountDeletion: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -197,6 +211,9 @@ export function AuthProvider({ children }: Readonly<Props>) {
         // flips the store via the onAuthStateChange listener above.
         await performGoogleOAuth();
       },
+      signInWithApple: async () => {
+        await performAppleOAuth();
+      },
       signUpWithPassword: async (email, password, metadata) => {
         // We bypass `authApi.customerSignup` here so we can pass `options.data`
         // (user_metadata) — the name collected on SignupScreen ends up there
@@ -230,6 +247,12 @@ export function AuthProvider({ children }: Readonly<Props>) {
         // scope for exactly this reason; the two now match.
         const { error } = await supabase.auth.signOut({ scope: "local" });
         if (error) throw error;
+      },
+      signOutAfterAccountDeletion: async () => {
+        await clearCachedPushToken();
+        // `local` scope only drops the stored session; the server revoked every
+        // session when it deleted the account.
+        await supabase.auth.signOut({ scope: "local" });
       },
     }),
     [session, initializing],

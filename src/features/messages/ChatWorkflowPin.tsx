@@ -6,6 +6,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { ActiveDeal, WorkflowView } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { journeyStepPrefix as P, journeyStepRef as R } from "@/utils/journeySteps";
+import { formatMoneyShort } from "@/utils/money";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 type Tone = "primary" | "good" | "warn" | "bad" | "neutral";
@@ -239,7 +240,7 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
           {activeDeal?.parcel ? (
             <Text style={styles.detailMeta}>
               {activeDeal.parcel.from_city} → {activeDeal.parcel.to_city}
-              {activeDeal.offer ? `  ·  ${activeDeal.offer.currency === "USD" ? "$" : ""}${activeDeal.offer.amount}` : ""}
+              {activeDeal.offer ? `  ·  ${formatMoneyShort(activeDeal.offer.amount, activeDeal.offer.currency)}` : ""}
             </Text>
           ) : null}
         </View>

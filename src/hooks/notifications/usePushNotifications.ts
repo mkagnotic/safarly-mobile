@@ -6,6 +6,7 @@ import {
   configureNotifications,
   flushPendingNotificationTarget,
   handleNotificationResponse,
+  watchPushTokenRefresh,
 } from "@/services/notifications/push";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -50,6 +51,12 @@ export function usePushNotifications(): void {
 
     return () => sub.remove();
   }, []);
+
+  // Keep the server's copy of this device's token current while signed in.
+  useEffect(() => {
+    if (!authenticated || Platform.OS === "web") return;
+    return watchPushTokenRefresh();
+  }, [authenticated]);
 
   // Once authenticated (and MainTabs has had a beat to mount), replay any tap
   // captured before we could navigate.

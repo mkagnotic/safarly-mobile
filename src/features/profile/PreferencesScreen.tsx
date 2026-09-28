@@ -1,19 +1,26 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { ActivityIndicator, StyleSheet, Switch, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { showToast } from "@/feedback/appFeedback";
 import { useMyPreferences } from "@/hooks/api/useMyPreferences";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type UserPreferences } from "@/services/api";
-import { requestAndRegisterPushToken, unregisterPushToken } from "@/services/notifications/push";
+import {
+  getPushAvailability,
+  getPushPermission,
+  requestAndRegisterPushToken,
+  unregisterPushToken,
+} from "@/services/notifications/push";
 import { colors } from "@/theme/colors";
+import { openAppSettings } from "@/utils/permissionBanner";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "PreferencesTab">;
 
@@ -47,11 +54,40 @@ const TOGGLES: readonly ToggleConfig[] = [
   },
 ] as const;
 
+type PushNotice = { kind: "blocked"; canAskAgain: boolean } | { kind: "failed" };
+
+/** Replaces the push toggle's description when push cannot work here at all. */
+const PUSH_UNAVAILABLE_COPY: Record<"unsupported" | "not-configured", string> = {
+  unsupported: "Push notifications aren't available on this device.",
+  "not-configured": "Push notifications aren't available in this version of the app yet.",
+};
+
 export function PreferencesScreen() {
   const navigation = useNavigation<Nav>();
   const { preferences, loading, error, refetch, update } = useMyPreferences();
 
   const [savingField, setSavingField] = useState<keyof UserPreferences | null>(null);
+
+  // Push depends on more than the saved preference: the build must support it
+  // and the OS must allow it. Both are checked before the toggle is shown, and
+  // the OS permission again whenever the screen regains focus — e.g. on return
+  // from the Settings app.
+  const pushAvailability = useMemo(() => getPushAvailability(), []);
+  const [pushPermission, setPushPermission] = useState<{ granted: boolean; canAskAgain: boolean } | null>(null);
+  const [pushNotice, setPushNotice] = useState<PushNotice | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (pushAvailability !== "available") return;
+      let active = true;
+      void getPushPermission().then((p) => {
+        if (active) setPushPermission(p);
+      });
+      return () => {
+        active = false;
+      };
+    }, [pushAvailability]),
+  );
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -77,27 +113,28 @@ export function PreferencesScreen() {
     [update],
   );
 
-  // Push needs more than a DB write: turning it ON must secure the OS
-  // permission and register a device token first (web parity — it gates the
-  // toggle on the browser Notification permission). If permission is refused we
-  // surface why and leave the switch off. Turning it OFF flips the server flag
-  // (which stops delivery) and deregisters this device's token.
+  // Turning push ON must secure the OS permission and register a device token
+  // before the server flag is set (web parity — web gates its toggle on the
+  // browser Notification permission). When that fails the switch stays off AND
+  // says why, inline, until dismissed: it never quietly flips back. Turning push
+  // OFF clears the server flag, which stops delivery, and deregisters this
+  // device's token.
   const handlePushToggle = useCallback(
     async (next: boolean) => {
+      setPushNotice(null);
       if (next) {
         setSavingField("push_enabled");
         const result = await requestAndRegisterPushToken();
+        const permission = await getPushPermission();
+        setPushPermission(permission);
         setSavingField(null);
         if (!result.ok) {
-          showToast({
-            title: result.reason === "denied" ? "Notifications are blocked" : "Push isn't available yet",
-            message:
-              result.reason === "denied"
-                ? "Turn on notifications for Safarly in your device Settings to receive push alerts."
-                : "We couldn't set up push notifications on this device.",
-            variant: "error",
-          });
-          return; // leave the toggle off
+          setPushNotice(
+            result.reason === "denied"
+              ? { kind: "blocked", canAskAgain: permission.canAskAgain }
+              : { kind: "failed" },
+          );
+          return;
         }
       }
       await handleUpdate({ push_enabled: next });
@@ -105,6 +142,20 @@ export function PreferencesScreen() {
     },
     [handleUpdate],
   );
+
+  // What the push switch shows. Saved-on but blocked by the OS is shown OFF —
+  // pushes cannot arrive, and claiming otherwise is the confusion this avoids.
+  const pushBlockedByOs =
+    pushAvailability === "available" &&
+    Boolean(preferences?.push_enabled) &&
+    pushPermission !== null &&
+    !pushPermission.granted;
+  const pushValue =
+    pushAvailability === "available" &&
+    Boolean(preferences?.push_enabled) &&
+    (pushPermission?.granted ?? true);
+  const shownPushNotice: PushNotice | null =
+    pushNotice ?? (pushBlockedByOs ? { kind: "blocked", canAskAgain: pushPermission.canAskAgain } : null);
 
   // ───────── Loading state ─────────
   if (loading && !preferences) {
@@ -144,22 +195,53 @@ export function PreferencesScreen() {
       <Text style={styles.subtitle}>Manage how you receive notifications.</Text>
 
       <View style={styles.list}>
-        {TOGGLES.map((toggle) => (
-          <ToggleCard
-            key={toggle.field}
-            icon={toggle.icon}
-            label={toggle.label}
-            desc={toggle.desc}
-            value={Boolean(preferences?.[toggle.field])}
-            saving={savingField === toggle.field}
-            onChange={(nextValue) =>
-              toggle.field === "push_enabled"
-                ? void handlePushToggle(nextValue)
-                : void handleUpdate({ [toggle.field]: nextValue } as Partial<UserPreferences>)
-            }
-          />
-        ))}
+        {TOGGLES.map((toggle) => {
+          const isPush = toggle.field === "push_enabled";
+          const pushUnavailable = isPush && pushAvailability !== "available";
+          return (
+            <ToggleCard
+              key={toggle.field}
+              icon={toggle.icon}
+              label={toggle.label}
+              desc={pushUnavailable ? PUSH_UNAVAILABLE_COPY[pushAvailability] : toggle.desc}
+              value={isPush ? pushValue : Boolean(preferences?.[toggle.field])}
+              disabled={pushUnavailable}
+              saving={savingField === toggle.field}
+              onChange={(nextValue) =>
+                isPush
+                  ? void handlePushToggle(nextValue)
+                  : void handleUpdate({ [toggle.field]: nextValue } as Partial<UserPreferences>)
+              }
+            />
+          );
+        })}
       </View>
+
+      {shownPushNotice ? (
+        <View style={styles.pushNotice}>
+          {shownPushNotice.kind === "blocked" ? (
+            <FormBanner
+              variant="warning"
+              title="Notifications are turned off"
+              message={
+                shownPushNotice.canAskAgain
+                  ? "Allow notifications for Safarly to turn on push."
+                  : "Notifications are turned off for Safarly. Turn them on in Settings to receive push notifications."
+              }
+              actionLabel={shownPushNotice.canAskAgain ? undefined : "Open Settings"}
+              onAction={shownPushNotice.canAskAgain ? undefined : openAppSettings}
+              onDismiss={pushNotice ? () => setPushNotice(null) : undefined}
+            />
+          ) : (
+            <FormBanner
+              variant="error"
+              title="Couldn't turn on push notifications"
+              message="Something went wrong setting up push on this device. Please try again."
+              onDismiss={() => setPushNotice(null)}
+            />
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={16} color={colors.mutedText} />
@@ -194,11 +276,12 @@ interface ToggleCardProps {
   label: string;
   desc: string;
   value: boolean;
+  disabled?: boolean;
   saving?: boolean;
   onChange: (next: boolean) => void;
 }
 
-function ToggleCard({ icon, label, desc, value, saving, onChange }: Readonly<ToggleCardProps>) {
+function ToggleCard({ icon, label, desc, value, disabled, saving, onChange }: Readonly<ToggleCardProps>) {
   return (
     <Card style={styles.toggleCard}>
       <View style={styles.toggleLeft}>
@@ -216,6 +299,9 @@ function ToggleCard({ icon, label, desc, value, saving, onChange }: Readonly<Tog
         <Switch
           value={value}
           onValueChange={onChange}
+          disabled={disabled}
+          accessibilityLabel={label}
+          accessibilityState={{ disabled: !!disabled, checked: value }}
           trackColor={{ false: "#E5DCF8", true: colors.primary }}
           thumbColor={value ? "#FFFFFF" : "#F4F2FB"}
           ios_backgroundColor="#E5DCF8"
@@ -287,6 +373,8 @@ const styles = StyleSheet.create({
   toggleTextBlock: { flex: 1 },
   toggleLabel: { color: colors.text, fontSize: 15, fontWeight: "700" },
   toggleDesc: { color: colors.mutedText, fontSize: 12, lineHeight: 17, marginTop: 2 },
+
+  pushNotice: { marginTop: 12 },
 
   // Footer note
   note: {

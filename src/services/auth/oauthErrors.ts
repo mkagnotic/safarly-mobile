@@ -5,7 +5,7 @@
  */
 export class AuthCancelledError extends Error {
   constructor() {
-    super("Google sign-in was cancelled");
+    super("Sign-in was cancelled");
     this.name = "AuthCancelledError";
   }
 }
@@ -25,8 +25,12 @@ export class AuthCancelledError extends Error {
  * Unmapped errors are logged for diagnosis and replaced with a generic, actionable
  * message. If a new provider error starts appearing, the console is where it shows up
  * — add a case here rather than letting it through.
+ *
+ * `provider` names the sign-in method in the copy. Mobile adds it for Sign in with
+ * Apple; it defaults to Google, so web's copy of this function (Google only) is
+ * unaffected.
  */
-export function mapOAuthError(raw: string, code: string | null): string {
+export function mapOAuthError(raw: string, code: string | null, provider: "Google" | "Apple" = "Google"): string {
   const text = (raw ?? "").toLowerCase();
   const c = (code ?? "").toLowerCase();
 
@@ -76,13 +80,17 @@ export function mapOAuthError(raw: string, code: string | null): string {
 
   // Provider switched off or misconfigured — the user cannot fix it, so point them
   // at the route that does work.
+  // "Unacceptable audience" is what Supabase says when the identity token was issued
+  // for a client ID the provider isn't configured to accept — for Apple, a bundle ID
+  // missing from the provider's authorised client IDs.
   if (
     c === "provider_disabled" ||
     c === "unsupported_provider" ||
     text.includes("provider is not enabled") ||
-    text.includes("unsupported provider")
+    text.includes("unsupported provider") ||
+    text.includes("unacceptable audience")
   ) {
-    return "Google sign-in isn't available right now. Please sign in with your email and password.";
+    return `${provider} sign-in isn't available right now. Please sign in with your email and password.`;
   }
 
   if (
@@ -104,5 +112,5 @@ export function mapOAuthError(raw: string, code: string | null): string {
     // eslint-disable-next-line no-console
     console.warn("[oauth] unmapped provider error:", raw, code ? `(code: ${code})` : "");
   }
-  return "We couldn't complete Google sign-in. Please try again, or sign in with your email and password.";
+  return `We couldn't complete ${provider} sign-in. Please try again, or sign in with your email and password.`;
 }

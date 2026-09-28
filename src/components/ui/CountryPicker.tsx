@@ -1,15 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { SearchablePickerSheet } from "@/components/ui/SearchablePickerSheet";
 import { COUNTRIES, countryLabel, type CountryOption } from "@/features/profile/countries";
 import { colors } from "@/theme/colors";
 
@@ -26,10 +19,9 @@ interface Props {
 }
 
 /**
- * Country picker built on a native `Modal` + `FlatList`. Filterable, fully
- * cross-platform (no native iOS/Android picker dependency), and lazy: the
- * sheet only mounts while open so it adds nothing to the render path of the
- * parent form when closed.
+ * Country field plus the shared searchable picker sheet. Fully cross-platform
+ * (no native iOS/Android picker dependency); search matches the country name or
+ * its ISO code.
  */
 export function CountryPicker({
   value,
@@ -40,31 +32,8 @@ export function CountryPicker({
   invalid,
 }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
-    );
-  }, [options, query]);
-
+  const close = useCallback(() => setOpen(false), []);
   const selectedLabel = countryLabel(value);
-
-  const handleSelect = useCallback(
-    (code: string) => {
-      onChange(code);
-      setOpen(false);
-      setQuery("");
-    },
-    [onChange],
-  );
-
-  const closeModal = useCallback(() => {
-    setOpen(false);
-    setQuery("");
-  }, []);
 
   return (
     <View>
@@ -94,68 +63,21 @@ export function CountryPicker({
         </View>
       </Pressable>
 
-      <Modal
+      <SearchablePickerSheet
         visible={open}
-        animationType="slide"
-        transparent
-        onRequestClose={closeModal}
-        statusBarTranslucent
-      >
-        <Pressable style={styles.backdrop} onPress={closeModal} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Select country</Text>
-            <Pressable onPress={closeModal} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
-              <Ionicons name="close" size={22} color={colors.text} />
-            </Pressable>
-          </View>
-
-          <View style={styles.searchRow}>
-            <Ionicons name="search-outline" size={16} color={colors.mutedText} />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search"
-              placeholderTextColor={colors.mutedText}
-              style={styles.searchInput}
-              autoCorrect={false}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.code}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => {
-              const selected = item.code === value;
-              return (
-                <Pressable
-                  onPress={() => handleSelect(item.code)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    pressed ? styles.rowPressed : null,
-                    selected ? styles.rowSelected : null,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                >
-                  <Text style={styles.rowName}>{item.name}</Text>
-                  {selected ? (
-                    <Ionicons name="checkmark" size={18} color={colors.primary} />
-                  ) : (
-                    <Text style={styles.rowCode}>{item.code}</Text>
-                  )}
-                </Pressable>
-              );
-            }}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListEmptyComponent={<Text style={styles.empty}>No matches</Text>}
-            contentContainerStyle={styles.listContent}
-          />
-        </View>
-      </Modal>
+        onClose={close}
+        title="Select country"
+        searchPlaceholder="Search countries"
+        autoCapitalize="none"
+        items={options}
+        keyExtractor={(c) => c.code}
+        getLabel={(c) => c.name}
+        // Match on the ISO code too, so "US" or "IN" finds the country.
+        getSearchText={(c) => `${c.name} ${c.code}`}
+        isSelected={(c) => c.code === value}
+        onSelect={(c) => onChange(c.code)}
+        renderTrailing={(c) => <Text style={styles.rowCode}>{c.code}</Text>}
+      />
     </View>
   );
 }
@@ -192,61 +114,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
   },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15, 15, 25, 0.4)" },
-  sheet: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: "78%",
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 16,
-  },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 12,
-  },
-  sheetTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 20,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.input,
-    borderRadius: 12,
-  },
-  searchInput: { flex: 1, color: colors.text, fontSize: 14, paddingVertical: 0 },
-  listContent: { paddingHorizontal: 12 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  rowPressed: { backgroundColor: "rgba(0,0,0,0.04)" },
-  rowSelected: { backgroundColor: "rgba(255, 122, 38, 0.08)" },
-  rowName: { color: colors.text, fontSize: 15, fontWeight: "500" },
   rowCode: { color: colors.mutedText, fontSize: 12, fontWeight: "700", letterSpacing: 0.5 },
-  separator: { height: 1, backgroundColor: "transparent" },
-  empty: { textAlign: "center", color: colors.mutedText, paddingVertical: 24 },
 });

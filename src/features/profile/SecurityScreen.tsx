@@ -20,9 +20,13 @@ type Row = {
 };
 
 /**
- * Security hub — mirrors web's `AccountSecuritySettings` main view: exactly two
- * controls, Email (managed via support) and Change Password. No 2FA / sessions /
- * delete-account, matching web.
+ * Security hub — Email, Change password, and the account-deletion entry point.
+ *
+ * Deletion lives here rather than under Preferences because this is where a user
+ * looks for "things that change my account", and because both stores require it
+ * to be reachable without contacting support (App Store Guideline 5.1.1(v),
+ * Google Play's data deletion policy). It is deliberately set apart from the
+ * credential rows and styled as destructive so it cannot be tapped by accident.
  */
 export function SecurityScreen() {
   const navigation = useNavigation<Nav>();
@@ -85,6 +89,27 @@ export function SecurityScreen() {
           </Pressable>
         ))}
       </View>
+
+      <Text style={styles.dangerLabel}>Danger zone</Text>
+      <View style={styles.card}>
+        <Pressable
+          style={styles.row}
+          accessibilityRole="button"
+          accessibilityLabel="Delete account"
+          onPress={() => navigation.navigate("DeleteAccountTab")}
+        >
+          <View style={styles.dangerIcon}>
+            <Ionicons name="trash-outline" size={18} color={colors.danger} />
+          </View>
+          <View style={styles.rowTextWrap}>
+            <Text style={styles.dangerTitle}>Delete account</Text>
+            <Text style={styles.rowSubtitle} numberOfLines={2}>
+              Permanently remove your account and personal data
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={17} color={colors.mutedText} />
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -129,6 +154,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  dangerLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.mutedText,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  dangerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(220, 40, 40, 0.10)",
+  },
+  dangerTitle: { fontSize: 15, fontWeight: "700", color: colors.danger },
   rowIcon: {
     width: 38,
     height: 38,

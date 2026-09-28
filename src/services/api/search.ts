@@ -51,6 +51,10 @@ export interface PackageMatch {
   weight_kg?: number;
   category?: string;
   fee_offered?: number;
+  /** Read with `fee_offered`, never apart from it — a rupee fee rendered as a
+   *  dollar amount overstated one offer roughly eightyfold on the carrier's
+   *  screen. Mirrors the web type. */
+  fee_currency?: string;
   description?: string;
   /** Retail purchase being forwarded: the handoff is normally a courier delivery
    *  to the carrier's local address rather than an in-person meetup. */

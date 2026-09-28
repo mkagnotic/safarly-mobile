@@ -40,6 +40,21 @@ export interface UserStats {
   response_rate: number;
 }
 
+export interface AccountDeletionStatus {
+  method: "password" | "email_code";
+  email: string | null;
+  apple_linked: boolean;
+  blocked: boolean;
+  blocked_reason: string | null;
+}
+
+export interface AccountDeletionConfirmation {
+  password?: string;
+  code?: string;
+  /** Fresh Sign in with Apple authorization code, so the server can revoke Apple's tokens. */
+  apple_authorization_code?: string;
+}
+
 export const usersApi = {
   getMyProfile: () =>
     api.get<{ profile: UserProfile; preferences: UserPreferences }>("/user-handler/me"),
@@ -68,4 +83,26 @@ export const usersApi = {
     api.delete<{ removed: boolean }>(
       `/user-handler/me/push-token?token=${encodeURIComponent(token)}`,
     ),
+
+  /**
+   * Whether this account can be deleted right now, and how the owner confirms
+   * it: `password` for accounts that have one, `email_code` for accounts created
+   * through Google or Apple. `blocked_reason` is user-facing copy.
+   */
+  getAccountDeletionStatus: () => api.get<AccountDeletionStatus>("/user-handler/me/deletion"),
+
+  /** Emails a 6-digit confirmation code. Only for `email_code` accounts. */
+  sendAccountDeletionCode: () =>
+    api.post<{ sent: boolean; expires_in_minutes: number }>("/user-handler/me/deletion/code", {}),
+
+  /**
+   * Permanently deletes the signed-in account after confirming the password or
+   * emailed code. The server revokes every session and push token, anonymizes
+   * the profile, and removes the sign-in identity; wrong confirmation fails with
+   * REAUTH_FAILED, an in-progress delivery or wallet balance with CONFLICT.
+   *
+   * The access token is void once this succeeds — sign out locally straight after.
+   */
+  deleteMyAccount: (confirmation: AccountDeletionConfirmation) =>
+    api.post<{ deleted: boolean }>("/user-handler/me/delete", confirmation),
 };

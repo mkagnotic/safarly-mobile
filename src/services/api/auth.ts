@@ -119,6 +119,24 @@ export const authApi = {
     return data;
   },
 
+  /**
+   * Sign in with Apple. The native sheet hands back an identity token signed by
+   * Apple, which Supabase verifies against the Apple provider configured in the
+   * Dashboard — the Services ID and key live there, never in the client.
+   *
+   * Users who hide their address get an Apple private-relay one
+   * (`…@privaterelay.appleid.com`). That is a real, deliverable address, so
+   * treat it like any other: never assume it maps to a person's own domain.
+   */
+  appleSignInWithIdToken: async (idToken: string) => {
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: "apple",
+      token: idToken,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   /** Get current user. */
   me: () => api.get<AuthUser>("/auth-handler/me"),
 

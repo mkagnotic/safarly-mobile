@@ -8,6 +8,11 @@ import { mapOAuthError } from "./oauthErrors";
 
 export { AuthCancelledError } from "./oauthErrors";
 
+/** Web always offers Google — the redirect flow needs no per-platform client. */
+export function isGoogleSignInConfigured(): boolean {
+  return true;
+}
+
 /**
  * The browser navigates away to Google on success, so this promise typically
  * doesn't resolve in-page — the session is established after the redirect

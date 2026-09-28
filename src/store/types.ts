@@ -82,6 +82,12 @@ export interface AppState {
   /** Transient — not persisted. See `PendingNotice`. */
   pendingNotice: PendingNotice | null;
   /**
+   * Set the moment an account deletion succeeds, just before signing out, so the
+   * signed-out stack opens on the confirmation screen instead of Login.
+   * Transient — a relaunch should land on the normal welcome screen.
+   */
+  accountDeleted: boolean;
+  /**
    * One-shot flag set at registration and consumed on the first Home render to
    * show the KYC welcome prompt exactly once. Persisted so it survives the
    * ProfileSetup hop before Home mounts.
@@ -92,6 +98,7 @@ export interface AppState {
   setSplashDone: () => void;
   setPendingNotice: (notice: PendingNotice | null) => void;
   clearPendingNotice: () => void;
+  setAccountDeleted: (deleted: boolean) => void;
   setKycWelcomePending: (pending: boolean) => void;
   finishOnboarding: () => void;
   finishProfileSetup: () => void;

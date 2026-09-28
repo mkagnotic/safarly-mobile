@@ -190,6 +190,9 @@ export interface Booking {
     to_country?: string | null;
     category: string;
     fee_offered: number;
+    /** The currency the booking is CHARGED in — payment-handler resolves it
+     *  from this same column. Read it with fee_offered, never apart from it. */
+    fee_currency?: string;
     weight?: number;
     weight_kg?: number;
     description?: string | null;
