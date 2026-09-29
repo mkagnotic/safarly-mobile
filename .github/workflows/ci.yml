@@ -27,5 +27,11 @@ jobs:
 
       - name: Lint
         run: npm run lint
+      # A test that was never committed protects one laptop. 10 of this repo's 14
+      # test files had never been `git add`ed, so CI ran 4 of them while the suite
+      # looked complete.
+      - name: Check tests are committed
+        run: npm run check:tests
+
       - name: Unit tests
         run: npm test
