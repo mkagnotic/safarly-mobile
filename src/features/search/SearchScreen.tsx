@@ -192,6 +192,19 @@ export function SearchScreen() {
   // infer it from.
   const requestedTab = route.params?.tab;
   const [activeTab, setActiveTab] = useState<ResultsTab>(requestedTab ?? "package");
+  /**
+   * ⚠️ Arriving from a match notification forces route-matching ON and skips the
+   * restore below. Web parity (`isMatchDeepLink` in `CustomerSearch.tsx`).
+   *
+   * Browsing everything is the right default for someone who opened Search
+   * themselves, but the wrong list for someone who tapped "1 travel buddy matches
+   * your route": in browse mode the results are every open listing, server-paged,
+   * so the promised card is usually not on the first page and the tab looks empty
+   * or unrelated. Route-matching returns exactly the overlapping listings — the
+   * set the notification was computed from — unpaginated, so the highlight effect
+   * can page to the card and scroll it into view.
+   */
+  const isMatchDeepLink = !!(highlightId || requestedTab);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // null `appliedFilters` = auto-match mode; per-list pages re-fire it for free.
@@ -212,9 +225,9 @@ export function SearchScreen() {
    * listings app behaves, and route-matching is an opt-in lens. Mirrors web
    * `CustomerSearch.tsx`.
    */
-  const [matchMyRoutes, setMatchMyRoutes] = useState(false);
+  const [matchMyRoutes, setMatchMyRoutes] = useState(isMatchDeepLink);
   const { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch } =
-    useSearchMatches({ initialFilters: BROWSE_QUERY });
+    useSearchMatches({ initialFilters: isMatchDeepLink ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY });
 
   // Manual search + page changes re-fire here; pagination is free (the unit was
   // already spent in handleApply).
@@ -235,7 +248,10 @@ export function SearchScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const snap = await loadPersistedSearch();
+      // A deep-link is a fresh, specific intent: restoring the last browse over it
+      // would drag the user off the card they just tapped. Web does the same by
+      // returning null from `loadPersistedSearch` when the URL carries the params.
+      const snap = isMatchDeepLink ? null : await loadPersistedSearch();
       if (!cancelled && snap) {
         setFromCountry(snap.fromCountry);
         setToCountry(snap.toCountry);
