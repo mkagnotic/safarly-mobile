@@ -193,19 +193,16 @@ export function PayoutSetupScreen() {
           */}
           {!hasAccount ? (
             <Card style={styles.hintCard}>
-              <Text style={styles.hintTitle}>One thing to expect</Text>
+              <Text style={styles.hintTitle}>Before you continue</Text>
               <Text style={styles.hintBody}>
-                {providerLabel} will ask how you earn money and offer you a product description or a
-                website. Choose the description — you are carrying parcels as a traveller, not
-                running a website, and naming one you do not own can hold your account up.
+                {providerLabel} will ask what you sell. Choose the product description option — you
+                don’t need a website.
               </Text>
               <View style={styles.hintQuote}>
                 <Text style={styles.hintQuoteText}>
-                  “I carry parcels for senders as a traveller on Safarly, and am paid a fee for each
-                  delivery I complete.”
+                  “I deliver parcels for customers and earn a fee for each delivery.”
                 </Text>
               </View>
-              <Text style={styles.hintFoot}>That wording is fine to use as it is.</Text>
             </Card>
           ) : null}
 
@@ -327,7 +324,6 @@ const styles = StyleSheet.create({
   hintBody: { color: colors.mutedText, fontSize: 12, lineHeight: 18 },
   hintQuote: { backgroundColor: colors.surfaceMuted, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
   hintQuoteText: { color: colors.text, fontSize: 12, lineHeight: 18, fontStyle: "italic" },
-  hintFoot: { color: colors.mutedText, fontSize: 11, marginTop: 8 },
   action: { borderRadius: 14, minHeight: 50, marginBottom: 12 },
 
   benefitRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12 },
