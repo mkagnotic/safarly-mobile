@@ -97,6 +97,27 @@ export const TravelCard = memo(function TravelCard({
   const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
   const hasActions = canModify && !!(onEdit || onDelete);
 
+  /**
+   * Does the card contain its own controls?
+   *
+   * The card is pressable AND carries Edit / Delete / "view matches" / chat
+   * buttons inside it. Declaring `accessibilityRole="button"` on the wrapper
+   * while those exist nests one control inside another, which is:
+   *
+   *   • invalid on web — react-native-web maps the role to a real <button>, so
+   *     RN-Web renders <button> inside <button> and React logs a hydration
+   *     error (63 of them on My Travels);
+   *   • worse on a DEVICE, which is the part that actually ships. TalkBack
+   *     announces the wrapper as a single button and the inner controls stop
+   *     being individually reachable — so a screen-reader user can open the
+   *     card but cannot press Edit or Delete at all.
+   *
+   * So the role goes to the controls, never to the container that holds them.
+   * `onPress` is untouched: tapping the card still works for everyone, it is
+   * simply no longer announced as a button competing with its own children.
+   */
+  const hasInnerControls = hasActions || !!onChat || matchClickable;
+
   /** Status chip — placed under the text or in the right column, see below. */
   const statusNode = expired ? (
     <View style={styles.expiredPill}>
@@ -152,7 +173,7 @@ export const TravelCard = memo(function TravelCard({
     <Pressable
       onPress={onPress}
       style={[styles.card, shadowCard()]}
-      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityRole={onPress && !hasInnerControls ? "button" : undefined}
       accessibilityLabel={`${tagLabel}: ${item.from_city} to ${item.to_city}`}
     >
       <View style={[styles.tag, tagTone === "muted" && styles.tagMuted]}>
