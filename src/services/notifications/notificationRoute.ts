@@ -61,7 +61,14 @@ export function resolveNotificationRoute(
     return { screen: "Trips", params: Object.keys(params).length ? params : undefined };
   }
   // Journey-expiry notices link here; "Parcels" is the tab hosting My Travels.
-  if (l.startsWith("/customer/my-trips")) return { screen: "Parcels" };
+  // `?tab=` picks the list inside it — buddy notifications point at Travel
+  // Partners, where a request is accepted and connected buddies live.
+  if (l.startsWith("/customer/my-trips")) {
+    const mt = l.match(/[?&]tab=(flights|packages|partners|archive)(?:&|$)/i);
+    return mt
+      ? { screen: "Parcels", params: { tab: mt[1].toLowerCase() } }
+      : { screen: "Parcels" };
+  }
   if (l.startsWith("/customer/messages")) return { screen: "MessagesTab" };
   if (l.startsWith("/customer/bookings")) return { screen: "BookingsTab" };
   // Carrier "set up payouts to accept this delivery" nudge links here.
@@ -69,7 +76,11 @@ export function resolveNotificationRoute(
   if (l.includes("/wallet")) return { screen: "TransactionsTab" };
   if (l.includes("/kyc")) return { screen: "KycVerificationTab" };
   if (l.startsWith("/customer/disputes")) return { screen: "DisputesTab" };
-  if (l.startsWith("/customer/buddies")) return { screen: "Buddies" };
+  // ⚠️ NOT the "Buddies" tab — that route name is legacy and renders the INBOX
+  // (see RootNavigator). Web's `/customer/buddies` is its create-a-listing form,
+  // so neither end of this link led to the request it was announcing. Travel
+  // Partners is where a buddy request is accepted.
+  if (l.startsWith("/customer/buddies")) return { screen: "Parcels", params: { tab: "partners" } };
   if (l.startsWith("/customer/activity")) return { screen: "ActivityTab" };
 
   switch (type) {
@@ -84,7 +95,7 @@ export function resolveNotificationRoute(
     case "dispute":
       return { screen: "DisputesTab" };
     case "buddy":
-      return { screen: "Buddies" };
+      return { screen: "Parcels", params: { tab: "partners" } };
     case "rating":
       return { screen: "ActivityTab" };
     default:

@@ -97,6 +97,26 @@ export const FRIENDLY_MAPPINGS = [
     message: SERVER_BUSY_MESSAGE,
   },
   {
+    // PostgREST could not reach Postgres, so it has no schema cache to answer
+    // from. Reported from production on 29 September 2026: a traveller trying to
+    // post a Travel Buddy listing was shown, verbatim, "Could not query the
+    // database for the schema cache. Retrying." — PostgREST's PGRST002, which is
+    // its own internal log line, not copy for a person.
+    //
+    // It belongs HERE rather than in the technical denylist below because it is
+    // transient by nature: PostgREST says "Retrying" because it is, and the write
+    // really does succeed a moment later. "Try again in a moment" is therefore
+    // true advice, which the generic "something went wrong" would not be.
+    //
+    // Deliberately narrow. Schema-cache MISSES ("could not find the 'x' column
+    // ... in the schema cache", PGRST202/204) mean a column or function the code
+    // expects is absent — a deploy bug that no amount of retrying fixes. Those
+    // fall through to the `schema cache` signature below and get the generic
+    // message instead of a promise that waiting will help.
+    match: /could not query the database|could not connect with the database|no more connections allowed|database (?:is )?(?:not available|unavailable)/i,
+    message: SERVER_BUSY_MESSAGE,
+  },
+  {
     match: /\btimed out\b|statement timeout|etimedout|\babortederror\b/i,
     message: "That took too long. Please try again.",
   },
@@ -125,6 +145,12 @@ export const TECHNICAL_SIGNATURES = [
   "deadlock detected",
   "could not serialize",
   "operator does not exist",
+  // PostgREST's schema cache. A MISS names the column or function the code asked
+  // for and the table it is not on — the shape of an internal bug report, and one
+  // that says nothing a user could act on. The transient "could not query the
+  // database for the schema cache" is caught by the mapping above, which runs
+  // first and gives better advice than this generic net.
+  "schema cache",
   // --- Supabase SDK error classes, which stringify with their name ---
   "autherror",
   "authapierror",
