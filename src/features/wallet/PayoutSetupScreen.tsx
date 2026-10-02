@@ -178,6 +178,37 @@ export function PayoutSetupScreen() {
             </Card>
           ) : null}
 
+          {/*
+            What to expect on the NEXT screen, not this one.
+
+            Stripe asks "how do you earn or collect money" and offers a product
+            description or a website URL. Carriers read "website" and stall:
+            they are individuals carrying parcels, they have no site of their
+            own, and mysafarly.com is not theirs to claim — Stripe's own note
+            says giving a URL asserts you use it to promote or sell. So they
+            abandon onboarding, and payouts never get set up.
+
+            Raised by a carrier who hit exactly this. The suggested wording is
+            offered verbatim so there is nothing to compose.
+          */}
+          {!hasAccount ? (
+            <Card style={styles.hintCard}>
+              <Text style={styles.hintTitle}>One thing to expect</Text>
+              <Text style={styles.hintBody}>
+                {providerLabel} will ask how you earn money and offer you a product description or a
+                website. Choose the description — you are carrying parcels as a traveller, not
+                running a website, and naming one you do not own can hold your account up.
+              </Text>
+              <View style={styles.hintQuote}>
+                <Text style={styles.hintQuoteText}>
+                  “I carry parcels for senders as a traveller on Safarly, and am paid a fee for each
+                  delivery I complete.”
+                </Text>
+              </View>
+              <Text style={styles.hintFoot}>That wording is fine to use as it is.</Text>
+            </Card>
+          ) : null}
+
           {/* Actions */}
           {isHostedSetup ? (
             isConnected ? (
@@ -287,6 +318,16 @@ const styles = StyleSheet.create({
   activeText: { color: colors.safe, fontSize: 12, fontWeight: "800" },
 
   card: { borderRadius: 16, marginBottom: 14, paddingHorizontal: 16, paddingVertical: 6 },
+
+  // The "what Stripe will ask you next" note. Padded like a normal card rather
+  // than the Benefit list's tighter rhythm, because it is prose to be read once
+  // and a sentence to be copied, not a row to be scanned.
+  hintCard: { borderRadius: 16, marginBottom: 14, paddingHorizontal: 16, paddingVertical: 16 },
+  hintTitle: { color: colors.text, fontSize: 14, fontWeight: "800", marginBottom: 6 },
+  hintBody: { color: colors.mutedText, fontSize: 12, lineHeight: 18 },
+  hintQuote: { backgroundColor: colors.surfaceMuted, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginTop: 10 },
+  hintQuoteText: { color: colors.text, fontSize: 12, lineHeight: 18, fontStyle: "italic" },
+  hintFoot: { color: colors.mutedText, fontSize: 11, marginTop: 8 },
   action: { borderRadius: 14, minHeight: 50, marginBottom: 12 },
 
   benefitRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 12 },
