@@ -37,3 +37,9 @@ export async function performGoogleOAuth(): Promise<void> {
     throw new Error(mapOAuthError(error.message, null));
   }
 }
+
+/**
+ * No-op on web. There is no cached native session to clear, and the redirect
+ * flow above already asks which account to use on every sign-in.
+ */
+export async function clearGoogleSession(): Promise<void> {}

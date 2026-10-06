@@ -15,6 +15,34 @@ export function parseLocalDate(s?: string | null): Date | null {
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
+/**
+ * Render a date-only `YYYY-MM-DD` column for display.
+ *
+ * ALWAYS use this for `travel_date`, `travel_date_from/_to`, `deadline`,
+ * `delivery_by*`, `date_from/_to` — never `new Date(value)`. Those columns are
+ * SQL `date`, not timestamps, so `new Date("2026-09-30")` parses as UTC
+ * midnight and renders as the 29th for every user west of Greenwich. That is
+ * the exact defect a client reported on 29 September 2026 ("why is the date not
+ * matching for requests and the posting?"), and it survived the first fix in
+ * five display formatters that were never checked.
+ *
+ * `new Date(value)` stays correct for TIMESTAMP columns (`created_at`,
+ * `expires_at`, …) — those carry a zone and must be converted to local.
+ */
+export function formatLocalDate(
+  value: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions & { locale?: string } = { month: "short", day: "numeric" },
+  fallback = "—",
+): string {
+  const d = parseLocalDate(value);
+  if (!d) return fallback;
+  // `locale` defaults to the device's own. Pass it only where a screen already
+  // pinned one — changing how a date READS is a separate decision from fixing
+  // which DAY it shows, and this helper only owns the latter.
+  const { locale, ...fmt } = opts;
+  return d.toLocaleDateString(locale, fmt);
+}
+
 interface TravelDateLike {
   travel_date?: string | null;
   travel_date_from?: string | null;

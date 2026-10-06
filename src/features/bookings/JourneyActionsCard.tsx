@@ -6,6 +6,7 @@ import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { Booking, JourneyDelayReason } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatLocalDate } from "@/utils/travelDate";
 
 /**
  * Stages 8, 9 and 10 - the carrier's own milestones once the money is secured
@@ -82,7 +83,7 @@ export function JourneyActionsCard({
           <Ionicons name="warning-outline" size={13} color={colors.warning} />
           <Text style={styles.delayNoticeText}>
             You reported a delay
-            {booking.agreed_travel_date ? ` - now travelling ${booking.agreed_travel_date}` : ""}.
+            {booking.agreed_travel_date ? ` - now travelling ${formatLocalDate(booking.agreed_travel_date)}` : ""}.
             {booking.delay_note ? ` "${booking.delay_note}"` : ""}
           </Text>
         </View>

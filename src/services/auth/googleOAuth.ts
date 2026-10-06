@@ -100,6 +100,18 @@ export async function performGoogleOAuth(): Promise<void> {
     throw err;
   }
 
+  // Drop any cached Google account first, so the OS account picker always
+  // appears. Without this the SDK silently returns the last account used and
+  // never asks: nobody can switch accounts, and on a shared phone the second
+  // person lands straight in the first person's Safarly account. Web has
+  // always forced this via `prompt: "select_account"` (googleOAuth.web.ts).
+  // Best-effort — it must never block a sign-in.
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // Nothing cached to clear.
+  }
+
   let response;
   try {
     response = await GoogleSignin.signIn();
@@ -132,5 +144,23 @@ export async function performGoogleOAuth(): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(mapOAuthError(message, null));
+  }
+}
+
+/**
+ * Forget the cached Google account. Called when the user signs out of Safarly:
+ * `supabase.auth.signOut()` only clears the Supabase session, and a Google
+ * session left behind is what let the next sign-in skip the account picker.
+ *
+ * Best-effort by design — signing out must succeed even where the native
+ * module is absent (Expo Go) or no Google session exists.
+ */
+export async function clearGoogleSession(): Promise<void> {
+  try {
+    const { GoogleSignin } = loadNativeModule();
+    ensureConfigured(GoogleSignin);
+    await GoogleSignin.signOut();
+  } catch {
+    // No native module, not configured, or no session. Nothing to clear.
   }
 }

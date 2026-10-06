@@ -8,6 +8,7 @@ import { isListingExpired } from "@/features/travels/statusLabels";
 import type { BuddyListing } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
+import { formatLocalDate } from "@/utils/travelDate";
 
 interface Props {
   item: BuddyListing;
@@ -29,10 +30,11 @@ function formatDateRange(item: BuddyListing): string {
   const from = item.travel_date_from ?? item.travel_date;
   const to = item.travel_date_to ?? item.travel_date;
   if (!from) return "";
+  // Date-only columns — never `new Date()`. See formatLocalDate.
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
-  const fromLabel = new Date(from).toLocaleDateString(undefined, opts);
+  const fromLabel = formatLocalDate(from, opts, "");
   if (!to || from === to) return fromLabel;
-  return `${fromLabel} - ${new Date(to).toLocaleDateString(undefined, opts)}`;
+  return `${fromLabel} - ${formatLocalDate(to, opts, "")}`;
 }
 
 export const BuddyPartnerCard = memo(function BuddyPartnerCard({

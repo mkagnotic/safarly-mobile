@@ -23,6 +23,7 @@ import { getErrorMessage, type Parcel } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowFab, shadowSoft } from "@/theme/elevation";
 import { formatMoneyShort } from "@/utils/money";
+import { formatLocalDate } from "@/utils/travelDate";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "Parcels">;
 
@@ -64,10 +65,8 @@ function styleForStatus(status: string): StatusBadgeStyle {
 
 /** "Mar 18" — same shape as web's `toLocaleDateString({month, day})`. */
 function formatDeliveryBy(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // `delivery_by` is a date-only column — see formatLocalDate.
+  return formatLocalDate(iso, { month: "short", day: "numeric" }, "");
 }
 
 function senderInitial(name: string | undefined | null): string {
