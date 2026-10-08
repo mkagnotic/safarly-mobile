@@ -28,6 +28,7 @@ import {
   type BuddyListing,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { formatLocalDate } from "@/utils/travelDate";
 import {
   EditBuddyListingModal,
   type EditBuddyListingFormValues,
@@ -44,10 +45,8 @@ type Nav = BottomTabNavigationProp<MainTabParamList, "PartnerDetailsTab">;
 type Route = RouteProp<MainTabParamList, "PartnerDetailsTab">;
 
 function formatLongDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  // `travel_date*` are date-only columns — never `new Date()`. See formatLocalDate.
+  return formatLocalDate(iso, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatDateRange(listing: BuddyListing): string {

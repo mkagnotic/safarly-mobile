@@ -54,6 +54,7 @@ import {
 } from "@/utils/routeMatch";
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 import { formatMoneyShort } from "@/utils/money";
+import { formatLocalDate } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -109,14 +110,8 @@ const LOOKING_FOR_OPTIONS: readonly LookingForOption[] = [
 ] as const;
 
 function formatDateLabel(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  // `travel_date` is a date-only column — never `new Date()`. See formatLocalDate.
+  return formatLocalDate(iso, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function capitalize(value: string): string {

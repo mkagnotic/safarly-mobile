@@ -10,7 +10,7 @@ import {
   unregisterPushToken,
 } from "@/services/notifications/push";
 import { performAppleOAuth } from "@/services/auth/appleOAuth";
-import { performGoogleOAuth } from "@/services/auth/googleOAuth";
+import { clearGoogleSession, performGoogleOAuth } from "@/services/auth/googleOAuth";
 import { useAppStore } from "@/store/useAppStore";
 
 export { AuthCancelledError } from "@/services/auth/googleOAuth";
@@ -239,6 +239,11 @@ export function AuthProvider({ children }: Readonly<Props>) {
         // still valid — after signOut the DELETE would 401. Best-effort; never
         // blocks sign-out.
         await unregisterPushToken();
+        // Forget the Google account too. Supabase's signOut only drops the
+        // Supabase session; leaving Google's behind meant the next "Sign in
+        // with Google" skipped the account picker and silently returned the
+        // same person — so nobody could switch accounts on a shared phone.
+        await clearGoogleSession();
         // signOut() also fires onAuthStateChange — the store flag flips there.
         //
         // Scope "local": supabase-js defaults to "global", which revokes the
@@ -250,6 +255,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
       },
       signOutAfterAccountDeletion: async () => {
         await clearCachedPushToken();
+        await clearGoogleSession();
         // `local` scope only drops the stored session; the server revoked every
         // session when it deleted the account.
         await supabase.auth.signOut({ scope: "local" });

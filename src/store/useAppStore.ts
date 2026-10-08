@@ -115,7 +115,27 @@ export const useAppStore = create<AppState>()(
       setAccountDeleted: (accountDeleted) => set({ accountDeleted }),
       setKycWelcomePending: (kycWelcomePending) => set({ kycWelcomePending }),
       login: () => set({ authenticated: true }),
-      logout: () => set({ authenticated: false, profileSetupDone: false }),
+      // Clear everything that belongs to the person signing out, not just the
+      // auth flags. These fields are persisted to AsyncStorage, so without this
+      // they survive into the NEXT account on a shared phone. Today that is
+      // latent rather than visible (no screen renders `userProfile` directly,
+      // and the pay screen reading `paymentMethods` is unreachable), but a
+      // single new `useAppStore(s => s.userProfile)` would turn it into one
+      // person seeing another's details — the same shape as the Google
+      // account-picker defect found on 2026-10-06.
+      //
+      // `onboarded` and `showLiveData` deliberately survive: they describe the
+      // DEVICE, not the account, and resetting them would replay the onboarding
+      // carousel for whoever signs in next.
+      logout: () =>
+        set({
+          authenticated: false,
+          profileSetupDone: false,
+          userProfile: defaultUserProfile,
+          paymentMethods: [],
+          kycWelcomePending: false,
+          pendingNotice: null,
+        }),
       toggleLiveDataVisibility: () => set((state) => ({ showLiveData: !state.showLiveData })),
       setLiveDataVisibility: (visible) => set({ showLiveData: visible }),
       setLanguage: (language) => set({ language }),

@@ -29,6 +29,7 @@ import {
 } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoneyShort } from "@/utils/money";
+import { formatLocalDate } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "OpportunitiesTab">,
@@ -41,15 +42,14 @@ const CATEGORIES = ["All", "Documents", "Gifts", "Medications"] as const;
 type Category = (typeof CATEGORIES)[number];
 
 function formatDeliveryDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // `delivery_by` is a date-only column — see formatLocalDate. en-US kept.
+  return formatLocalDate(iso, { month: "short", day: "numeric", locale: "en-US" });
 }
 
 function formatTripDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  // Date-only column — see formatLocalDate. en-US kept: this screen always
+  // read that way, and the bug being fixed is the DAY, not the format.
+  return formatLocalDate(iso, { month: "short", day: "numeric", locale: "en-US" });
 }
 
 function getInitials(name: string | undefined): string {

@@ -29,6 +29,7 @@ import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/serv
 import { colors } from "@/theme/colors";
 import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
 import { formatMoneyShort } from "@/utils/money";
+import { formatLocalDate } from "@/utils/travelDate";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -41,10 +42,8 @@ type Nav = BottomTabNavigationProp<MainTabParamList, "ParcelDetailsTab">;
 type Route = RouteProp<MainTabParamList, "ParcelDetailsTab">;
 
 function formatDeliveryDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // `delivery_by` is a date-only column — see formatLocalDate. en-US kept.
+  return formatLocalDate(iso, { month: "short", day: "numeric", year: "numeric", locale: "en-US" });
 }
 
 // Was a local CURRENCY_SYMBOL map. Four screens each had their own version of

@@ -47,6 +47,7 @@ import {
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
+import { formatLocalDate } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "BookingsTab">,
@@ -131,13 +132,6 @@ function formatDateTime(iso: string): string {
 function formatCategory(value: string): string {
   const v = value.trim();
   return v ? v.charAt(0).toUpperCase() + v.slice(1) : v;
-}
-
-/** "Mar 18" — short form for the agreed-travel-date pill (web parity). */
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /**
@@ -1207,7 +1201,12 @@ function ExpandedBody({
               <View style={styles.parcelCell}>
                 <Text style={styles.parcelCellKey}>Travel date: </Text>
                 <Text style={styles.parcelCellValue}>
-                  {formatDate(booking.agreed_travel_date)}
+                  {formatLocalDate(booking.agreed_travel_date, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    locale: "en-US",
+                  })}
                 </Text>
               </View>
             ) : null}
@@ -1763,7 +1762,7 @@ function BookingRow({
               <View style={styles.travelDatePill}>
                 <Ionicons name="airplane" size={11} color={colors.primary} />
                 <Text style={styles.travelDateText}>
-                  {formatShortDate(booking.agreed_travel_date)}
+                  {formatLocalDate(booking.agreed_travel_date, { month: "short", day: "numeric", locale: "en-US" })}
                 </Text>
               </View>
             ) : null}
