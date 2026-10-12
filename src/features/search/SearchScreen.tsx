@@ -55,6 +55,7 @@ import {
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
+import { showToast } from "@/feedback/appFeedback";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -71,7 +72,6 @@ interface Notice {
   title?: string;
   variant: NoticeVariant;
 }
-type SetNotice = (notice: Notice | null) => void;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -893,7 +893,6 @@ export function SearchScreen() {
             matches={displayCarrierTrips}
             matchesByParcelId={carrierTripsByParcelId}
             navigation={navigation}
-            setNotice={setNotice}
             highlightId={highlightId}
           />
         ) : activeTab === "buddy" ? (
@@ -901,7 +900,6 @@ export function SearchScreen() {
             loading={loading}
             matches={isAutoMatch ? pagedBuddyMatches : dedupedBuddyMatches}
             navigation={navigation}
-            setNotice={setNotice}
             highlightId={highlightId}
           />
         ) : (
@@ -913,7 +911,6 @@ export function SearchScreen() {
             matches={displayReceiverRequests}
             matchesByTripId={receiverRequestsByTripId}
             navigation={navigation}
-            setNotice={setNotice}
             highlightId={highlightId}
           />
         )}
@@ -1066,7 +1063,6 @@ function PackageTabResults({
   matches,
   matchesByParcelId,
   navigation,
-  setNotice,
   highlightId,
 }: Readonly<{
   loading: boolean;
@@ -1077,7 +1073,6 @@ function PackageTabResults({
   /** Pre-filtered per-parcel match lists (same source as the tab count). */
   matchesByParcelId: Map<string, PackageMatch[]>;
   navigation: Nav;
-  setNotice: SetNotice;
   highlightId?: string;
 }>) {
   if (isAutoMatch) {
@@ -1130,7 +1125,6 @@ function PackageTabResults({
                       <PackageMatchCard
                         match={m}
                         navigation={navigation}
-                        setNotice={setNotice}
                         nested
                         highlighted={m.id === highlightId}
                       />
@@ -1161,7 +1155,6 @@ function PackageTabResults({
           key={`${m.type}-${m.id}`}
           match={m}
           navigation={navigation}
-          setNotice={setNotice}
           highlighted={m.id === highlightId}
         />
       ))}
@@ -1173,13 +1166,11 @@ function BuddyTabResults({
   loading,
   matches,
   navigation,
-  setNotice,
   highlightId,
 }: Readonly<{
   loading: boolean;
   matches: BuddySearchMatch[];
   navigation: Nav;
-  setNotice: SetNotice;
   highlightId?: string;
 }>) {
   if (loading && matches.length === 0) return <MatchListSkeleton />;
@@ -1198,7 +1189,6 @@ function BuddyTabResults({
           key={b.id}
           match={b}
           navigation={navigation}
-          setNotice={setNotice}
           highlighted={b.id === highlightId}
         />
       ))}
@@ -1214,7 +1204,6 @@ function ReceiverTabResults({
   matches,
   matchesByTripId,
   navigation,
-  setNotice,
   highlightId,
 }: Readonly<{
   loading: boolean;
@@ -1225,7 +1214,6 @@ function ReceiverTabResults({
   /** Pre-filtered per-trip match lists (same source as the tab count). */
   matchesByTripId: Map<string, PackageMatch[]>;
   navigation: Nav;
-  setNotice: SetNotice;
   highlightId?: string;
 }>) {
   if (isAutoMatch) {
@@ -1276,7 +1264,6 @@ function ReceiverTabResults({
                       <PackageMatchCard
                         match={m}
                         navigation={navigation}
-                        setNotice={setNotice}
                         nested
                         highlighted={m.id === highlightId}
                       />
@@ -1307,7 +1294,6 @@ function ReceiverTabResults({
           key={`${m.type}-${m.id}`}
           match={m}
           navigation={navigation}
-          setNotice={setNotice}
           highlighted={m.id === highlightId}
         />
       ))}
@@ -1320,13 +1306,11 @@ function ReceiverTabResults({
 function PackageMatchCard({
   match,
   navigation,
-  setNotice,
   nested,
   highlighted,
 }: Readonly<{
   match: PackageMatch;
   navigation: Nav;
-  setNotice: SetNotice;
   nested?: boolean;
   /** Deep-link highlight (web parity: the `?match=` ring). */
   highlighted?: boolean;
@@ -1341,7 +1325,7 @@ function PackageMatchCard({
 
   const handleViewProfile = useCallback(() => {
     if (!person?.id) {
-      setNotice({
+      showToast({
         title: "User unavailable",
         message: "Unable to open profile — user not available.",
         variant: "error",
@@ -1352,11 +1336,11 @@ function PackageMatchCard({
       userId: person.id,
       name: person.name ?? undefined,
     });
-  }, [person?.id, person?.name, navigation, setNotice]);
+  }, [person?.id, person?.name, navigation]);
 
   const handleStartChat = useCallback(async () => {
     if (!person?.id) {
-      setNotice({
+      showToast({
         title: "User unavailable",
         message: "Unable to start chat — user not available.",
         variant: "error",
@@ -1372,11 +1356,11 @@ function PackageMatchCard({
         source: "messages",
       });
     } catch (err) {
-      setNotice({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
+      showToast({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
     } finally {
       setChatStarting(false);
     }
-  }, [person?.id, person?.name, navigation, setNotice]);
+  }, [person?.id, person?.name, navigation]);
 
   const secondary = isTrip
     ? {
@@ -1512,12 +1496,10 @@ function PackageMatchCard({
 function BuddyMatchCard({
   match,
   navigation,
-  setNotice,
   highlighted,
 }: Readonly<{
   match: BuddySearchMatch;
   navigation: Nav;
-  setNotice: SetNotice;
   /** Deep-link highlight (web parity: the `?match=` ring). */
   highlighted?: boolean;
 }>) {
@@ -1541,7 +1523,7 @@ function BuddyMatchCard({
     setConnecting(true);
     try {
       await buddiesApi.sendRequest(match.id);
-      setNotice({
+      showToast({
         title: "Buddy request sent",
         message: `${match.user?.name ?? "They"} will see it in My travels → Partners.`,
         variant: "success",
@@ -1549,11 +1531,11 @@ function BuddyMatchCard({
     } catch (err) {
       // The server already explains the ordinary refusals in plain words -
       // already connected, already sent, or they sent you one first.
-      setNotice({ title: "Couldn't send request", message: getErrorMessage(err), variant: "error" });
+      showToast({ title: "Couldn't send request", message: getErrorMessage(err), variant: "error" });
     } finally {
       setConnecting(false);
     }
-  }, [match.id, match.user?.name, connecting, setNotice]);
+  }, [match.id, match.user?.name, connecting]);
 
   const details: { label: string; value: string }[] = [
     ...(match.age != null ? [{ label: "AGE", value: `${match.age} yrs` }] : []),
@@ -1567,7 +1549,7 @@ function BuddyMatchCard({
 
   const handleViewProfile = useCallback(() => {
     if (!match.user?.id) {
-      setNotice({
+      showToast({
         title: "User unavailable",
         message: "Unable to open profile — user not available.",
         variant: "error",
@@ -1578,11 +1560,11 @@ function BuddyMatchCard({
       userId: match.user.id,
       name: match.user.name ?? undefined,
     });
-  }, [match.user?.id, match.user?.name, navigation, setNotice]);
+  }, [match.user?.id, match.user?.name, navigation]);
 
   const handleStartChat = useCallback(async () => {
     if (!match.user?.id) {
-      setNotice({
+      showToast({
         title: "User unavailable",
         message: "Unable to start chat — user not available.",
         variant: "error",
@@ -1598,11 +1580,11 @@ function BuddyMatchCard({
         source: "buddies",
       });
     } catch (err) {
-      setNotice({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
+      showToast({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
     } finally {
       setChatStarting(false);
     }
-  }, [match.user?.id, match.user?.name, navigation, setNotice]);
+  }, [match.user?.id, match.user?.name, navigation]);
 
   return (
     <Card style={[styles.matchCard, highlighted && styles.matchHighlighted]}>
