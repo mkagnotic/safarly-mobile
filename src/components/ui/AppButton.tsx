@@ -1,12 +1,14 @@
-import type { ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { createPressLock, type PressLock } from "@/lib/pressLock";
 import { colors } from "@/theme/colors";
 import { shadowSoft } from "@/theme/elevation";
 
 type Props = {
   label: string;
-  onPress: () => void;
+  /** May return a promise: further presses are ignored until it settles. */
+  onPress: () => void | Promise<unknown>;
   style?: StyleProp<ViewStyle>;
   variant?: "primary" | "secondary" | "danger" | "dark";
   disabled?: boolean;
@@ -26,6 +28,9 @@ type Props = {
   gradientColors?: readonly [string, string];
 };
 
+/** Long enough to cover the render that applies `loading`/`disabled`. */
+const PRESS_LOCK_MS = 800;
+
 export function AppButton({
   label,
   onPress,
@@ -38,6 +43,21 @@ export function AppButton({
 }: Readonly<Props>) {
   // A button whose action is already running must not fire it again.
   const blocked = disabled || loading;
+
+  // Two quick taps must not both fire (e.g. create the same listing twice) -
+  // see lib/pressLock. One lock per button instance.
+  const lockRef = useRef<PressLock | null>(null);
+  lockRef.current ??= createPressLock(PRESS_LOCK_MS);
+  const handlePress = useCallback(() => {
+    lockRef.current?.press(onPress);
+  }, [onPress]);
+  // An explicit label: left to itself Android joins the icon and the text into
+  // ", Continue with Email" - the icon contributes an empty piece.
+  const a11y = {
+    accessibilityRole: "button" as const,
+    accessibilityLabel: label,
+    accessibilityState: { disabled: blocked, busy: loading },
+  };
   const icon = loading ? (
     <ActivityIndicator size="small" color={variant === "secondary" ? colors.text : colors.white} />
   ) : (
@@ -50,7 +70,8 @@ export function AppButton({
       <Pressable
         android_ripple={{ color: "rgba(255,255,255,0.16)" }}
         disabled={blocked}
-        onPress={onPress}
+        onPress={handlePress}
+        {...a11y}
         style={({ pressed }) => [
           styles.base,
           styles.primaryOuter,
@@ -80,7 +101,8 @@ export function AppButton({
     <Pressable
       android_ripple={{ color: "rgba(255,255,255,0.16)" }}
       disabled={blocked}
-      onPress={onPress}
+      onPress={handlePress}
+      {...a11y}
       style={({ pressed }) => [
         styles.base,
         styles[variant],

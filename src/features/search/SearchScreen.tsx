@@ -537,6 +537,7 @@ export function SearchScreen() {
             receiver: receiverTabCount,
           }}
           loading={loading}
+          hideCounts={!!error}
         />
 
         {error ? (
