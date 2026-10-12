@@ -40,7 +40,7 @@ const CHECKS = [
   // ---------------------------------------------------------------- step 5 copy
   {
     repo: "web",
-    file: "src/customer/pages/CustomerBookings.tsx",
+    file: "src/features/bookings/pages/CustomerBookings.tsx",
     id: "step5-delivery-copy",
     why: "Client-approved step 5 wording. The sender receives and inspects the parcel, THEN hands the code to the carrier; the old copy told them to give it to a separate receiver and never to the carrier.",
     must: [
@@ -68,7 +68,7 @@ const CHECKS = [
   // ------------------------------------------------------------- party labelling
   {
     repo: "web",
-    file: "src/customer/pages/CustomerBookings.tsx",
+    file: "src/features/bookings/pages/CustomerBookings.tsx",
     id: "party-label-receiver",
     why: "The parcel owner is labelled Receiver on the booking card. A booking has no separate receiver party, and this is the role that matters at delivery.",
     must: ['text-muted-foreground">Receiver<'],
@@ -86,7 +86,7 @@ const CHECKS = [
   // ------------------------------------------------------------------ handoff pin
   {
     repo: "web",
-    file: "src/customer/components/ChatHandoffPrompt.tsx",
+    file: "src/features/messages/components/ChatHandoffPrompt.tsx",
     id: "handoff-pin-no-role-noun",
     why: "This title is carrier-only. 'your carrier' would be self-referential and 'your sender' clashes with the Receiver label, so it names no role at all.",
     must: ['title = "Tell them where to send the parcel"'],
@@ -104,7 +104,7 @@ const CHECKS = [
   // ----------------------------------------------------------- price prompt copy
   {
     repo: "web",
-    file: "src/customer/components/ChatOfferPrompt.tsx",
+    file: "src/features/messages/components/ChatOfferPrompt.tsx",
     id: "price-sentence-names-the-role",
     why: "Names the ROLE, never the person. `${counterpartName} listed this delivery` was right for the carrier and wrong for the parcel owner, who was told the other party had set their own asking price.",
     must: ["Receiver listed this delivery at"],
@@ -112,7 +112,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/components/ChatOfferPrompt.tsx",
+    file: "src/features/messages/components/ChatOfferPrompt.tsx",
     id: "price-ctas",
     why: "Client-approved CTAs: Accept $X / Negotiate.",
     must: ["Accept {money(suggested)}", '"Negotiate"'],
@@ -120,7 +120,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/components/NewOfferDialog.tsx",
+    file: "src/features/messages/components/NewOfferDialog.tsx",
     id: "accept-intent-dialog",
     why: "Tapping 'Accept $X' opened a dialog titled 'Counter offer'. The accept intent gives it matching copy that still does not claim the deal is closed.",
     must: ['"Accept this price"', "intent", "The other party confirms it to lock the deal in"],
@@ -130,7 +130,7 @@ const CHECKS = [
   // ------------------------------------------------------------- responsive CTAs
   {
     repo: "web",
-    file: "src/customer/components/ChatOfferPrompt.tsx",
+    file: "src/features/messages/components/ChatOfferPrompt.tsx",
     id: "price-ctas-fit-every-width",
     why: "`.btn-action` is shrink-0 with a fixed px-5, so the two CTAs overran the row and the second was CLIPPED at 320/360/375/390px - iPhone 14/15 width. flex-wrap + flex-1 + a min width is what keeps both fully visible.",
     // Pins the row AND both buttons individually. Searching for the bare classes was
@@ -183,7 +183,7 @@ const CHECKS = [
   // ------------------------------------------------------- notification titles
   {
     repo: "web",
-    file: "src/customer/pages/CustomerNotifications.tsx",
+    file: "src/features/notifications/pages/CustomerNotifications.tsx",
     id: "notification-title-wraps",
     why: "`truncate` is one line at ANY width, so on a phone the title lost the word carrying the meaning: 'Your parcel delivery is tomor…', 'Travel verification under revi…'. Two lines, matching the body. Fixed on BOTH platforms together so no parity gap is created.",
     must: ["text-sm text-foreground line-clamp-2"],
@@ -219,7 +219,7 @@ const CHECKS = [
   // ------------------------------------------------- journey progress step names
   {
     repo: "web",
-    file: "src/customer/components/JourneyProgress.tsx",
+    file: "src/features/bookings/components/JourneyProgress.tsx",
     id: "journey-step-names-on-phone",
     why: "A phone showed six anonymous dashes and no step names. Six labels do not fit side by side below md, so they stack one per row instead of being dropped or truncated.",
     must: ["md:hidden", "md:flex", "JOURNEY_STEP[key].name"],
@@ -236,7 +236,7 @@ const CHECKS = [
   // ------------------------------------------------- sign-in anti-enumeration
   {
     repo: "web",
-    file: "src/components/auth/RoleLogin.tsx",
+    file: "src/features/auth/components/RoleLogin.tsx",
     id: "signin-no-user-enumeration",
     why: "A distinct 'No account found with this email' reply turned the sign-in form into an account enumeration oracle: anyone with a list of addresses could learn which are registered. One message now covers a wrong password, an unknown address and a Google-only account.",
     must: ["SIGN_IN_FAILED_MESSAGE", "Incorrect email or password"],
@@ -254,7 +254,7 @@ const CHECKS = [
   // ------------------------------------------- carriers, not senders, are missing
   {
     repo: "web",
-    file: "src/customer/pages/search/lib/constants.ts",
+    file: "src/features/search/lib/constants.ts",
     id: "empty-state-names-carriers",
     why: "Shown under a card for a parcel the user is SENDING, so the missing party is a CARRIER. It read 'No matched senders yet', naming the opposite side of the deal.",
     must: ["No matching carriers yet for this route or date."],
@@ -272,7 +272,7 @@ const CHECKS = [
   // ------------------------------------------------ search browses everything first
   {
     repo: "web",
-    file: ["src/customer/pages/CustomerSearch.tsx", "src/customer/pages/search/components/SearchFilterPanel.tsx"],
+    file: ["src/features/search/pages/CustomerSearch.tsx", "src/features/search/components/SearchFilterPanel.tsx"],
     id: "search-browses-all-by-default",
     why: "Search used to open on route-matching ONLY, so a user with no listings of their own saw an empty screen and had no way to browse the marketplace. Browsing everything is the default; route-matching is an opt-in lens.",
     must: ["matchMyRoutes", "All listings", "Matches for my routes", "Showing everything posted on Safarly"],
@@ -290,7 +290,7 @@ const CHECKS = [
   // --------------------------------------------- validation never fails silently
   {
     repo: "web",
-    file: "src/customer/pages/CustomerListTrip.tsx",
+    file: "src/features/trips/pages/CustomerListTrip.tsx",
     id: "trip-validation-speaks-up",
     why: "The submit handler ended in a bare `return`. With only a size problem - whose warning renders sections above the button - pressing Submit produced no request, no toast and no focus change, which reads as a dead button.",
     must: ["focusFirstFormError()", "Size exceeds airline carry-on limit"],
@@ -298,7 +298,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/CustomerSendParcel.tsx",
+    file: "src/features/parcels/pages/CustomerSendParcel.tsx",
     id: "parcel-validation-speaks-up",
     why: "Same silent-return bug as the trip form; mobile already scrolled to the offending field.",
     must: ["focusFirstFormError()", "Size exceeds airline carry-on limit"],
@@ -308,7 +308,7 @@ const CHECKS = [
   // ------------------------------------------------------- one rating per booking
   {
     repo: "web",
-    file: "src/customer/pages/CustomerRateDelivery.tsx",
+    file: "src/features/bookings/pages/CustomerRateDelivery.tsx",
     id: "rating-reflects-existing",
     why: "The API already returns `viewer_has_rated`; the page ignored it and offered a blank star rating to someone who had already reviewed, who then hit a CONFLICT after filling it in.",
     must: ["booking.viewer_has_rated", "You already reviewed this delivery"],
@@ -317,7 +317,7 @@ const CHECKS = [
   // ------------------------------------------- a listing's owner can act on it
   {
     repo: "web",
-    file: "src/customer/pages/CustomerParcelDetail.tsx",
+    file: "src/features/parcels/pages/CustomerParcelDetail.tsx",
     id: "parcel-detail-owner-actions",
     why: "The owner of a parcel reached this page and found nothing to do - a visitor got 'Message Sender' and the sender got no action at all. The sibling trip detail page has always offered Edit and Cancel; mobile's parcel screen had them too. Web was the outlier.",
     must: ["EditParcelDialog", "customer.cancelParcel", "customer.editParcel", "Cancel this parcel request?"],
@@ -334,7 +334,7 @@ const CHECKS = [
   // ------------------------------- a success screen opens the list you landed in
   {
     repo: "web",
-    file: "src/customer/pages/CustomerSendParcel.tsx",
+    file: "src/features/parcels/pages/CustomerSendParcel.tsx",
     id: "receive-request-opens-my-packages",
     why: "Client-reported: posting a receive request dropped you on My Flights. /customer/my-trips with no ?tab falls back to 'flights', so the CTA must name its tab rather than lean on the default.",
     must: ["my-trips?tab=packages"],
@@ -342,7 +342,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/CustomerCreateBuddy.tsx",
+    file: "src/features/buddies/pages/CustomerCreateBuddy.tsx",
     id: "buddy-listing-opens-travel-partners",
     why: "Same fallback: a new buddy listing belongs in Travel Partners, not My Flights.",
     must: ["my-trips?tab=partners"],
@@ -375,7 +375,7 @@ const CHECKS = [
   // --------------------------- the pin and the thread agree on what is on the table
   {
     repo: "web",
-    file: ["src/customer/pages/CustomerMessages.tsx", "src/customer/pages/messages/hooks/useOfferTimeline.ts"],
+    file: ["src/features/messages/pages/CustomerMessages.tsx", "src/features/messages/hooks/useOfferTimeline.ts"],
     id: "pin-reads-live-offer-from-thread",
     why: "Client-reported: an OPEN $49 counter sat in the thread with Accept/Counter/Decline directly above a bar reading 'Receiver listed this delivery at $45. [Accept $45]'. activeDeal is a SEPARATE fetch from the messages, so while it lagged the two halves of one screen gave different answers and the bar quoted the stale one. The timeline reconciles every card and arrives with the message, so it answers first - which is what mobile has always done (resolveOffers).",
     must: ["const liveOffer", "offerResolutions.get", "liveOffer={liveOffer}"],
@@ -383,7 +383,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/components/ChatOfferPrompt.tsx",
+    file: "src/features/messages/components/ChatOfferPrompt.tsx",
     id: "pin-reads-live-offer-from-thread",
     why: "The bar must prefer the thread's answer over activeDeal, and must not keep an Accept button alive on an offer the thread has already settled.",
     must: ["authoritativeOffer", "liveOffer !== undefined"],
@@ -408,7 +408,7 @@ const CHECKS = [
   // ------------------------- the parcel review names the person, not just the role
   {
     repo: "web",
-    file: "src/customer/components/ChatParcelReviewPrompt.tsx",
+    file: "src/features/messages/components/ChatParcelReviewPrompt.tsx",
     id: "parcel-review-names-the-counterpart",
     why: "Client request: 'it is best to replace by name - it can say Awaiting Roja parcel photos'. Safe on THIS card and not on the price line: every string sits inside the viewer_role === carrier branch, so the reader is always the carrier and the named party is always the other person. The fallback keeps two forms so it still reads as a sentence.",
     // Web interpolates in JSX (`{Who}`), mobile in a template literal (`${Who}`);
@@ -435,7 +435,7 @@ const CHECKS = [
   // ------------------- a delivery must be named, and named the same on both platforms
   {
     repo: "web",
-    file: "src/customer/components/ChatDealSwitcher.tsx",
+    file: "src/features/messages/components/ChatDealSwitcher.tsx",
     id: "deal-chips-are-distinguishable",
     why: "Reported live as 'the app is asking the travel document from Viswanath instead of Roja'. It was asking the carrier correctly - but the pair had TWO live deals on the SAME route with OPPOSITE roles, and the chips were labelled by route alone, so both rendered an identical string. Route is not an identifier.",
     must: ["labelDeals", "labels.get(id)?.chip"],
@@ -451,7 +451,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/messages/components/ChatPinnedArea.tsx",
+    file: "src/features/messages/components/ChatPinnedArea.tsx",
     id: "pinned-action-names-its-delivery",
     why: "The pinned prompts are deal-scoped but named no delivery, so 'Upload your travel document' read as being about the other one. Shown only when the thread holds more than one, so a single-delivery chat is unchanged.",
     must: ["selectedDealLabel", "This step is for"],
@@ -484,7 +484,7 @@ const CHECKS = [
   // ------------- the switcher and the pinned line must agree that a choice exists
   {
     repo: "web",
-    file: "src/customer/pages/messages/hooks/useOfferTimeline.ts",
+    file: "src/features/messages/hooks/useOfferTimeline.ts",
     id: "context-line-follows-the-switcher",
     why: "Found by scenario H: a CANCELLED delivery beside a live one hid the switcher (which filters finished deals) while the pinned line still printed 'This step is for ...' - announcing a choice with no control to make it. Both must ask selectableDeals().",
     must: ["selectableDeals(dealList, selectedDealIdResolved).length < 2"],
@@ -550,7 +550,7 @@ const CHECKS = [
   // -------------------------------------- QA sweep: a deep link must answer at once
   {
     repo: "web",
-    file: "src/customer/layouts/CustomerLayout.tsx",
+    file: "src/features/customer-shell/layouts/CustomerLayout.tsx",
     id: "shell-does-not-block-on-the-profile-call",
     why: "Reported as 'the site is very slow'. The shell blocked every screen underneath it on GET user-handler/me - measured at 4.6s against a cold edge function - so a deep link to a parcel did not issue its own request until +5.6s. Onboarding completion never goes back to false, so a remembered yes lets the shell render at once: measured 7460ms -> 324ms. Mobile has always worked this way (`profileSetupDone`).",
     must: ["wasOnboarded", "rememberOnboarded", 'if (isLoading && !(onboardedHint && role === "customer"))'],
@@ -583,7 +583,7 @@ const CHECKS = [
   // ------------------------------- acceptance QA: a wait must always end somewhere
   {
     repo: "web",
-    file: "src/components/auth/RoleLogin.tsx",
+    file: "src/features/auth/components/RoleLogin.tsx",
     id: "sign-in-cannot-hang-forever",
     why: "Caught live during acceptance testing: POST /auth/v1/token was issued and never answered, and signInWithPassword neither resolved nor rejected - so the button sat on 'Signing in...' indefinitely with nothing to read and nothing to retry. The page already toasts getErrorMessage(error); it just never got an error.",
     must: ["withTimeout(", "AUTH_TIMEOUT_MS", "taking longer than usual"],
@@ -616,7 +616,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/CustomerBookings.tsx",
+    file: "src/features/bookings/pages/CustomerBookings.tsx",
     id: "retry-does-not-reboot-the-app",
     why: "Try Again ran window.location.reload(), throwing away every other piece of app state to retry one request - and on a genuinely offline device a reload cannot fetch the document at all, which would strand the user on a browser error page instead of the app.",
     must: ["refetch()"],
@@ -624,7 +624,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/CustomerMyTrips.tsx",
+    file: "src/features/my-trips/pages/CustomerMyTrips.tsx",
     id: "flights-and-partners-offer-a-way-out",
     why: "Both error states rendered with no retry and no link: a dead end with nothing to press.",
     must: ["refetchFlights", "refetchBuddyListings"],
@@ -674,7 +674,7 @@ const CHECKS = [
   // ------------- travel buddy: the connect action that was never wired to the UI
   {
     repo: "web",
-    file: "src/customer/pages/search/components/PersonCard.tsx",
+    file: "src/features/search/components/PersonCard.tsx",
     id: "buddy-match-can-connect",
     why: "The whole Travel Buddy lifecycle - request, accept, connection, two-tap journey completion, mutual rating - was built and deployed in buddy-handler, and `useSendBuddyRequest` existed, but NOTHING in either app ever called it. A buddy match offered only View profile and Start chat, and a chat creates no connection. Production proved it: 0 buddy_requests, 0 buddy_connections and 0 buddy ratings against 12 delivery ratings. Remove this and the feature dead-ends again.",
     must: ["useSendBuddyRequest", "buddyListingId", "handleConnect"],
