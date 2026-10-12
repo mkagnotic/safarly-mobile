@@ -324,7 +324,10 @@ export function SendParcelScreen() {
 
   const routeComplete = !!fromCity && !!toCity;
   const datesComplete = !!deliveryBy && (dateMode === "single" || !!deliveryTo);
-  const detailsComplete = Number(weight) > 0;
+  // Over the airline limit is not "complete" - the step must not show a tick
+  // (and a fee suggestion for 30 kg) that the submit check then rejects.
+  const detailsComplete =
+    Number(weight) > 0 && Number(weight) <= (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB);
   const feeComplete = Number(feeOffered) > 0;
 
   // 5 required fields; date-range adds the latest date as the 6th.

@@ -304,6 +304,7 @@ export function NotificationsScreen() {
               refreshing={loading && notifications.length > 0}
               onRefresh={refetch}
               tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
           // Perf: list recycling is fine for ~20 items, but keep these conservative.

@@ -58,6 +58,8 @@ export function RateBuddyModal({
 
   return (
     <Modal
+      statusBarTranslucent
+      navigationBarTranslucent
       visible={open}
       transparent
       animationType="fade"

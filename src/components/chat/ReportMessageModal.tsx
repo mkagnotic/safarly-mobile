@@ -91,6 +91,8 @@ export function ReportMessageModal({
 
   return (
     <Modal
+      statusBarTranslucent
+      navigationBarTranslucent
       visible={open}
       transparent
       animationType="fade"
@@ -244,7 +246,8 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 16, fontWeight: "800" },
   body: { color: colors.mutedText, fontSize: 12, lineHeight: 17 },
 
-  bodyScroll: { maxHeight: 380 },
+  // flexShrink: when the keyboard leaves less room, scroll instead of collapsing to 0.
+  bodyScroll: { maxHeight: 380, flexShrink: 1 },
   bodyScrollContent: { gap: 8, paddingBottom: 4 },
 
   reasonRow: {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { applyMessageInsert, applyMessageUpdate } from "@/utils/realtimeMessages";
 import {
   ApiClientError,
   messagesApi,
@@ -179,13 +180,9 @@ export function useChatMessages({
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
+          // Skips a row we already have (e.g. our own send already echoed).
           const incoming = payload.new as Partial<Message> | undefined;
-          if (!incoming?.id) return;
-          // Skip if we already have this row (e.g. our own send already echoed).
-          setServerMessages((prev) => {
-            if (prev.some((m) => m.id === incoming.id)) return prev;
-            return [...prev, incoming as Message];
-          });
+          setServerMessages((prev) => applyMessageInsert(prev, incoming));
         },
       )
       .on(
@@ -197,11 +194,11 @@ export function useChatMessages({
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
+          // Keeps the same array when the event changes nothing - a new array
+          // per event re-rendered the thread and, in a burst, hit React's
+          // "Maximum update depth exceeded" (see utils/realtimeMessages).
           const updated = payload.new as Partial<Message> | undefined;
-          if (!updated?.id) return;
-          setServerMessages((prev) =>
-            prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)),
-          );
+          setServerMessages((prev) => applyMessageUpdate(prev, updated));
         },
       )
       .subscribe();

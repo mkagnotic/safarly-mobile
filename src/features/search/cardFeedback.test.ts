@@ -23,14 +23,28 @@ import { describe, test } from "node:test";
 
 const SRC = readFileSync("src/features/search/SearchScreen.tsx", "utf8");
 
-/** Where the card components begin — everything below here is in the list. */
+/**
+ * The cards that moved out of SearchScreen.tsx. BuddyMatchCard's state and
+ * actions stayed in the screen (check:ux pins `handleConnect` there); only its
+ * markup moved, to BuddyMatchCardBody.
+ */
+const CARD_FILES = [
+  "src/features/search/components/PackageMatchCard.tsx",
+  "src/features/search/components/BuddyMatchCardBody.tsx",
+];
+
+/** Where the card components begin in the screen — everything below here is in the list. */
 const CARDS_START = (() => {
-  const i = SRC.indexOf("function PackageMatchCard(");
-  assert.ok(i !== -1, "PackageMatchCard not found — has it been renamed?");
+  const i = SRC.indexOf("function BuddyMatchCard(");
+  assert.ok(i !== -1, "BuddyMatchCard not found — has it been renamed?");
   return i;
 })();
 
-const cardSource = SRC.slice(CARDS_START);
+const cardSource = [
+  SRC.slice(CARDS_START),
+  ...CARD_FILES.map((f) => readFileSync(f, "utf8")),
+].join("\n");
+
 /** Strip comments: this file explains the bug, and prose is not code. */
 const cardCode = cardSource
   .replace(/\/\*[\s\S]*?\*\//g, "")

@@ -118,7 +118,7 @@ export function Screen({
       scrollEventThrottle={16}
       removeClippedSubviews={Platform.OS === "android"}
       refreshControl={
-        refreshEnabled ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} /> : undefined
+        refreshEnabled ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} /> : undefined
       }
     >
       {children}

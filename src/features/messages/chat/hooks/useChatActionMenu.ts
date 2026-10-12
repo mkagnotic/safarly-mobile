@@ -1,0 +1,229 @@
+import { useCallback, useState } from "react";
+
+import { showAppAlert, showToast } from "@/feedback/appFeedback";
+import { type UseActiveDealResult } from "@/hooks/api/useActiveDeal";
+import { type UseMyConversationsResult } from "@/hooks/api/useMyConversations";
+import { useModalHandoff } from "@/hooks/useModalHandoff";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import { ApiClientError, getErrorMessage, messagesApi, type Conversation } from "@/services/api";
+
+import { type ChatNav, type SetChatModalError } from "../chatTypes";
+
+interface UseChatActionMenuInput {
+  conversationId: string | null;
+  conversation: Conversation | null;
+  activeDeal: UseActiveDealResult["activeDeal"];
+  matchableDeal: UseActiveDealResult["activeDeal"];
+  navigation: ChatNav;
+  refetchConversations: UseMyConversationsResult["refetch"];
+  refetchActiveDeal: UseActiveDealResult["refetch"];
+  afterChildModal: ReturnType<typeof useModalHandoff>["after"];
+  setModalError: SetChatModalError;
+}
+
+/**
+ * The header kebab's conversation-actions sheet and everything it opens: shared
+ * media, archive, report user, raise dispute, block / unblock and unmatch.
+ */
+export function useChatActionMenu({
+  conversationId,
+  conversation,
+  activeDeal,
+  matchableDeal,
+  navigation,
+  refetchConversations,
+  refetchActiveDeal,
+  afterChildModal,
+  setModalError,
+}: UseChatActionMenuInput) {
+  // The header kebab opens the conversation-actions sheet; the composer
+  // paperclip opens the attach sheet (see `useChatComposer`).
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  // iOS can't present a Modal while another is still fading out, so anything
+  // opened from the sheet waits for it to dismiss.
+  const { after: afterActionMenu, onDismiss: onActionMenuDismissed } = useModalHandoff();
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [reportUserOpen, setReportUserOpen] = useState(false);
+  const [reportUserPending, setReportUserPending] = useState(false);
+  const [archivePending, setArchivePending] = useState(false);
+  // Two destructive-confirm states reuse one ConfirmActionModal — `null` when
+  // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
+  // pattern in `ChatActionDropdown.tsx:46`.
+  const [confirmAction, setConfirmAction] = useState<"block" | "unmatch" | null>(null);
+  const [confirmPending, setConfirmPending] = useState(false);
+
+  // Both block and unmatch open the same shared ConfirmActionModal — the
+  // `confirmAction` slot decides title/body/icon. Web does the same with one
+  // Dialog + a "block" | "unmatch" enum (ChatActionDropdown.tsx:46-72).
+  const handleUnmatch = useCallback(() => {
+    if (!conversationId) return;
+    afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("unmatch"));
+  }, [conversationId, afterActionMenu]);
+
+  const handleBlock = useCallback(() => {
+    if (!conversationId) return;
+    afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("block"));
+  }, [conversationId, afterActionMenu]);
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!conversationId || !confirmAction) return;
+    setConfirmPending(true);
+    setModalError(null);
+    try {
+      if (confirmAction === "block") {
+        await messagesApi.blockUser(conversationId);
+        showToast({ title: "Blocked", variant: "info" });
+      } else {
+        // End the delivery on screen, not whichever one the server would have picked.
+        await messagesApi.unmatchConversation(conversationId, {
+          carrier_request_id: matchableDeal?.carrier_request_id ?? undefined,
+        });
+        showToast({ title: "Unmatched", variant: "info" });
+      }
+      setConfirmAction(null);
+      // Flip the match-state banner AND the pinned workflow bar instantly
+      // instead of waiting on realtime. Unmatch reverts the conversation to
+      // `pending`, so the match prompt has to come back - awaited, so the
+      // confirm button stays busy until the screen actually has that state
+      // (fire-and-forget left the old banner up and looked like nothing
+      // happened). The bump wakes the inbox and My Travels, whose listing
+      // statuses the unmatch also reverts.
+      for (const t of ["conversations", "messages", "carrier-requests", "parcels", "trips", "bookings"] as const) {
+        bumpRealtimeTopic(t);
+      }
+      await Promise.all([refetchConversations(), refetchActiveDeal()]);
+    } catch (err) {
+      // Guard may reject if the state moved (e.g. already unmatched). Resync.
+      void refetchConversations();
+
+      // A blocked unmatch used to dead-end: "Cancel the booking first to end the
+      // match" with no way to reach that booking. The server now names it, so
+      // offer a route straight there - Cancel lives on the booking card.
+      const blocker =
+        err instanceof ApiClientError
+          ? (err.details?.[0] as { booking_id?: string; action?: string } | undefined)
+          : undefined;
+      if (confirmAction === "unmatch" && blocker?.booking_id) {
+        afterChildModal(() => setConfirmAction(null), () => showAppAlert({
+          title: "Can't unmatch yet",
+          message: getErrorMessage(err),
+          actions: [
+            { text: "Not now", style: "cancel" },
+            {
+              text: blocker.action === "view_dispute" ? "View dispute" : "Go to booking",
+              onPress: () => {
+                if (blocker.action === "view_dispute") navigation.navigate("DisputesTab");
+                else navigation.navigate("BookingsTab", { expandId: blocker.booking_id as string });
+              },
+            },
+          ],
+        }));
+        return;
+      }
+
+      setModalError({ modal: "confirm", message: getErrorMessage(err) });
+    } finally {
+      setConfirmPending(false);
+    }
+  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal,
+      setModalError]);
+
+  const handleUnblock = useCallback(async () => {
+    if (!conversationId) return;
+    setActionMenuOpen(false);
+    try {
+      await messagesApi.unblockUser(conversationId);
+      showToast({ title: "Unblocked", variant: "info" });
+      void refetchConversations();
+    } catch (err) {
+      void refetchConversations();
+      showToast({
+        title: "Couldn't unblock",
+        message: getErrorMessage(err),
+        variant: "error",
+      });
+    }
+  }, [conversationId, refetchConversations]);
+
+  // ───────── Header action-menu handlers (web parity) ─────────
+  const isArchived = conversation?.archived === true;
+
+  const handleArchiveToggle = useCallback(async () => {
+    if (!conversationId) return;
+    setActionMenuOpen(false);
+    setArchivePending(true);
+    try {
+      if (isArchived) {
+        await messagesApi.unarchiveConversation(conversationId);
+        showToast({ title: "Chat unarchived", variant: "info", duration: 1600 });
+      } else {
+        await messagesApi.archiveConversation(conversationId);
+        showToast({ title: "Chat archived", variant: "info", duration: 1600 });
+      }
+      void refetchConversations();
+    } catch (err) {
+      showToast({ title: "Couldn't update", message: getErrorMessage(err), variant: "error" });
+    } finally {
+      setArchivePending(false);
+    }
+  }, [conversationId, isArchived, refetchConversations]);
+
+  // Raise a dispute: jump to the filing screen pre-scoped to this deal's booking
+  // when one exists, otherwise the disputes list where the user can pick one.
+  const handleRaiseDispute = useCallback(() => {
+    setActionMenuOpen(false);
+    const bookingId = activeDeal?.booking_id ?? null;
+    if (bookingId) navigation.navigate("FileDisputeTab", { bookingId });
+    else navigation.navigate("DisputesTab");
+  }, [activeDeal?.booking_id, navigation]);
+
+  // Conversation-level report reuses the message-report endpoint with the
+  // conversation id as the target — exactly what web's "Report User" does.
+  const handleSubmitUserReport = useCallback(
+    async ({ reason, details }: { reason: string; details: string | undefined }) => {
+      if (!conversationId) return;
+      setReportUserPending(true);
+      setModalError(null);
+      try {
+        await messagesApi.reportMessage(conversationId, reason, details);
+        setReportUserOpen(false);
+        showToast({
+          title: "Reported",
+          message: "Thank you for keeping the community safe.",
+          variant: "success",
+        });
+      } catch (err) {
+        setModalError({ modal: "reportUser", message: getErrorMessage(err) });
+      } finally {
+        setReportUserPending(false);
+      }
+    },
+    [conversationId, setModalError],
+  );
+
+  return {
+    actionMenuOpen,
+    setActionMenuOpen,
+    afterActionMenu,
+    onActionMenuDismissed,
+    mediaOpen,
+    setMediaOpen,
+    reportUserOpen,
+    setReportUserOpen,
+    reportUserPending,
+    archivePending,
+    confirmAction,
+    setConfirmAction,
+    confirmPending,
+    isArchived,
+    handleUnmatch,
+    handleBlock,
+    handleConfirmAction,
+    handleUnblock,
+    handleArchiveToggle,
+    handleRaiseDispute,
+    handleSubmitUserReport,
+  };
+}
+
+export type ChatActionMenuController = ReturnType<typeof useChatActionMenu>;

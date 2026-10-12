@@ -22,12 +22,15 @@ interface KeyboardLiftProps {
  * - iOS: exactly the old `KeyboardAvoidingView behavior="padding"` — a Modal's
  *   window is not resized for the keyboard there, and padding has always
  *   lifted these cards correctly.
- * - Android: RN 0.81 renders Modals edge-to-edge, and an edge-to-edge window is
- *   never resized for the keyboard either; a `KeyboardAvoidingView` with no
- *   behaviour (what these modals used) does nothing, so the keyboard covered
- *   the input and the footer buttons. Instead the content is padded up by the
- *   keyboard's real reach from `useKeyboardMetrics`, animated like
- *   `KeyboardAwareSheet`, so a centred card re-centres in the space above it.
+ * - Android: the content is padded up by the keyboard's real reach from
+ *   `useKeyboardMetrics`, animated like `KeyboardAwareSheet`, so a centred card
+ *   re-centres in the space above it.
+ *
+ * REQUIRES an edge-to-edge Modal on Android: `statusBarTranslucent` and
+ * `navigationBarTranslucent`, exactly like `KeyboardAwareSheet`. Without them
+ * Android resizes the Modal's window for the keyboard AND this adds the lift
+ * again — the card was pushed up twice as far, squeezed, and its buttons ended
+ * up with zero height (found on the emulator, 2026-10-12).
  */
 export function KeyboardLift({ children, style }: Readonly<KeyboardLiftProps>) {
   if (Platform.OS === "ios") {

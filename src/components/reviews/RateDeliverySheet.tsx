@@ -70,6 +70,8 @@ export function RateDeliverySheet({
 
   return (
     <Modal
+      statusBarTranslucent
+      navigationBarTranslucent
       visible={open}
       transparent
       animationType="fade"
