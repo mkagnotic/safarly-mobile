@@ -254,7 +254,7 @@ const CHECKS = [
   // ------------------------------------------- carriers, not senders, are missing
   {
     repo: "web",
-    file: "src/customer/pages/CustomerSearch.tsx",
+    file: "src/customer/pages/search/lib/constants.ts",
     id: "empty-state-names-carriers",
     why: "Shown under a card for a parcel the user is SENDING, so the missing party is a CARRIER. It read 'No matched senders yet', naming the opposite side of the deal.",
     must: ["No matching carriers yet for this route or date."],
@@ -272,7 +272,7 @@ const CHECKS = [
   // ------------------------------------------------ search browses everything first
   {
     repo: "web",
-    file: "src/customer/pages/CustomerSearch.tsx",
+    file: ["src/customer/pages/CustomerSearch.tsx", "src/customer/pages/search/components/SearchFilterPanel.tsx"],
     id: "search-browses-all-by-default",
     why: "Search used to open on route-matching ONLY, so a user with no listings of their own saw an empty screen and had no way to browse the marketplace. Browsing everything is the default; route-matching is an opt-in lens.",
     must: ["matchMyRoutes", "All listings", "Matches for my routes", "Showing everything posted on Safarly"],
@@ -375,7 +375,7 @@ const CHECKS = [
   // --------------------------- the pin and the thread agree on what is on the table
   {
     repo: "web",
-    file: "src/customer/pages/CustomerMessages.tsx",
+    file: ["src/customer/pages/CustomerMessages.tsx", "src/customer/pages/messages/hooks/useOfferTimeline.ts"],
     id: "pin-reads-live-offer-from-thread",
     why: "Client-reported: an OPEN $49 counter sat in the thread with Accept/Counter/Decline directly above a bar reading 'Receiver listed this delivery at $45. [Accept $45]'. activeDeal is a SEPARATE fetch from the messages, so while it lagged the two halves of one screen gave different answers and the bar quoted the stale one. The timeline reconciles every card and arrives with the message, so it answers first - which is what mobile has always done (resolveOffers).",
     must: ["const liveOffer", "offerResolutions.get", "liveOffer={liveOffer}"],
@@ -399,7 +399,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "supabase/functions/message-handler/index.ts",
+    file: "supabase/functions/message-handler/routes/offers.ts",
     id: "offer-card-status-cannot-freeze",
     why: "The offer_card message is written AFTER the offer row with the status captured at insert. A counter landing in that window supersedes the offer and runs its own card sync, which finds no card yet and silently does nothing - freezing the card at 'open' on a dead offer forever. Two such rows existed in production. Re-read once the card exists and correct it.",
     must: ["settled.status !== offer.status", "syncOfferCardStatus(supabase, offer.id"],
@@ -451,7 +451,7 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: "src/customer/pages/CustomerMessages.tsx",
+    file: "src/customer/pages/messages/components/ChatPinnedArea.tsx",
     id: "pinned-action-names-its-delivery",
     why: "The pinned prompts are deal-scoped but named no delivery, so 'Upload your travel document' read as being about the other one. Shown only when the thread holds more than one, so a single-delivery chat is unchanged.",
     must: ["selectedDealLabel", "This step is for"],
@@ -484,7 +484,7 @@ const CHECKS = [
   // ------------- the switcher and the pinned line must agree that a choice exists
   {
     repo: "web",
-    file: "src/customer/pages/CustomerMessages.tsx",
+    file: "src/customer/pages/messages/hooks/useOfferTimeline.ts",
     id: "context-line-follows-the-switcher",
     why: "Found by scenario H: a CANCELLED delivery beside a live one hid the switcher (which filters finished deals) while the pinned line still printed 'This step is for ...' - announcing a choice with no control to make it. Both must ask selectableDeals().",
     must: ["selectableDeals(dealList, selectedDealIdResolved).length < 2"],
@@ -674,7 +674,7 @@ const CHECKS = [
   // ------------- travel buddy: the connect action that was never wired to the UI
   {
     repo: "web",
-    file: "src/customer/pages/CustomerSearch.tsx",
+    file: "src/customer/pages/search/components/PersonCard.tsx",
     id: "buddy-match-can-connect",
     why: "The whole Travel Buddy lifecycle - request, accept, connection, two-tap journey completion, mutual rating - was built and deployed in buddy-handler, and `useSendBuddyRequest` existed, but NOTHING in either app ever called it. A buddy match offered only View profile and Start chat, and a chat creates no connection. Production proved it: 0 buddy_requests, 0 buddy_connections and 0 buddy ratings against 12 delivery ratings. Remove this and the feature dead-ends again.",
     must: ["useSendBuddyRequest", "buddyListingId", "handleConnect"],
@@ -731,13 +731,19 @@ let checked = 0;
 
 for (const c of CHECKS) {
   if (c.repo !== SELF) continue;
-  const path = join(HERE, c.file);
-  if (!existsSync(path)) {
-    failures.push(`${c.id}: ${c.file} is missing.\n      why: ${c.why}`);
+  // `file` may list several files when the pinned code was split across
+  // modules (a page and the components/hooks extracted from it): they are
+  // checked as one unit, so a needle may live in any of them.
+  const files = Array.isArray(c.file) ? c.file : [c.file];
+  const missingFile = files.find((f) => !existsSync(join(HERE, f)));
+  if (missingFile) {
+    failures.push(`${c.id}: ${missingFile} is missing.\n      why: ${c.why}`);
     continue;
   }
   checked++;
-  const code = norm(stripComments(readFileSync(path, "utf8")));
+  const code = files
+    .map((f) => norm(stripComments(readFileSync(join(HERE, f), "utf8"))))
+    .join(" \n ");
 
   for (const needle of c.must) {
     if (!code.includes(norm(needle))) {

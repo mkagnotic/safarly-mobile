@@ -1,28 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
-import {
-  CompositeNavigationProp,
-  useNavigation,
-  useRoute,
-  type RouteProp,
-} from "@react-navigation/native";
-import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 
-import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
-import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
-import { DatePicker } from "@/features/search/DatePicker";
 import { isSameRoute } from "@/features/travels/routeValidation";
-import { packageMatchOwnerIds, withoutBlocked } from "@/features/moderation/blockFilter";
 import {
   clearPersistedSearch,
   loadPersistedSearch,
@@ -32,12 +18,8 @@ import {
   type SearchCountry,
 } from "@/features/search/searchPersistence";
 import { RouteListingCard } from "@/features/search/RouteListingCard";
-import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
-import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
-import { useParcels } from "@/hooks/api/useParcels";
 import { useSearchMatches } from "@/hooks/api/useSearchMatches";
-import { useTrips } from "@/hooks/api/useTrips";
-import { MainTabParamList, RootStackParamList } from "@/navigation/types";
+import { MainTabParamList } from "@/navigation/types";
 import {
   buddiesApi,
   getErrorMessage,
@@ -46,122 +28,41 @@ import {
   type PackageMatch,
   type Parcel,
   type SearchFilters,
-  type Trip,
 } from "@/services/api";
-import { colors, primaryTint } from "@/theme/colors";
-import {
-  carrierTripMatchesParcel,
-  parcelExceedsCapacity,
-  parcelMatchesTrip,
-} from "@/utils/routeMatch";
-import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
-import { formatMoneyShort } from "@/utils/money";
-import { formatLocalDate } from "@/utils/travelDate";
+import { colors } from "@/theme/colors";
+import { formatDeliveryWindow } from "@/utils/travelDate";
 import { showToast } from "@/feedback/appFeedback";
-
-type Nav = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList>,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-/** Per-side country for the route filter — independent, so IN -> IN is reachable. */
-const COUNTRY_LABEL: Record<SearchCountry, string> = { IN: "India", US: "USA" };
-const COUNTRY_FLAG: Record<SearchCountry, string> = { IN: "🇮🇳", US: "🇺🇸" };
-
-type NoticeVariant = "error" | "info" | "success" | "warning";
-interface Notice {
-  message: string;
-  title?: string;
-  variant: NoticeVariant;
-}
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Local-midnight ISO "YYYY-MM-DD" (avoids UTC day-shift). */
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-/** Web parity: search dates are bounded to today … +12 months. */
-function searchDateBounds(): { todayIso: string; maxIso: string } {
-  const today = new Date();
-  const max = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
-  return { todayIso: isoDay(today), maxIso: isoDay(max) };
-}
-
-/** Web parity: 3/day cap, 10 per manual page (auto-match uses 50). */
-const MANUAL_PER_PAGE = 10;
-
-/** Default view: everything on the marketplace, paged. */
-const BROWSE_QUERY = { per_page: MANUAL_PER_PAGE } as const;
-/** Opt-in lens: only listings that fit the user's own trips and parcels. */
-const MATCH_MY_ROUTES_QUERY = { per_page: 50, match_my_routes: true } as const;
-/** Client-side page sizes for auto-match lists (mirrors web). */
-const AUTO_PER_PAGE = 5;
-const AUTO_BUDDY_PER_PAGE = 10;
-
-interface LookingForOption {
-  value: LookingForType;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}
-
-const LOOKING_FOR_OPTIONS: readonly LookingForOption[] = [
-  { value: "travel_buddy", label: "Travel Buddy", icon: "people-outline" },
-  { value: "carrier", label: "Carrier", icon: "car-sport" },
-  { value: "receive_request", label: "Receive Request", icon: "mail-outline" },
-] as const;
-
-function formatDateLabel(iso: string | null | undefined): string {
-  // `travel_date` is a date-only column — never `new Date()`. See formatLocalDate.
-  return formatLocalDate(iso, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-
-/** Move the deep-linked match (id === preferId) to the front so dedup keeps it
- *  as the surviving card for its person (web parity: `preferId`). */
-function preferFirst<T extends { id: string }>(items: T[], preferId?: string): T[] {
-  if (!preferId || !items.some((it) => it.id === preferId)) return items;
-  return [...items].sort((a, b) => (a.id === preferId ? -1 : b.id === preferId ? 1 : 0));
-}
-
-/**
- * Collapse matches so each carrier/sender shows once (mirrors web). A single
- * person can list several trips on the same route + date, which otherwise
- * renders as duplicate profile cards all leading to the same chat. Keeps the
- * first (most relevant per backend ordering) match per person — or the
- * `preferId` match when set, so a deep-linked listing survives dedup.
- */
-function dedupePackageMatchesByPerson(
-  matches: PackageMatch[],
-  preferId?: string,
-): PackageMatch[] {
-  const seen = new Set<string>();
-  return preferFirst(matches, preferId).filter((m) => {
-    const person = m.type === "carrier_trip" ? m.carrier : m.sender;
-    const key = person?.id ?? `match-${m.type}-${m.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/** Same idea for buddy matches — one card per user. */
-function dedupeBuddyMatchesByUser(
-  matches: BuddySearchMatch[],
-  preferId?: string,
-): BuddySearchMatch[] {
-  const seen = new Set<string>();
-  return preferFirst(matches, preferId).filter((m) => {
-    const key = m.user?.id ?? `buddy-${m.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+import { styles } from "@/features/search/SearchScreen.styles";
+import { AppliedFilterChips } from "@/features/search/components/AppliedFilterChips";
+import { BuddyMatchCardBody } from "@/features/search/components/BuddyMatchCardBody";
+import { PackageMatchCard } from "@/features/search/components/PackageMatchCard";
+import { Pagination } from "@/features/search/components/Pagination";
+import { ReceiverTabResults } from "@/features/search/components/ReceiverTabResults";
+import { ResultTabs } from "@/features/search/components/ResultTabs";
+import { SearchFilterFields } from "@/features/search/components/SearchFilterFields";
+import { SearchModeBanner } from "@/features/search/components/SearchModeBanner";
+import {
+  MatchCardSkeleton,
+  MatchListSkeleton,
+  MyListingSkeleton,
+} from "@/features/search/components/SearchSkeletons";
+import { EmptyResults, ErrorBlock } from "@/features/search/components/SearchStates";
+import { useSearchPaging } from "@/features/search/hooks/useSearchPaging";
+import { useSearchResultLists } from "@/features/search/hooks/useSearchResultLists";
+import type { Nav } from "@/features/search/lib/navigation";
+import {
+  AUTO_BUDDY_PER_PAGE,
+  AUTO_PER_PAGE,
+  BROWSE_QUERY,
+  COUNTRY_LABEL,
+  formatDateLabel,
+  ISO_DATE,
+  MANUAL_PER_PAGE,
+  MATCH_MY_ROUTES_QUERY,
+  type Notice,
+  searchDateBounds,
+} from "@/features/search/lib/searchConfig";
+import { sharedStyles } from "@/features/search/searchStyles";
 
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
@@ -323,137 +224,16 @@ export function SearchScreen() {
     autoBuddyPage,
   ]);
 
-  // In auto-match mode results are grouped under the user's own listings —
-  // one card per parcel/trip with matches nested inside (mirrors web).
-  const myTripsState = useTrips({ filter: "my_trips", perPage: 100 });
-  const myParcelsState = useParcels({ filter: "my_parcels", perPage: 100 });
+  const {
+    myTripsState, myParcelsState, carrierTrips, receiverRequests, buddyMatches, displayCarrierTrips,
+    displayReceiverRequests, dedupedBuddyMatches, sortedMyParcels, sortedMyTrips,
+    carrierTripsByParcelId, receiverRequestsByTripId,
+  } = useSearchResultLists({ results, loading, highlightId });
 
   const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
   const toCities = toCountry === "IN" ? INDIA_CITIES : USA_CITIES;
   const fromCountryLabel = COUNTRY_LABEL[fromCountry];
   const toCountryLabel = COUNTRY_LABEL[toCountry];
-
-  // Blocked people (either direction) drop out of every result list here, so
-  // the auto-match maps and tab counts below never see them. Server totals
-  // still count them; the gap is at most the number of blocked people.
-  const { hiddenUserIds } = useBlockedUsers();
-  const visiblePackageMatches = useMemo(
-    () => withoutBlocked(results?.package_matches ?? [], hiddenUserIds, packageMatchOwnerIds),
-    [results, hiddenUserIds],
-  );
-  const carrierTrips = useMemo(
-    () => visiblePackageMatches.filter((m) => m.type === "carrier_trip"),
-    [visiblePackageMatches],
-  );
-  const receiverRequests = useMemo(
-    () => visiblePackageMatches.filter((m) => m.type === "receive_request"),
-    [visiblePackageMatches],
-  );
-  const buddyMatches = useMemo(
-    () => withoutBlocked(results?.buddy_matches ?? [], hiddenUserIds, (b) => b.user?.id),
-    [results, hiddenUserIds],
-  );
-
-  // Manual (filtered) lists render one card per listing, so the same person can
-  // repeat when they have several listings — collapse to one card per person
-  // (mirrors web). Auto-match dedupes per-listing inside the maps above.
-  const displayCarrierTrips = useMemo(
-    () => dedupePackageMatchesByPerson(carrierTrips, highlightId),
-    [carrierTrips, highlightId],
-  );
-  const displayReceiverRequests = useMemo(
-    () => dedupePackageMatchesByPerson(receiverRequests, highlightId),
-    [receiverRequests, highlightId],
-  );
-  const dedupedBuddyMatches = useMemo(
-    () => dedupeBuddyMatchesByUser(buddyMatches, highlightId),
-    [buddyMatches, highlightId],
-  );
-
-  const sortedMyParcels: Parcel[] = useMemo(
-    () =>
-      myParcelsState.parcels
-        // "matched" stays in: a listing with one deal can still take more
-        // (multi-bidder + capacity) — web and the server include it too.
-        .filter((p) => p.status === "open" || p.status === "looking_for_match" || p.status === "matched")
-        .sort((a, b) => (a.delivery_by ?? "").localeCompare(b.delivery_by ?? "")),
-    [myParcelsState.parcels],
-  );
-  const sortedMyTrips: Trip[] = useMemo(
-    () =>
-      myTripsState.trips
-        .filter((t) => t.status === "active" || t.status === "looking_for_match" || t.status === "matched")
-        .sort((a, b) => a.travel_date.localeCompare(b.travel_date)),
-    [myTripsState.trips],
-  );
-
-  // Pre-compute per-listing matches at the parent so the tab counts and the
-  // nested cards read from the same source (no auto-match drift).
-  const carrierTripsByParcelId = useMemo(() => {
-    const map = new Map<string, PackageMatch[]>();
-    if (loading) return map;
-    for (const parcel of sortedMyParcels) {
-      map.set(
-        parcel.id,
-        dedupePackageMatchesByPerson(
-          carrierTrips
-            .filter((m) =>
-              carrierTripMatchesParcel(
-                {
-                  from_city: m.from_city,
-                  to_city: m.to_city,
-                  any_from: m.any_from,
-                  any_to: m.any_to,
-                  travel_date: m.travel_date,
-                },
-                parcel,
-              ),
-            )
-            // Flag (don't hide) trips whose capacity is under this parcel's weight.
-            .map((m) => ({
-              ...m,
-              exceeds_capacity: parcelExceedsCapacity(parcel.weight_kg, m.luggage_capacity_kg),
-            })),
-          highlightId,
-        ),
-      );
-    }
-    return map;
-  }, [loading, carrierTrips, sortedMyParcels, highlightId]);
-
-  const receiverRequestsByTripId = useMemo(() => {
-    const map = new Map<string, PackageMatch[]>();
-    if (loading) return map;
-    for (const trip of sortedMyTrips) {
-      map.set(
-        trip.id,
-        dedupePackageMatchesByPerson(
-          receiverRequests
-            .filter(
-              (m) =>
-                m.delivery_by != null &&
-                parcelMatchesTrip(
-                  {
-                    from_city: m.from_city,
-                    to_city: m.to_city,
-                    any_from: m.any_from,
-                    any_to: m.any_to,
-                    delivery_by: m.delivery_by,
-                  },
-                  trip,
-                ),
-            )
-            // Flag (don't hide) receive requests heavier than this trip's capacity.
-            .map((m) => ({
-              ...m,
-              exceeds_capacity: parcelExceedsCapacity(m.weight_kg, trip.luggage_capacity_kg),
-            })),
-          highlightId,
-        ),
-      );
-    }
-    return map;
-  }, [loading, receiverRequests, sortedMyTrips, highlightId]);
 
   // Deep-link highlight (web parity): once the results are in, jump to the tab —
   // and the page — that holds the `?match=` listing, so its ringed card is on
@@ -511,64 +291,15 @@ export function SearchScreen() {
   // Auto-match counts = sum of nested matches under user listings; manual
   // filter counts = flat result length. Buddies is always flat.
   const isAutoMatch = !hasAppliedFilters && matchMyRoutes;
-  const packageTabCount = useMemo(() => {
-    if (!isAutoMatch) return results?.carrier_total ?? carrierTrips.length;
-    let total = 0;
-    for (const list of carrierTripsByParcelId.values()) total += list.length;
-    return total;
-  }, [isAutoMatch, results?.carrier_total, carrierTrips, carrierTripsByParcelId]);
-
-  const receiverTabCount = useMemo(() => {
-    if (!isAutoMatch) return results?.receive_total ?? receiverRequests.length;
-    let total = 0;
-    for (const list of receiverRequestsByTripId.values()) total += list.length;
-    return total;
-  }, [isAutoMatch, results?.receive_total, receiverRequests, receiverRequestsByTripId]);
-
-  const buddyTabCount = isAutoMatch
-    ? dedupedBuddyMatches.length
-    : results?.buddy_total ?? dedupedBuddyMatches.length;
-
-  // Total pages per list (manual mode only). One-based, min 1.
-  const carrierPages = Math.max(1, Math.ceil(packageTabCount / MANUAL_PER_PAGE));
-  const receiverPages = Math.max(1, Math.ceil(receiverTabCount / MANUAL_PER_PAGE));
-  const buddyPages = Math.max(1, Math.ceil(buddyTabCount / MANUAL_PER_PAGE));
-
-  // Auto-match lists come back in bulk, so slice them client-side — a handful
-  // of cards at a time instead of one endless scroll (mirrors web). Clamp the
-  // page in case the underlying list shrank since it was last set.
-  const autoPkgPages = Math.max(1, Math.ceil(sortedMyParcels.length / AUTO_PER_PAGE));
-  const safeAutoPkgPage = Math.min(autoPkgPage, autoPkgPages);
-  const pagedMyParcels = useMemo(
-    () =>
-      sortedMyParcels.slice(
-        (safeAutoPkgPage - 1) * AUTO_PER_PAGE,
-        safeAutoPkgPage * AUTO_PER_PAGE,
-      ),
-    [sortedMyParcels, safeAutoPkgPage],
-  );
-
-  const autoRcvPages = Math.max(1, Math.ceil(sortedMyTrips.length / AUTO_PER_PAGE));
-  const safeAutoRcvPage = Math.min(autoRcvPage, autoRcvPages);
-  const pagedMyTrips = useMemo(
-    () =>
-      sortedMyTrips.slice(
-        (safeAutoRcvPage - 1) * AUTO_PER_PAGE,
-        safeAutoRcvPage * AUTO_PER_PAGE,
-      ),
-    [sortedMyTrips, safeAutoRcvPage],
-  );
-
-  const autoBuddyPages = Math.max(1, Math.ceil(dedupedBuddyMatches.length / AUTO_BUDDY_PER_PAGE));
-  const safeAutoBuddyPage = Math.min(autoBuddyPage, autoBuddyPages);
-  const pagedBuddyMatches = useMemo(
-    () =>
-      dedupedBuddyMatches.slice(
-        (safeAutoBuddyPage - 1) * AUTO_BUDDY_PER_PAGE,
-        safeAutoBuddyPage * AUTO_BUDDY_PER_PAGE,
-      ),
-    [dedupedBuddyMatches, safeAutoBuddyPage],
-  );
+  const {
+    packageTabCount, receiverTabCount, buddyTabCount, carrierPages, receiverPages, buddyPages,
+    autoPkgPages, safeAutoPkgPage, pagedMyParcels, autoRcvPages, safeAutoRcvPage, pagedMyTrips,
+    autoBuddyPages, safeAutoBuddyPage, pagedBuddyMatches,
+  } = useSearchPaging({
+    isAutoMatch, results, carrierTrips, carrierTripsByParcelId, receiverRequests,
+    receiverRequestsByTripId, dedupedBuddyMatches, sortedMyParcels, sortedMyTrips, autoPkgPage,
+    autoRcvPage, autoBuddyPage,
+  });
 
   /** Switching a side's country invalidates that side's city, so clear it. */
   const toggleFromCountry = useCallback(() => {
@@ -728,122 +459,32 @@ export function SearchScreen() {
         ) : null}
 
         <Card style={styles.filtersCard}>
-          <Text style={styles.fieldLabel}>ROUTE</Text>
-          {/* Each side owns its country, so a domestic route (IN -> IN) is
-              reachable. No swap control: with both sides independently
-              switchable it would be a redundant third way to do the same thing,
-              and the create forms don't have one either. */}
-          <View style={styles.routeRow}>
-            <View style={styles.routeCol}>
-              <Pressable
-                style={styles.countryChip}
-                onPress={toggleFromCountry}
-                disabled={loading}
-                accessibilityRole="button"
-                accessibilityLabel={`Departure country: ${fromCountryLabel}. Tap to switch.`}
-              >
-                <Text style={styles.countryChipText}>
-                  {COUNTRY_FLAG[fromCountry]} {fromCountryLabel}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
-              </Pressable>
-              <CityPicker
-                value={fromCity}
-                onChange={setFromCity}
-                cities={fromCities}
-                placeholder="From city"
-                disabled={loading}
-              />
-            </View>
-
-            <View style={styles.routeCol}>
-              <Pressable
-                style={styles.countryChip}
-                onPress={toggleToCountry}
-                disabled={loading}
-                accessibilityRole="button"
-                accessibilityLabel={`Arrival country: ${toCountryLabel}. Tap to switch.`}
-              >
-                <Text style={styles.countryChipText}>
-                  {COUNTRY_FLAG[toCountry]} {toCountryLabel}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
-              </Pressable>
-              <CityPicker
-                value={toCity}
-                onChange={setToCity}
-                cities={toCities}
-                placeholder="To city"
-                disabled={loading}
-              />
-            </View>
-          </View>
-
-          {/* Date Range — tappable fields that open a calendar sheet. Bounded to
-              today … +12 months (web parity); "To" can't precede "From". */}
-          <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>DATE RANGE</Text>
-          <View style={styles.dateRow}>
-            <DatePicker
-              value={dateFrom}
-              onChange={setDateFrom}
-              placeholder="From date"
-              disabled={loading}
-              minDate={dateBounds.todayIso}
-              maxDate={dateBounds.maxIso}
-            />
-            <DatePicker
-              value={dateTo}
-              onChange={setDateTo}
-              placeholder="To date"
-              disabled={loading}
-              minDate={dateFrom && ISO_DATE.test(dateFrom) ? dateFrom : dateBounds.todayIso}
-              maxDate={dateBounds.maxIso}
-            />
-          </View>
-
-          {/* Looking For */}
-          <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>LOOKING FOR</Text>
-          <View style={styles.lookingForCol}>
-            {LOOKING_FOR_OPTIONS.map((opt) => {
-              const checked = lookingFor.includes(opt.value);
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => toggleLookingFor(opt.value)}
-                  style={styles.checkboxRow}
-                  disabled={loading}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked }}
-                >
-                  <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                    {checked ? (
-                      <Ionicons name="checkmark" size={14} color={colors.white} />
-                    ) : null}
-                  </View>
-                  <Text style={styles.checkboxLabel}>{opt.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View style={styles.applyRow}>
-            {hasActiveFilters ? (
-              <AppButton
-                label="Clear"
-                variant="secondary"
-                onPress={handleClear}
-                disabled={searchBusy}
-                style={styles.applyButtonFlex}
-              />
-            ) : null}
-            <AppButton
-              label={loading ? "Searching…" : "Apply Filters & Search"}
-              onPress={() => void handleApply()}
-              disabled={searchBusy}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              style={styles.applyButtonFlex}
-            />
-          </View>
+          <SearchFilterFields
+            loading={loading}
+            fromCountry={fromCountry}
+            toCountry={toCountry}
+            fromCountryLabel={fromCountryLabel}
+            toCountryLabel={toCountryLabel}
+            toggleFromCountry={toggleFromCountry}
+            toggleToCountry={toggleToCountry}
+            fromCity={fromCity}
+            setFromCity={setFromCity}
+            toCity={toCity}
+            setToCity={setToCity}
+            fromCities={fromCities}
+            toCities={toCities}
+            dateFrom={dateFrom}
+            setDateFrom={setDateFrom}
+            dateTo={dateTo}
+            setDateTo={setDateTo}
+            dateBounds={dateBounds}
+            lookingFor={lookingFor}
+            toggleLookingFor={toggleLookingFor}
+            hasActiveFilters={hasActiveFilters}
+            handleClear={handleClear}
+            searchBusy={searchBusy}
+            handleApply={handleApply}
+          />
 
           <View style={styles.modeToggleRow}>
             <Pressable
@@ -975,98 +616,11 @@ export function SearchScreen() {
   );
 }
 
-// ───────────────────────── Result tabs ─────────────────────────
-
-interface ResultTabsProps {
-  active: ResultsTab;
-  onChange: (tab: ResultsTab) => void;
-  counts: { package: number; buddy: number; receiver: number };
-  loading: boolean;
-}
-
-const ResultTabs = memo(function ResultTabs({
-  active,
-  onChange,
-  counts,
-  loading,
-}: Readonly<ResultTabsProps>) {
-  const tabs: readonly { key: ResultsTab; label: string; count: number }[] = [
-    { key: "package", label: "Packages", count: counts.package },
-    { key: "buddy", label: "Buddies", count: counts.buddy },
-    { key: "receiver", label: "Receivers", count: counts.receiver },
-  ];
-  return (
-    <View style={styles.tabsRow}>
-      {tabs.map((tab) => {
-        const isActive = tab.key === active;
-        return (
-          <Pressable
-            key={tab.key}
-            onPress={() => onChange(tab.key)}
-            style={[styles.tab, isActive && styles.tabActive]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
-          >
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]} numberOfLines={1}>
-              {tab.label}{" "}
-              {loading ? (
-                <Text style={styles.tabCount}>(…)</Text>
-              ) : (
-                <Text style={styles.tabCount}>({tab.count})</Text>
-              )}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-});
-
-// ───────────────────────── Pagination ─────────────────────────
-
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  loading: boolean;
-  onChange: (next: number) => void;
-}
-
-function Pagination({ page, totalPages, loading, onChange }: Readonly<PaginationProps>) {
-  if (totalPages <= 1) return null;
-  const canPrev = page > 1 && !loading;
-  const canNext = page < totalPages && !loading;
-  return (
-    <View style={styles.pagination}>
-      <Pressable
-        onPress={() => onChange(page - 1)}
-        disabled={!canPrev}
-        style={[styles.pageButton, !canPrev && styles.pageButtonDisabled]}
-        accessibilityRole="button"
-        accessibilityLabel="Previous page"
-      >
-        <Ionicons name="chevron-back" size={16} color={canPrev ? colors.text : colors.subtleText} />
-        <Text style={[styles.pageButtonText, !canPrev && styles.pageButtonTextDisabled]}>Prev</Text>
-      </Pressable>
-      <Text style={styles.pageIndicator}>
-        Page {page} of {totalPages}
-      </Text>
-      <Pressable
-        onPress={() => onChange(page + 1)}
-        disabled={!canNext}
-        style={[styles.pageButton, !canNext && styles.pageButtonDisabled]}
-        accessibilityRole="button"
-        accessibilityLabel="Next page"
-      >
-        <Text style={[styles.pageButtonText, !canNext && styles.pageButtonTextDisabled]}>Next</Text>
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={canNext ? colors.text : colors.subtleText}
-        />
-      </Pressable>
-    </View>
-  );
-}
+// PackageTabResults, BuddyTabResults and BuddyMatchCard's actions stay in this
+// file on purpose: `npm run check:ux` pins the carriers empty-state copy and
+// `buddiesApi.sendRequest` / `handleConnect` to SearchScreen.tsx, and
+// cardFeedback.test.ts fences the card actions. Everything else lives in
+// ./components, ./hooks and ./lib.
 
 // ───────────────────────── Tab bodies ─────────────────────────
 
@@ -1126,16 +680,16 @@ function PackageTabResults({
               {loading ? (
                 <MatchCardSkeleton />
               ) : matched.length === 0 ? (
-                <Text style={styles.nestedEmpty}>
+                <Text style={sharedStyles.nestedEmpty}>
                   No matching carriers yet for this route or date.
                 </Text>
               ) : (
                 <View>
-                  <Text style={styles.nestedHeading}>CARRIER TRIPS</Text>
+                  <Text style={sharedStyles.nestedHeading}>CARRIER TRIPS</Text>
                   {matched.map((m, i) => (
                     <View
                       key={`${m.type}-${m.id}`}
-                      style={i > 0 ? styles.nestedDivider : undefined}
+                      style={i > 0 ? sharedStyles.nestedDivider : undefined}
                     >
                       <PackageMatchCard
                         match={m}
@@ -1208,303 +762,6 @@ function BuddyTabResults({
         />
       ))}
     </View>
-  );
-}
-
-function ReceiverTabResults({
-  loading,
-  isAutoMatch,
-  myTrips,
-  myTripsLoading,
-  matches,
-  matchesByTripId,
-  navigation,
-  highlightId,
-}: Readonly<{
-  loading: boolean;
-  isAutoMatch: boolean;
-  myTrips: Trip[];
-  myTripsLoading: boolean;
-  matches: PackageMatch[];
-  /** Pre-filtered per-trip match lists (same source as the tab count). */
-  matchesByTripId: Map<string, PackageMatch[]>;
-  navigation: Nav;
-  highlightId?: string;
-}>) {
-  if (isAutoMatch) {
-    if (myTripsLoading && myTrips.length === 0)
-      return (
-        <View>
-          <MyListingSkeleton />
-          <MyListingSkeleton />
-        </View>
-      );
-    if (myTrips.length === 0)
-      return (
-        <EmptyResults
-          icon="mail-outline"
-          title="No trips listed"
-          body="List a trip to see receiver requests on your route."
-        />
-      );
-    return (
-      <View>
-        {myTrips.map((trip) => {
-          const matched = matchesByTripId.get(trip.id) ?? [];
-          return (
-            <RouteListingCard
-              key={trip.id}
-              fromCity={trip.from_city}
-              toCity={trip.to_city}
-              kind="trip"
-              dateLabel={formatTravelDateRange(trip, { year: true })}
-              secondary={
-                trip.airline ? { label: "AIRLINE", value: trip.airline } : undefined
-              }
-            >
-              {loading ? (
-                <MatchCardSkeleton />
-              ) : matched.length === 0 ? (
-                <Text style={styles.nestedEmpty}>
-                  No receiver requests yet for this route or date.
-                </Text>
-              ) : (
-                <View>
-                  <Text style={styles.nestedHeading}>RECEIVER REQUESTS</Text>
-                  {matched.map((m, i) => (
-                    <View
-                      key={`${m.type}-${m.id}`}
-                      style={i > 0 ? styles.nestedDivider : undefined}
-                    >
-                      <PackageMatchCard
-                        match={m}
-                        navigation={navigation}
-                        nested
-                        highlighted={m.id === highlightId}
-                      />
-                    </View>
-                  ))}
-                </View>
-              )}
-            </RouteListingCard>
-          );
-        })}
-      </View>
-    );
-  }
-
-  if (loading && matches.length === 0) return <MatchListSkeleton />;
-  if (matches.length === 0)
-    return (
-      <EmptyResults
-        icon="mail-outline"
-        title="No receiver requests"
-        body="Try widening your filters or date range."
-      />
-    );
-  return (
-    <View>
-      {matches.map((m) => (
-        <PackageMatchCard
-          key={`${m.type}-${m.id}`}
-          match={m}
-          navigation={navigation}
-          highlighted={m.id === highlightId}
-        />
-      ))}
-    </View>
-  );
-}
-
-// ───────────────────────── Cards ─────────────────────────
-
-function PackageMatchCard({
-  match,
-  navigation,
-  nested,
-  highlighted,
-}: Readonly<{
-  match: PackageMatch;
-  navigation: Nav;
-  nested?: boolean;
-  /** Deep-link highlight (web parity: the `?match=` ring). */
-  highlighted?: boolean;
-}>) {
-  const isTrip = match.type === "carrier_trip";
-  const person = isTrip ? match.carrier : match.sender;
-  const dateLabel = isTrip
-    ? formatDateLabel(match.travel_date)
-    : formatDateLabel(match.delivery_by);
-
-  const [chatStarting, setChatStarting] = useState(false);
-
-  const handleViewProfile = useCallback(() => {
-    if (!person?.id) {
-      showToast({
-        title: "User unavailable",
-        message: "Unable to open profile — user not available.",
-        variant: "error",
-      });
-      return;
-    }
-    navigation.navigate("PublicProfileTab", {
-      userId: person.id,
-      name: person.name ?? undefined,
-    });
-  }, [person?.id, person?.name, navigation]);
-
-  const handleStartChat = useCallback(async () => {
-    if (!person?.id) {
-      showToast({
-        title: "User unavailable",
-        message: "Unable to start chat — user not available.",
-        variant: "error",
-      });
-      return;
-    }
-    setChatStarting(true);
-    try {
-      const res = await messagesApi.createConversation(person.id, "booking");
-      navigation.navigate("OfferChatTab", {
-        conversationId: res.data.id,
-        name: person.name || "Conversation",
-        source: "messages",
-      });
-    } catch (err) {
-      showToast({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
-    } finally {
-      setChatStarting(false);
-    }
-  }, [person?.id, person?.name, navigation]);
-
-  const secondary = isTrip
-    ? {
-        label: "CAPACITY",
-        value:
-          match.luggage_capacity_kg != null
-            ? `${match.luggage_capacity_kg} kg`
-            : "—",
-      }
-    : {
-        label: "FEE",
-        value:
-          match.fee_offered != null ? formatMoneyShort(match.fee_offered, match.fee_currency) : "—",
-      };
-
-  const inlineSubtitle = isTrip
-    ? match.airline
-      ? `Via ${match.airline}`
-      : null
-    : // Receive request: category + weight (web parity — web shows both).
-      [
-        match.category?.trim() ? capitalize(match.category.trim()) : null,
-        match.weight_kg != null ? `${match.weight_kg} kg` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ") || null;
-
-  const personBlock = (
-    <View style={styles.personRow}>
-      <Avatar name={person?.name} uri={person?.avatar_url} size={40} />
-      <View style={styles.personInfo}>
-        <Text style={styles.personName} numberOfLines={2}>
-          {person?.name || "Unknown user"}
-        </Text>
-        <Text style={styles.ratingText}>
-          {person?.rating && person.rating > 0
-            ? `${person.rating.toFixed(1)} rating`
-            : "New member"}
-        </Text>
-      </View>
-    </View>
-  );
-
-  const metricsBlock = (
-    <MetricRow>
-      <MetricTile label="DATE" value={dateLabel} compact />
-      <MetricTile label={secondary.label} value={secondary.value} highlight compact />
-    </MetricRow>
-  );
-
-  const subtitleBlock = inlineSubtitle ? (
-    <Text style={[styles.matchSubtitle, nested && styles.matchSubtitleNested]}>
-      {inlineSubtitle}
-    </Text>
-  ) : null;
-
-  // Web parity: a match still shows but wears an amber pill when the parcel is
-  // heavier than the carrier's capacity. Copy differs by side (carrier trip vs
-  // your trip), matching web's "Exceeds capacity" / "Exceeds your capacity".
-  // A carrier bidding on this needs to know BEFORE they commit: an online order
-  // is normally couriered to their local address rather than handed over in
-  // person, which changes what they are agreeing to.
-  const onlineOrderPill = !isTrip && match.is_online_order ? (
-    <View style={[styles.onlineOrderPill, nested && styles.capacityPillNested]}>
-      <Ionicons name="cube-outline" size={12} color={colors.primary} />
-      <Text style={styles.onlineOrderPillText}>Online order</Text>
-    </View>
-  ) : null;
-
-  const warningBlock = (match.exceeds_capacity || onlineOrderPill) ? (
-    <View style={styles.pillRow}>
-      {match.exceeds_capacity ? (
-        <View style={[styles.capacityPill, nested && styles.capacityPillNested]}>
-          <Ionicons name="alert-circle" size={12} color={colors.warning} />
-          <Text style={styles.capacityPillText}>
-            {isTrip ? "Exceeds capacity" : "Exceeds your capacity"}
-          </Text>
-        </View>
-      ) : null}
-      {onlineOrderPill}
-    </View>
-  ) : null;
-
-  const actionsBlock = (
-    <View style={styles.actionsRow}>
-      <AppButton
-        label="View profile"
-        variant="secondary"
-        onPress={handleViewProfile}
-        style={styles.actionButtonFlex}
-      />
-      <AppButton
-        label={chatStarting ? "Starting…" : "Start chat"}
-        onPress={() => void handleStartChat()}
-        disabled={chatStarting || !person?.id}
-        gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-        style={styles.actionButtonFlex}
-      />
-    </View>
-  );
-
-  // Nested under a listing card: no card chrome or route header (parent shows it).
-  if (nested) {
-    return (
-      <View style={[styles.matchNested, highlighted && styles.matchHighlighted]}>
-        {personBlock}
-        {metricsBlock}
-        {subtitleBlock}
-        {warningBlock}
-        {actionsBlock}
-      </View>
-    );
-  }
-
-  return (
-    <Card style={[styles.matchCard, highlighted && styles.matchHighlighted]}>
-      <RouteHeader
-        fromCity={match.from_city}
-        toCity={match.to_city}
-        kind={isTrip ? "trip" : "parcel"}
-        compact
-      />
-      {metricsBlock}
-      {subtitleBlock}
-      {warningBlock}
-      <View style={styles.divider} />
-      {personBlock}
-      {actionsBlock}
-    </Card>
   );
 }
 
@@ -1602,647 +859,16 @@ function BuddyMatchCard({
   }, [match.user?.id, match.user?.name, navigation]);
 
   return (
-    <Card style={[styles.matchCard, highlighted && styles.matchHighlighted]}>
-      <View style={styles.personRow}>
-        <Avatar name={match.user?.name} uri={match.user?.avatar_url} size={48} />
-        <View style={styles.personInfo}>
-          <View style={styles.buddyTitleRow}>
-            <Text style={styles.personName} numberOfLines={2}>
-              {match.user?.name || "Travel buddy"}
-            </Text>
-            <View style={styles.badgeSafe}>
-              <Text style={styles.badgeText}>BUDDY</Text>
-            </View>
-          </View>
-          <Text style={styles.ratingText}>
-            {match.user?.rating && match.user.rating > 0
-              ? `${match.user.rating.toFixed(1)} rating`
-              : "New member"}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.travelDetailsBlock}>
-        <Text style={styles.travelLabel}>TRAVEL DETAILS</Text>
-        <RouteHeader fromCity={match.from_city} toCity={match.to_city} kind="trip" compact />
-        <MetricRow>
-          <MetricTile label="DATE" value={dateLabel} compact />
-          <MetricTile label="AIRLINE" value={match.airline || "—"} highlight compact />
-        </MetricRow>
-        {details.length > 0 ? (
-          <View style={styles.detailsGrid}>
-            {details.map((d) => (
-              <View key={d.label} style={styles.detailItem}>
-                <Text style={styles.detailLabel}>{d.label}</Text>
-                <Text style={styles.detailValue} numberOfLines={2}>
-                  {d.value}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-        {match.bio ? (
-          <Text style={styles.bioText} numberOfLines={2}>
-            {match.bio}
-          </Text>
-        ) : null}
-      </View>
-
-      <AppButton
-        label={connecting ? "Sending…" : "Connect"}
-        onPress={() => void handleConnect()}
-        disabled={connecting || !match.id}
-        style={styles.connectButton}
-      />
-      <View style={styles.actionsRow}>
-        <AppButton
-          label="View profile"
-          variant="secondary"
-          onPress={handleViewProfile}
-          style={styles.actionButtonFlex}
-        />
-        <AppButton
-          label={chatStarting ? "Starting…" : "Start chat"}
-          onPress={() => void handleStartChat()}
-          disabled={chatStarting || !match.user?.id}
-          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-          style={styles.actionButtonFlex}
-        />
-      </View>
-    </Card>
+    <BuddyMatchCardBody
+      match={match}
+      highlighted={highlighted}
+      dateLabel={dateLabel}
+      details={details}
+      connecting={connecting}
+      handleConnect={handleConnect}
+      handleViewProfile={handleViewProfile}
+      chatStarting={chatStarting}
+      handleStartChat={handleStartChat}
+    />
   );
 }
-
-// ───────────────────────── Reusable bits ─────────────────────────
-
-/** Chip summary of the active manual-search filters (mirrors web). */
-function AppliedFilterChips({ filters }: Readonly<{ filters: SearchFilters }>) {
-  const chips: string[] = [];
-  if (filters.from_city) {
-    chips.push(`From: ${filters.from_city === "ANY" ? "Any City" : filters.from_city}`);
-  }
-  if (filters.to_city) {
-    chips.push(`To: ${filters.to_city === "ANY" ? "Any City" : filters.to_city}`);
-  }
-  if (filters.date_from) chips.push(`From: ${filters.date_from}`);
-  if (filters.date_to) chips.push(`To: ${filters.date_to}`);
-  for (const l of filters.looking_for?.split(",").filter(Boolean) ?? []) {
-    chips.push(capitalize(l.replace(/_/g, " ")));
-  }
-  if (chips.length === 0) chips.push("All results (no filters)");
-
-  return (
-    <View style={styles.filterChipsRow}>
-      <Text style={styles.filterChipsLabel}>FILTERS:</Text>
-      {chips.map((c) => (
-        <View key={c} style={styles.filterChip}>
-          <Text style={styles.filterChipText}>{c}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-interface SearchModeBannerProps {
-  hasAppliedFilters: boolean;
-  activeTab: ResultsTab;
-  myParcelsCount: number;
-  myTripsCount: number;
-  myBuddyCount: number;
-}
-
-function SearchModeBanner({
-  hasAppliedFilters,
-  activeTab,
-  myParcelsCount,
-  myTripsCount,
-  myBuddyCount,
-}: Readonly<SearchModeBannerProps>) {
-  if (hasAppliedFilters) return null;
-
-  let body: string | null = null;
-  if (activeTab === "package") {
-    body =
-      myParcelsCount > 0
-        ? `Showing carrier trips matching your ${myParcelsCount} active parcel request${myParcelsCount === 1 ? "" : "s"} (route + date).`
-        : "List a parcel request to auto-see carriers on your route.";
-  } else if (activeTab === "buddy") {
-    body =
-      myBuddyCount > 0
-        ? `Showing buddies matching your ${myBuddyCount} route${myBuddyCount === 1 ? "" : "s"} (same route + travel date).`
-        : "Create a buddy listing or enable Travel Buddy on a trip to auto-see companions.";
-  } else {
-    body =
-      myTripsCount > 0
-        ? `Showing receiver requests matching your ${myTripsCount} active trip${myTripsCount === 1 ? "" : "s"} (route + delivery date).`
-        : "List a trip to auto-see receiver requests on your route.";
-  }
-
-  return (
-    <View style={styles.modeBanner}>
-      <Text style={styles.modeBannerText}>{body}</Text>
-    </View>
-  );
-}
-
-function MatchCardSkeleton() {
-  return (
-    <View style={styles.skeletonMatchCard}>
-      <View style={styles.skeletonRouteRow}>
-        <SkeletonBlock style={styles.skeletonRouteCity} />
-        <View style={styles.skeletonRouteConnector}>
-          <View style={styles.skeletonRouteLine} />
-          <SkeletonBlock style={styles.skeletonRouteIcon} />
-          <View style={styles.skeletonRouteLine} />
-        </View>
-        <SkeletonBlock style={styles.skeletonRouteCity} />
-      </View>
-      <View style={styles.skeletonTileRow}>
-        <SkeletonBlock style={styles.skeletonTile} />
-        <SkeletonBlock style={styles.skeletonTile} />
-      </View>
-      <View style={styles.skeletonDivider} />
-      <View style={styles.skeletonPersonRow}>
-        <SkeletonBlock style={styles.skeletonAvatar} />
-        <View style={styles.skeletonPersonInfo}>
-          <SkeletonBlock style={styles.skeletonPersonName} />
-          <SkeletonBlock style={styles.skeletonPersonMeta} />
-        </View>
-      </View>
-      <View style={styles.skeletonActionsRow}>
-        <SkeletonBlock style={styles.skeletonActionButton} />
-        <SkeletonBlock style={styles.skeletonActionButton} />
-      </View>
-    </View>
-  );
-}
-
-function MatchListSkeleton({ count = 3 }: Readonly<{ count?: number }>) {
-  return (
-    <View>
-      {Array.from({ length: count }).map((_, i) => (
-        <MatchCardSkeleton key={i} />
-      ))}
-    </View>
-  );
-}
-
-function MyListingSkeleton() {
-  return (
-    <View style={styles.skeletonListingCard}>
-      <View style={styles.skeletonRouteRow}>
-        <SkeletonBlock style={styles.skeletonRouteCity} />
-        <View style={styles.skeletonRouteConnector}>
-          <View style={styles.skeletonRouteLine} />
-          <SkeletonBlock style={styles.skeletonRouteIcon} />
-          <View style={styles.skeletonRouteLine} />
-        </View>
-        <SkeletonBlock style={styles.skeletonRouteCity} />
-      </View>
-      <View style={styles.skeletonTileRow}>
-        <SkeletonBlock style={styles.skeletonTile} />
-        <SkeletonBlock style={styles.skeletonTile} />
-      </View>
-    </View>
-  );
-}
-
-function ErrorBlock({
-  message,
-  onRetry,
-}: Readonly<{ message: string; onRetry?: () => void }>) {
-  return (
-    <View style={styles.centered}>
-      <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-      <Text style={styles.errorTitle}>Couldn't load results</Text>
-      <Text style={styles.errorBody}>{message}</Text>
-      {onRetry ? (
-        <AppButton
-          label="Try again"
-          onPress={onRetry}
-          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-          style={styles.retryButtonWrap}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-interface EmptyResultsProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body: string;
-}
-
-function EmptyResults({ icon, title, body }: Readonly<EmptyResultsProps>) {
-  return (
-    <View style={styles.emptyResults}>
-      <View style={styles.emptyIconBox}>
-        <Ionicons name={icon} size={28} color={colors.wordmark} />
-      </View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
-    </View>
-  );
-}
-
-// ───────────────────────── Styles ─────────────────────────
-
-const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 20, paddingBottom: 32, paddingTop: 8 },
-
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 8,
-    marginBottom: 14,
-  },
-  headerTextWrap: { flex: 1, minWidth: 0 },
-  title: { color: colors.text, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  subtitle: {
-    color: colors.mutedText,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "500",
-    marginTop: 4,
-  },
-  bannerSlot: { marginBottom: 14 },
-
-  // Filters
-  filtersCard: { gap: 12, padding: 16, marginBottom: 18 },
-  fieldLabel: {
-    color: colors.mutedText,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  fieldLabelTopGap: { marginTop: 6 },
-  routeRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  routeCol: { flex: 1, minWidth: 0, gap: 8 },
-  countryChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceMuted,
-  },
-  countryChipText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  swapButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: primaryTint.fill10,
-    borderWidth: 1,
-    borderColor: primaryTint.stroke18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dateRow: { flexDirection: "row", gap: 8 },
-  lookingForCol: { gap: 14, marginTop: 4 },
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.controlOutline,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
-  checkboxLabel: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
-  applyRow: { flexDirection: "row", gap: 10, marginTop: 14 },
-  applyButtonFlex: { flex: 1 },
-  modeToggleRow: {
-    flexDirection: "row",
-    alignSelf: "center",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    padding: 3,
-    marginBottom: 8,
-  },
-  modeToggleButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  modeToggleButtonActive: {
-    backgroundColor: colors.card,
-  },
-  modeToggleLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.subtleText,
-  },
-  modeToggleLabelActive: {
-    color: colors.text,
-  },
-  noteText: {
-    color: colors.mutedText,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "500",
-    textAlign: "center",
-    marginTop: 4,
-  },
-
-  tabsRow: {
-    flexDirection: "row",
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-  },
-  tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  tabLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
-  tabLabelActive: { color: colors.text },
-  tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
-
-  filterChipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 4,
-    marginBottom: 12,
-  },
-  filterChipsLabel: {
-    color: colors.mutedText,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: primaryTint.fill10,
-  },
-  filterChipText: {
-    color: colors.wordmark,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "700",
-  },
-
-  modeBanner: { paddingHorizontal: 4, paddingBottom: 10 },
-  modeBannerText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "500",
-  },
-
-  pagination: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  pageButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  pageButtonDisabled: { opacity: 0.4 },
-  pageButtonText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  pageButtonTextDisabled: { color: colors.subtleText },
-  pageIndicator: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "600" },
-
-  // Loading / error / empty
-  centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
-
-  skeletonMatchCard: {
-    padding: 16,
-    marginBottom: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    gap: 14,
-  },
-  skeletonListingCard: {
-    padding: 16,
-    marginBottom: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    gap: 14,
-  },
-  skeletonRouteRow: { flexDirection: "row", alignItems: "center" },
-  skeletonRouteCity: { flex: 1, height: 22, marginHorizontal: 4 },
-  skeletonRouteConnector: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-  },
-  skeletonRouteLine: { width: 14, height: 1, backgroundColor: colors.border },
-  skeletonRouteIcon: { width: 20, height: 20, borderRadius: 10 },
-  skeletonTileRow: { flexDirection: "row", gap: 10 },
-  skeletonTile: { flex: 1, height: 70, borderRadius: 14 },
-  skeletonDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  skeletonPersonRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  skeletonAvatar: { width: 40, height: 40, borderRadius: 20 },
-  skeletonPersonInfo: { flex: 1, gap: 6 },
-  skeletonPersonName: { width: "55%", height: 16, borderRadius: 6 },
-  skeletonPersonMeta: { width: "35%", height: 12, borderRadius: 6 },
-  skeletonActionsRow: { flexDirection: "row", gap: 10 },
-  skeletonActionButton: { flex: 1, height: 48, borderRadius: 16 },
-
-  // Nested matches inside a RouteListingCard
-  nestedEmpty: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "500",
-    paddingVertical: 4,
-  },
-  nestedHeading: {
-    color: colors.mutedText,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
-  errorBody: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "500",
-    textAlign: "center",
-    maxWidth: 280,
-  },
-  retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
-  emptyResults: { alignItems: "center", paddingVertical: 36, gap: 8 },
-  emptyIconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surfaceTintPrimary,
-  },
-  emptyTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800", marginTop: 4 },
-  emptyBody: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "500",
-    textAlign: "center",
-    maxWidth: 300,
-  },
-
-  // Match card
-  matchCard: { padding: 16, marginBottom: 14, gap: 14 },
-  matchNested: { gap: 12 },
-  // Deep-link highlight ring (web parity: `border-primary ring-2`). The nested
-  // variant has no card chrome, so the ring also gives it padding + a radius.
-  matchHighlighted: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: colors.primarySoft,
-  },
-  nestedDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    marginTop: 14,
-    paddingTop: 14,
-  },
-  matchSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  matchSubtitleNested: { textAlign: "left" },
-  capacityPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "rgba(245, 159, 10, 0.12)",
-    marginTop: 6,
-  },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  onlineOrderPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    alignSelf: "flex-start",
-    backgroundColor: primaryTint.fill12,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  onlineOrderPillText: { color: colors.primary, fontSize: 11, fontWeight: "800" },
-  capacityPillNested: { alignSelf: "flex-start" },
-  capacityPillText: { color: colors.warning, fontSize: 11, lineHeight: 14, fontWeight: "700" },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-
-  personRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  personInfo: { flex: 1, minWidth: 0 },
-  personName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: "700" },
-  ratingText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", marginTop: 2 },
-
-  // Buddy card
-  buddyTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  badgeSafe: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: "rgba(34, 197, 94, 0.12)",
-  },
-  badgeText: { color: colors.safe, fontSize: 10, lineHeight: 13, fontWeight: "800", letterSpacing: 0.4 },
-  travelDetailsBlock: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 10,
-  },
-  travelLabel: {
-    color: colors.subtleText,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  detailsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  detailItem: { width: "44%" },
-  detailLabel: {
-    color: colors.mutedText,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  bioText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "500",
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-
-  actionsRow: { flexDirection: "row", gap: 10 },
-  connectButton: { marginTop: 12 },
-  actionButtonFlex: { flex: 1 },
-});
