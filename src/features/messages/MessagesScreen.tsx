@@ -253,6 +253,7 @@ export function MessagesScreen() {
             }
             onRefresh={onRefresh}
             tintColor={colors.primary}
+              colors={[colors.primary]}
           />
         }
         showsVerticalScrollIndicator={false}

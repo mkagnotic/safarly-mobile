@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { colors } from "@/theme/colors";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";

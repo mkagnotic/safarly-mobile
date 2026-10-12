@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Text, TextInput, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";

@@ -1,16 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  Text,
-  TextInput,
-  View,
-  type ListRenderItemInfo,
-} from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
@@ -594,6 +586,7 @@ export function BookingsScreen() {
               refreshing={loading && bookings.length > 0}
               onRefresh={refetch}
               tintColor={colors.primary}
+              colors={[colors.primary]}
             />
           }
         />

@@ -2,15 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { FormBanner } from "@/components/ui/FormBanner";
 import type { RNUploadFile } from "@/services/api";

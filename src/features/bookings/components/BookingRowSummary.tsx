@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { bookingFee } from "@/features/bookings/paymentMath";
 import type { Booking } from "@/services/api";

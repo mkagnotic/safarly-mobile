@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
 import type { Booking } from "@/services/api";

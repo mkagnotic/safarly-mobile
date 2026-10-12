@@ -434,6 +434,7 @@ export function SearchScreen() {
             refreshing={refreshing}
             onRefresh={() => void handleRefresh()}
             tintColor={colors.wordmark}
+              colors={[colors.wordmark]}
           />
         }
       >

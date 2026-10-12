@@ -142,6 +142,7 @@ export function MyTravelsScreen() {
             refreshing={refreshing}
             onRefresh={refetchActive}
             tintColor={colors.wordmark}
+              colors={[colors.wordmark]}
           />
         }
       >

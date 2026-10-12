@@ -195,7 +195,7 @@ export function DisputesScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={disputes.length === 0 ? styles.listContentEmpty : styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
           }
         />
       </View>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
