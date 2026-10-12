@@ -42,7 +42,9 @@ const REASONS: readonly ReportReason[] = [
   { value: "other", label: "Other", helper: "Something else — please describe below." },
 ];
 
-const MAX_DETAILS = 500;
+// The server limit for every report (moderation-handler MAX_REPORT_DETAILS) -
+// was 500 here while web and the other report forms allowed 1000.
+const MAX_DETAILS = 1000;
 
 interface ReportMessageModalProps {
   open: boolean;

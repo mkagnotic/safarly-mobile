@@ -111,7 +111,12 @@ export function PublicProfileScreen() {
   // Prefer the reviews aggregate (matches web), fall back to the profile field.
   const displayRating = reviews.averageRating > 0 ? reviews.averageRating : (profile?.rating ?? 0);
   const isNew = !displayRating || displayRating <= 0;
-  const reviewCount = reviews.total;
+  // The server already leaves blocked people's reviews out of BOTH the list and
+  // its total (rating-handler). Any row still hidden here - a block made since
+  // the list loaded - comes off the number too, so "N reviews" always describes
+  // the cards under it. It used to count them: "5 reviews" over 3 cards.
+  const hiddenOnPage = reviews.reviews.length - visibleReviews.length;
+  const reviewCount = Math.max(visibleReviews.length, reviews.total - hiddenOnPage);
   const verified = isKycVerified(profile?.kyc_status);
   const preferredRoutes =
     [profile?.city, profile?.country].filter(Boolean).join(", ") || "—";

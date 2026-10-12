@@ -14,7 +14,7 @@ import {
   EVIDENCE_TYPES,
   evidenceMimeType,
   MAX_EVIDENCE_BYTES,
-  REJECT_REASON_MIN,
+  REJECT_REASON_MIN, minLengthHint,
 } from "@/features/bookings/lib/modalValidation";
 
 // ─────────────── Reject handoff modal ───────────────
@@ -121,9 +121,11 @@ export function RejectHandoffModal({
           editable={!pending}
           autoFocus
         />
-        <Text style={sharedStyles.modalHelper}>
-          {trimmed.length}/{REJECT_REASON_MIN} characters minimum
-        </Text>
+        {minLengthHint(trimmed.length, REJECT_REASON_MIN) ? (
+          <Text style={sharedStyles.modalHelper}>
+            {minLengthHint(trimmed.length, REJECT_REASON_MIN)}
+          </Text>
+        ) : null}
 
         <Text style={sharedStyles.modalFieldLabel}>Where is the parcel now?</Text>
         <View style={styles.returnWhereRow}>

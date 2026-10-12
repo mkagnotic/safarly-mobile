@@ -29,6 +29,7 @@ import { useBookings } from "@/hooks/api/useBookings";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, disputesApi, type Booking, type RNUploadFile } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { minLengthHint } from "@/features/bookings/lib/modalValidation";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "FileDisputeTab">;
 
@@ -247,9 +248,11 @@ export function FileDisputeScreen() {
         multiline
         editable={!submitting}
       />
-      <Text style={[styles.counter, descLen > 0 && descLen < MIN_DESCRIPTION && styles.counterWarn]}>
-        {descLen}/{MIN_DESCRIPTION} minimum characters
-      </Text>
+      {minLengthHint(descLen, MIN_DESCRIPTION) ? (
+        <Text style={[styles.counter, descLen > 0 && styles.counterWarn]}>
+          {minLengthHint(descLen, MIN_DESCRIPTION)}
+        </Text>
+      ) : null}
 
       {/* Evidence */}
       <Text style={[styles.label, styles.labelGap]}>EVIDENCE (OPTIONAL)</Text>

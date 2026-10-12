@@ -41,6 +41,7 @@ export function MyTravelsScreen() {
     sentRequests, connections, senderBookings, dedupedRequests, pendingSentRequests,
     dedupedListings, dedupedFlights, dedupedArchive, dedupedDelivered, activeSend, activeReceive,
     activeBuddies, completedBuddies, trackerBookingFor, parcelById,
+    travelCounts, pastPackages, pastPosts, dedupedPastPackages, dedupedPastPosts,
   } = useMyTravelsData();
 
   const {
@@ -56,19 +57,14 @@ export function MyTravelsScreen() {
     myProfile,
   });
 
+  // Exact counts from the server (one definition, shared with web) - never a
+  // page length. `undefined` until they arrive: the tab shows just its name.
+  const counts = travelCounts.counts;
   const tabs: readonly TabConfig[] = [
-    { key: "flights", label: "Flights", count: flights.total },
-    {
-      key: "packages",
-      label: "Packages",
-      count: activeSend.length + activeReceive.length,
-    },
-    { key: "partners", label: "Partners", count: partners.total },
-    {
-      key: "archive",
-      label: "Archive",
-      count: archive.total + delivered.bookings.length + completedBuddies.length,
-    },
+    { key: "flights", label: "Flights", count: counts?.flights },
+    { key: "packages", label: "Packages", count: counts?.packages },
+    { key: "partners", label: "Partners", count: counts?.partners },
+    { key: "archive", label: "Archive", count: counts?.archive },
   ];
 
   const goSendParcel = useCallback(
@@ -81,6 +77,8 @@ export function MyTravelsScreen() {
   );
 
   const refetchActive = useCallback(async () => {
+    // The counts refresh alongside whichever list is pulled.
+    void travelCounts.refetch();
     if (activeTab === "flights") return flights.refetch();
     if (activeTab === "packages") {
       // senderBookings drives the journey trackers on the Receive cards, so it
@@ -102,7 +100,13 @@ export function MyTravelsScreen() {
       return;
     }
     if (activeTab === "archive") {
-      await Promise.all([archive.refetch(), delivered.refetch(), connections.refetch()]);
+      await Promise.all([
+        archive.refetch(),
+        delivered.refetch(),
+        connections.refetch(),
+        pastPackages.refetch(),
+        pastPosts.refetch(),
+      ]);
       return;
     }
   }, [
@@ -117,6 +121,9 @@ export function MyTravelsScreen() {
     sentRequests,
     connections,
     senderBookings,
+    travelCounts,
+    pastPackages,
+    pastPosts,
   ]);
 
   const refreshing =
@@ -273,6 +280,19 @@ export function MyTravelsScreen() {
             completedBuddies={completedBuddies}
             onRateBuddy={handleOpenRate}
             parcelById={parcelById}
+            deliveredHasMore={delivered.hasMore}
+            deliveredLoadingMore={delivered.loadingMore}
+            onLoadMoreDelivered={delivered.loadMore}
+            pastPackages={dedupedPastPackages}
+            pastPackagesHasMore={pastPackages.hasMore}
+            pastPackagesLoadingMore={pastPackages.loadingMore}
+            onLoadMorePastPackages={pastPackages.loadMore}
+            onOpenParcel={handleOpenParcel}
+            pastPosts={dedupedPastPosts}
+            pastPostsHasMore={pastPosts.hasMore}
+            pastPostsLoadingMore={pastPosts.loadingMore}
+            onLoadMorePastPosts={pastPosts.loadMore}
+            onOpenBuddy={handleOpenBuddy}
           />
         ) : null}
       </ScrollView>

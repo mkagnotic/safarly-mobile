@@ -23,6 +23,13 @@ interface SearchPagingInput {
   autoBuddyPage: number;
 }
 
+/** How many distinct listings appear across per-listing match groups. */
+export function countUniqueMatches(groups: ReadonlyMap<string, readonly { id: string }[]>): number {
+  const ids = new Set<string>();
+  for (const list of groups.values()) for (const m of list) ids.add(m.id);
+  return ids.size;
+}
+
 /**
  * Tab counts, page totals and the client-side pages of the auto-match lists.
  * Moved verbatim out of SearchScreen.tsx.
@@ -41,18 +48,17 @@ export function useSearchPaging({
   autoRcvPage,
   autoBuddyPage,
 }: SearchPagingInput) {
+  // Auto-match: the number of DIFFERENT listings that match, not the sum of the
+  // per-listing groups - a trip that fits two of your parcels appears under
+  // both, and summing the groups counted it twice.
   const packageTabCount = useMemo(() => {
     if (!isAutoMatch) return results?.carrier_total ?? carrierTrips.length;
-    let total = 0;
-    for (const list of carrierTripsByParcelId.values()) total += list.length;
-    return total;
+    return countUniqueMatches(carrierTripsByParcelId);
   }, [isAutoMatch, results?.carrier_total, carrierTrips, carrierTripsByParcelId]);
 
   const receiverTabCount = useMemo(() => {
     if (!isAutoMatch) return results?.receive_total ?? receiverRequests.length;
-    let total = 0;
-    for (const list of receiverRequestsByTripId.values()) total += list.length;
-    return total;
+    return countUniqueMatches(receiverRequestsByTripId);
   }, [isAutoMatch, results?.receive_total, receiverRequests, receiverRequestsByTripId]);
 
   const buddyTabCount = isAutoMatch

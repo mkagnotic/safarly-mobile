@@ -12,3 +12,17 @@ export function evidenceMimeType(mimeType: string | null | undefined, name: stri
   if (ext === "webp") return "image/webp";
   return ext ? `image/${ext}` : "image/jpeg";
 }
+
+/**
+ * The hint under a field with a minimum length - or null once the minimum is met.
+ *
+ * Was "{typed}/{min} characters minimum", which reads as a quota once you are
+ * past it: "37/10 characters minimum" looks like 37 out of 10. Now it says what
+ * is required and how far off you are, and gets out of the way once you are there.
+ */
+export function minLengthHint(length: number, min: number): string | null {
+  const remaining = min - Math.max(0, length);
+  if (remaining <= 0) return null;
+  if (length <= 0) return `Minimum ${min} characters`;
+  return `Minimum ${min} characters · ${remaining} more needed`;
+}

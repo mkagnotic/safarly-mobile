@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, View } from "react-native";
 
+import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
 import { TravelCard } from "@/features/travels/TravelCard";
 import {
   getErrorMessage,
   type Booking,
   type BuddyConnection,
+  type BuddyListing,
   type Parcel,
   type Trip,
 } from "@/services/api";
@@ -36,6 +38,19 @@ export function ArchiveTab({
   completedBuddies,
   onRateBuddy,
   parcelById,
+  deliveredHasMore,
+  deliveredLoadingMore,
+  onLoadMoreDelivered,
+  pastPackages,
+  pastPackagesHasMore,
+  pastPackagesLoadingMore,
+  onLoadMorePastPackages,
+  onOpenParcel,
+  pastPosts,
+  pastPostsHasMore,
+  pastPostsLoadingMore,
+  onLoadMorePastPosts,
+  onOpenBuddy,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
@@ -54,9 +69,28 @@ export function ArchiveTab({
   onRateBuddy: (conn: BuddyConnection) => void;
   /** Parcels already loaded in Send/Receive, keyed by id — feeds the archive tracker. */
   parcelById: Map<string, Parcel>;
+  deliveredHasMore: boolean;
+  deliveredLoadingMore: boolean;
+  onLoadMoreDelivered: () => void;
+  /** Packages whose date passed, or that closed without a delivery (server-decided). */
+  pastPackages: Parcel[];
+  pastPackagesHasMore: boolean;
+  pastPackagesLoadingMore: boolean;
+  onLoadMorePastPackages: () => void;
+  onOpenParcel: (id: string) => void;
+  /** Travel-partner posts whose travel dates have passed (server-decided). */
+  pastPosts: BuddyListing[];
+  pastPostsHasMore: boolean;
+  pastPostsLoadingMore: boolean;
+  onLoadMorePastPosts: () => void;
+  onOpenBuddy: (id: string) => void;
 }>) {
   const nothing =
-    trips.length === 0 && deliveredBookings.length === 0 && completedBuddies.length === 0;
+    trips.length === 0 &&
+    deliveredBookings.length === 0 &&
+    completedBuddies.length === 0 &&
+    pastPackages.length === 0 &&
+    pastPosts.length === 0;
   if ((loading || deliveredLoading) && nothing) return <ListSkeleton />;
   if (error && nothing)
     return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
@@ -86,6 +120,11 @@ export function ArchiveTab({
               onOpen={() => onOpenDelivery(b.id)}
             />
           ))}
+          <LoadMoreButton
+            hasMore={deliveredHasMore}
+            loading={deliveredLoadingMore}
+            onPress={onLoadMoreDelivered}
+          />
         </View>
       ) : null}
 
@@ -122,6 +161,47 @@ export function ArchiveTab({
             />
           ))}
           <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={onLoadMore} />
+        </View>
+      ) : null}
+
+      {pastPackages.length > 0 ? (
+        <View style={sharedStyles.section}>
+          <View style={sharedStyles.sectionHeading}>
+            <Ionicons name="cube-outline" size={16} color={colors.mutedText} />
+            <Text style={sharedStyles.sectionTitle}>Past packages</Text>
+          </View>
+          {pastPackages.map((p) => (
+            <TravelCard
+              key={p.id}
+              type="parcel"
+              tag="PAST PACKAGE"
+              tagTone="muted"
+              item={p}
+              onPress={() => onOpenParcel(p.id)}
+            />
+          ))}
+          <LoadMoreButton
+            hasMore={pastPackagesHasMore}
+            loading={pastPackagesLoadingMore}
+            onPress={onLoadMorePastPackages}
+          />
+        </View>
+      ) : null}
+
+      {pastPosts.length > 0 ? (
+        <View style={sharedStyles.section}>
+          <View style={sharedStyles.sectionHeading}>
+            <Ionicons name="people-outline" size={16} color={colors.mutedText} />
+            <Text style={sharedStyles.sectionTitle}>Past travel partner posts</Text>
+          </View>
+          {pastPosts.map((b) => (
+            <BuddyPartnerCard key={b.id} item={b} onPress={() => onOpenBuddy(b.id)} />
+          ))}
+          <LoadMoreButton
+            hasMore={pastPostsHasMore}
+            loading={pastPostsLoadingMore}
+            onPress={onLoadMorePastPosts}
+          />
         </View>
       ) : null}
     </View>

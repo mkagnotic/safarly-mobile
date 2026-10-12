@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
+  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -19,6 +20,7 @@ import { MatchConfirmationModal } from "@/components/chat/MatchConfirmationModal
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useMyConversations } from "@/hooks/api/useMyConversations";
+import { refreshUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { getErrorMessage, messagesApi, type Conversation } from "@/services/api";
 import { colors } from "@/theme/colors";
 
@@ -40,6 +42,11 @@ export function MessagesScreen() {
     error,
     mutating,
     refetch,
+    hasMore,
+    loadMore,
+    loadingMore,
+    total,
+    unreadChats,
     acceptMatch,
     declineMatch,
     markConversationRead,
@@ -51,7 +58,15 @@ export function MessagesScreen() {
     conversations: archivedConversations,
     loading: archivedLoading,
     refetch: refetchArchived,
+    hasMore: hasMoreArchived,
+    loadMore: loadMoreArchived,
+    loadingMore: loadingMoreArchived,
+    total: archivedTotal,
   } = useMyConversations({ currentUserId: user?.id ?? null, archived: true });
+  // The Archived banner/header count: all archived threads, not just the page.
+  const archivedCount = hasMoreArchived
+    ? Math.max(archivedTotal ?? 0, archivedConversations.length)
+    : archivedConversations.length;
 
   const [showArchived, setShowArchived] = useState(false);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
@@ -61,10 +76,13 @@ export function MessagesScreen() {
   // counts the user just cleared by reading messages reflect immediately —
   // belt-and-suspenders for the realtime path. Pull the archived list too so a
   // chat archived from inside the conversation shows up here right away.
+  // The tab badge too: reading the thread marked its messages read on the
+  // server, and the badge must not wait on realtime to notice.
   useFocusEffect(
     useCallback(() => {
       void refetch();
       void refetchArchived();
+      refreshUnreadInboxCount();
     }, [refetch, refetchArchived]),
   );
 
@@ -94,7 +112,7 @@ export function MessagesScreen() {
 
   // Search + filter chips, and the two-section split — see `useInboxFilters`.
   const { search, setSearch, filter, setFilter, counts, requestRows, otherRows, sectionedData } =
-    useInboxFilters({ conversations, user });
+    useInboxFilters({ conversations, user, hasMore, serverTotal: total, serverUnreadChats: unreadChats });
   // Accept / decline from a row — see `useInboxMatchActions`.
   const {
     acceptTarget, setAcceptTarget, declineTarget, setDeclineTarget, acceptPending, declinePending,
@@ -194,6 +212,23 @@ export function MessagesScreen() {
 
   const keyExtractor = useCallback((c: Conversation) => c.id, []);
 
+  // The inbox is paged. Without this a thread past the first page could never
+  // be opened, and its unread messages (which the tab badge counts) never
+  // cleared. Web shows a "Load more conversations" button for the same thing.
+  const onEndReached = useCallback(() => {
+    void (showArchived ? loadMoreArchived() : loadMore());
+  }, [showArchived, loadMore, loadMoreArchived]);
+  const showFooterSpinner = showArchived ? loadingMoreArchived : loadingMore;
+  const renderFooter = useCallback(
+    () =>
+      showFooterSpinner ? (
+        <View style={styles.footerLoading}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : null,
+    [showFooterSpinner],
+  );
+
   return (
     <Screen scroll={false} edges={["top", "left", "right"]}>
       <FlatList
@@ -203,7 +238,7 @@ export function MessagesScreen() {
         ListHeaderComponent={
           showArchived ? (
             <ArchivedHeader
-              count={archivedConversations.length}
+              count={archivedCount}
               onBack={() => setShowArchived(false)}
             />
           ) : (
@@ -218,7 +253,7 @@ export function MessagesScreen() {
               />
               {archivedConversations.length > 0 ? (
                 <ArchivedBanner
-                  count={archivedConversations.length}
+                  count={archivedCount}
                   onPress={() => setShowArchived(true)}
                 />
               ) : null}
@@ -226,6 +261,9 @@ export function MessagesScreen() {
           )
         }
         ListEmptyComponent={showArchived ? ArchivedEmpty : renderEmpty}
+        ListFooterComponent={renderFooter}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
         ItemSeparatorComponent={({ leadingItem }) => {
           if (showArchived || !leadingItem || requestRows.length === 0 || otherRows.length === 0)
             return null;
@@ -312,7 +350,9 @@ const ListHeader = memo(function ListHeader({
   // bordered header card.
   const filters: readonly { key: InboxFilter; label: string; count: number }[] = [
     { key: "all", label: "All", count: counts.all },
-    { key: "unread", label: "Unread", count: counts.unread },
+    // Unread CHATS: the tab badge counts unread MESSAGES, so a bare "Unread 1"
+    // under a badge of 3 read as a bug. Same label on web.
+    { key: "unread", label: "Unread chats", count: counts.unread },
     { key: "requests", label: "Requests", count: counts.requests },
   ];
 
@@ -340,11 +380,16 @@ const ListHeader = memo(function ListHeader({
                 // lifts the touch target to 46dp without changing the visual design.
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Filter: ${f.label}`}
+                accessibilityLabel={`Filter: ${f.label}, ${f.count}`}
                 accessibilityState={{ selected: active }}
               >
                 <Text
                   style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextInactive]}
+                  // "Unread chats" is the longest label; on the narrowest phones
+                  // it shrinks a touch rather than wrapping the chip row.
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
                 >
                   {f.label}
                 </Text>
@@ -428,12 +473,15 @@ const screenStyles = StyleSheet.create({
   },
   chipsRow: { flexDirection: "row", gap: 8 },
   chip: {
-    flex: 1,
+    // Grow from the label's own width (not equal thirds) so the longer
+    // "Unread chats" label gets the room it needs; still no dead space.
+    flexGrow: 1,
+    flexShrink: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
@@ -470,6 +518,7 @@ const screenStyles = StyleSheet.create({
 
   // "ALL CONVERSATIONS" separator (between Match Requests and the rest).
   sectionHeading: { paddingHorizontal: 4, marginTop: 4, marginBottom: 8 },
+  footerLoading: { paddingVertical: 16, alignItems: "center" },
   sectionHeadingText: {
     color: colors.mutedText,
     fontSize: 11,
