@@ -220,6 +220,8 @@ export function EditParcelModal({
 
   return (
     <Modal
+      statusBarTranslucent
+      navigationBarTranslucent
       visible={open}
       transparent
       animationType="fade"

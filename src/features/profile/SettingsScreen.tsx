@@ -6,6 +6,7 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Screen } from "@/components/ui/Screen";
 import { MainTabParamList } from "@/navigation/types";
+import { currentAppVersion } from "@/lib/buildInfo";
 import { colors } from "@/theme/colors";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "SettingsTab">;
@@ -25,7 +26,9 @@ type SettingSection = {
 
 export function SettingsScreen() {
   const navigation = useNavigation<Nav>();
-  const appVersion = "1.0.0";
+  // The installed build's version (the one the force-update gate compares),
+  // not a literal that drifts from what actually shipped.
+  const appVersion = currentAppVersion() ?? "—";
 
   const sections = useMemo<readonly SettingSection[]>(
     () => [

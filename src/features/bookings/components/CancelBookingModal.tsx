@@ -41,7 +41,7 @@ export function CancelBookingModal({
   };
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal statusBarTranslucent navigationBarTranslucent visible={open} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardModalCard onBackdropPress={handleClose}>
         <View style={sharedStyles.modalHeader}>
           <Text style={sharedStyles.modalTitle}>Cancel Booking?</Text>

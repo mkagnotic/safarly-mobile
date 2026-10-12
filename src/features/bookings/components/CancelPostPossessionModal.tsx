@@ -99,7 +99,7 @@ export function CancelPostPossessionModal({
   };
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal statusBarTranslucent navigationBarTranslucent visible={open} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardModalCard onBackdropPress={handleClose}>
         <View style={sharedStyles.modalHeader}>
           <View style={sharedStyles.modalHeaderBubbleDanger}>

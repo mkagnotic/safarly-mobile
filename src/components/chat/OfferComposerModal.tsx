@@ -87,6 +87,8 @@ export function OfferComposerModal({
 
   return (
     <Modal
+      statusBarTranslucent
+      navigationBarTranslucent
       visible={open}
       transparent
       animationType="fade"

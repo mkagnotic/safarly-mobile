@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/ui/AppButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { useAuth } from "@/context/AuthContext";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import type { BuddySearchMatch } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -36,6 +38,8 @@ export function BuddyMatchCardBody({
   chatStarting,
   handleStartChat,
 }: Readonly<BuddyMatchCardBodyProps>) {
+  const { user } = useAuth();
+  const canReport = !!match.user?.id && match.user.id !== user?.id;
   return (
     <Card style={[sharedStyles.matchCard, highlighted && sharedStyles.matchHighlighted]}>
       <View style={sharedStyles.personRow}>
@@ -55,6 +59,9 @@ export function BuddyMatchCardBody({
               : "New member"}
           </Text>
         </View>
+        {canReport ? (
+          <ModerationMenu target={{ type: "buddy_listing", id: match.id }} reportLabel="Report listing" />
+        ) : null}
       </View>
 
       <View style={styles.travelDetailsBlock}>

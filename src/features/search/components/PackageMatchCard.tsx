@@ -5,6 +5,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/ui/AppButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { useAuth } from "@/context/AuthContext";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { getErrorMessage, messagesApi, type PackageMatch } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
@@ -30,6 +32,10 @@ export function PackageMatchCard({
 }>) {
   const isTrip = match.type === "carrier_trip";
   const person = isTrip ? match.carrier : match.sender;
+  const { user } = useAuth();
+  // Every listing someone else posted can be reported from where it is seen
+  // (App Store 1.2) - search is the only place most of them are ever seen.
+  const canReport = !!person?.id && person.id !== user?.id;
   const dateLabel = isTrip
     ? formatDateLabel(match.travel_date)
     : formatDateLabel(match.delivery_by);
@@ -114,6 +120,12 @@ export function PackageMatchCard({
             : "New member"}
         </Text>
       </View>
+      {canReport ? (
+        <ModerationMenu
+          target={{ type: isTrip ? "trip" : "parcel", id: match.id }}
+          reportLabel={isTrip ? "Report trip" : "Report parcel"}
+        />
+      ) : null}
     </View>
   );
 
