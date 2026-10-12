@@ -47,10 +47,8 @@ import { AccountDeletedScreen } from "@/features/profile/AccountDeletedScreen";
 import { DeleteAccountScreen } from "@/features/profile/DeleteAccountScreen";
 import { EditProfileScreen } from "@/features/profile/EditProfileScreen";
 import { PublicProfileScreen } from "@/features/profile/PublicProfileScreen";
-import { EarningsScreen } from "@/features/earnings/EarningsScreen";
 import { PayoutSetupScreen } from "@/features/wallet/PayoutSetupScreen";
 import { TransactionsScreen } from "@/features/wallet/TransactionsScreen";
-import { AddCardScreen } from "@/features/wallet/AddCardScreen";
 import { ReviewsScreen } from "@/features/reviews/ReviewsScreen";
 import { KycVerificationScreen } from "@/features/profile/KycVerificationScreen";
 import { SettingsScreen } from "@/features/profile/SettingsScreen";
@@ -66,8 +64,6 @@ import { DeliveryReviewScreen } from "@/features/bookings/DeliveryReviewScreen";
 import { DeliveryDetailsScreen } from "@/features/travels/DeliveryDetailsScreen";
 import { DisputesScreen } from "@/features/disputes/DisputesScreen";
 import { FileDisputeScreen } from "@/features/disputes/FileDisputeScreen";
-import { SafetyAlertsScreen } from "@/features/safety/SafetyAlertsScreen";
-import { MatchScreen } from "@/features/matching/MatchScreen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { useAppStore } from "@/store/useAppStore";
 import { usePendingDeepLink } from "@/hooks/usePendingDeepLink";
@@ -76,8 +72,7 @@ import { usePushNotifications } from "@/hooks/notifications/usePushNotifications
 import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
-import { RateDeliveryPrompt } from "@/components/reviews/RateDeliveryPrompt";
-import { JourneyExpiryReminder } from "@/components/reminders/JourneyExpiryReminder";
+import { AutoPrompts } from "@/components/reminders/AutoPrompts";
 import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
@@ -115,8 +110,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Profile: "person-outline",
   PayoutSetupTab: "business-outline",
   TransactionsTab: "receipt-outline",
-  AddCardTab: "card-outline",
-  EarningsTab: "cash-outline",
   KycVerificationTab: "shield-checkmark-outline",
   EditProfileTab: "create",
   ReviewsTab: "star-outline",
@@ -145,8 +138,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   DeliveryDetailsTab: "cube-outline",
   DisputesTab: "alert-circle",
   FileDisputeTab: "flag",
-  SafetyAlertsTab: "shield-outline",
-  MatchTab: "people-circle",
 };
 
 /** Filled variants for focused tabs. `search` has no filled glyph in Ionicons. */
@@ -300,8 +291,6 @@ function MainTabs() {
       <Tabs.Screen name="CreateBuddyTab" component={CreateBuddyScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PayoutSetupTab" component={PayoutSetupScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TransactionsTab" component={TransactionsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="AddCardTab" component={AddCardScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="EarningsTab" component={EarningsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="KycVerificationTab" component={KycVerificationScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="EditProfileTab" component={EditProfileScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ReviewsTab" component={ReviewsScreen} options={HIDDEN_TAB} />
@@ -332,8 +321,6 @@ function MainTabs() {
       <Tabs.Screen name="DeliveryDetailsTab" component={DeliveryDetailsScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DisputesTab" component={DisputesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="FileDisputeTab" component={FileDisputeScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="SafetyAlertsTab" component={SafetyAlertsScreen} options={HIDDEN_TAB} />
-          <Tabs.Screen name="MatchTab" component={MatchScreen} options={HIDDEN_TAB} />
         </Tabs.Navigator>
       </View>
     </ScreenBackgroundContext.Provider>
@@ -448,7 +435,6 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="Reviews" component={ReviewsScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Earnings" component={EarningsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="KycVerification" component={KycVerificationScreen} options={{ headerShown: false }} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
@@ -462,10 +448,7 @@ export function RootNavigator() {
           (web RateDeliveryPrompt parity). Only in the fully-authed app so it
           never fetches on splash / auth / profile-setup. */}
       {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
-        <>
-          <RateDeliveryPrompt />
-          <JourneyExpiryReminder />
-        </>
+        <AutoPrompts />
       )}
       {SHOW_DATA_TOGGLE && (
         <Pressable

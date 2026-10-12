@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppPressable } from "@/components/ui/AppPressable";
+import { useModalHandoff } from "@/hooks/useModalHandoff";
 import { registerAppFeedback } from "@/feedback/appFeedback";
 import type { AppAlertOptions, ToastPayload, ToastVariant } from "@/feedback/types";
 import { colors } from "@/theme/colors";
@@ -111,13 +112,23 @@ function AppAlertModal({
 }>) {
   const { width } = useWindowDimensions();
   const cardW = Math.min(width - 40, 400);
+  // Close first, then act: an action that presents something (a native sheet,
+  // another dialog) must wait for this Modal to finish dismissing on iOS.
+  const { after: afterClose, onDismiss } = useModalHandoff();
   const actions =
     options?.actions && options.actions.length > 0
       ? options.actions
       : [{ text: "OK", style: "default" as const, onPress: onRequestClose }];
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onRequestClose} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onRequestClose}
+      onDismiss={onDismiss}
+      statusBarTranslucent
+    >
       <Pressable style={styles.alertBackdrop} onPress={onRequestClose} accessibilityRole="button" accessibilityLabel="Dismiss">
         <Pressable onPress={(e) => e.stopPropagation()} style={[styles.alertCard, shadowCard(), { width: cardW }]}>
           {/* Explicit dismiss. Tapping the backdrop already closes the sheet,
@@ -150,10 +161,7 @@ function AppAlertModal({
                     !isCancel && !isDestructive && styles.alertBtnPrimary,
                     pressed && styles.alertBtnPressed,
                   ]}
-                  onPress={() => {
-                    action.onPress?.();
-                    onRequestClose();
-                  }}
+                  onPress={() => afterClose(onRequestClose, () => action.onPress?.())}
                   accessibilityRole="button"
                 >
                   <Text

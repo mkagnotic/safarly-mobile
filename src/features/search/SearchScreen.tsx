@@ -22,6 +22,7 @@ import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { DatePicker } from "@/features/search/DatePicker";
 import { isSameRoute } from "@/features/travels/routeValidation";
+import { packageMatchOwnerIds, withoutBlocked } from "@/features/moderation/blockFilter";
 import {
   clearPersistedSearch,
   loadPersistedSearch,
@@ -32,6 +33,7 @@ import {
 } from "@/features/search/searchPersistence";
 import { RouteListingCard } from "@/features/search/RouteListingCard";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useParcels } from "@/hooks/api/useParcels";
 import { useSearchMatches } from "@/hooks/api/useSearchMatches";
 import { useTrips } from "@/hooks/api/useTrips";
@@ -331,15 +333,26 @@ export function SearchScreen() {
   const fromCountryLabel = COUNTRY_LABEL[fromCountry];
   const toCountryLabel = COUNTRY_LABEL[toCountry];
 
+  // Blocked people (either direction) drop out of every result list here, so
+  // the auto-match maps and tab counts below never see them. Server totals
+  // still count them; the gap is at most the number of blocked people.
+  const { hiddenUserIds } = useBlockedUsers();
+  const visiblePackageMatches = useMemo(
+    () => withoutBlocked(results?.package_matches ?? [], hiddenUserIds, packageMatchOwnerIds),
+    [results, hiddenUserIds],
+  );
   const carrierTrips = useMemo(
-    () => (results?.package_matches ?? []).filter((m) => m.type === "carrier_trip"),
-    [results],
+    () => visiblePackageMatches.filter((m) => m.type === "carrier_trip"),
+    [visiblePackageMatches],
   );
   const receiverRequests = useMemo(
-    () => (results?.package_matches ?? []).filter((m) => m.type === "receive_request"),
-    [results],
+    () => visiblePackageMatches.filter((m) => m.type === "receive_request"),
+    [visiblePackageMatches],
   );
-  const buddyMatches = results?.buddy_matches ?? [];
+  const buddyMatches = useMemo(
+    () => withoutBlocked(results?.buddy_matches ?? [], hiddenUserIds, (b) => b.user?.id),
+    [results, hiddenUserIds],
+  );
 
   // Manual (filtered) lists render one card per listing, so the same person can
   // repeat when they have several listings — collapse to one card per person
@@ -360,14 +373,16 @@ export function SearchScreen() {
   const sortedMyParcels: Parcel[] = useMemo(
     () =>
       myParcelsState.parcels
-        .filter((p) => p.status === "open" || p.status === "looking_for_match")
+        // "matched" stays in: a listing with one deal can still take more
+        // (multi-bidder + capacity) — web and the server include it too.
+        .filter((p) => p.status === "open" || p.status === "looking_for_match" || p.status === "matched")
         .sort((a, b) => (a.delivery_by ?? "").localeCompare(b.delivery_by ?? "")),
     [myParcelsState.parcels],
   );
   const sortedMyTrips: Trip[] = useMemo(
     () =>
       myTripsState.trips
-        .filter((t) => t.status === "active" || t.status === "looking_for_match")
+        .filter((t) => t.status === "active" || t.status === "looking_for_match" || t.status === "matched")
         .sort((a, b) => a.travel_date.localeCompare(b.travel_date)),
     [myTripsState.trips],
   );

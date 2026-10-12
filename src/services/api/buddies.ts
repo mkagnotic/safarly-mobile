@@ -40,7 +40,8 @@ export interface BuddyRequest {
   status: string;
   created_at: string;
   requester?: { id: string; name: string; avatar_url: string | null };
-  /** Server joins the sender profile under this key on the list response. */
+  /** Server joins the sender profile under this key on the list response — on a
+   *  SENT request that is the viewer, not the recipient. */
   user_profiles?: { id?: string; name: string; avatar_url: string | null } | null;
 }
 
@@ -113,6 +114,12 @@ export const buddiesApi = {
 
   rejectRequest: (requestId: string) =>
     api.put<{ status: string }>(`/buddy-handler/requests/${requestId}/reject`),
+
+  /** Cancel (withdraw) a buddy request I sent — sender only, while still pending. */
+  cancelRequest: (requestId: string) =>
+    api.put<{ request_id: string; status: "withdrawn" }>(
+      `/buddy-handler/requests/${requestId}/cancel`,
+    ),
 
   getConnections: () => api.get<BuddyConnection[]>("/buddy-handler/connections"),
 

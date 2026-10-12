@@ -18,7 +18,7 @@ export type LegalSection = {
  * Shown on the Privacy Policy, Terms of Service and Cookie Policy.
  * Update this whenever the substance of those documents changes.
  */
-export const LEGAL_EFFECTIVE_DATE = "4 August 2026";
+export const LEGAL_EFFECTIVE_DATE = "12 October 2026";
 
 /**
  * Legal, About and Contact copy.
@@ -38,7 +38,13 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "2. User Roles",
+    title: "2. Eligibility",
+    paragraphs: [
+      "You must be at least 18 years old, and able to form a legally binding contract, to create an account or use Safarly. By using Safarly, you confirm that you meet these requirements.",
+    ],
+  },
+  {
+    title: "3. User Roles",
     paragraphs: ["Users may act as:"],
     bullets: [
       "Carrier (Traveler): transports items",
@@ -48,7 +54,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "3. Platform Role",
+    title: "4. Platform Role",
     paragraphs: ["Safarly:"],
     bullets: [
       "Facilitates connections between users",
@@ -58,7 +64,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "4. Payments & Fees",
+    title: "5. Payments & Fees",
     bullets: [
       "Payments are processed through secure third-party providers",
       "Safarly charges a platform fee per transaction",
@@ -67,7 +73,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "5. Refunds & Cancellations",
+    title: "6. Refunds & Cancellations",
     bullets: [
       "Full refunds may be issued before a match is confirmed",
       "Partial refunds may apply after a match is confirmed",
@@ -75,7 +81,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "6. User Responsibilities",
+    title: "7. User Responsibilities",
     paragraphs: ["Users agree to:"],
     bullets: [
       "Provide accurate information",
@@ -86,7 +92,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "7. Prohibited Items",
+    title: "8. Prohibited Items",
     paragraphs: ["Users must not send:"],
     bullets: [
       "Illegal substances",
@@ -97,7 +103,23 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "8. Travel Companion Disclaimer",
+    title: "9. Community Standards",
+    paragraphs: [
+      "Safarly has zero tolerance for objectionable content or abusive users. This applies to everything you post or send, including listings, photos, profile details and chat messages.",
+      "You can report a message, a listing or a user from the chat, their profile or the listing, and you can block any user. We review reports within 24 hours. Content that breaks these standards is removed, and the accounts responsible are suspended or terminated.",
+      "You must not post, send or engage in:",
+    ],
+    bullets: [
+      "Harassment, bullying or threats",
+      "Hate speech or discrimination",
+      "Sexual or violent content",
+      "Spam, scams or fraud",
+      "Impersonating another person or organisation",
+      "Offering or requesting illegal items",
+    ],
+  },
+  {
+    title: "10. Travel Companion Disclaimer",
     paragraphs: ["Safarly facilitates introductions only. Users are responsible for:"],
     bullets: [
       "Verifying identity and comfort level",
@@ -106,7 +128,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "9. Disputes",
+    title: "11. Disputes",
     paragraphs: ["In case of disputes:"],
     bullets: [
       "Safarly may review transaction details",
@@ -115,7 +137,7 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "10. Limitation of Liability",
+    title: "12. Limitation of Liability",
     paragraphs: ["Safarly is not liable for:"],
     bullets: [
       "Loss, damage, or delay of items",
@@ -124,18 +146,23 @@ export const termsSections: LegalSection[] = [
     ],
   },
   {
-    title: "11. Account Suspension",
+    title: "13. Account Suspension",
     paragraphs: ["Safarly may suspend or terminate accounts for:"],
-    bullets: ["Fraudulent activity", "Policy violations", "Safety concerns"],
+    bullets: [
+      "Fraudulent activity",
+      "Breaking our Community Standards (section 9)",
+      "Other policy violations",
+      "Safety concerns",
+    ],
   },
   {
-    title: "12. Changes",
+    title: "14. Changes",
     paragraphs: [
       "We may update these terms at any time. Continued use of the platform implies acceptance.",
     ],
   },
   {
-    title: "13. Ownership & Company Information",
+    title: "15. Ownership & Company Information",
     paragraphs: [
       OWNERSHIP_STATEMENT_TERMS,
       `Questions about these Terms may be sent to ${SUPPORT_EMAIL}.`,
@@ -149,10 +176,17 @@ export const privacySections: LegalSection[] = [
     paragraphs: ["We may collect:"],
     bullets: [
       "Name, email, and phone number",
-      "Profile details such as language and travel preferences",
-      "Government ID for verification/KYC",
-      "Payment information processed through Stripe",
-      "Usage data such as search activity, chats, and platform interactions",
+      "Profile photo, bio, and profile details such as language and travel preferences",
+      "Pickup and handoff addresses",
+      "Parcel details and photos, and trip details such as routes, dates and capacity",
+      "Chat messages, and the photos and documents you attach to them",
+      "A government ID photo and a selfie for identity verification (KYC), reviewed by our staff",
+      "Payment information processed through Stripe. Your card number is handled by Stripe and is not stored by Safarly",
+      "Payout details: your bank account number, IFSC code or UPI ID for payouts in India through Razorpay, and the payout account status Stripe shares with us when you set up Stripe Connect",
+      "Push notification tokens, so we can send notifications to your device",
+      "Whether you are online or typing, which is shown to the person you are chatting with",
+      "Reports you submit and users you block",
+      "Usage data such as search activity and platform interactions",
     ],
   },
   {
@@ -173,10 +207,16 @@ export const privacySections: LegalSection[] = [
   },
   {
     title: "4. Data Sharing",
-    paragraphs: ["We may share limited data:"],
+    paragraphs: [
+      "We do not sell your personal data, and we do not use it for advertising or tracking. We may share limited data:",
+    ],
     bullets: [
-      "Between users to enable transactions",
-      "With service providers for payment and verification",
+      "Between users to enable transactions, such as your name, profile photo, listings and messages",
+      "With Stripe, to process payments and Stripe Connect payouts",
+      "With Razorpay, to send payouts in India",
+      "With Supabase, which hosts our database, file storage and sign-in",
+      "With Expo, Apple and Google, to deliver push notifications",
+      "With other service providers we rely on to run Safarly, such as email delivery, only as needed to provide the service",
       "When required by law",
     ],
   },
@@ -189,33 +229,41 @@ export const privacySections: LegalSection[] = [
     paragraphs: ["You may:"],
     bullets: [
       "Update your profile",
-      "Request account deletion",
+      "Delete your account from within the app",
       "Contact us for data-related requests",
     ],
   },
   {
-    title: "7. Cookies & Tracking",
+    title: "7. Data Retention & Deletion",
+    paragraphs: [
+      "We keep your account data for as long as your account is active.",
+      "When you delete your account, your profile, trips, parcel requests and travel-buddy listings are removed, and your remaining personal details are deleted or anonymised. Deletion is permanent. Messages and reviews you exchanged stay visible to the other person, shown as \u201cDeleted user\u201d. Records the law requires us to keep, such as completed delivery, payment and tax records, are retained for as long as required.",
+      "Identity-verification images (your ID photo and selfie) are kept only as long as needed to verify you and to meet our legal obligations.",
+    ],
+  },
+  {
+    title: "8. Cookies & Tracking",
     paragraphs: [
       "Safarly does not set cookies and does not use analytics, advertising or tracking services. We store a small amount of information in your browser or app so you stay signed in and so one-time prompts are not repeated at you.",
       "Our Cookie Policy lists exactly what is stored and how to clear it.",
     ],
   },
   {
-    title: "8. International Users",
+    title: "9. International Users",
     paragraphs: [
       "By using Safarly, you consent to data processing in the United States and other applicable regions.",
     ],
   },
   {
-    title: "9. Changes",
+    title: "10. Changes",
     paragraphs: ["We may update this policy periodically."],
   },
   {
-    title: "10. Contact",
+    title: "11. Contact",
     paragraphs: ["For questions or concerns: admin@mysafarly.com"],
   },
   {
-    title: "11. Ownership & Company Information",
+    title: "12. Ownership & Company Information",
     paragraphs: [
       OWNERSHIP_STATEMENT,
       `${COMPANY_NAME} is the data controller responsible for personal information processed through Safarly.`,

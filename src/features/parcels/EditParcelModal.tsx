@@ -15,6 +15,7 @@ import {
 import { CalendarModal } from "@/components/ui/CalendarModal";
 import { DateField, DateModeToggle, LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import type { DeliveryDateMode } from "@/services/api";
@@ -226,231 +227,237 @@ export function EditParcelModal({
         if (!pending) onCancel();
       }}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!pending) onCancel();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.center} pointerEvents="box-none">
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Edit parcel</Text>
-            <Pressable
-              onPress={onCancel}
-              hitSlop={8}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>From</Text>
-            <LocationCard
-              flag={fromFlag}
-              label={fromCountryName}
-              filled
-              onToggle={toggleFromCountry}
-            />
-            <CityPicker
-              value={form.from_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
-              cities={fromCities}
-              placeholder="Select origin city"
-              variant="card"
-              disabled={pending}
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>To</Text>
-            <LocationCard
-              flag={toFlag}
-              label={toCountryName}
-              filled
-              onToggle={toggleToCountry}
-            />
-            <CityPicker
-              value={form.to_city}
-              onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
-              cities={toCities}
-              placeholder="Select destination city"
-              variant="card"
-              disabled={pending}
-            />
-          </View>
-
-          {/* Deliver by — sits below the destination, matching the create form. */}
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Deliver by</Text>
-            <DateModeToggle<DeliveryDateMode>
-              options={[
-                { value: "single", label: "Single Date" },
-                { value: "range", label: "Date Range" },
-              ]}
-              value={form.delivery_date_mode}
-              onChange={(next) =>
-                setForm((prev) => ({
-                  ...prev,
-                  delivery_date_mode: next,
-                  // Collapsing here keeps the two in step; the handler would
-                  // otherwise do it and the UI would briefly disagree.
-                  delivery_by_to: next === "single" ? prev.delivery_by_from : prev.delivery_by_to,
-                }))
-              }
-            />
-            <View style={styles.dateRow}>
-              <View style={styles.dateCell}>
-                <DateField
-                  label={form.delivery_date_mode === "range" ? "Earliest" : "Deliver by"}
-                  value={fromDate ? formatDateLabel(fromDate) : null}
-                  placeholder="Select date"
-                  onPress={() => setCalendarTarget("from")}
-                />
-              </View>
-              <View style={styles.dateCell}>
-                <DateField
-                  label="Latest"
-                  value={toDate ? formatDateLabel(toDate) : null}
-                  placeholder="Select date"
-                  onPress={() => setCalendarTarget("to")}
-                  disabled={form.delivery_date_mode === "single"}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Category</Text>
-            <View style={styles.chipRow}>
-              {CATEGORIES.map((c) => {
-                const active = form.category === c;
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => setForm((prev) => ({ ...prev, category: c }))}
-                    disabled={pending}
-                    style={[styles.chip, active && styles.chipActive]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {c[0].toUpperCase() + c.slice(1)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Weight (kg)</Text>
-            <TextInput
-              value={form.weight_kg}
-              onChangeText={(t) =>
-                setForm((prev) => ({ ...prev, weight_kg: sanitizeDecimalInput(t, 4, 2) }))
-              }
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={colors.placeholderText}
-              style={[styles.textInput, weightNum > MAX_WEIGHT_KG && styles.textInputError]}
-              editable={!pending}
-            />
-            {weightNum > MAX_WEIGHT_KG ? (
-              <Text style={styles.inlineError}>
-                Exceeds the airline limit of {MAX_WEIGHT_KG} kg per item.
-              </Text>
-            ) : null}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Fee offered</Text>
-            <View style={styles.feeRow}>
+      {/* A Modal's window is not resized for the keyboard on either platform
+          (edge-to-edge on Android), so lift the card ourselves: the form scrolls in the space left and
+          the Cancel / Save footer stays above the keyboard. */}
+      <KeyboardLift style={styles.flex}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!pending) onCancel();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.center} pointerEvents="box-none">
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Edit parcel</Text>
               <Pressable
-                onPress={() =>
+                onPress={onCancel}
+                hitSlop={8}
+                disabled={pending}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={colors.mutedText} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>From</Text>
+              <LocationCard
+                flag={fromFlag}
+                label={fromCountryName}
+                filled
+                onToggle={toggleFromCountry}
+              />
+              <CityPicker
+                value={form.from_city}
+                onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
+                cities={fromCities}
+                placeholder="Select origin city"
+                variant="card"
+                disabled={pending}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>To</Text>
+              <LocationCard
+                flag={toFlag}
+                label={toCountryName}
+                filled
+                onToggle={toggleToCountry}
+              />
+              <CityPicker
+                value={form.to_city}
+                onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
+                cities={toCities}
+                placeholder="Select destination city"
+                variant="card"
+                disabled={pending}
+              />
+            </View>
+
+            {/* Deliver by — sits below the destination, matching the create form. */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Deliver by</Text>
+              <DateModeToggle<DeliveryDateMode>
+                options={[
+                  { value: "single", label: "Single Date" },
+                  { value: "range", label: "Date Range" },
+                ]}
+                value={form.delivery_date_mode}
+                onChange={(next) =>
                   setForm((prev) => ({
                     ...prev,
-                    fee_currency: prev.fee_currency === "USD" ? "INR" : "USD",
+                    delivery_date_mode: next,
+                    // Collapsing here keeps the two in step; the handler would
+                    // otherwise do it and the UI would briefly disagree.
+                    delivery_by_to: next === "single" ? prev.delivery_by_from : prev.delivery_by_to,
                   }))
                 }
-                disabled={pending}
-                style={styles.currencyToggle}
-                accessibilityRole="button"
-                accessibilityLabel={`Currency: ${form.fee_currency}. Tap to switch.`}
-              >
-                <Text style={styles.currencyToggleText}>{form.fee_currency}</Text>
-              </Pressable>
+              />
+              <View style={styles.dateRow}>
+                <View style={styles.dateCell}>
+                  <DateField
+                    label={form.delivery_date_mode === "range" ? "Earliest" : "Deliver by"}
+                    value={fromDate ? formatDateLabel(fromDate) : null}
+                    placeholder="Select date"
+                    onPress={() => setCalendarTarget("from")}
+                  />
+                </View>
+                <View style={styles.dateCell}>
+                  <DateField
+                    label="Latest"
+                    value={toDate ? formatDateLabel(toDate) : null}
+                    placeholder="Select date"
+                    onPress={() => setCalendarTarget("to")}
+                    disabled={form.delivery_date_mode === "single"}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Category</Text>
+              <View style={styles.chipRow}>
+                {CATEGORIES.map((c) => {
+                  const active = form.category === c;
+                  return (
+                    <Pressable
+                      key={c}
+                      onPress={() => setForm((prev) => ({ ...prev, category: c }))}
+                      disabled={pending}
+                      style={[styles.chip, active && styles.chipActive]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {c[0].toUpperCase() + c.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Weight (kg)</Text>
               <TextInput
-                value={form.fee_offered}
+                value={form.weight_kg}
                 onChangeText={(t) =>
-                  setForm((prev) => ({ ...prev, fee_offered: sanitizeDecimalInput(t, 6, 2) }))
+                  setForm((prev) => ({ ...prev, weight_kg: sanitizeDecimalInput(t, 4, 2) }))
                 }
                 keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor={colors.placeholderText}
-                style={[styles.textInput, styles.feeInput]}
+                style={[styles.textInput, weightNum > MAX_WEIGHT_KG && styles.textInputError]}
+                editable={!pending}
+              />
+              {weightNum > MAX_WEIGHT_KG ? (
+                <Text style={styles.inlineError}>
+                  Exceeds the airline limit of {MAX_WEIGHT_KG} kg per item.
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Fee offered</Text>
+              <View style={styles.feeRow}>
+                <Pressable
+                  onPress={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      fee_currency: prev.fee_currency === "USD" ? "INR" : "USD",
+                    }))
+                  }
+                  disabled={pending}
+                  style={styles.currencyToggle}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Currency: ${form.fee_currency}. Tap to switch.`}
+                >
+                  <Text style={styles.currencyToggleText}>{form.fee_currency}</Text>
+                </Pressable>
+                <TextInput
+                  value={form.fee_offered}
+                  onChangeText={(t) =>
+                    setForm((prev) => ({ ...prev, fee_offered: sanitizeDecimalInput(t, 6, 2) }))
+                  }
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.placeholderText}
+                  style={[styles.textInput, styles.feeInput]}
+                  editable={!pending}
+                />
+              </View>
+              {suggestedFee != null ? (
+                <Text style={styles.hint}>
+                  Suggested for {form.weight_kg} kg: {currencySymbol(form.fee_currency)}
+                  {suggestedFee}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>
+                Description <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+              </Text>
+              <TextInput
+                value={form.description}
+                onChangeText={(t) => setForm((prev) => ({ ...prev, description: t }))}
+                placeholder="Describe what's in the parcel…"
+                maxLength={2000}
+                placeholderTextColor={colors.subtleText}
+                style={[styles.textInput, styles.multiline]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
                 editable={!pending}
               />
             </View>
-            {suggestedFee != null ? (
-              <Text style={styles.hint}>
-                Suggested for {form.weight_kg} kg: {currencySymbol(form.fee_currency)}
-                {suggestedFee}
-              </Text>
-            ) : null}
-          </View>
+            {error ? <Text style={styles.formError}>{error}</Text> : null}
+            </ScrollView>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>
-              Description <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-            </Text>
-            <TextInput
-              value={form.description}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, description: t }))}
-              placeholder="Describe what's in the parcel…"
-              placeholderTextColor={colors.subtleText}
-              style={[styles.textInput, styles.multiline]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              editable={!pending}
-            />
-          </View>
-          {error ? <Text style={styles.formError}>{error}</Text> : null}
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <AppButton
-              label="Cancel"
-              variant="secondary"
-              onPress={onCancel}
-              disabled={pending}
-              style={styles.footerButton}
-            />
-            <AppButton
-              label={pending ? "Saving…" : "Save changes"}
-              onPress={handleSubmit}
-              disabled={pending}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              leftIcon={
-                pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
-              }
-              style={styles.footerButton}
-            />
+            <View style={styles.footer}>
+              <AppButton
+                label="Cancel"
+                variant="secondary"
+                onPress={onCancel}
+                disabled={pending}
+                style={styles.footerButton}
+              />
+              <AppButton
+                label={pending ? "Saving…" : "Save changes"}
+                onPress={handleSubmit}
+                disabled={pending}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={
+                  pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+                }
+                style={styles.footerButton}
+              />
+            </View>
           </View>
         </View>
-      </View>
+      </KeyboardLift>
 
       <CalendarModal
         open={calendarTarget !== null}
@@ -484,6 +491,7 @@ export function EditParcelModal({
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   dateRow: { flexDirection: "row", gap: 10, marginTop: 8 },
   dateCell: { flex: 1 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

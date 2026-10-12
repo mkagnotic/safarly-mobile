@@ -28,7 +28,6 @@ export type RootStackParamList = {
   SendParcel: undefined;
   ListTrip: undefined;
   Reviews: undefined;
-  Earnings: undefined;
   KycVerification: undefined;
   EditProfile: undefined;
   TermsOfService: undefined;
@@ -61,8 +60,6 @@ export type MainTabParamList = {
   PayoutSetupTab: undefined;
   /** Payments / transaction history (web `CustomerTransactions`). */
   TransactionsTab: undefined;
-  AddCardTab: undefined;
-  EarningsTab: undefined;
   KycVerificationTab: undefined;
   EditProfileTab: undefined;
   ReviewsTab: undefined;
@@ -124,6 +121,4 @@ export type MainTabParamList = {
   /** `bookingId` preselects the booking (from chat); omitted → the form shows a
    *  booking picker (web parity). */
   FileDisputeTab: { bookingId?: string } | undefined;
-  SafetyAlertsTab: undefined;
-  MatchTab: { type?: "parcel" | "buddy"; matchName?: string; route?: string };
 };

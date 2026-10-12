@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { supabase } from "@/integrations/supabase/client";
@@ -47,7 +48,7 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
     if (uploading || disabled) return;
     setStatus(null);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = await requestLibraryPermission();
       if (perm.status !== "granted") {
         {
           const denied = permissionDeniedBanner("photos", perm, "upload a profile picture");
@@ -62,6 +63,7 @@ export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled 
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
+        ...LIBRARY_PICK_OPTIONS,
         mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],

@@ -151,13 +151,3 @@ export interface Opportunity {
   senderRating: number;
 }
 
-export interface SafetyAlert {
-  id: string;
-  type: "kyc_failure" | "account_restricted" | "suspicious_activity" | "referral_blocked";
-  title: string;
-  message: string;
-  severity: "warning" | "danger" | "info";
-  date: string;
-  actionLabel?: string;
-  dismissed?: boolean;
-}

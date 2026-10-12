@@ -10,7 +10,6 @@ import {
   seedDisputes,
   seedBids,
   seedOpportunities,
-  seedSafetyAlerts,
 } from "@/store/seedData";
 import type { AppState, KycStatus, PaymentMethod, UserProfile } from "@/store/types";
 import type { AppLanguage } from "@/i18n/translations";
@@ -93,7 +92,6 @@ const initialState = {
   disputes: seedDisputes,
   bids: seedBids,
   opportunities: seedOpportunities,
-  safetyAlerts: seedSafetyAlerts,
   // Excluded from `partialize` below — never survives a relaunch by design.
   pendingNotice: null as AppState["pendingNotice"],
   // Also excluded from `partialize`: see `accountDeleted` in types.
@@ -137,23 +135,12 @@ export const useAppStore = create<AppState>()(
           pendingNotice: null,
         }),
       toggleLiveDataVisibility: () => set((state) => ({ showLiveData: !state.showLiveData })),
-      setLiveDataVisibility: (visible) => set({ showLiveData: visible }),
       setLanguage: (language) => set({ language }),
       setTimeFormat: (timeFormat) => set({ timeFormat }),
       setTimeZone: (timeZone) => set({ timeZone }),
       setWalletBalance: (nextBalance) => set({ walletBalance: Math.max(0, nextBalance) }),
       adjustWalletBalance: (delta) =>
         set((state) => ({ walletBalance: Math.max(0, state.walletBalance + delta) })),
-      addPaymentMethod: (method) =>
-        set((state) => {
-          const hasDefault = state.paymentMethods.some((m) => m.isDefault);
-          const newMethod: PaymentMethod = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            ...method,
-            isDefault: !hasDefault,
-          };
-          return { paymentMethods: [newMethod, ...state.paymentMethods] };
-        }),
       addNotification: (item) =>
         set((state) => {
           const nextItem: NotificationItem = {
@@ -233,12 +220,6 @@ export const useAppStore = create<AppState>()(
             b.id === bidId ? { ...b, status } : b
           ),
         })),
-      dismissSafetyAlert: (alertId) =>
-        set((state) => ({
-          safetyAlerts: state.safetyAlerts.map((a) =>
-            a.id === alertId ? { ...a, dismissed: true } : a
-          ),
-        })),
       addMessageToThread: (threadName, message) =>
         set((state) => ({
           messages: state.messages.map((thread) =>
@@ -287,7 +268,6 @@ export const useAppStore = create<AppState>()(
           disputes: state.disputes ?? seedDisputes,
           bids: state.bids ?? seedBids,
           opportunities: state.opportunities ?? seedOpportunities,
-          safetyAlerts: state.safetyAlerts ?? seedSafetyAlerts,
           language: (state.language as AppLanguage | undefined) ?? "en-US",
           timeFormat: (state.timeFormat as AppTimeFormat | undefined) ?? "12h",
           timeZone: (state.timeZone as AppTimeZone | undefined) ?? "America/New_York",
@@ -309,7 +289,6 @@ export const useAppStore = create<AppState>()(
         disputes: state.disputes,
         bids: state.bids,
         opportunities: state.opportunities,
-        safetyAlerts: state.safetyAlerts,
         walletBalance: state.walletBalance,
         language: state.language,
         timeFormat: state.timeFormat,

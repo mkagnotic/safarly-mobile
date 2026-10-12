@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 
-import { formatLocalDate, parseLocalDate } from "./travelDate.ts";
+import { formatLocalDate, parseLocalDate, toLocalYmd } from "./travelDate.ts";
 
 /**
  * CLASS-LEVEL FENCE over the UTC off-by-one. Mirrors web's
@@ -73,6 +73,26 @@ describe("the helper itself keeps the calendar day", () => {
     assert.equal(formatLocalDate(""), "—");
     assert.equal(formatLocalDate(undefined, undefined, ""), "");
     assert.equal(formatLocalDate("not-a-date"), "—");
+  });
+});
+
+describe("today, as a date-only column would store it", () => {
+  test("is the local calendar day, zero-padded", () => {
+    assert.equal(toLocalYmd(new Date(2026, 0, 5)), "2026-01-05");
+    assert.equal(toLocalYmd(new Date(2026, 11, 31, 23, 59)), "2026-12-31");
+  });
+
+  test("round-trips through parseLocalDate", () => {
+    assert.equal(toLocalYmd(parseLocalDate("2026-09-30") ?? undefined), "2026-09-30");
+  });
+
+  test("no source file derives it from toLocaleDateString(\"en-CA\")", () => {
+    // Locale-data dependent: Hermes on iOS is not guaranteed to return
+    // YYYY-MM-DD for it, which silently breaks every string comparison.
+    const offenders = walk("src").filter((f) =>
+      /toLocaleDateString\(\s*["']en-CA["']/.test(readFileSync(f, "utf8")),
+    );
+    assert.deepEqual(offenders, [], "use toLocalYmd from @/utils/travelDate");
   });
 });
 

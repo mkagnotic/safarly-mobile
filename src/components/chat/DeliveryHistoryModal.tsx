@@ -9,6 +9,7 @@ import {
   View,
   type ListRenderItemInfo,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { useDeliveryHistory } from "@/hooks/api/useDeliveryHistory";
@@ -62,6 +63,8 @@ export function DeliveryHistoryModal({
   conversationId,
   onClose,
 }: Readonly<DeliveryHistoryModalProps>) {
+  // The sheet is pinned to bottom: 0 — clear the iPhone home indicator.
+  const insets = useSafeAreaInsets();
   const { items, loading, error, refetch } = useDeliveryHistory({
     conversationId,
     enabled: open,
@@ -124,7 +127,7 @@ export function DeliveryHistoryModal({
         accessibilityRole="button"
         accessibilityLabel="Dismiss delivery history"
       />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         <View style={styles.sheetHeader}>
           <View style={styles.headerIcon}>
             <Ionicons name="cube-outline" size={18} color={colors.primary} />
@@ -198,7 +201,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     paddingTop: 12,
-    paddingBottom: 24,
   },
   sheetHeader: {
     flexDirection: "row",

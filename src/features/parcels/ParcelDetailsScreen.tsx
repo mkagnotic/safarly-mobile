@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { UnavailableContentCard } from "@/components/moderation/UnavailableContentCard";
 import { AppButton } from "@/components/ui/AppButton";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -19,6 +21,8 @@ import {
   labelForStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
+import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
@@ -27,6 +31,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
 import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
@@ -58,7 +63,7 @@ function senderInitial(name: string): string {
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 }
 
-function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
+function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?: ReactNode }>) {
   return (
     <View style={styles.headerRow}>
       <Pressable
@@ -70,6 +75,7 @@ function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
       <Text style={styles.title}>Parcel details</Text>
+      {right}
     </View>
   );
 }
@@ -140,7 +146,9 @@ function SenderCard({ sender }: Readonly<{ sender: NonNullable<Parcel["sender"]>
   return (
     <Card style={styles.senderCard}>
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{senderInitial(sender.name ?? "")}</Text>
+        <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+          {senderInitial(sender.name ?? "")}
+        </Text>
       </View>
       <View style={styles.senderInfo}>
         <Text style={styles.senderName} numberOfLines={2}>
@@ -213,6 +221,7 @@ export function ParcelDetailsScreen() {
 
   const { user } = useAuth();
   const { parcel, error, refetch } = useParcelDetail(parcelId);
+  const { hiddenUserIds } = useBlockedUsers();
 
   // Drives the journey timeline below. No role filter — this screen is reachable
   // as either side of the deal, and the resolver picks the booking that best
@@ -398,6 +407,22 @@ export function ParcelDetailsScreen() {
   // not own. The server refuses them, but the buttons should never have been offered.
   const canModify = viewerIsSender && !isTerminal(parcel.status) && !parcelExpired;
 
+  // A blocked person's parcel (either direction), reached by deep link. A
+  // delivery already booked between the two stays visible - its timeline is
+  // how the carrier and sender finish it.
+  if (
+    !viewerIsSender &&
+    !trackerBooking &&
+    isHiddenOwner([parcel.sender_id, parcel.sender?.id], hiddenUserIds)
+  ) {
+    return (
+      <Screen onRefresh={refetch}>
+        <DetailsHeader onBack={handleBack} />
+        <UnavailableContentCard onBack={handleBack} />
+      </Screen>
+    );
+  }
+
   const editInitial: EditParcelFormValues = {
     from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
     from_country: (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
@@ -417,7 +442,14 @@ export function ParcelDetailsScreen() {
 
   return (
     <Screen onRefresh={refetch}>
-      <DetailsHeader onBack={handleBack} />
+      <DetailsHeader
+        onBack={handleBack}
+        right={
+          viewerIsSender ? null : (
+            <ModerationMenu target={{ type: "parcel", id: parcel.id }} reportLabel="Report parcel" />
+          )
+        }
+      />
 
       {notice ? (
         <View style={styles.bannerSlot}>

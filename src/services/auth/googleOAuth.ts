@@ -9,7 +9,11 @@
 import type * as GoogleSigninModule from "@react-native-google-signin/google-signin";
 import { Platform } from "react-native";
 
-import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from "@/integrations/google/env";
+import {
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_IOS_URL_SCHEME,
+  GOOGLE_WEB_CLIENT_ID,
+} from "@/integrations/google/env";
 import { authApi } from "@/services/api/auth";
 
 import { AuthCancelledError, mapOAuthError } from "./oauthErrors";
@@ -53,11 +57,14 @@ function loadNativeModule(): GoogleSigninNative {
  * Whether this build can offer Google sign-in at all. iOS needs its own OAuth
  * client (and the matching URL scheme, injected by app.config.js); without it
  * the button is hidden rather than shown and failing — App Store review treats
- * a control that cannot work as an incomplete app.
+ * a control that cannot work as an incomplete app. Both iOS values are
+ * required: a client ID without the registered URL scheme makes the native SDK
+ * raise an NSException in release builds, which is a crash, not an error.
  */
 export function isGoogleSignInConfigured(): boolean {
   if (!GOOGLE_WEB_CLIENT_ID) return false;
-  return Platform.OS !== "ios" || GOOGLE_IOS_CLIENT_ID.length > 0;
+  if (Platform.OS !== "ios") return true;
+  return GOOGLE_IOS_CLIENT_ID.length > 0 && GOOGLE_IOS_URL_SCHEME.length > 0;
 }
 
 let configured = false;
@@ -156,6 +163,9 @@ export async function performGoogleOAuth(): Promise<void> {
  * module is absent (Expo Go) or no Google session exists.
  */
 export async function clearGoogleSession(): Promise<void> {
+  // Where Google can't be offered (iOS without its client) there is no session
+  // to clear, and configure() without an iOS client logs a native error.
+  if (!isGoogleSignInConfigured()) return;
   try {
     const { GoogleSignin } = loadNativeModule();
     ensureConfigured(GoogleSignin);

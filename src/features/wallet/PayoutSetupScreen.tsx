@@ -94,7 +94,8 @@ export function PayoutSetupScreen() {
       // PAYOUT_RETURN_URL, so the browser closes itself; it also resolves if the
       // user dismisses it early. Either way the server is the authority, so we
       // re-read the status rather than trusting the result.
-      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL);
+      // Ephemeral (iOS only) skips the "wants to use stripe.com to Sign In" prompt.
+      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL, { preferEphemeralSession: true });
       if (!mountedRef.current) return;
       setLoading(true);
       await loadStatus();

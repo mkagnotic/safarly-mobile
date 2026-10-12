@@ -36,6 +36,12 @@ type Props = PropsWithChildren<{
   onRefresh?: () => void | Promise<void>;
   /** When set, overrides the default screen background (e.g. full white surfaces). */
   safeBackgroundColor?: string;
+  /**
+   * Skip the wrapping KeyboardAvoidingView. Screens whose own ScrollView sets
+   * `automaticallyAdjustKeyboardInsets` pass `Platform.OS === "ios"`: on iOS
+   * both would apply and leave a blank band above the keyboard, while Android
+   * ignores that prop and still needs this wrapper.
+   */
   disableKeyboardAvoiding?: boolean;
 }>;
 

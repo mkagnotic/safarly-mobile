@@ -6,7 +6,6 @@ import type {
   NotificationItem,
   Opportunity,
   Parcel,
-  SafetyAlert,
   Trip,
 } from "@/types/models";
 
@@ -201,40 +200,3 @@ export const seedOpportunities: Opportunity[] = [
   { id: "OPP-004", parcelId: "PKG-NEW2", from: "Seattle", to: "Hyderabad", weight: "2.0 kg", fee: "$42", date: "Mar 28", category: "Medicines", senderName: "Kiran V.", senderRating: 4.8 },
 ];
 
-export const seedSafetyAlerts: SafetyAlert[] = [
-  {
-    id: "SA-001",
-    type: "kyc_failure",
-    title: "KYC Verification Failed",
-    message: "Your ID document could not be verified. Please re-upload a clear photo of your government-issued ID.",
-    severity: "danger",
-    date: "Mar 20",
-    actionLabel: "Re-upload ID",
-  },
-  {
-    id: "SA-002",
-    type: "account_restricted",
-    title: "Account Temporarily Restricted",
-    message: "Your account has been temporarily restricted due to multiple failed delivery attempts. Please contact support.",
-    severity: "danger",
-    date: "Mar 19",
-    actionLabel: "Contact Support",
-  },
-  {
-    id: "SA-003",
-    type: "suspicious_activity",
-    title: "Suspicious Activity Detected",
-    message: "We noticed unusual login activity on your account. If this wasn't you, please change your password immediately.",
-    severity: "warning",
-    date: "Mar 18",
-    actionLabel: "Change Password",
-  },
-  {
-    id: "SA-004",
-    type: "referral_blocked",
-    title: "Referral Program Suspended",
-    message: "Your referral privileges have been suspended due to policy violations. Referral bonuses will not be credited.",
-    severity: "warning",
-    date: "Mar 17",
-  },
-];

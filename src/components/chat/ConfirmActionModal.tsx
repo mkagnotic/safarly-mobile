@@ -8,6 +8,7 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";
 
 export type ConfirmActionTone = "destructive" | "primary";
@@ -28,6 +29,11 @@ interface ConfirmActionModalProps {
   icon?: keyof typeof Ionicons.glyphMap;
   /** Disables both buttons + spins the confirm button while a request is in flight. */
   pending: boolean;
+  /**
+   * Why the last confirm failed. Rendered inside the card: a toast is drawn in
+   * the root view, UNDER this Modal, so it would never be seen.
+   */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -47,6 +53,7 @@ export function ConfirmActionModal({
   tone = "destructive",
   icon,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: Readonly<ConfirmActionModalProps>) {
@@ -100,6 +107,8 @@ export function ConfirmActionModal({
               <Ionicons name="close" size={18} color={colors.mutedText} />
             </Pressable>
           </View>
+
+          <FormBanner message={error} />
 
           <View style={styles.footer}>
             <Pressable

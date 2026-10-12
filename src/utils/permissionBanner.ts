@@ -13,9 +13,12 @@ import { showAppAlert, showToast } from "@/feedback/appFeedback";
  *
  * Two shapes because the call sites differ. Screens that own a `FormBanner`
  * (KYC, avatar upload) render `permissionDeniedBanner` inline; screens that only
- * have transient toasts (chat, parcel review, travel docs) call
- * `notifyPermissionDenied`, which escalates to an alert precisely when there is
- * an action worth offering.
+ * have transient toasts (chat) call `notifyPermissionDenied`, which escalates to
+ * an alert precisely when there is an action worth offering.
+ *
+ * Anything already inside an open Modal / sheet (parcel review, travel docs)
+ * must use the inline banner: the alert is itself a root-level Modal, and iOS
+ * will not present it over another one.
  */
 
 export type PermissionKind = "camera" | "photos";

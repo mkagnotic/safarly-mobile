@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { UnavailableContentCard } from "@/components/moderation/UnavailableContentCard";
 import { AppButton } from "@/components/ui/AppButton";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -13,6 +15,9 @@ import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { ANY_CITY } from "@/features/search/CityPicker";
 import { isListingExpired, isTerminal, labelForStatus } from "@/features/travels/statusLabels";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
+import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
+import { useBookings } from "@/hooks/api/useBookings";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
 import { useAuth } from "@/context/AuthContext";
 import { MainTabParamList } from "@/navigation/types";
@@ -20,6 +25,7 @@ import { ApiClientError, getErrorMessage, tripsApi, type Trip } from "@/services
 import { colors } from "@/theme/colors";
 import { formatTravelDateRange } from "@/utils/travelDate";
 import { EditTripModal, type EditTripFormValues } from "./EditTripModal";
+import { viewerHasBookingOnTrip } from "./model/tripBookingAccess";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -31,7 +37,7 @@ interface Notice {
 type Nav = BottomTabNavigationProp<MainTabParamList, "TripDetailsTab">;
 type Route = RouteProp<MainTabParamList, "TripDetailsTab">;
 
-function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
+function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?: ReactNode }>) {
   return (
     <View style={styles.headerRow}>
       <Pressable
@@ -43,6 +49,7 @@ function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
       <Text style={styles.title}>Trip details</Text>
+      {right}
     </View>
   );
 }
@@ -122,6 +129,14 @@ export function TripDetailsScreen() {
 
   const { trip, error, refetch } = useTripDetail(tripId);
   const { user } = useAuth();
+  const { hiddenUserIds } = useBlockedUsers();
+  // A delivery already booked on this trip keeps it visible through a block —
+  // same exemption as ParcelDetailsScreen.
+  const bookings = useBookings({ role: "sender", perPage: 100 });
+  const viewerHasBooking = useMemo(
+    () => (trip ? viewerHasBookingOnTrip(bookings.bookings, trip, user?.id) : false),
+    [bookings.bookings, trip, user?.id],
+  );
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -279,10 +294,30 @@ export function TripDetailsScreen() {
   // all, so anyone who could open a trip was offered both (the server refuses).
   const isOwner = !!user?.id && trip.carrier_id === user.id;
   const canModify = isOwner && !isTerminal(trip.status ?? "") && !expired;
+  const ownerIds = [trip.carrier_id, trip.carrier?.id, trip.user_id];
+
+  // A blocked person's trip (either direction), reached by deep link. A
+  // delivery already booked on it stays visible - this screen is how the
+  // carrier and sender finish it (mirrors ParcelDetailsScreen).
+  if (!isOwner && !viewerHasBooking && isHiddenOwner(ownerIds, hiddenUserIds)) {
+    return (
+      <Screen onRefresh={refetch}>
+        <DetailsHeader onBack={handleBack} />
+        <UnavailableContentCard onBack={handleBack} />
+      </Screen>
+    );
+  }
 
   return (
     <Screen onRefresh={refetch}>
-      <DetailsHeader onBack={handleBack} />
+      <DetailsHeader
+        onBack={handleBack}
+        right={
+          isOwner ? null : (
+            <ModerationMenu target={{ type: "trip", id: trip.id }} reportLabel="Report trip" />
+          )
+        }
+      />
 
       {notice ? (
         <View style={styles.bannerSlot}>

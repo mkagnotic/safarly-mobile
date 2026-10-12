@@ -39,6 +39,24 @@ export function resolveNotificationRoute(
     };
   }
 
+  // `/customer/bookings/:id/pay` — the "pay for your booking" nudge. Must run
+  // BEFORE the generic bookings matcher below, which would swallow it and open
+  // the list instead of checkout.
+  const payMatch = l.match(/^\/customer\/bookings\/([0-9a-f-]{36})\/pay(?:[/?#]|$)/i);
+  if (payMatch) {
+    return { screen: "PayBookingTab", params: { bookingId: payMatch[1] } };
+  }
+
+  // Listing detail pages (web `/customer/parcels/:id`, `/customer/trips/:id`).
+  const parcelMatch = l.match(/^\/customer\/parcels\/([0-9a-f-]{36})/i);
+  if (parcelMatch) {
+    return { screen: "ParcelDetailsTab", params: { parcelId: parcelMatch[1] } };
+  }
+  const tripMatch = l.match(/^\/customer\/trips\/([0-9a-f-]{36})/i);
+  if (tripMatch) {
+    return { screen: "TripDetailsTab", params: { tripId: tripMatch[1] } };
+  }
+
   // `/customer/bookings/:id` isn't a route on web either — the list uses inline
   // expandable cards, so pass `expandId` to auto-open the row.
   const bookingsMatch = l.match(/^\/customer\/bookings\/([0-9a-f-]{36})/i);
@@ -73,8 +91,12 @@ export function resolveNotificationRoute(
   if (l.startsWith("/customer/bookings")) return { screen: "BookingsTab" };
   // Carrier "set up payouts to accept this delivery" nudge links here.
   if (l.includes("/payout-setup")) return { screen: "PayoutSetupTab" };
+  // Covers web's `/customer/profile/wallet` as well as older `/customer/wallet` links.
   if (l.includes("/wallet")) return { screen: "TransactionsTab" };
   if (l.includes("/kyc")) return { screen: "KycVerificationTab" };
+  // After the profile sub-pages above (wallet, kyc, payout-setup) so those keep
+  // their own screens; anything else under the profile opens the Profile tab.
+  if (/^\/customer\/profile(?:[/?#]|$)/.test(l)) return { screen: "Profile" };
   if (l.startsWith("/customer/disputes")) return { screen: "DisputesTab" };
   // ⚠️ NOT the "Buddies" tab — that route name is legacy and renders the INBOX
   // (see RootNavigator). Web's `/customer/buddies` is its create-a-listing form,

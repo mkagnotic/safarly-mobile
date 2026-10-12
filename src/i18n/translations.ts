@@ -9,7 +9,6 @@ export type TranslationKey =
   | "stack.sendParcel"
   | "stack.listTrip"
   | "stack.wallet"
-  | "stack.earnings"
   | "stack.reviews"
   | "reviews.dataOffTitle"
   | "reviews.dataOffHint"
@@ -35,21 +34,11 @@ export type TranslationKey =
   | "wallet.statusCompleted"
   | "wallet.statusHeld"
   | "wallet.statusRefunded"
-  | "earnings.heroTotalLabel"
-  | "earnings.deliveriesPaid"
-  | "earnings.pending"
-  | "earnings.withdrawToBank"
-  | "earnings.history"
-  | "earnings.deliveryPayout"
-  | "earnings.statusPending"
-  | "earnings.statusCompleted"
-  | "earnings.emptyHistory"
   | "profile.kycVerified"
   | "profile.wallet"
   | "profile.walletSubtitle"
   | "profile.editProfile"
   | "profile.kycVerification"
-  | "profile.earnings"
   | "profile.messages"
   | "profile.reviews"
   | "profile.settings"
@@ -79,7 +68,6 @@ const enUS: Dict = {
   "stack.sendParcel": "Send Parcel",
   "stack.listTrip": "List Trip",
   "stack.wallet": "Wallet",
-  "stack.earnings": "Earnings",
   "stack.reviews": "Reviews",
   "reviews.dataOffTitle": "No reviews yet",
   "reviews.dataOffHint": "Reviews from your delivery interactions will appear here.",
@@ -105,21 +93,11 @@ const enUS: Dict = {
   "wallet.statusCompleted": "Completed",
   "wallet.statusHeld": "Held",
   "wallet.statusRefunded": "Refunded",
-  "earnings.heroTotalLabel": "Total earned",
-  "earnings.deliveriesPaid": "Deliveries paid",
-  "earnings.pending": "Pending",
-  "earnings.withdrawToBank": "Withdraw to Bank",
-  "earnings.history": "Earning History",
-  "earnings.deliveryPayout": "Delivery Payout",
-  "earnings.statusPending": "Pending",
-  "earnings.statusCompleted": "Completed",
-  "earnings.emptyHistory": "No earnings yet",
   "profile.kycVerified": "KYC Verified",
   "profile.wallet": "Wallet",
   "profile.walletSubtitle": "Balance & payments",
   "profile.editProfile": "Edit Profile",
   "profile.kycVerification": "KYC Verification",
-  "profile.earnings": "Earnings",
   "profile.messages": "Messages",
   "profile.reviews": "Reviews",
   "profile.settings": "Settings",
@@ -148,7 +126,6 @@ const frCA: Dict = {
   "stack.sendParcel": "Envoyer un colis",
   "stack.listTrip": "Lister un voyage",
   "stack.wallet": "Portefeuille",
-  "stack.earnings": "Gains",
   "stack.reviews": "Avis",
   "reviews.dataOffTitle": "Aucun avis",
   "reviews.dataOffHint": "Activez les donnees pour voir les avis de vos destinataires.",
@@ -174,21 +151,11 @@ const frCA: Dict = {
   "wallet.statusCompleted": "Termine",
   "wallet.statusHeld": "En attente",
   "wallet.statusRefunded": "Rembourse",
-  "earnings.heroTotalLabel": "Total gagne",
-  "earnings.deliveriesPaid": "Livraisons payees",
-  "earnings.pending": "En attente",
-  "earnings.withdrawToBank": "Retirer vers la banque",
-  "earnings.history": "Historique des gains",
-  "earnings.deliveryPayout": "Paiement de livraison",
-  "earnings.statusPending": "En attente",
-  "earnings.statusCompleted": "Termine",
-  "earnings.emptyHistory": "Aucun gain pour le moment",
   "profile.kycVerified": "KYC Verifie",
   "profile.wallet": "Portefeuille",
   "profile.walletSubtitle": "Solde et paiements",
   "profile.editProfile": "Modifier le profil",
   "profile.kycVerification": "Verification KYC",
-  "profile.earnings": "Gains",
   "profile.messages": "Messages",
   "profile.reviews": "Avis",
   "profile.settings": "Parametres",
@@ -217,7 +184,6 @@ const esUS: Dict = {
   "stack.sendParcel": "Enviar paquete",
   "stack.listTrip": "Publicar viaje",
   "stack.wallet": "Billetera",
-  "stack.earnings": "Ganancias",
   "stack.reviews": "Resenas",
   "reviews.dataOffTitle": "Sin resenas",
   "reviews.dataOffHint": "Activa los datos de la app para ver resenas de tus destinatarios.",
@@ -243,21 +209,11 @@ const esUS: Dict = {
   "wallet.statusCompleted": "Completada",
   "wallet.statusHeld": "Retenida",
   "wallet.statusRefunded": "Reembolsada",
-  "earnings.heroTotalLabel": "Total ganado",
-  "earnings.deliveriesPaid": "Entregas pagadas",
-  "earnings.pending": "Pendiente",
-  "earnings.withdrawToBank": "Retirar al banco",
-  "earnings.history": "Historial de ganancias",
-  "earnings.deliveryPayout": "Pago de entrega",
-  "earnings.statusPending": "Pendiente",
-  "earnings.statusCompleted": "Completada",
-  "earnings.emptyHistory": "Sin ganancias aun",
   "profile.kycVerified": "KYC Verificado",
   "profile.wallet": "Billetera",
   "profile.walletSubtitle": "Saldo y pagos",
   "profile.editProfile": "Editar perfil",
   "profile.kycVerification": "Verificacion KYC",
-  "profile.earnings": "Ganancias",
   "profile.messages": "Mensajes",
   "profile.reviews": "Resenas",
   "profile.settings": "Configuracion",

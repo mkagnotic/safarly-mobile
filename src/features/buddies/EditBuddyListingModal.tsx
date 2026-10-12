@@ -13,6 +13,7 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { CalendarModal } from "@/components/ui/CalendarModal";
 import { ListPickerModal } from "@/components/ui/ListPickerModal";
 import { LocationCard } from "@/components/ui/FormSection";
@@ -217,258 +218,263 @@ export function EditBuddyListingModal({
         if (!pending) onCancel();
       }}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!pending) onCancel();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.center} pointerEvents="box-none">
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Edit travel partner request</Text>
-            <Pressable
-              onPress={onCancel}
-              hitSlop={8}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
+      {/* A Modal's window is not resized for the keyboard on either platform
+          (edge-to-edge on Android), so lift the card ourselves: the form scrolls in the space left and
+          the Cancel / Save footer stays above the keyboard. */}
+      <KeyboardLift style={styles.flex}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!pending) onCancel();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.center} pointerEvents="box-none">
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Edit travel partner request</Text>
+              <Pressable
+                onPress={onCancel}
+                hitSlop={8}
+                disabled={pending}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={colors.mutedText} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
+              {/* ───── Route ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>From</Text>
+                <LocationCard
+                  flag={fromFlag}
+                  label={fromCountryName}
+                  filled
+                  onToggle={toggleFromCountry}
+                />
+                <CityPicker
+                  value={form.from_city}
+                  onChange={(v) => {
+                    patch({ from_city: v });
+                    clearError("fromCity");
+                  }}
+                  cities={fromCities}
+                  placeholder="Select departure city"
+                  variant="card"
+                  disabled={pending}
+                  invalid={!!errors.fromCity}
+                />
+                {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
+              </View>
 
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ───── Route ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>From</Text>
-              <LocationCard
-                flag={fromFlag}
-                label={fromCountryName}
-                filled
-                onToggle={toggleFromCountry}
-              />
-              <CityPicker
-                value={form.from_city}
-                onChange={(v) => {
-                  patch({ from_city: v });
-                  clearError("fromCity");
-                }}
-                cities={fromCities}
-                placeholder="Select departure city"
-                variant="card"
-                disabled={pending}
-                invalid={!!errors.fromCity}
-              />
-              {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
-            </View>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>To</Text>
+                <LocationCard
+                  flag={toFlag}
+                  label={toCountryName}
+                  filled
+                  onToggle={toggleToCountry}
+                />
+                <CityPicker
+                  value={form.to_city}
+                  onChange={(v) => {
+                    patch({ to_city: v });
+                    clearError("toCity");
+                  }}
+                  cities={toCities}
+                  placeholder="Select destination city"
+                  variant="card"
+                  disabled={pending}
+                  invalid={!!toCityError}
+                />
+                {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
+              </View>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>To</Text>
-              <LocationCard
-                flag={toFlag}
-                label={toCountryName}
-                filled
-                onToggle={toggleToCountry}
-              />
-              <CityPicker
-                value={form.to_city}
-                onChange={(v) => {
-                  patch({ to_city: v });
-                  clearError("toCity");
-                }}
-                cities={toCities}
-                placeholder="Select destination city"
-                variant="card"
-                disabled={pending}
-                invalid={!!toCityError}
-              />
-              {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
-            </View>
-
-            {/* ───── Travel date ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Travel date</Text>
-              <Pressable
-                onPress={() => setCalendarOpen(true)}
-                style={[styles.input, styles.selectInput, !!errors.travelDate && styles.inputError]}
-                accessibilityRole="button"
-                accessibilityLabel="Pick travel date"
-                disabled={pending}
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-                <Text
-                  style={[styles.selectInputText, !selectedDate && styles.selectInputPlaceholder]}
-                  numberOfLines={1}
+              {/* ───── Travel date ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Travel date</Text>
+                <Pressable
+                  onPress={() => setCalendarOpen(true)}
+                  style={[styles.input, styles.selectInput, !!errors.travelDate && styles.inputError]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pick travel date"
+                  disabled={pending}
                 >
-                  {selectedDate ? formatDateLabel(selectedDate) : "Select date"}
-                </Text>
-              </Pressable>
-              {errors.travelDate ? (
-                <Text style={styles.inlineError}>{errors.travelDate}</Text>
-              ) : null}
-            </View>
+                  <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                  <Text
+                    style={[styles.selectInputText, !selectedDate && styles.selectInputPlaceholder]}
+                    numberOfLines={1}
+                  >
+                    {selectedDate ? formatDateLabel(selectedDate) : "Select date"}
+                  </Text>
+                </Pressable>
+                {errors.travelDate ? (
+                  <Text style={styles.inlineError}>{errors.travelDate}</Text>
+                ) : null}
+              </View>
 
-            {/* ───── Airline ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <Pressable
-                style={[styles.input, styles.selectInput]}
-                onPress={() => setAirlineOpen(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Pick airline"
-                disabled={pending}
-              >
-                <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
-                <Text
-                  style={[styles.selectInputText, !form.airline && styles.selectInputPlaceholder]}
-                  numberOfLines={1}
+              {/* ───── Airline ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                </Text>
+                <Pressable
+                  style={[styles.input, styles.selectInput]}
+                  onPress={() => setAirlineOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pick airline"
+                  disabled={pending}
                 >
-                  {form.airline || "Select airline"}
+                  <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
+                  <Text
+                    style={[styles.selectInputText, !form.airline && styles.selectInputPlaceholder]}
+                    numberOfLines={1}
+                  >
+                    {form.airline || "Select airline"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+                </Pressable>
+              </View>
+
+              {/* ───── Age ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
                 </Text>
-                <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-              </Pressable>
-            </View>
+                <TextInput
+                  value={form.age}
+                  onChangeText={(v) => {
+                    patch({ age: sanitizeDigitsOnly(v, 3) });
+                    clearError("age");
+                  }}
+                  placeholder="e.g. 28"
+                  placeholderTextColor={colors.placeholderText}
+                  keyboardType="number-pad"
+                  style={[styles.textInput, !!ageError && styles.inputError]}
+                  editable={!pending}
+                />
+                {ageError ? <Text style={styles.inlineError}>{ageError}</Text> : null}
+              </View>
 
-            {/* ───── Age ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <TextInput
-                value={form.age}
-                onChangeText={(v) => {
-                  patch({ age: sanitizeDigitsOnly(v, 3) });
-                  clearError("age");
-                }}
-                placeholder="e.g. 28"
-                placeholderTextColor={colors.placeholderText}
-                keyboardType="number-pad"
-                style={[styles.textInput, !!ageError && styles.inputError]}
-                editable={!pending}
-              />
-              {ageError ? <Text style={styles.inlineError}>{ageError}</Text> : null}
-            </View>
-
-            {/* ───── Languages ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Languages{" "}
-                <Text style={styles.fieldLabelMuted}>(Optional, up to {MAX_LANGUAGES})</Text>
-              </Text>
-              {form.languages.length > 0 ? (
-                <View style={styles.chipsRow}>
-                  {form.languages.map((lang) => (
-                    <View key={lang} style={styles.chip}>
-                      <Text style={styles.chipText}>{lang}</Text>
-                      <Pressable
-                        onPress={() => handleRemoveLanguage(lang)}
-                        hitSlop={6}
-                        disabled={pending}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove ${lang}`}
-                      >
-                        <Ionicons name="close" size={12} color={colors.mutedText} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              <Pressable
-                style={[styles.input, styles.selectInput]}
-                onPress={() => setLanguagePickerOpen(true)}
-                disabled={pending || form.languages.length >= MAX_LANGUAGES}
-                accessibilityRole="button"
-                accessibilityLabel="Add a language"
-              >
-                <Text style={[styles.selectInputText, styles.selectInputPlaceholder]}>
-                  {form.languages.length >= MAX_LANGUAGES
-                    ? `Max ${MAX_LANGUAGES} selected`
-                    : "Add a language"}
+              {/* ───── Languages ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Languages{" "}
+                  <Text style={styles.fieldLabelMuted}>(Optional, up to {MAX_LANGUAGES})</Text>
                 </Text>
-                <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-              </Pressable>
-            </View>
+                {form.languages.length > 0 ? (
+                  <View style={styles.chipsRow}>
+                    {form.languages.map((lang) => (
+                      <View key={lang} style={styles.chip}>
+                        <Text style={styles.chipText}>{lang}</Text>
+                        <Pressable
+                          onPress={() => handleRemoveLanguage(lang)}
+                          hitSlop={6}
+                          disabled={pending}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${lang}`}
+                        >
+                          <Ionicons name="close" size={12} color={colors.mutedText} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                <Pressable
+                  style={[styles.input, styles.selectInput]}
+                  onPress={() => setLanguagePickerOpen(true)}
+                  disabled={pending || form.languages.length >= MAX_LANGUAGES}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add a language"
+                >
+                  <Text style={[styles.selectInputText, styles.selectInputPlaceholder]}>
+                    {form.languages.length >= MAX_LANGUAGES
+                      ? `Max ${MAX_LANGUAGES} selected`
+                      : "Add a language"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+                </Pressable>
+              </View>
 
-            {/* ───── Interests ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <TextInput
-                value={form.interests}
-                onChangeText={(t) => patch({ interests: t })}
-                placeholder="e.g. Photography, Hiking, Food, Tech"
-                placeholderTextColor={colors.placeholderText}
-                style={styles.textInput}
-                editable={!pending}
+              {/* ───── Interests ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                </Text>
+                <TextInput
+                  value={form.interests}
+                  onChangeText={(t) => patch({ interests: t })}
+                  placeholder="e.g. Photography, Hiking, Food, Tech"
+                  placeholderTextColor={colors.placeholderText}
+                  style={styles.textInput}
+                  editable={!pending}
+                />
+              </View>
+
+              {/* ───── Layover ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                </Text>
+                <TextInput
+                  value={form.layover}
+                  onChangeText={(t) => patch({ layover: t })}
+                  placeholder="e.g. London Heathrow — 3h layover"
+                  placeholderTextColor={colors.placeholderText}
+                  style={styles.textInput}
+                  editable={!pending}
+                />
+              </View>
+
+              {/* ───── Bio ───── */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  About you <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                </Text>
+                <TextInput
+                  value={form.bio}
+                  onChangeText={(t) => patch({ bio: t })}
+                  placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
+                  placeholderTextColor={colors.placeholderText}
+                  style={[styles.textInput, styles.multiline]}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                  editable={!pending}
+                />
+              </View>
+            </ScrollView>
+
+            <View style={styles.footer}>
+              <AppButton
+                label="Cancel"
+                variant="secondary"
+                onPress={onCancel}
+                disabled={pending}
+                style={styles.footerButton}
+              />
+              <AppButton
+                label={pending ? "Saving…" : "Save changes"}
+                onPress={handleSubmit}
+                disabled={pending}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={
+                  pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+                }
+                style={styles.footerButton}
               />
             </View>
-
-            {/* ───── Layover ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <TextInput
-                value={form.layover}
-                onChangeText={(t) => patch({ layover: t })}
-                placeholder="e.g. London Heathrow — 3h layover"
-                placeholderTextColor={colors.placeholderText}
-                style={styles.textInput}
-                editable={!pending}
-              />
-            </View>
-
-            {/* ───── Bio ───── */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                About you <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <TextInput
-                value={form.bio}
-                onChangeText={(t) => patch({ bio: t })}
-                placeholder="Tell potential buddies about yourself — travel style, what you're looking for…"
-                placeholderTextColor={colors.placeholderText}
-                style={[styles.textInput, styles.multiline]}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                editable={!pending}
-              />
-            </View>
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <AppButton
-              label="Cancel"
-              variant="secondary"
-              onPress={onCancel}
-              disabled={pending}
-              style={styles.footerButton}
-            />
-            <AppButton
-              label={pending ? "Saving…" : "Save changes"}
-              onPress={handleSubmit}
-              disabled={pending}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              leftIcon={
-                pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
-              }
-              style={styles.footerButton}
-            />
           </View>
         </View>
-      </View>
+      </KeyboardLift>
 
       <ListPickerModal
         open={airlineOpen}
@@ -514,6 +520,7 @@ export function EditBuddyListingModal({
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
   center: {
     flex: 1,

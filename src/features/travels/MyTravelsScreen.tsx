@@ -12,6 +12,7 @@ import { PrimaryHeaderActions } from "@/components/ui/PrimaryHeaderActions";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { showAppAlert } from "@/feedback/appFeedback";
+import { buddyRequestSenderIds, withoutBlocked } from "@/features/moderation/blockFilter";
 import { ANY_CITY } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import {
@@ -24,6 +25,7 @@ import {
   type EditParcelFormValues,
 } from "@/features/parcels/EditParcelModal";
 import { BuddyPartnerCard } from "@/features/travels/BuddyPartnerCard";
+import { cancellableSentRequests } from "@/features/travels/buddyRequests";
 import { isTerminal } from "@/features/travels/statusLabels";
 import { MatchesModal, type MatchesSource } from "@/features/travels/MatchesModal";
 import { JourneySummaryRow } from "@/features/travels/ParcelJourneyTracker";
@@ -31,12 +33,14 @@ import { createTrackerBookingResolver } from "@/features/travels/trackerBooking"
 import { TravelCard } from "@/features/travels/TravelCard";
 import { TripAvailabilityToggle } from "@/features/travels/TripAvailabilityToggle";
 import { EditTripModal, type EditTripFormValues } from "@/features/trips/EditTripModal";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useBuddyConnections } from "@/hooks/api/useBuddyConnections";
 import { useBuddyListings } from "@/hooks/api/useBuddyListings";
 import { useBuddyRequests } from "@/hooks/api/useBuddyRequests";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useParcels } from "@/hooks/api/useParcels";
+import { usePublicProfile } from "@/hooks/api/usePublicProfile";
 import { useTrips } from "@/hooks/api/useTrips";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import {
@@ -54,6 +58,7 @@ import {
   type Trip,
 } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
+import { toLocalYmd } from "@/utils/travelDate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -109,7 +114,9 @@ export function MyTravelsScreen() {
   const delivered = useBookings({ status: "delivered", perPage: 50 });
   const myProfile = useMyProfile();
   const requests = useBuddyRequests();
+  const sentRequests = useBuddyRequests("sent");
   const connections = useBuddyConnections();
+  const { hiddenUserIds } = useBlockedUsers();
 
   // Bookings where I'm the sender — drives the Receive-card journey tracker.
   // Fetched broadly (all statuses) so we can pick the live booking per parcel;
@@ -122,7 +129,19 @@ export function MyTravelsScreen() {
   const dedupedSend = uniqueBy(sendParcels.parcels, (p) => p.id);
   const dedupedReceive = uniqueBy(receiveParcels.parcels, (p) => p.id);
   const dedupedConnections = uniqueBy(connections.connections, (c) => c.buddy?.id ?? c.id);
-  const dedupedRequests = uniqueBy(requests.requests, (r) => r.id);
+  // A pending request from a blocked person (either direction) is hidden. Existing
+  // connections stay: that relationship is already under way.
+  const dedupedRequests = uniqueBy(
+    withoutBlocked(requests.requests, hiddenUserIds, buddyRequestSenderIds),
+    (r) => r.id,
+  );
+  // Requests I sent that are still pending (so still cancellable). A recipient I
+  // blocked, or who blocked me, is hidden like everywhere else.
+  const pendingSentRequests = withoutBlocked(
+    cancellableSentRequests(sentRequests.requests, myProfile.profile?.id),
+    hiddenUserIds,
+    (r) => r.receiver_id,
+  );
   const dedupedListings = uniqueBy(partners.listings, (b) => b.id);
   const dedupedFlights = uniqueBy(flights.trips, (t) => t.id);
   const dedupedArchive = uniqueBy(archive.trips, (t) => t.id);
@@ -221,7 +240,12 @@ export function MyTravelsScreen() {
       return;
     }
     if (activeTab === "partners") {
-      await Promise.all([partners.refetch(), requests.refetch(), connections.refetch()]);
+      await Promise.all([
+        partners.refetch(),
+        requests.refetch(),
+        sentRequests.refetch(),
+        connections.refetch(),
+      ]);
       return;
     }
     if (activeTab === "archive") {
@@ -237,6 +261,7 @@ export function MyTravelsScreen() {
     archive,
     delivered,
     requests,
+    sentRequests,
     connections,
     senderBookings,
   ]);
@@ -585,6 +610,40 @@ export function MyTravelsScreen() {
     [requests],
   );
 
+  const handleCancelSentRequest = useCallback(
+    (request: BuddyRequest, recipientName: string) => {
+      showAppAlert({
+        title: "Cancel buddy request?",
+        message: `Your request to ${recipientName} will be removed from their requests. You can send a new one later.`,
+        actions: [
+          { text: "Keep request", style: "cancel" },
+          {
+            text: "Cancel request",
+            style: "destructive",
+            onPress: () => {
+              void (async () => {
+                setActioningId(request.id);
+                setFormError(null);
+                try {
+                  await buddiesApi.cancelRequest(request.id);
+                  await sentRequests.refetch();
+                } catch (err) {
+                  // 409 = they answered first (or it was already cancelled);
+                  // refresh so the stale row drops out either way.
+                  setFormError(`Couldn't cancel request. ${getErrorMessage(err)}`);
+                  void sentRequests.refetch();
+                } finally {
+                  setActioningId(null);
+                }
+              })();
+            },
+          },
+        ],
+      });
+    },
+    [sentRequests],
+  );
+
   const handleCompleteConnection = useCallback(
     async (id: string) => {
       setActioningId(id);
@@ -815,6 +874,8 @@ export function MyTravelsScreen() {
             loadingMore={partners.loadingMore}
             onLoadMore={partners.loadMore}
             requests={dedupedRequests}
+            sentRequests={pendingSentRequests}
+            onCancelSent={handleCancelSentRequest}
             activeBuddies={activeBuddies}
             actioningId={actioningId}
             onAccept={handleAcceptRequest}
@@ -1218,6 +1279,8 @@ function PartnersTab({
   loadingMore,
   onLoadMore,
   requests,
+  sentRequests,
+  onCancelSent,
   activeBuddies,
   actioningId,
   onAccept,
@@ -1238,6 +1301,8 @@ function PartnersTab({
   loadingMore: boolean;
   onLoadMore: () => void;
   requests: BuddyRequest[];
+  sentRequests: BuddyRequest[];
+  onCancelSent: (request: BuddyRequest, recipientName: string) => void;
   activeBuddies: BuddyConnection[];
   actioningId: string | null;
   onAccept: (id: string) => void;
@@ -1246,7 +1311,7 @@ function PartnersTab({
   onComplete: (id: string) => void;
   onDisconnect: (conn: BuddyConnection) => void;
 }>) {
-  const hasExtras = requests.length > 0 || activeBuddies.length > 0;
+  const hasExtras = requests.length > 0 || sentRequests.length > 0 || activeBuddies.length > 0;
 
   const listingsBody =
     loading && listings.length === 0 ? (
@@ -1290,6 +1355,23 @@ function PartnersTab({
               pending={actioningId === r.id}
               onAccept={() => onAccept(r.id)}
               onReject={() => onReject(r.id)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {sentRequests.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Ionicons name="paper-plane-outline" size={16} color={colors.primary} />
+            <Text style={styles.sectionTitle}>Sent requests</Text>
+          </View>
+          {sentRequests.map((r) => (
+            <SentBuddyRequestCard
+              key={r.id}
+              request={r}
+              pending={actioningId === r.id}
+              onCancel={(name) => onCancelSent(r, name)}
             />
           ))}
         </View>
@@ -1370,6 +1452,49 @@ function BuddyRequestCard({
   );
 }
 
+/**
+ * A request I sent that is still waiting on the other traveller. The list row
+ * only joins the SENDER's profile (me), so the recipient's name comes from their
+ * public profile.
+ */
+function SentBuddyRequestCard({
+  request,
+  pending,
+  onCancel,
+}: Readonly<{ request: BuddyRequest; pending: boolean; onCancel: (recipientName: string) => void }>) {
+  const { profile: recipient } = usePublicProfile(request.receiver_id);
+  const name = recipient?.name || "Traveler";
+  const sentOn = request.created_at
+    ? new Date(request.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+  return (
+    <View style={styles.lcCard}>
+      <View style={styles.lcPersonRow}>
+        <View style={styles.lcAvatar}>
+          <Text style={styles.lcAvatarText}>{getInitials(recipient?.name)}</Text>
+        </View>
+        <View style={styles.lcPersonInfo}>
+          <Text style={styles.lcName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.lcMessage} numberOfLines={1}>
+            {sentOn ? `Sent ${sentOn} · waiting for a reply` : "Waiting for a reply"}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.lcActions}>
+        <AppButton
+          label={pending ? "…" : "Cancel request"}
+          variant="secondary"
+          onPress={() => onCancel(name)}
+          disabled={pending}
+          style={styles.lcActionFlex}
+        />
+      </View>
+    </View>
+  );
+}
+
 function BuddyConnectionCard({
   connection,
   pending,
@@ -1387,7 +1512,7 @@ function BuddyConnectionCard({
   const route = c.from_city && c.to_city ? `${c.from_city} → ${c.to_city}` : null;
   const journeyStart = c.travel_date_from || c.travel_date;
   const journeyStarted =
-    !journeyStart || journeyStart.slice(0, 10) <= new Date().toLocaleDateString("en-CA");
+    !journeyStart || journeyStart.slice(0, 10) <= toLocalYmd();
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>

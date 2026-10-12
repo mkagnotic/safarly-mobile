@@ -142,6 +142,15 @@ export type {
   Testimonial,
 } from "./cms";
 
+export { moderationApi } from "./moderation";
+export type {
+  ReportTarget,
+  ReportTargetType,
+  ReportReason,
+  ReportResult,
+  BlockList,
+} from "./moderation";
+
 export { feedApi } from "./feed";
 export type { FeedItem } from "./feed";
 

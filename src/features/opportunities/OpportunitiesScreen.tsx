@@ -17,6 +17,8 @@ import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Screen } from "@/components/ui/Screen";
 import { showToast } from "@/feedback/appFeedback";
+import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useOpportunities } from "@/hooks/api/useOpportunities";
 import { useTrips } from "@/hooks/api/useTrips";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -414,9 +416,13 @@ export function OpportunitiesScreen() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
 
+  const { hiddenUserIds } = useBlockedUsers();
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return opportunities.filter((p) => {
+      // Blocked senders (either direction) never appear as opportunities.
+      if (isHiddenOwner([p.sender_id, p.sender?.id], hiddenUserIds)) return false;
       const matchSearch =
         !q ||
         p.from_city.toLowerCase().includes(q) ||
@@ -426,7 +432,7 @@ export function OpportunitiesScreen() {
         (p.category ?? "").toLowerCase() === categoryFilter.toLowerCase();
       return matchSearch && matchCategory;
     });
-  }, [opportunities, searchQuery, categoryFilter]);
+  }, [opportunities, searchQuery, categoryFilter, hiddenUserIds]);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();

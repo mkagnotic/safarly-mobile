@@ -198,9 +198,9 @@ export function CreateBuddyScreen() {
     if (!travelDate) {
       errors.travelDate = "Pick a travel date";
     } else if (travelDate < today) {
-      errors.travelDate = "Can't be in the past";
+      errors.travelDate = "Date cannot be in the past";
     } else if (travelDate > maxDate) {
-      errors.travelDate = "Must be within 12 months";
+      errors.travelDate = "Date must be within the next 12 months";
     }
 
     const ageRangeError = getAgeError(age);

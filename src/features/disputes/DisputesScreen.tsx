@@ -12,8 +12,11 @@ import {
   View,
   type ListRenderItemInfo,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -28,13 +31,21 @@ import {
   statusTint,
 } from "@/features/disputes/disputeConfig";
 import { useAuth } from "@/context/AuthContext";
+import {
+  EVIDENCE_MAX_FILES,
+  screenEvidence,
+  skippedEvidenceMessage,
+  type PickedEvidence,
+} from "@/features/disputes/evidenceFiles";
 import { useMyDisputes } from "@/hooks/api/useMyDisputes";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { MainTabParamList } from "@/navigation/types";
 import { disputesApi, getErrorMessage, type Dispute } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoneyShort } from "@/utils/money";
+import { notifyPermissionDenied } from "@/utils/permissionBanner";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "DisputesTab">;
 type BannerVariant = "success" | "error" | "info" | "warning";
@@ -67,6 +78,8 @@ export function DisputesScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuth();
   const userId = user?.id ?? "";
+  // The lightbox is full-screen: keep its close button below the notch.
+  const insets = useSafeAreaInsets();
 
   const { disputes, loading, loadingMore, hasMore, error, refetch, loadMore } = useMyDisputes();
   // Dedicated pull-to-refresh state so the spinner shows on any pull — including
@@ -191,7 +204,7 @@ export function DisputesScreen() {
       <Modal visible={!!previewUri} transparent animationType="fade" onRequestClose={() => setPreviewUri(null)}>
         <Pressable style={styles.lightbox} onPress={() => setPreviewUri(null)} accessibilityRole="button" accessibilityLabel="Close image">
           {previewUri ? <Image source={{ uri: previewUri }} style={styles.lightboxImage} resizeMode="contain" /> : null}
-          <View style={styles.lightboxClose}>
+          <View style={[styles.lightboxClose, { top: insets.top + 8 }]}>
             <Ionicons name="close" size={22} color={colors.white} />
           </View>
         </Pressable>
@@ -224,6 +237,7 @@ function DisputeCard({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [waiving, setWaiving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const isResolved = dispute.status === "resolved";
   // Web parity: the sender can grant the waiver when the counterparty filed a
@@ -251,6 +265,81 @@ function DisputeCard({
       setSending(false);
     }
   }, [draft, sending, dispute.id, onRefetch, onBanner]);
+
+  // Late evidence: an open dispute can still take photos / PDFs after filing —
+  // same endpoint and limits as the file-a-dispute form.
+  const uploadPicked = useCallback(
+    async (picked: PickedEvidence[]) => {
+      const screened = screenEvidence(picked);
+      const skippedNote = skippedEvidenceMessage(screened);
+      if (screened.files.length === 0) {
+        onBanner({ variant: "error", title: "Nothing to upload", message: skippedNote ?? undefined });
+        return;
+      }
+      setUploading(true);
+      try {
+        const res = await disputesApi.uploadEvidence(dispute.id, screened.files);
+        const stored = res.data?.evidence_files?.length ?? screened.files.length;
+        const serverSkipped = res.data?.skipped_files ?? [];
+        const notes = [
+          skippedNote,
+          ...serverSkipped.map((f) => `${f.name}: ${f.message}`),
+        ].filter(Boolean);
+        onBanner({
+          variant: notes.length ? "warning" : "success",
+          title: `${stored} file${stored === 1 ? "" : "s"} added to the dispute`,
+          message: notes.length ? notes.join(" ") : undefined,
+        });
+        await onRefetch();
+      } catch (err) {
+        onBanner({ variant: "error", title: "Couldn't upload evidence", message: getErrorMessage(err) });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [dispute.id, onRefetch, onBanner],
+  );
+
+  const addEvidencePhotos = useCallback(async () => {
+    if (uploading) return;
+    try {
+      const perm = await requestLibraryPermission();
+      if (perm.status !== "granted") {
+        notifyPermissionDenied("photos", perm, "add evidence");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        ...LIBRARY_PICK_OPTIONS,
+        mediaTypes: ["images"],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: EVIDENCE_MAX_FILES,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      await uploadPicked(
+        result.assets.map((a) => ({ uri: a.uri, name: a.fileName, mimeType: a.mimeType, size: a.fileSize })),
+      );
+    } catch (err) {
+      onBanner({ variant: "error", title: "Couldn't open photos", message: getErrorMessage(err) });
+    }
+  }, [uploading, uploadPicked, onBanner]);
+
+  const addEvidenceFiles = useCallback(async () => {
+    if (uploading) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      await uploadPicked(
+        result.assets.map((a) => ({ uri: a.uri, name: a.name, mimeType: a.mimeType, size: a.size })),
+      );
+    } catch (err) {
+      onBanner({ variant: "error", title: "Couldn't pick file", message: getErrorMessage(err) });
+    }
+  }, [uploading, uploadPicked, onBanner]);
 
   const confirmWaiver = useCallback(async () => {
     if (waiving) return;
@@ -394,6 +483,43 @@ function DisputeCard({
                 })}
               </View>
             </>
+          ) : null}
+
+          {/* Late evidence (open disputes only) */}
+          {!isResolved ? (
+            <View style={styles.addEvidenceBlock}>
+              {evidence.length === 0 ? (
+                <Text style={[styles.detailLabel, styles.detailLabelGap]}>EVIDENCE</Text>
+              ) : null}
+              <Text style={styles.addEvidenceHint}>
+                Add photos or PDFs — JPEG, PNG, WebP, GIF or PDF, up to 10 MB each, {EVIDENCE_MAX_FILES} at a time.
+              </Text>
+              <View style={styles.addEvidenceRow}>
+                <Pressable
+                  onPress={() => void addEvidencePhotos()}
+                  disabled={uploading}
+                  style={[styles.addEvidenceButton, uploading && styles.buttonPending]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add evidence photos"
+                  accessibilityState={{ disabled: uploading, busy: uploading }}
+                >
+                  <Ionicons name="images-outline" size={14} color={colors.primary} />
+                  <Text style={styles.addEvidenceText}>Add photos</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void addEvidenceFiles()}
+                  disabled={uploading}
+                  style={[styles.addEvidenceButton, uploading && styles.buttonPending]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add evidence files"
+                  accessibilityState={{ disabled: uploading, busy: uploading }}
+                >
+                  <Ionicons name="document-attach-outline" size={14} color={colors.primary} />
+                  <Text style={styles.addEvidenceText}>Add files</Text>
+                </Pressable>
+                {uploading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              </View>
+            </View>
           ) : null}
 
           {/* Conversation */}
@@ -578,6 +704,21 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   evidencePdfChipText: { color: colors.primary, fontSize: 12, fontWeight: "700", flexShrink: 1 },
+  addEvidenceBlock: { gap: 6, marginTop: 4 },
+  addEvidenceHint: { color: colors.mutedText, fontSize: 12, lineHeight: 17 },
+  addEvidenceRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  addEvidenceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceTintPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addEvidenceText: { color: colors.primary, fontSize: 13, fontWeight: "700" },
 
   // Thread
   thread: { gap: 8 },
@@ -658,5 +799,5 @@ const styles = StyleSheet.create({
   // Lightbox
   lightbox: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", alignItems: "center", justifyContent: "center" },
   lightboxImage: { width: "92%", height: "80%" },
-  lightboxClose: { position: "absolute", top: 48, right: 24 },
+  lightboxClose: { position: "absolute", right: 24 },
 });

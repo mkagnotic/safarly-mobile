@@ -344,7 +344,7 @@ export function PayBookingScreen() {
           </View>
 
           <AppButton
-            label={paying ? "Opening secure checkout…" : `Pay ${money(total)}`}
+            label={paying ? "Opening secure checkout…" : `Pay ${money(total, bookingCurrency)}`}
             disabled={paying || !kyc.isApproved}
             onPress={() => void handlePay()}
             leftIcon={paying ? <ActivityIndicator size="small" color={colors.white} /> : undefined}

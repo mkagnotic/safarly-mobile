@@ -5,6 +5,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 
 const STAR_LABELS = ["Poor", "Fair", "Good", "Very Good", "Excellent"] as const;
@@ -75,114 +77,131 @@ export function RateDeliverySheet({
         if (!pending) onDismiss();
       }}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!pending) onDismiss();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.center} pointerEvents="box-none">
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <View style={styles.headerIcon}>
-              <Ionicons name="star" size={20} color={colors.warning} />
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>Rate your delivery</Text>
-              <Text style={styles.subtitle} numberOfLines={2}>
-                How was your experience with <Text style={styles.subtitleStrong}>{ratedUserName}</Text>?
-              </Text>
-            </View>
-            <Pressable
-              onPress={onDismiss}
-              hitSlop={8}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-
-          {routeSummary ? (
-            <View style={styles.routePill}>
-              <Ionicons name="location-outline" size={13} color={colors.mutedText} />
-              <Text style={styles.routeText} numberOfLines={1}>{routeSummary}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((n) => (
+      {/* A Modal's window is not resized for the keyboard on either platform
+          (edge-to-edge on Android), so lift the card ourselves; the card scrolls once it no longer fits. */}
+      <KeyboardLift style={styles.flex}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!pending) onDismiss();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.center} pointerEvents="box-none">
+          {/* "handled": a tap outside the multiline review dismisses the keyboard. */}
+          <ScrollView
+            style={styles.card}
+            contentContainerStyle={styles.cardContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            <View style={styles.header}>
+              <View style={styles.headerIcon}>
+                <Ionicons name="star" size={20} color={colors.warning} />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>Rate your delivery</Text>
+                <Text style={styles.subtitle} numberOfLines={2}>
+                  How was your experience with <Text style={styles.subtitleStrong}>{ratedUserName}</Text>?
+                </Text>
+              </View>
               <Pressable
-                key={n}
-                onPress={() => setScore(n)}
-                hitSlop={4}
+                onPress={onDismiss}
+                hitSlop={8}
                 disabled={pending}
                 accessibilityRole="button"
-                accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
+                accessibilityLabel="Close"
               >
-                <Ionicons
-                  name={n <= score ? "star" : "star-outline"}
-                  size={38}
-                  color={n <= score ? colors.warning : colors.border}
-                />
+                <Ionicons name="close" size={20} color={colors.mutedText} />
               </Pressable>
-            ))}
-          </View>
-          <Text style={styles.scoreLabel}>{score > 0 ? STAR_LABELS[score - 1] : "Tap to rate"}</Text>
+            </View>
 
-          <Text style={styles.reviewLabel}>
-            Review <Text style={styles.labelMuted}>(optional)</Text>
-          </Text>
-          <TextInput
-            value={review}
-            onChangeText={(t) => setReview(t.slice(0, MAX_REVIEW))}
-            placeholder="Share a few words about your experience…"
-            placeholderTextColor={colors.subtleText}
-            style={[styles.input, styles.textarea]}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            editable={!pending}
-            maxLength={MAX_REVIEW}
-          />
+            {routeSummary ? (
+              <View style={styles.routePill}>
+                <Ionicons name="location-outline" size={13} color={colors.mutedText} />
+                <Text style={styles.routeText} numberOfLines={1}>{routeSummary}</Text>
+              </View>
+            ) : null}
 
-          <View style={styles.footer}>
-            <AppButton
-              label="Later"
-              variant="secondary"
-              onPress={onDismiss}
-              disabled={pending}
-              style={styles.footerButton}
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable
+                  key={n}
+                  onPress={() => setScore(n)}
+                  hitSlop={4}
+                  disabled={pending}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
+                >
+                  <Ionicons
+                    name={n <= score ? "star" : "star-outline"}
+                    size={38}
+                    color={n <= score ? colors.warning : colors.border}
+                  />
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.scoreLabel}>{score > 0 ? STAR_LABELS[score - 1] : "Tap to rate"}</Text>
+
+            <Text style={styles.reviewLabel}>
+              Review <Text style={styles.labelMuted}>(optional)</Text>
+            </Text>
+            <TextInput
+              value={review}
+              onChangeText={(t) => setReview(t.slice(0, MAX_REVIEW))}
+              placeholder="Share a few words about your experience…"
+              placeholderTextColor={colors.subtleText}
+              style={[styles.input, styles.textarea]}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              editable={!pending}
+              maxLength={MAX_REVIEW}
             />
-            <AppButton
-              label={pending ? "Submitting…" : "Submit rating"}
-              onPress={handleSubmit}
-              disabled={pending || score <= 0}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              leftIcon={pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
-              style={styles.footerButton}
-            />
-          </View>
+
+            <View style={styles.footer}>
+              <AppButton
+                label="Later"
+                variant="secondary"
+                onPress={onDismiss}
+                disabled={pending}
+                style={styles.footerButton}
+              />
+              <AppButton
+                label={pending ? "Submitting…" : "Submit rating"}
+                onPress={handleSubmit}
+                disabled={pending || score <= 0}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
+                style={styles.footerButton}
+              />
+            </View>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardLift>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.45)" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+  },
   card: {
     width: "100%",
     maxWidth: 440,
+    flexGrow: 0,
     borderRadius: 22,
     backgroundColor: colors.card,
-    padding: 20,
-    gap: 14,
   },
+  cardContent: { padding: 20, gap: 14 },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   headerIcon: {
     width: 40,

@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Modal, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import type { MatchCandidate } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatCandidateDate, parcelRouteOf, tripRouteOf } from "@/utils/matchCandidateLabel";
@@ -11,6 +13,11 @@ interface Props {
   open: boolean;
   candidates: MatchCandidate[];
   pending?: boolean;
+  /**
+   * Why the last attempt failed. Rendered inside the sheet: a toast is drawn
+   * in the root view, UNDER this Modal, so it would never be seen.
+   */
+  error?: string | null;
   onCancel: () => void;
   onPick: (candidate: MatchCandidate) => void;
 }
@@ -26,7 +33,9 @@ interface Props {
  *
  * Keep in sync with web `src/customer/components/MatchDealPickerDialog.tsx`.
  */
-export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPick }: Props) {
+export function MatchDealPickerModal({ open, candidates, pending, error, onCancel, onPick }: Props) {
+  // The sheet is pinned to bottom: 0 — clear the iPhone home indicator.
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable
@@ -35,7 +44,7 @@ export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPi
         accessibilityRole="button"
         accessibilityLabel="Dismiss"
       />
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         <View style={styles.header}>
           <View style={styles.headerIcon}>
             <Ionicons name="cube" size={20} color={colors.primary} />
@@ -83,6 +92,12 @@ export function MatchDealPickerModal({ open, candidates, pending, onCancel, onPi
           })}
         </ScrollView>
 
+        {error ? (
+          <View style={styles.errorWrap}>
+            <FormBanner message={error} />
+          </View>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
           onPress={onCancel}
@@ -108,7 +123,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 16,
-    paddingBottom: 24,
     paddingHorizontal: 16,
   },
   header: { flexDirection: "row", gap: 10, marginBottom: 12 },
@@ -141,6 +155,7 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
   rowVia: { color: colors.text, fontSize: 11, lineHeight: 15, marginTop: 2 },
   rowMeta: { marginTop: 2, fontSize: 12, color: colors.subtleText },
+  errorWrap: { marginTop: 12 },
   cancel: { marginTop: 12, alignItems: "center", paddingVertical: 10 },
   cancelText: { fontSize: 14, fontWeight: "600", color: colors.subtleText },
 });

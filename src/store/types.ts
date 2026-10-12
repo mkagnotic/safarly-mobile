@@ -8,7 +8,6 @@ import type {
   NotificationItem,
   Opportunity,
   Parcel,
-  SafetyAlert,
   Trip,
   UserRole,
 } from "@/types/models";
@@ -73,7 +72,6 @@ export interface AppState {
   disputes: Dispute[];
   bids: Bid[];
   opportunities: Opportunity[];
-  safetyAlerts: SafetyAlert[];
   paymentMethods: PaymentMethod[];
   walletBalance: number;
   language: AppLanguage;
@@ -107,13 +105,11 @@ export interface AppState {
   login: () => void;
   logout: () => void;
   toggleLiveDataVisibility: () => void;
-  setLiveDataVisibility: (visible: boolean) => void;
   setLanguage: (language: AppLanguage) => void;
   setTimeFormat: (timeFormat: AppTimeFormat) => void;
   setTimeZone: (timeZone: AppTimeZone) => void;
   setWalletBalance: (nextBalance: number) => void;
   adjustWalletBalance: (delta: number) => void;
-  addPaymentMethod: (method: Omit<PaymentMethod, "id" | "isDefault">) => void;
   addNotification: (item: Omit<NotificationItem, "read"> & { read?: boolean }) => void;
   updateUserProfile: (patch: Partial<UserProfile>) => void;
   /** Replace the profile slice from a freshly-fetched API profile, preserving only fields the API doesn't own (e.g. `phone`). */
@@ -127,7 +123,6 @@ export interface AppState {
   updateDisputeStatus: (disputeId: string, status: Dispute["status"]) => void;
   addBid: (bid: Bid) => void;
   updateBidStatus: (bidId: string, status: Bid["status"]) => void;
-  dismissSafetyAlert: (alertId: string) => void;
   addMessageToThread: (threadName: string, message: { from: "me" | "them"; text: string; time: string }) => void;
   updateThreadStatus: (threadName: string, status: MessageThread["status"]) => void;
   setActiveRole: (role: UserRole) => void;

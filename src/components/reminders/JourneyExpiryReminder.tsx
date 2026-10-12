@@ -43,7 +43,14 @@ async function persistSeen(ids: Set<string>): Promise<void> {
  * notifications, and on first load pops a single modal listing every unseen
  * `journey_expiry` notice, then marks them seen.
  */
-export function JourneyExpiryReminder() {
+export function JourneyExpiryReminder({
+  held = false,
+  onActiveChange,
+}: {
+  /** Another app-wide popup is showing; wait (iOS can present one Modal at a time). */
+  held?: boolean;
+  onActiveChange?: (active: boolean) => void;
+} = {}) {
   const { notifications, loading } = useMyNotifications({ perPage: 50 });
   const [items, setItems] = useState<Notification[] | null>(null);
   const [closed, setClosed] = useState(false);
@@ -84,7 +91,12 @@ export function JourneyExpiryReminder() {
     })();
   }, [loading, notifications]);
 
-  if (closed || !items || items.length === 0) return null;
+  const active = !held && !closed && !!items && items.length > 0;
+  useEffect(() => {
+    onActiveChange?.(active);
+  }, [active, onActiveChange]);
+
+  if (!active || !items) return null;
 
   const close = () => setClosed(true);
 

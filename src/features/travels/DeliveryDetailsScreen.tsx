@@ -22,6 +22,7 @@ import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
 import { formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
@@ -164,7 +165,9 @@ export function DeliveryDetailsScreen() {
       {counterpart ? (
         <Card style={styles.personCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initialsOf(counterpart.name)}</Text>
+            <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+              {initialsOf(counterpart.name)}
+            </Text>
           </View>
           <View style={styles.personCol}>
             <Text style={styles.personName} numberOfLines={1}>

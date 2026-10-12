@@ -16,6 +16,18 @@ export function parseLocalDate(s?: string | null): Date | null {
 }
 
 /**
+ * A Date's LOCAL calendar day as `YYYY-MM-DD` — the shape of a SQL `date`
+ * column, so the two compare as strings. Built by hand rather than with
+ * the "en-CA" locale trick, whose output depends on the locale data the
+ * JS engine ships (Hermes on iOS can return a different shape).
+ */
+export function toLocalYmd(d: Date = new Date()): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/**
  * Render a date-only `YYYY-MM-DD` column for display.
  *
  * ALWAYS use this for `travel_date`, `travel_date_from/_to`, `deadline`,

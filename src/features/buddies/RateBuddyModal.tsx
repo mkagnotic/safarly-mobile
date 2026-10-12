@@ -5,6 +5,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +13,7 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 
 const STAR_LABELS = ["Poor", "Fair", "Good", "Very Good", "Excellent"] as const;
@@ -63,101 +65,118 @@ export function RateBuddyModal({
         if (!pending) onCancel();
       }}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!pending) onCancel();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.center} pointerEvents="box-none">
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Rate {buddyName}</Text>
-            <Pressable
-              onPress={onCancel}
-              hitSlop={8}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-
-          <Text style={styles.label}>How was your experience?</Text>
-          <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((n) => (
+      {/* A Modal's window is not resized for the keyboard on either platform
+          (edge-to-edge on Android), so lift the card ourselves; the card scrolls once it no longer fits. */}
+      <KeyboardLift style={styles.flex}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!pending) onCancel();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.center} pointerEvents="box-none">
+          {/* "handled": a tap outside the multiline review dismisses the keyboard. */}
+          <ScrollView
+            style={styles.card}
+            contentContainerStyle={styles.cardContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>Rate {buddyName}</Text>
               <Pressable
-                key={n}
-                onPress={() => setScore(n)}
-                hitSlop={4}
+                onPress={onCancel}
+                hitSlop={8}
                 disabled={pending}
                 accessibilityRole="button"
-                accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
+                accessibilityLabel="Close"
               >
-                <Ionicons
-                  name={n <= score ? "star" : "star-outline"}
-                  size={34}
-                  color={n <= score ? colors.warning : colors.subtleText}
-                />
+                <Ionicons name="close" size={20} color={colors.mutedText} />
               </Pressable>
-            ))}
-          </View>
-          {score > 0 ? <Text style={styles.scoreLabel}>{STAR_LABELS[score - 1]}</Text> : null}
+            </View>
 
-          <Text style={[styles.label, styles.reviewLabel]}>
-            Review <Text style={styles.labelMuted}>(Optional)</Text>
-          </Text>
-          <TextInput
-            value={review}
-            onChangeText={setReview}
-            placeholder="Share a few words about your trip together…"
-            placeholderTextColor={colors.subtleText}
-            style={[styles.input, styles.textarea]}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            editable={!pending}
-          />
+            <Text style={styles.label}>How was your experience?</Text>
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable
+                  key={n}
+                  onPress={() => setScore(n)}
+                  hitSlop={4}
+                  disabled={pending}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
+                >
+                  <Ionicons
+                    name={n <= score ? "star" : "star-outline"}
+                    size={34}
+                    color={n <= score ? colors.warning : colors.subtleText}
+                  />
+                </Pressable>
+              ))}
+            </View>
+            {score > 0 ? <Text style={styles.scoreLabel}>{STAR_LABELS[score - 1]}</Text> : null}
 
-          <View style={styles.footer}>
-            <AppButton
-              label="Cancel"
-              variant="secondary"
-              onPress={onCancel}
-              disabled={pending}
-              style={styles.footerButton}
+            <Text style={[styles.label, styles.reviewLabel]}>
+              Review <Text style={styles.labelMuted}>(Optional)</Text>
+            </Text>
+            <TextInput
+              value={review}
+              onChangeText={setReview}
+              placeholder="Share a few words about your trip together…"
+              placeholderTextColor={colors.subtleText}
+              style={[styles.input, styles.textarea]}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              editable={!pending}
             />
-            <AppButton
-              label={pending ? "Submitting…" : "Submit rating"}
-              onPress={handleSubmit}
-              disabled={pending || score <= 0}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              leftIcon={
-                pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
-              }
-              style={styles.footerButton}
-            />
-          </View>
+
+            <View style={styles.footer}>
+              <AppButton
+                label="Cancel"
+                variant="secondary"
+                onPress={onCancel}
+                disabled={pending}
+                style={styles.footerButton}
+              />
+              <AppButton
+                label={pending ? "Submitting…" : "Submit rating"}
+                onPress={handleSubmit}
+                disabled={pending || score <= 0}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={
+                  pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+                }
+                style={styles.footerButton}
+              />
+            </View>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardLift>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(15,15,25,0.4)" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+  },
   card: {
     width: "100%",
     maxWidth: 440,
+    flexGrow: 0,
     borderRadius: 22,
     backgroundColor: colors.card,
-    padding: 20,
-    gap: 14,
   },
+  cardContent: { padding: 20, gap: 14 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
 

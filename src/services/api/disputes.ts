@@ -32,7 +32,11 @@ export const disputesApi = {
    * the edge function's `req.formData()` would 422 on an empty part otherwise.
    */
   uploadEvidence: (id: string, files: RNUploadFile[]) =>
-    api.uploadRNFiles<{ evidence_files: string[] }>(
+    api.uploadRNFiles<{
+      evidence_files: { storage_path?: string; url: string | null; name: string }[];
+      /** Files the server did NOT store, each with a human-readable reason. */
+      skipped_files?: { name: string; reason: string; message: string }[];
+    }>(
       `/dispute-handler/${id}/evidence`,
       files,
       "files",

@@ -80,3 +80,44 @@ describe("every other notification route is untouched", () => {
     assert.equal(resolveNotificationRoute("/customer/payout-setup", "payment").screen, "PayoutSetupTab");
   });
 });
+
+describe("listing, profile and pay deep links open their screens", () => {
+  test("/customer/bookings/:id/pay opens checkout, not the bookings list", () => {
+    assert.deepEqual(resolveNotificationRoute(`/customer/bookings/${ID}/pay`, "booking"), {
+      screen: "PayBookingTab",
+      params: { bookingId: ID },
+    });
+    assert.deepEqual(resolveNotificationRoute(`/customer/bookings/${ID}/pay?from=push`, "payment"), {
+      screen: "PayBookingTab",
+      params: { bookingId: ID },
+    });
+  });
+
+  test("a booking link that merely starts with 'pay' is not checkout", () => {
+    assert.equal(resolveNotificationRoute(`/customer/bookings/${ID}/payout`, "booking").screen, "BookingsTab");
+  });
+
+  test("/customer/parcels/:id opens the parcel", () => {
+    assert.deepEqual(resolveNotificationRoute(`/customer/parcels/${ID}`, "booking"), {
+      screen: "ParcelDetailsTab",
+      params: { parcelId: ID },
+    });
+  });
+
+  test("/customer/trips/:id opens the trip (and /customer/my-trips is unaffected)", () => {
+    assert.deepEqual(resolveNotificationRoute(`/customer/trips/${ID}`, "booking"), {
+      screen: "TripDetailsTab",
+      params: { tripId: ID },
+    });
+    assert.equal(resolveNotificationRoute("/customer/my-trips", "booking").screen, "Parcels");
+  });
+
+  test("/customer/profile opens Profile; /customer/profile/wallet opens Payments", () => {
+    assert.deepEqual(resolveNotificationRoute("/customer/profile", "kyc"), { screen: "Profile" });
+    assert.deepEqual(resolveNotificationRoute("/customer/profile?x=1", null), { screen: "Profile" });
+    assert.equal(resolveNotificationRoute("/customer/profile/wallet", "payment").screen, "TransactionsTab");
+    assert.equal(resolveNotificationRoute("/customer/profile/kyc", "kyc").screen, "KycVerificationTab");
+    // A different path that only shares the prefix is not the profile.
+    assert.notEqual(resolveNotificationRoute("/customer/profiles", null).screen, "Profile");
+  });
+});

@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -81,7 +82,8 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   const validate = useCallback(
     (nextEmail: string): boolean => {
       const next: FormErrors = {};
-      if (!fullName.trim()) next.fullName = "Name is required";
+      // Web parity: a single letter is not a name.
+      if (fullName.trim().length < 2) next.fullName = "Enter your full name";
       if (!nextEmail) next.email = "Email is required";
       else if (!EMAIL_RE.test(nextEmail)) next.email = "Enter a valid email";
       next.password = validatePassword(password) ?? undefined;
@@ -164,8 +166,12 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
 
         if (info?.exists && info.confirmed) {
           if (!info.has_password && info.providers.includes("google")) {
+            // Without the Google button on this device, "Forgot password" is
+            // the way in: it sets a password on a Google-only account.
             setFormError(
-              "This email is registered with Google. Use “Continue with Google” to sign in.",
+              isGoogleSignInConfigured()
+                ? "This email is registered with Google. Use “Continue with Google” to sign in."
+                : "This email is registered with Google. Use “Forgot password” on the sign-in screen to set a password for it.",
             );
           } else {
             setErrors((e) => ({
@@ -216,7 +222,11 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
   }, [busy, validate, signUpWithPassword, email, password, fullName, onSwitchToLogin, setKycWelcomePending]);
 
   return (
-    <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
+    <Screen
+      edges={["top", "right", "left", "bottom"]}
+      scroll={false}
+      disableKeyboardAvoiding={Platform.OS === "ios"}
+    >
       <View style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -301,6 +311,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="password-new"
+                textContentType="newPassword"
                 editable={!busy}
                 error={errors.password}
                 returnKeyType="next"
@@ -336,6 +347,9 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoCorrect={false}
+              // Same hints as the field above, so iOS strong-password autofill fills both.
+              autoComplete="password-new"
+              textContentType="newPassword"
               editable={!busy}
               error={errors.confirmPassword}
               returnKeyType="go"
@@ -387,7 +401,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
               </Pressable>
             </View>
             <LegalConsentText
-              prefix="By creating an account, you agree to our"
+              prefix="By creating an account, you confirm you're 18 or older and agree to our"
               style={styles.terms}
               disabled={busy}
             />

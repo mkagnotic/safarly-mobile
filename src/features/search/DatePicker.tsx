@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors, primaryTint } from "@/theme/colors";
+import { FIXED_CELL_MAX_FONT_SCALE, accessibleDateLabel } from "@/utils/accessibleDate";
 
 interface Props {
   /** ISO date string "YYYY-MM-DD" or empty. */
@@ -63,6 +65,9 @@ function formatDisplay(d: Date): string {
 
 export function DatePicker({ value, onChange, placeholder, disabled, minDate, maxDate }: Readonly<Props>) {
   const [open, setOpen] = useState(false);
+  // The sheet is pinned to bottom: 0 — clear the iPhone home indicator
+  // (no inset: the original 20pt).
+  const insets = useSafeAreaInsets();
   const initialMonth = useMemo(() => startOfMonth(fromIso(value) ?? new Date()), [value]);
   const [viewMonth, setViewMonth] = useState(initialMonth);
 
@@ -138,7 +143,7 @@ export function DatePicker({ value, onChange, placeholder, disabled, minDate, ma
         statusBarTranslucent
       >
         <Pressable style={styles.backdrop} onPress={close} />
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
           <View style={styles.handle} />
 
           <View style={styles.headerRow}>
@@ -153,7 +158,7 @@ export function DatePicker({ value, onChange, placeholder, disabled, minDate, ma
             >
               <Ionicons name="chevron-back" size={20} color={prevDisabled ? colors.subtleText : colors.text} />
             </Pressable>
-            <Text style={styles.monthLabel}>
+            <Text style={styles.monthLabel} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
               {viewMonth.toLocaleDateString(undefined, {
                 month: "long",
                 year: "numeric",
@@ -174,7 +179,7 @@ export function DatePicker({ value, onChange, placeholder, disabled, minDate, ma
 
           <View style={styles.dowRow}>
             {DOW.map((d) => (
-              <Text key={d} style={styles.dowText}>
+              <Text key={d} style={styles.dowText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
                 {d}
               </Text>
             ))}
@@ -197,7 +202,7 @@ export function DatePicker({ value, onChange, placeholder, disabled, minDate, ma
                   ]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected, disabled: outOfRange }}
-                  accessibilityLabel={formatDisplay(date)}
+                  accessibilityLabel={`${accessibleDateLabel(date)}${isToday ? ", today" : ""}`}
                 >
                   <View
                     style={[
@@ -207,6 +212,7 @@ export function DatePicker({ value, onChange, placeholder, disabled, minDate, ma
                     ]}
                   >
                     <Text
+                      maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}
                       style={[
                         styles.cellText,
                         !inMonth && styles.cellTextOut,
@@ -274,7 +280,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingBottom: 20,
     paddingHorizontal: 16,
   },
   handle: {

@@ -8,8 +8,10 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";
 
 export type MatchUserRole = "carrier" | "sender";
@@ -25,6 +27,11 @@ interface MatchConfirmationModalProps {
   userRole?: MatchUserRole;
   /** Conversation `context_type` — `"buddy"` switches the copy to the buddy variant. */
   contextType?: string;
+  /**
+   * Why the last attempt failed. Rendered inside the sheet: a toast is drawn
+   * in the root view, UNDER this Modal, so it would never be seen.
+   */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -67,10 +74,14 @@ export function MatchConfirmationModal({
   open,
   pending,
   contextType = "booking",
+  error,
   onCancel,
   onConfirm,
 }: Readonly<MatchConfirmationModalProps>) {
   const [agreed, setAgreed] = useState(false);
+  // The sheet is pinned to bottom: 0 — keep Confirm Match clear of the iPhone
+  // home indicator (no inset: the original 22pt).
+  const insets = useSafeAreaInsets();
   const isBuddy = contextType === "buddy";
 
   // Reset agreement when the modal closes so the next open requires re-confirmation.
@@ -188,7 +199,13 @@ export function MatchConfirmationModal({
           </Pressable>
         </ScrollView>
 
-        <View style={styles.footer}>
+        {error ? (
+          <View style={styles.errorWrap}>
+            <FormBanner message={error} />
+          </View>
+        ) : null}
+
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) + 8 }]}>
           <Pressable
             onPress={onCancel}
             disabled={pending}
@@ -298,6 +315,7 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
 
   body: { maxHeight: 480 },
+  errorWrap: { paddingHorizontal: 18, paddingBottom: 10 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14 },
 
   section: { marginBottom: 12 },
@@ -364,7 +382,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 18,
     paddingTop: 12,
-    paddingBottom: 22,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     justifyContent: "flex-end",
