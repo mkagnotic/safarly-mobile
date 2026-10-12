@@ -14,8 +14,12 @@ import { ANY_CITY } from "@/features/search/CityPicker";
  * True when departure and destination are genuinely the same place.
  *
  * `ANY_CITY` is exempt: it's a wildcard, so "Any -> Any" is a deliberately
- * broad listing rather than a mistake. Note web does NOT exempt it and so
- * rejects that legitimate case — mobile's behaviour is the intended one.
+ * broad listing rather than a mistake.
+ *
+ * Web agreed with this as of `src/lib/routeValidation.ts`, and
+ * `_shared/validation.ts` now enforces the same exemption server-side, so all
+ * three agree. This note used to say web rejected the case and that mobile was
+ * the intended behaviour; that was true when written and is not any more.
  */
 export function isSameRoute(
   fromCountry: string,
