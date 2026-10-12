@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   CompositeNavigationProp,
@@ -17,6 +17,9 @@ import {
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
+import { withoutBlocked } from "@/features/moderation/blockFilter";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import {
   getErrorMessage,
@@ -76,10 +79,23 @@ interface Props {
 export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
   const navigation = useNavigation<Nav>();
 
-  const [rows, setRows] = useState<MatchRow[]>([]);
+  const [allRows, setRows] = useState<MatchRow[]>([]);
+  // Suggestions are browse content: blocked people (either direction) drop out.
+  const { hiddenUserIds } = useBlockedUsers();
+  const rows = useMemo(
+    () => withoutBlocked(allRows, hiddenUserIds, (r) => r.personId),
+    [allRows, hiddenUserIds],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [startingId, setStartingId] = useState<string | null>(null);
+  // A failed "Message" tap is reported in the card — a toast would render
+  // under this Modal. Cleared on retry and whenever the modal closes.
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) setChatError(null);
+  }, [open]);
 
   const kind = source?.kind;
   const sourceId = source?.id;
@@ -165,6 +181,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
     async (personId: string | null, name: string) => {
       if (!personId) return;
       setStartingId(personId);
+      setChatError(null);
       try {
         const res = await messagesApi.createConversation(personId, "booking");
         onClose();
@@ -173,8 +190,10 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
           name: name || "Conversation",
           source: "messages",
         });
-      } catch {
-        // Surface nothing destructive — leave the modal open so the user can retry.
+      } catch (err) {
+        // Leave the modal open so the user can retry, and say why it failed —
+        // this used to swallow the error and the tap simply did nothing.
+        setChatError(`Couldn't start the chat. ${getErrorMessage(err)}`);
       } finally {
         setStartingId(null);
       }
@@ -216,6 +235,8 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
           </View>
+
+          <FormBanner message={chatError} onDismiss={() => setChatError(null)} />
 
           {loading ? (
             <View style={styles.stateBox}>

@@ -1929,7 +1929,7 @@ export type Database = {
         | "delivered"
         | "cancelled"
         | "disputed"
-      buddy_request_status: "pending" | "accepted" | "rejected"
+      buddy_request_status: "pending" | "accepted" | "rejected" | "withdrawn"
       carrier_request_status: "pending" | "accepted" | "rejected" | "withdrawn"
       conversation_context: "booking" | "buddy" | "support"
       device_platform: "ios" | "android" | "web"
@@ -2139,7 +2139,7 @@ export const Constants = {
         "cancelled",
         "disputed",
       ],
-      buddy_request_status: ["pending", "accepted", "rejected"],
+      buddy_request_status: ["pending", "accepted", "rejected", "withdrawn"],
       carrier_request_status: ["pending", "accepted", "rejected", "withdrawn"],
       conversation_context: ["booking", "buddy", "support"],
       device_platform: ["ios", "android", "web"],

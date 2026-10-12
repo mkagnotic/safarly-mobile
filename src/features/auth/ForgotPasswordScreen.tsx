@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
@@ -140,7 +140,11 @@ export function ForgotPasswordScreen() {
   );
 
   return (
-    <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
+    <Screen
+      scroll={false}
+      edges={["top", "right", "left", "bottom"]}
+      disableKeyboardAvoiding={Platform.OS === "ios"}
+    >
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.scrollContent}

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 
 import { colors } from "@/theme/colors";
+import { formatMoney } from "@/utils/money";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -50,10 +51,9 @@ export function txStatusTone(status: string): { bg: string; fg: string } {
   }
 }
 
-/** Signed, currency-formatted amount: `+$12.00` for credits, `−$12.00` for debits. */
-export function formatTxAmount(amount: number, credit: boolean): string {
-  const abs = Math.abs(Number(amount) || 0).toFixed(2);
-  return `${credit ? "+" : "−"}$${abs}`;
+/** Signed, currency-formatted amount: `+$12.00` / `+₹1200.00` for credits, `−$12.00` for debits. */
+export function formatTxAmount(amount: number, credit: boolean, currency?: string | null): string {
+  return `${credit ? "+" : "−"}${formatMoney(Math.abs(Number(amount) || 0), currency)}`;
 }
 
 /** "Mon D, YYYY" — matches web's `formatDate`. */

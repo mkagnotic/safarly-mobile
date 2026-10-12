@@ -353,16 +353,16 @@ export function SendParcelScreen() {
     if (isSameRoute) errors.toCity = SAME_ROUTE_MSG;
     const w = parseFloat(weight);
     if (!w || w <= 0) {
-      errors.weight = "Enter a valid weight";
+      errors.weight = "Enter the parcel weight";
     } else if (w > (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) {
       errors.weight = `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
     }
     if (!deliveryBy) {
       errors.deliveryBy = dateMode === "range" ? "Pick the earliest date" : "Pick a delivery date";
     } else if (deliveryBy < today) {
-      errors.deliveryBy = "Can't be in the past";
+      errors.deliveryBy = "Date cannot be in the past";
     } else if (deliveryBy > maxDate) {
-      errors.deliveryBy = "Must be within 12 months";
+      errors.deliveryBy = "Date must be within the next 12 months";
     }
     if (dateMode === "range") {
       if (!deliveryTo) {
@@ -373,7 +373,7 @@ export function SendParcelScreen() {
         // this message promised otherwise.
         errors.deliveryTo = "Must be after the earliest";
       } else if (deliveryTo > maxDate) {
-        errors.deliveryTo = "Must be within 12 months";
+        errors.deliveryTo = "Latest date must be within the next 12 months";
       }
     }
     const fee = parseFloat(feeOffered);
@@ -877,6 +877,7 @@ export function SendParcelScreen() {
               value={description}
               onChangeText={setDescription}
               placeholder="Describe your parcel briefly…"
+              maxLength={2000}
               placeholderTextColor={colors.subtleText}
               style={[styles.input, styles.textarea]}
               multiline

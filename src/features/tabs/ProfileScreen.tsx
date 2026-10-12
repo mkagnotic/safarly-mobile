@@ -4,6 +4,7 @@ import { CompositeNavigationProp, useNavigation } from "@react-navigation/native
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
@@ -50,13 +51,24 @@ type ProfileMenuTarget =
   | "TermsOfService"
   | "PrivacyPolicy";
 
-interface MenuItem {
+interface MenuItemBase {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  target: ProfileMenuTarget;
   /** Optional unread-count pill rendered to the right of the label. */
   badge?: number;
 }
+
+/** A row either pushes an in-app route or opens a web page in the in-app browser. */
+type MenuItem =
+  | (MenuItemBase & { target: ProfileMenuTarget; url?: undefined })
+  | (MenuItemBase & { url: string; target?: undefined });
+
+/**
+ * The Privacy Policy points at a Cookie Policy and the Terms at a refund policy;
+ * the app has no screen for either, so these open the canonical web pages.
+ */
+const COOKIE_POLICY_URL = "https://mysafarly.com/cookie-policy";
+const REFUND_POLICY_URL = "https://mysafarly.com/refund-policy";
 
 interface MenuSection {
   title: string;
@@ -115,6 +127,8 @@ export function ProfileScreen() {
           { icon: "mail-outline", label: "Contact Us", target: "Contact" },
           { icon: "document-text-outline", label: "Terms of Service", target: "TermsOfService" },
           { icon: "shield-outline", label: "Privacy Policy", target: "PrivacyPolicy" },
+          { icon: "document-outline", label: "Cookie Policy", url: COOKIE_POLICY_URL },
+          { icon: "cash-outline", label: "Refund Policy", url: REFUND_POLICY_URL },
         ],
       },
     ],
@@ -201,12 +215,8 @@ export function ProfileScreen() {
             )}
             <Pressable
               style={styles.cameraBadge}
-              onPress={() =>
-                showToast({
-                  title: "Photo upload coming soon",
-                  variant: "info",
-                })
-              }
+              // Photo upload lives on Edit Profile; the badge is a shortcut there.
+              onPress={() => navigation.navigate("EditProfileTab")}
               accessibilityRole="button"
               accessibilityLabel="Change photo"
             >
@@ -286,7 +296,10 @@ export function ProfileScreen() {
                 icon={item.icon}
                 label={item.label}
                 badge={item.badge}
-                onPress={() => navigation.navigate(item.target)}
+                onPress={() => {
+                  if (item.url !== undefined) void WebBrowser.openBrowserAsync(item.url);
+                  else navigation.navigate(item.target);
+                }}
                 isLast={i === section.items.length - 1}
               />
             ))}

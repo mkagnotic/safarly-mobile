@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
+import { FIXED_CELL_MAX_FONT_SCALE, accessibleDateLabel } from "@/utils/accessibleDate";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
 
@@ -109,7 +110,9 @@ export function CalendarModal({
             >
               <Ionicons name="chevron-back" size={18} color={colors.text} />
             </Pressable>
-            <Text style={styles.monthLabel}>{monthLabel}</Text>
+            <Text style={styles.monthLabel} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+              {monthLabel}
+            </Text>
             <Pressable
               onPress={() => shiftMonth(1)}
               style={styles.navButton}
@@ -122,7 +125,7 @@ export function CalendarModal({
 
           <View style={styles.weekRow}>
             {WEEKDAYS.map((d) => (
-              <Text key={d} style={styles.weekday}>
+              <Text key={d} style={styles.weekday} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
                 {d}
               </Text>
             ))}
@@ -144,9 +147,11 @@ export function CalendarModal({
                     isToday && !isSelected && styles.cellToday,
                   ]}
                   accessibilityRole="button"
+                  accessibilityLabel={`${accessibleDateLabel(cell.date)}${isToday ? ", today" : ""}`}
                   accessibilityState={{ disabled, selected: isSelected }}
                 >
                   <Text
+                    maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}
                     style={[
                       styles.cellText,
                       !cell.inMonth && styles.cellTextMuted,

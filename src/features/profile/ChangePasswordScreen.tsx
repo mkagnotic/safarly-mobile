@@ -170,6 +170,7 @@ export function ChangePasswordScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="password-new"
+          textContentType="newPassword"
           editable={!submitting}
           error={errors.next}
           returnKeyType="next"
@@ -202,6 +203,9 @@ export function ChangePasswordScreen() {
         secureTextEntry={!showNew}
         autoCapitalize="none"
         autoCorrect={false}
+        // Same hints as the field above, so iOS strong-password autofill fills both.
+        autoComplete="password-new"
+        textContentType="newPassword"
         editable={!submitting}
         error={errors.confirm}
         returnKeyType="go"

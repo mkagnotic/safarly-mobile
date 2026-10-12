@@ -10,8 +10,13 @@ export interface UseBuddyRequestsResult {
   refetch: () => Promise<void>;
 }
 
-/** Pending buddy requests sent to me (Travel Partners → "Requests received"). */
-export function useBuddyRequests(): UseBuddyRequestsResult {
+/**
+ * Pending buddy requests. "received" (default) feeds Travel Partners →
+ * "Requests received"; "sent" feeds "Sent requests", where the sender can cancel.
+ */
+export function useBuddyRequests(
+  direction: "sent" | "received" = "received",
+): UseBuddyRequestsResult {
   const [requests, setRequests] = useState<BuddyRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | Error | null>(null);
@@ -25,7 +30,7 @@ export function useBuddyRequests(): UseBuddyRequestsResult {
       setLoading(true);
       setError(null);
       try {
-        const res = await buddiesApi.getMyRequests("received");
+        const res = await buddiesApi.getMyRequests(direction);
         if (!mountedRef.current) return;
         setRequests(res.data ?? []);
       } catch (err) {
@@ -38,7 +43,7 @@ export function useBuddyRequests(): UseBuddyRequestsResult {
     })();
     inFlightRef.current = promise;
     return promise;
-  }, []);
+  }, [direction]);
 
   useEffect(() => {
     mountedRef.current = true;

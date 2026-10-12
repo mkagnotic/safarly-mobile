@@ -25,10 +25,14 @@ test("fee breakdown: zero / null / negative collapse to zero", () => {
   assert.deepEqual(feeBreakdown(-10), { fee: 0, platformFee: 0, total: 0 });
 });
 
-test("carrier payout is 90% of the fee (Part 4 §4)", () => {
-  assert.equal(carrierPayout(50), 45);
-  assert.equal(carrierPayout(33.33), 30); // 33.33 * 0.9 = 29.997 → 30.00
+test("carrier payout is the full fee — the platform fee is charged to the sender, not deducted", () => {
+  assert.equal(carrierPayout(50), 50);
+  assert.equal(carrierPayout(33.33), 33.33);
   assert.equal(carrierPayout(0), 0);
+  assert.equal(carrierPayout(null), 0);
+  assert.equal(carrierPayout(-10), 0);
+  // sender pays fee + platform fee; carrier receives the fee
+  assert.equal(feeBreakdown(50).total - feeBreakdown(50).platformFee, carrierPayout(50));
 });
 
 test("countdown formats days, hours, minutes", () => {

@@ -4,7 +4,8 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
+import { ActivityIndicator, BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -102,12 +103,12 @@ export function KycVerificationScreen() {
     setBanner(null);
     clearError();
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = await requestLibraryPermission();
       if (perm.status !== "granted") {
         setBanner(permissionDeniedBanner("photos", perm, "upload your document"));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      const result = await ImagePicker.launchImageLibraryAsync({ ...LIBRARY_PICK_OPTIONS, mediaTypes: ["images"], quality: 0.8 });
       if (result.canceled || !result.assets?.[0]) return;
       applyImageAsset("doc", result.assets[0]);
     } catch (err) {
@@ -201,6 +202,21 @@ export function KycVerificationScreen() {
   const reviewNotes =
     kyc.submission?.review_notes ??
     "Your verification wasn't approved. Please review and resubmit your documents.";
+
+  // Android hardware back on step 2/3 steps back through the wizard instead of
+  // leaving the screen and throwing away the photos already captured. (iOS has
+  // no hardware back; the edge swipe still leaves, as on any screen.)
+  const wizardStepBack = showForm && step > 1;
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android" || !wizardStepBack) return undefined;
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3) : s));
+        return true;
+      });
+      return () => sub.remove();
+    }, [wizardStepBack]),
+  );
 
   return (
     <Screen contentContainerStyle={styles.screenContent}>

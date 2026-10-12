@@ -75,6 +75,7 @@ export async function isAppleSignInAvailable(): Promise<boolean> {
  */
 async function persistAppleFullName(
   fullName: AppleAuthenticationModule.AppleAuthenticationFullName | null,
+  email: string | null,
 ): Promise<void> {
   const name = [fullName?.givenName, fullName?.familyName]
     .filter(Boolean)
@@ -84,13 +85,26 @@ async function persistAppleFullName(
 
   try {
     const { data } = await usersApi.getMyProfile();
-    // Never clobber a name the user already has — this only fills the blank a
-    // fresh Apple account arrives with.
-    if (data?.profile?.name?.trim()) return;
+    // Never clobber a name the user already has — this only fills the
+    // placeholder a fresh Apple account arrives with.
+    if (!isPlaceholderName(data?.profile?.name, email)) return;
     await usersApi.updateMyProfile({ name });
   } catch {
     // Non-fatal by design; see above.
   }
+}
+
+/**
+ * Whether a profile name is the placeholder the `handle_new_user` trigger
+ * writes, not one the user chose. Apple's ID token carries no name, so the
+ * trigger falls back to the email's local part (for a private-relay address,
+ * something like `x7k2pq9abc`) — treat that, or a blank, as "not set".
+ */
+function isPlaceholderName(current: string | null | undefined, email: string | null): boolean {
+  const name = current?.trim() ?? "";
+  if (!name) return true;
+  const localPart = email?.split("@")[0]?.trim() ?? "";
+  return !!localPart && name.toLowerCase() === localPart.toLowerCase();
 }
 
 /**
@@ -124,14 +138,16 @@ export async function performAppleOAuth(): Promise<void> {
     throw new Error("Apple did not return an identity token. Please try again.");
   }
 
+  let sessionEmail: string | null = null;
   try {
-    await authApi.appleSignInWithIdToken(credential.identityToken);
+    const data = await authApi.appleSignInWithIdToken(credential.identityToken);
+    sessionEmail = data.user?.email ?? null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(mapOAuthError(message, null, "Apple"));
   }
 
-  await persistAppleFullName(credential.fullName ?? null);
+  await persistAppleFullName(credential.fullName ?? null, sessionEmail ?? credential.email ?? null);
 }
 
 /**

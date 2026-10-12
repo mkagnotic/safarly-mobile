@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import {
   ActivityIndicator,
   Image,
@@ -15,8 +16,8 @@ import {
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
-import { notifyPermissionDenied } from "@/utils/permissionBanner";
-import { showToast } from "@/feedback/appFeedback";
+import { FormBanner } from "@/components/ui/FormBanner";
+import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
 import {
   getErrorMessage,
   type ParcelReviewPhoto,
@@ -52,6 +53,13 @@ interface ParcelReviewModalProps {
   loading: boolean;
   pending: ParcelReviewPending;
   onClose: () => void;
+  /**
+   * Why the last upload / review request failed. Shown inside the sheet: a
+   * toast is drawn in the root view, under this Modal, and is never seen.
+   */
+  error?: string | null;
+  /** Clears `error` — called when the banner is dismissed. */
+  onDismissError?: () => void;
   onUpload: (files: RNUploadFile[]) => void;
   onApprove: () => void;
   onReject: (reason: ParcelReviewReason, note?: string) => void;
@@ -74,6 +82,8 @@ export function ParcelReviewModal({
   loading,
   pending,
   onClose,
+  error,
+  onDismissError,
   onUpload,
   onApprove,
   onReject,
@@ -85,6 +95,15 @@ export function ParcelReviewModal({
   const [reason, setReason] = useState<ParcelReviewReason>("too_large");
   const [note, setNote] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // A refused camera / photo permission is reported INSIDE the sheet. The
+  // shared `notifyPermissionDenied` alert is a root-level Modal, and iOS will
+  // not present a second Modal over this open sheet, so its "Open Settings"
+  // button never appeared there.
+  const [permissionBanner, setPermissionBanner] = useState<PermissionBanner | null>(null);
+  // A rejected pick (too large, picker failure) — same reason as above: a toast
+  // would render under this sheet.
+  const [localError, setLocalError] = useState<string | null>(null);
+  const shownError = localError ?? error ?? null;
 
   useEffect(() => {
     if (!open) {
@@ -93,6 +112,8 @@ export function ParcelReviewModal({
       setReason("too_large");
       setNote("");
       setConfirmCancel(false);
+      setPermissionBanner(null);
+      setLocalError(null);
     }
   }, [open]);
 
@@ -111,14 +132,17 @@ export function ParcelReviewModal({
   };
 
   const pickImages = async () => {
+    setLocalError(null);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = await requestLibraryPermission();
       if (perm.status !== "granted") {
-        notifyPermissionDenied("photos", perm, "add parcel photos");
+        setPermissionBanner(permissionDeniedBanner("photos", perm, "add parcel photos"));
         return;
       }
+      setPermissionBanner(null);
       const remaining = Math.max(1, maxPhotos - files.length);
       const result = await ImagePicker.launchImageLibraryAsync({
+        ...LIBRARY_PICK_OPTIONS,
         mediaTypes: ["images"],
         allowsMultipleSelection: true,
         selectionLimit: remaining,
@@ -128,7 +152,7 @@ export function ParcelReviewModal({
       const picked: RNUploadFile[] = [];
       for (const asset of result.assets) {
         if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-          showToast({ title: "Too large", message: "Each file must be under 10 MB.", variant: "error" });
+          setLocalError("Each file must be under 10 MB.");
           continue;
         }
         picked.push({
@@ -139,22 +163,24 @@ export function ParcelReviewModal({
       }
       if (picked.length) addFiles(picked);
     } catch (err) {
-      showToast({ title: "Couldn't pick photos", message: getErrorMessage(err), variant: "error" });
+      setLocalError(`Couldn't pick photos. ${getErrorMessage(err)}`);
     }
   };
 
   const takePhoto = async () => {
+    setLocalError(null);
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
-        notifyPermissionDenied("camera", perm, "take a photo");
+        setPermissionBanner(permissionDeniedBanner("camera", perm, "take a photo"));
         return;
       }
+      setPermissionBanner(null);
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        showToast({ title: "Too large", message: "Each file must be under 10 MB.", variant: "error" });
+        setLocalError("Each file must be under 10 MB.");
         return;
       }
       addFiles([
@@ -165,11 +191,12 @@ export function ParcelReviewModal({
         },
       ]);
     } catch (err) {
-      showToast({ title: "Couldn't take photo", message: getErrorMessage(err), variant: "error" });
+      setLocalError(`Couldn't take photo. ${getErrorMessage(err)}`);
     }
   };
 
   const pickPdfs = async () => {
+    setLocalError(null);
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: "application/pdf",
@@ -180,14 +207,14 @@ export function ParcelReviewModal({
       const picked: RNUploadFile[] = [];
       for (const asset of result.assets) {
         if (asset.size && asset.size > MAX_FILE_BYTES) {
-          showToast({ title: "Too large", message: "Each file must be under 10 MB.", variant: "error" });
+          setLocalError("Each file must be under 10 MB.");
           continue;
         }
         picked.push({ uri: asset.uri, name: asset.name, type: asset.mimeType ?? "application/pdf" });
       }
       if (picked.length) addFiles(picked);
     } catch (err) {
-      showToast({ title: "Couldn't pick files", message: getErrorMessage(err), variant: "error" });
+      setLocalError(`Couldn't pick files. ${getErrorMessage(err)}`);
     }
   };
 
@@ -224,6 +251,31 @@ export function ParcelReviewModal({
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
         </View>
+
+        {permissionBanner ? (
+          <View style={styles.permissionBanner}>
+            <FormBanner
+              variant={permissionBanner.variant}
+              title={permissionBanner.title}
+              message={permissionBanner.message}
+              actionLabel={permissionBanner.actionLabel}
+              onAction={permissionBanner.onAction}
+              onDismiss={() => setPermissionBanner(null)}
+            />
+          </View>
+        ) : null}
+
+        {shownError ? (
+          <View style={styles.permissionBanner}>
+            <FormBanner
+              message={shownError}
+              onDismiss={() => {
+                setLocalError(null);
+                onDismissError?.();
+              }}
+            />
+          </View>
+        ) : null}
 
         <ScrollView
           style={styles.body}
@@ -693,6 +745,7 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
 
+  permissionBanner: { paddingHorizontal: 18, paddingTop: 12 },
   body: { maxHeight: 540 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28 },
   centered: { paddingVertical: 40, alignItems: "center", justifyContent: "center" },

@@ -33,10 +33,13 @@ export function feeBreakdown(feeOffered: number | null | undefined): FeeBreakdow
   return { fee: safe, platformFee, total };
 }
 
-/** Payout the carrier receives after delivery = 90% of the fee. */
+/**
+ * Payout the carrier receives after delivery = the full agreed fee. The 10%
+ * platform fee is charged to the SENDER on top (see `feeBreakdown`), so nothing
+ * is deducted from the carrier — this matches what the server pays out.
+ */
 export function carrierPayout(feeOffered: number | null | undefined): number {
-  const { fee } = feeBreakdown(feeOffered);
-  return Math.round(fee * 0.9 * 100) / 100;
+  return feeBreakdown(feeOffered).fee;
 }
 
 /** "2d 4h left to pay" / "5h 12m left to pay" / "12m left to pay". */

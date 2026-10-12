@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -12,7 +10,14 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
+import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+
+/** Server ceiling on an offer (web `NewOfferDialog.tsx` parity). */
+const MAX_OFFER_AMOUNT = 1_000_000;
+/** `message-handler` rejects longer offer notes. */
+const MAX_NOTE_LENGTH = 500;
 
 export interface OfferComposerSubmit {
   amount: number;
@@ -53,7 +58,11 @@ export function OfferComposerModal({
   // Re-seeds on every open so a reopened composer never shows a stale draft.
   useEffect(() => {
     if (open) {
-      setAmount(currentAmount != null && currentAmount > 0 ? String(currentAmount) : "");
+      setAmount(
+        currentAmount != null && currentAmount > 0
+          ? sanitizeDecimalInput(String(Math.round(currentAmount * 100) / 100), 7, 2)
+          : "",
+      );
       setNote("");
     } else {
       setAmount("");
@@ -62,7 +71,8 @@ export function OfferComposerModal({
   }, [open, currentAmount]);
 
   const parsed = Number(amount);
-  const valid = Number.isFinite(parsed) && parsed > 0;
+  const tooHigh = Number.isFinite(parsed) && parsed > MAX_OFFER_AMOUNT;
+  const valid = Number.isFinite(parsed) && parsed > 0 && !tooHigh;
 
   const title = mode === "seed" ? "Make an offer" : "Counter offer";
   const body =
@@ -84,10 +94,7 @@ export function OfferComposerModal({
         if (!pending) onCancel();
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
+      <KeyboardLift style={styles.flex}>
         <Pressable
           style={styles.backdrop}
           onPress={() => {
@@ -112,7 +119,8 @@ export function OfferComposerModal({
               <Text style={styles.currency}>{currencySymbol}</Text>
               <TextInput
                 value={amount}
-                onChangeText={setAmount}
+                // Up to 7 whole + 2 decimal digits — the shape the server stores.
+                onChangeText={(v) => setAmount(sanitizeDecimalInput(v, 7, 2))}
                 placeholder="0.00"
                 placeholderTextColor={colors.subtleText}
                 style={styles.amountInput}
@@ -121,6 +129,7 @@ export function OfferComposerModal({
                 autoFocus
               />
             </View>
+            {tooHigh ? <Text style={styles.errorText}>Amount is too high</Text> : null}
 
             <TextInput
               value={note}
@@ -130,7 +139,7 @@ export function OfferComposerModal({
               style={styles.noteInput}
               editable={!pending}
               multiline
-              maxLength={280}
+              maxLength={MAX_NOTE_LENGTH}
             />
 
             <View style={styles.footer}>
@@ -144,7 +153,13 @@ export function OfferComposerModal({
                 <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
               <Pressable
-                onPress={() => onSubmit({ amount: parsed, note: note.trim() || undefined })}
+                onPress={() =>
+                  onSubmit({
+                    // Round to cents like web, so "12.345" can never reach the server.
+                    amount: Math.round(parsed * 100) / 100,
+                    note: note.trim() || undefined,
+                  })
+                }
                 disabled={pending || !valid}
                 style={[
                   styles.button,
@@ -165,7 +180,7 @@ export function OfferComposerModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardLift>
     </Modal>
   );
 }
@@ -207,6 +222,7 @@ const styles = StyleSheet.create({
   },
   currency: { color: colors.text, fontSize: 22, fontWeight: "800" },
   amountInput: { flex: 1, color: colors.text, fontSize: 22, fontWeight: "800", padding: 0 },
+  errorText: { color: colors.danger, fontSize: 12, fontWeight: "600", marginTop: -6 },
   noteInput: {
     minHeight: 60,
     maxHeight: 120,

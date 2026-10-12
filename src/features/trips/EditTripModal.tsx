@@ -14,6 +14,7 @@ import {
 
 import { LocationCard } from "@/components/ui/FormSection";
 import { AppButton } from "@/components/ui/AppButton";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MAX_WEIGHT_KG, isSameRoute } from "@/features/travels/routeValidation";
@@ -258,182 +259,187 @@ export function EditTripModal({
         if (!pending) onCancel();
       }}
     >
-      <Pressable
-        style={styles.backdrop}
-        onPress={() => {
-          if (!pending) onCancel();
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-      />
-      <View style={styles.center} pointerEvents="box-none">
-        <View style={styles.card}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Edit trip</Text>
-            <Pressable
-              onPress={onCancel}
-              hitSlop={8}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
+      {/* A Modal's window is not resized for the keyboard on either platform
+          (edge-to-edge on Android), so lift the card ourselves: the form scrolls in the space left and
+          the Cancel / Save footer stays above the keyboard. */}
+      <KeyboardLift style={styles.flex}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => {
+            if (!pending) onCancel();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.center} pointerEvents="box-none">
+          <View style={styles.card}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Edit trip</Text>
+              <Pressable
+                onPress={onCancel}
+                hitSlop={8}
+                disabled={pending}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={colors.mutedText} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>From</Text>
-            <LocationCard
-              flag={fromFlag}
-              label={fromCountryName}
-              filled
-              onToggle={toggleFromCountry}
-            />
-            <CityPicker
-              value={form.from_city}
-              onChange={(v) => {
-                setForm((prev) => ({ ...prev, from_city: v }));
-                clearError("fromCity");
-              }}
-              cities={fromCities}
-              placeholder="Select departure city"
-              variant="card"
-              disabled={pending}
-              invalid={!!errors.fromCity}
-            />
-            {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>To</Text>
-            <LocationCard
-              flag={toFlag}
-              label={toCountryName}
-              filled
-              onToggle={toggleToCountry}
-            />
-            <CityPicker
-              value={form.to_city}
-              onChange={(v) => {
-                setForm((prev) => ({ ...prev, to_city: v }));
-                clearError("toCity");
-              }}
-              cities={toCities}
-              placeholder="Select arrival city"
-              variant="card"
-              disabled={pending}
-              invalid={!!toCityError}
-            />
-            {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
-          </View>
-
-          <View style={styles.dateRow}>
-            <View style={[styles.field, styles.dateField]}>
-              <Text style={styles.fieldLabel}>Depart</Text>
-              <Pressable
-                onPress={() => openCalendar("from")}
-                style={styles.input}
-                accessibilityRole="button"
-                accessibilityLabel="Pick depart date"
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>From</Text>
+              <LocationCard
+                flag={fromFlag}
+                label={fromCountryName}
+                filled
+                onToggle={toggleFromCountry}
+              />
+              <CityPicker
+                value={form.from_city}
+                onChange={(v) => {
+                  setForm((prev) => ({ ...prev, from_city: v }));
+                  clearError("fromCity");
+                }}
+                cities={fromCities}
+                placeholder="Select departure city"
+                variant="card"
                 disabled={pending}
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-                <Text
-                  style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
-                  numberOfLines={1}
-                >
-                  {fromLabel}
-                </Text>
-              </Pressable>
-              {errors.departDate ? (
-                <Text style={styles.inlineError}>{errors.departDate}</Text>
-              ) : null}
+                invalid={!!errors.fromCity}
+              />
+              {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
             </View>
 
-            <View style={[styles.field, styles.dateField]}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>To</Text>
+              <LocationCard
+                flag={toFlag}
+                label={toCountryName}
+                filled
+                onToggle={toggleToCountry}
+              />
+              <CityPicker
+                value={form.to_city}
+                onChange={(v) => {
+                  setForm((prev) => ({ ...prev, to_city: v }));
+                  clearError("toCity");
+                }}
+                cities={toCities}
+                placeholder="Select arrival city"
+                variant="card"
+                disabled={pending}
+                invalid={!!toCityError}
+              />
+              {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
+            </View>
+
+            <View style={styles.dateRow}>
+              <View style={[styles.field, styles.dateField]}>
+                <Text style={styles.fieldLabel}>Depart</Text>
+                <Pressable
+                  onPress={() => openCalendar("from")}
+                  style={styles.input}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pick depart date"
+                  disabled={pending}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                  <Text
+                    style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
+                    numberOfLines={1}
+                  >
+                    {fromLabel}
+                  </Text>
+                </Pressable>
+                {errors.departDate ? (
+                  <Text style={styles.inlineError}>{errors.departDate}</Text>
+                ) : null}
+              </View>
+
+              <View style={[styles.field, styles.dateField]}>
+                <Text style={styles.fieldLabel}>
+                  Return <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                </Text>
+                <Pressable
+                  onPress={() => openCalendar("to")}
+                  style={styles.input}
+                  accessibilityRole="button"
+                  accessibilityLabel="Pick return date"
+                  disabled={pending}
+                >
+                  <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                  <Text
+                    style={[styles.inputText, !selectedTo && styles.inputPlaceholder]}
+                    numberOfLines={1}
+                  >
+                    {toLabel}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Luggage capacity (kg)</Text>
+              <TextInput
+                value={form.luggage_capacity_kg}
+                onChangeText={(t) => {
+                  setForm((prev) => ({ ...prev, luggage_capacity_kg: t }));
+                  clearError("capacity");
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.placeholderText}
+                style={[styles.textInput, !!errors.capacity && styles.inputError]}
+                editable={!pending}
+              />
+              {errors.capacity ? <Text style={styles.inlineError}>{errors.capacity}</Text> : null}
+            </View>
+
+            <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Return <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Notes <Text style={styles.fieldLabelMuted}>(Optional)</Text>
               </Text>
-              <Pressable
-                onPress={() => openCalendar("to")}
-                style={styles.input}
-                accessibilityRole="button"
-                accessibilityLabel="Pick return date"
-                disabled={pending}
-              >
-                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-                <Text
-                  style={[styles.inputText, !selectedTo && styles.inputPlaceholder]}
-                  numberOfLines={1}
-                >
-                  {toLabel}
-                </Text>
-              </Pressable>
+              <TextInput
+                value={form.notes}
+                onChangeText={(t) => setForm((prev) => ({ ...prev, notes: t }))}
+                placeholder="Any notes for carriers…"
+                placeholderTextColor={colors.subtleText}
+                style={[styles.textInput, styles.multiline]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={!pending}
+              />
             </View>
-          </View>
+            </ScrollView>
 
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Luggage capacity (kg)</Text>
-            <TextInput
-              value={form.luggage_capacity_kg}
-              onChangeText={(t) => {
-                setForm((prev) => ({ ...prev, luggage_capacity_kg: t }));
-                clearError("capacity");
-              }}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={colors.placeholderText}
-              style={[styles.textInput, !!errors.capacity && styles.inputError]}
-              editable={!pending}
-            />
-            {errors.capacity ? <Text style={styles.inlineError}>{errors.capacity}</Text> : null}
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>
-              Notes <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-            </Text>
-            <TextInput
-              value={form.notes}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, notes: t }))}
-              placeholder="Any notes for carriers…"
-              placeholderTextColor={colors.subtleText}
-              style={[styles.textInput, styles.multiline]}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-              editable={!pending}
-            />
-          </View>
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <AppButton
-              label="Cancel"
-              variant="secondary"
-              onPress={onCancel}
-              disabled={pending}
-              style={styles.footerButton}
-            />
-            <AppButton
-              label={pending ? "Saving…" : "Save changes"}
-              onPress={handleSubmit}
-              disabled={pending}
-              gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-              leftIcon={
-                pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
-              }
-              style={styles.footerButton}
-            />
+            <View style={styles.footer}>
+              <AppButton
+                label="Cancel"
+                variant="secondary"
+                onPress={onCancel}
+                disabled={pending}
+                style={styles.footerButton}
+              />
+              <AppButton
+                label={pending ? "Saving…" : "Save changes"}
+                onPress={handleSubmit}
+                disabled={pending}
+                gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+                leftIcon={
+                  pending ? <ActivityIndicator size="small" color={colors.white} /> : undefined
+                }
+                style={styles.footerButton}
+              />
+            </View>
           </View>
         </View>
-      </View>
+      </KeyboardLift>
 
       {/* Calendar sub-modal — shared between Depart + Return */}
       <Modal
@@ -522,6 +528,7 @@ export function EditTripModal({
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15,15,25,0.4)",

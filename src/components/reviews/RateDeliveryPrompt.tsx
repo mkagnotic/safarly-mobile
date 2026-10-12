@@ -48,7 +48,14 @@ function useActiveRouteName(): string | undefined {
  * sides get asked independently. "Later" dismissals are kept in memory only, so
  * an un-acted prompt returns next launch — enough to ask again, not to nag.
  */
-export function RateDeliveryPrompt() {
+export function RateDeliveryPrompt({
+  held = false,
+  onActiveChange,
+}: {
+  /** Another app-wide popup is showing; wait (iOS can present one Modal at a time). */
+  held?: boolean;
+  onActiveChange?: (active: boolean) => void;
+} = {}) {
   const { user } = useAuth();
   const { bookings, refetch } = useBookings({ status: "delivered", perPage: 10 });
 
@@ -60,13 +67,17 @@ export function RateDeliveryPrompt() {
   const suppressed = activeRoute ? SUPPRESSED_ROUTES.has(activeRoute) : false;
 
   const pending = useMemo(() => {
-    if (!user || suppressed) return null;
+    if (!user || suppressed || held) return null;
     return bookings.find((b) => !b.viewer_has_rated && !dismissed.includes(b.id)) ?? null;
-  }, [bookings, user, suppressed, dismissed]);
+  }, [bookings, user, suppressed, held, dismissed]);
 
   useEffect(() => {
     setOpen(pending != null);
   }, [pending]);
+
+  useEffect(() => {
+    onActiveChange?.(open);
+  }, [open, onActiveChange]);
 
   const { ratedUserId, ratedUserName, routeSummary } = useMemo(() => {
     if (!pending || !user) {

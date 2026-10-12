@@ -6,7 +6,8 @@ import { AppInput } from "@/components/ui/AppInput";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { Booking, JourneyDelayReason } from "@/services/api";
 import { colors } from "@/theme/colors";
-import { formatLocalDate } from "@/utils/travelDate";
+import { journeyStepLabel } from "@/utils/journeySteps";
+import { formatLocalDate, toLocalYmd } from "@/utils/travelDate";
 
 /**
  * Stages 8, 9 and 10 - the carrier's own milestones once the money is secured
@@ -63,7 +64,15 @@ export function JourneyActionsCard({
   if (inFlight && landed) return null;
 
   const busy = pending !== null;
-  const dateValid = !newDate || /^\d{4}-\d{2}-\d{2}$/.test(newDate);
+  // A rescheduled trip can't be in the past. YYYY-MM-DD compares correctly as a
+  // string, and both sides are LOCAL calendar days (never UTC — that would
+  // reject "today" for evening users west of UTC).
+  const dateFormatOk = !newDate || /^\d{4}-\d{2}-\d{2}$/.test(newDate);
+  const datePast = Boolean(newDate) && dateFormatOk && newDate < toLocalYmd();
+  const dateValid = dateFormatOk && !datePast;
+  let dateError: string | undefined;
+  if (!dateFormatOk) dateError = "Use the format YYYY-MM-DD";
+  else if (datePast) dateError = "Date cannot be in the past";
 
   return (
     <View style={styles.card}>
@@ -74,7 +83,7 @@ export function JourneyActionsCard({
           color={colors.primary}
         />
         <Text style={styles.stepLabel}>
-          {preFlight ? "STEP 2 OF 5 · TRAVEL READY" : "STEP 3 OF 5 · IN TRANSIT"}
+          {journeyStepLabel(preFlight ? "travelReady" : "inTransit").toUpperCase()}
         </Text>
       </View>
 
@@ -228,7 +237,7 @@ export function JourneyActionsCard({
             value={newDate}
             onChangeText={setNewDate}
             autoCapitalize="none"
-            error={dateValid ? undefined : "Use the format YYYY-MM-DD"}
+            error={dateError}
           />
           <AppInput
             label="Anything your sender should know (optional)"

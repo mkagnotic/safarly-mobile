@@ -27,6 +27,7 @@ import {
   txTypeMeta,
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
+import { formatMoney } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "TransactionsTab">,
@@ -138,6 +139,10 @@ export function TransactionsScreen() {
       ? { label: "Total earned", value: summary?.total_earned ?? 0, tone: colors.safe }
       : { label: "Refunded", value: summary?.total_refunded ?? 0, tone: colors.mutedText };
 
+  // The summary endpoint carries no currency; use the account's (earnings) currency,
+  // else the currency of the user's transactions — never a hard-coded "$".
+  const summaryCurrency = earnings?.currency ?? items[0]?.currency ?? null;
+
   return (
     <Screen contentContainerStyle={styles.content} refreshEnabled onRefresh={load}>
       <View style={styles.headerRow}>
@@ -162,9 +167,9 @@ export function TransactionsScreen() {
         <>
           {/* Summary tiles */}
           <View style={styles.summaryRow}>
-            <SummaryTile label="Total paid" value={summary?.total_spent ?? 0} tone={colors.text} />
+            <SummaryTile label="Total paid" value={summary?.total_spent ?? 0} tone={colors.text} currency={summaryCurrency} />
             <SummaryTile label="Transactions" value={summary?.count ?? total} tone={colors.text} count />
-            <SummaryTile label={thirdTile.label} value={thirdTile.value} tone={thirdTile.tone} />
+            <SummaryTile label={thirdTile.label} value={thirdTile.value} tone={thirdTile.tone} currency={summaryCurrency} />
           </View>
 
           {/* Payout note — pending payout + auto-payout disclaimer + link
@@ -179,7 +184,7 @@ export function TransactionsScreen() {
             <View style={{ flex: 1 }}>
               {(earnings?.pending_payouts ?? 0) > 0 ? (
                 <Text style={styles.payoutNoteStrong}>
-                  {`$${Number(earnings?.pending_payouts ?? 0).toFixed(2)} pending payout`}
+                  {`${formatMoney(earnings?.pending_payouts ?? 0, earnings?.currency)} pending payout`}
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>
@@ -225,11 +230,17 @@ export function TransactionsScreen() {
   );
 }
 
-function SummaryTile({ label, value, tone, count }: Readonly<{ label: string; value: number; tone: string; count?: boolean }>) {
+function SummaryTile({
+  label,
+  value,
+  tone,
+  count,
+  currency,
+}: Readonly<{ label: string; value: number; tone: string; count?: boolean; currency?: string | null }>) {
   return (
     <View style={styles.summaryTile}>
       <Text style={[styles.summaryValue, { color: tone }]} numberOfLines={1}>
-        {count ? String(value) : `$${Number(value || 0).toFixed(2)}`}
+        {count ? String(value) : formatMoney(value || 0, currency)}
       </Text>
       <Text style={styles.summaryLabel}>{label}</Text>
     </View>
@@ -259,7 +270,7 @@ function TxRow({
       </View>
       <View style={styles.txRight}>
         <Text style={[styles.txAmount, { color: meta.credit ? colors.safe : colors.text }]}>
-          {formatTxAmount(tx.amount, meta.credit)}
+          {formatTxAmount(tx.amount, meta.credit, tx.currency)}
         </Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
           <Text style={[styles.statusText, { color: tone.fg }]}>{tx.status}</Text>

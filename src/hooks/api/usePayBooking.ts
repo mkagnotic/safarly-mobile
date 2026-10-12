@@ -65,7 +65,11 @@ export function usePayBooking(bookingId: string | undefined): UsePayBookingResul
       //    when the deep-link return fires ('success') OR the user closes the
       //    browser ('cancel'/'dismiss'). We don't trust the result type — we
       //    always verify with the server next.
-      await WebBrowser.openAuthSessionAsync(intent.checkout_url, PAYMENT_RETURN_URL);
+      //    Ephemeral (iOS only): skips the system "wants to use stripe.com to
+      //    Sign In" prompt, which reads as a login request before a payment.
+      await WebBrowser.openAuthSessionAsync(intent.checkout_url, PAYMENT_RETURN_URL, {
+        preferEphemeralSession: true,
+      });
 
       // 3. Confirm by session. The webhook may already have settled; confirm is
       //    idempotent and re-checks the session is really paid.

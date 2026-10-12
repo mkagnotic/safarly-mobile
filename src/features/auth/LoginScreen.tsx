@@ -46,10 +46,13 @@ const HERO_MARGIN_TOP = Platform.OS === "ios" ? 32 : 40;
 /**
  * Shown for ANY failed email/password sign-in. Deliberately identical whether
  * or not the address is registered. Kept word-for-word in sync with web
- * `RoleLogin.tsx`.
+ * `RoleLogin.tsx` — except where this build can't offer Google (iOS without its
+ * client): there the Google button is hidden, so point Google-only users at
+ * "Forgot password?", which sets a password on a Google-only account.
  */
-const SIGN_IN_FAILED_MESSAGE =
-  'Incorrect email or password. If you signed up with Google, use "Sign in with Google".';
+const SIGN_IN_FAILED_MESSAGE = isGoogleSignInConfigured()
+  ? 'Incorrect email or password. If you signed up with Google, use "Sign in with Google".'
+  : 'Incorrect email or password. If you signed up with Google, use "Forgot password?" to set a password for this email.';
 
 export function LoginScreen() {
   const navigation = useNavigation<Nav>();
@@ -208,7 +211,11 @@ export function LoginScreen() {
 
   if (mode === "email") {
     return (
-      <Screen scroll={false} edges={["top", "right", "left", "bottom"]}>
+      <Screen
+        scroll={false}
+        edges={["top", "right", "left", "bottom"]}
+        disableKeyboardAvoiding={Platform.OS === "ios"}
+      >
         <ScrollView
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}

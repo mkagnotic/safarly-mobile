@@ -22,7 +22,13 @@
  *
  *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID  -> "<n>-<hash>.apps.googleusercontent.com"  (required)
  *   EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID  -> "<n>-<hash>.apps.googleusercontent.com"  (iOS, later)
+ *   EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME -> "com.googleusercontent.apps.<n>-<hash>"   (iOS, later)
+ *
+ * The URL scheme is read by app.config.js at build time to register the
+ * native callback; it is mirrored here only so the iOS gate can require both.
  */
 export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "";
 
 export const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "";
+
+export const GOOGLE_IOS_URL_SCHEME = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME?.trim() ?? "";

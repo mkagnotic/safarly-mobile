@@ -351,9 +351,9 @@ export function ListTripScreen() {
     if (!departDate) {
       errors.departDate = "Pick a travel date";
     } else if (departDate < today) {
-      errors.departDate = "Can't be in the past";
+      errors.departDate = "Date cannot be in the past";
     } else if (departDate > maxDate) {
-      errors.departDate = "Must be within 12 months";
+      errors.departDate = "Date must be within the next 12 months";
     }
     const w = parseFloat(maxWeight);
     if (!w || w <= 0) {

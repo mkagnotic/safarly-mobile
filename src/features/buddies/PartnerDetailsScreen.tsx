@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ConfirmActionModal } from "@/components/chat/ConfirmActionModal";
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { UnavailableContentCard } from "@/components/moderation/UnavailableContentCard";
 import { AppButton } from "@/components/ui/AppButton";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -19,6 +21,9 @@ import {
   labelForStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
+import { useAuth } from "@/context/AuthContext";
+import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBuddyListingDetail } from "@/hooks/api/useBuddyListingDetail";
 import { MainTabParamList } from "@/navigation/types";
 import {
@@ -58,7 +63,7 @@ function formatDateRange(listing: BuddyListing): string {
   return `${fromLabel} → ${formatLongDate(to)}`;
 }
 
-function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
+function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?: ReactNode }>) {
   return (
     <View style={styles.headerRow}>
       <Pressable
@@ -70,6 +75,7 @@ function DetailsHeader({ onBack }: Readonly<{ onBack: () => void }>) {
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
       <Text style={styles.title}>Partner details</Text>
+      {right}
     </View>
   );
 }
@@ -184,6 +190,8 @@ export function PartnerDetailsScreen() {
   const listingId = route.params?.listingId;
 
   const { listing, loading, error, refetch } = useBuddyListingDetail(listingId);
+  const { user } = useAuth();
+  const { hiddenUserIds } = useBlockedUsers();
 
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -289,7 +297,20 @@ export function PartnerDetailsScreen() {
     );
   }
 
-  const canModify = !isTerminal(listing.status);
+  const ownerIds = [listing.user_id, listing.user?.id, listing.user_profiles?.id];
+  const isOwner = !!user?.id && ownerIds.includes(user.id);
+  // Only the person who posted the listing may edit or remove it.
+  const canModify = isOwner && !isTerminal(listing.status);
+
+  // A blocked person's listing (either direction), reached by deep link.
+  if (!isOwner && isHiddenOwner(ownerIds, hiddenUserIds)) {
+    return (
+      <Screen onRefresh={refetch}>
+        <DetailsHeader onBack={handleBack} />
+        <UnavailableContentCard onBack={handleBack} />
+      </Screen>
+    );
+  }
 
   const editInitial: EditBuddyListingFormValues = {
     from_city: listing.from_city === "Any" ? ANY_CITY : listing.from_city,
@@ -307,7 +328,17 @@ export function PartnerDetailsScreen() {
 
   return (
     <Screen onRefresh={refetch}>
-      <DetailsHeader onBack={handleBack} />
+      <DetailsHeader
+        onBack={handleBack}
+        right={
+          isOwner ? null : (
+            <ModerationMenu
+              target={{ type: "buddy_listing", id: listing.id }}
+              reportLabel="Report listing"
+            />
+          )
+        }
+      />
 
       {notice ? (
         <View style={styles.bannerSlot}>

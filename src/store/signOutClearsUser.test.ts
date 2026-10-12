@@ -67,7 +67,6 @@ describe("every persisted key has a decision attached", () => {
     "authenticated", "profileSetupDone", "kycWelcomePending", "userProfile",
     "paymentMethods", "walletBalance", "parcels", "trips", "messages",
     "notifications", "bookings", "disputes", "bids", "opportunities",
-    "safetyAlerts",
   ]);
 
   test("partialize is readable", () => {

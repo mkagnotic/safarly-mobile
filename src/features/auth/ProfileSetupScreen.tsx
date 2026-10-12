@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
+  BackHandler,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -220,7 +222,8 @@ export function ProfileSetupScreen() {
       // the web bounce page, which forwards to PAYOUT_RETURN_URL and closes this
       // browser automatically. Resolves early too if the user backs out, so the
       // server stays the authority — we always re-read the status.
-      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL);
+      // Ephemeral (iOS only) skips the "wants to use stripe.com to Sign In" prompt.
+      await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL, { preferEphemeralSession: true });
       if (!mountedRef.current) return;
       await refreshPayoutStatus();
     } catch (err) {
@@ -251,6 +254,21 @@ export function ProfileSetupScreen() {
     else if (step === 2) setStep(1);
   }, [step]);
 
+  // Android hardware back on the Profile / Payout steps goes to the previous
+  // step. This is the root of the signed-in-but-not-set-up stack, so without
+  // this the system back button closed the app mid-onboarding. On the first
+  // step it keeps its default behaviour. (iOS has no hardware back.)
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android" || step === 0) return undefined;
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (!submitting) goBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [step, submitting, goBack]),
+  );
+
   const initials = useMemo(() => {
     const trimmed = name.trim();
     if (!trimmed) return "?";
@@ -268,7 +286,11 @@ export function ProfileSetupScreen() {
   }
 
   return (
-    <Screen edges={["top", "right", "left", "bottom"]} scroll={false}>
+    <Screen
+      edges={["top", "right", "left", "bottom"]}
+      scroll={false}
+      disableKeyboardAvoiding={Platform.OS === "ios"}
+    >
       <View style={styles.container}>
         <StepIndicator current={step} />
 
@@ -377,6 +399,14 @@ const TERMS_SUMMARY: readonly Readonly<{ heading: string; body: string }>[] = [
     body: "You're responsible for providing accurate information, complying with applicable laws and airline rules, and not sending prohibited or illegal items.",
   },
   {
+    heading: "Age.",
+    body: "You must be 18 or older to use Safarly.",
+  },
+  {
+    heading: "Community Standards.",
+    body: "No harassment, hate speech, threats, sexual or violent content, scams or illegal items. You can report or block any user; we review reports within 24 hours and remove offending content and accounts.",
+  },
+  {
     heading: "Privacy.",
     body: "We process personal data as described in our Privacy Policy. Tap below to read the full policy.",
   },
@@ -425,7 +455,7 @@ function TermsStep({
         <Checkbox
           checked={termsAccepted}
           onChange={onTerms}
-          label="I agree to the Terms of Service and Privacy Policy"
+          label="I confirm I'm 18 or older, and I agree to the Terms of Service (including the Community Standards) and Privacy Policy"
         />
         <Checkbox
           checked={liabilityAccepted}

@@ -4,13 +4,15 @@ import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@re
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,13 +21,14 @@ import {
 } from "react-native";
 
 import { Avatar } from "@/components/ui/Avatar";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
-import { bookingFee, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { bookingFee, feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
 import { HandoffPlanCard } from "@/features/bookings/HandoffPlanCard";
 import { ParcelReturnCard } from "@/features/bookings/ParcelReturnCard";
 import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
@@ -179,11 +182,45 @@ function getRole(
   return "unknown";
 }
 
+// ─────────────── Keyboard-safe modal frame ───────────────
+
+/**
+ * Backdrop + centered card for the modals below that take typed input. A
+ * Modal's window is not resized for the keyboard on either platform (Android
+ * Modals are edge-to-edge), so the card is lifted with `KeyboardLift` and
+ * scrolls once it no longer fits — otherwise an autoFocused multiline reason
+ * hides the footer buttons.
+ * `keyboardShouldPersistTaps="handled"` lets a tap outside the input dismiss
+ * the keyboard, which a multiline input has no return key to do.
+ */
+function KeyboardModalCard({
+  onBackdropPress,
+  children,
+}: Readonly<{ onBackdropPress: () => void; children: ReactNode }>) {
+  return (
+    <KeyboardLift style={styles.flex}>
+      <Pressable style={styles.modalBackdrop} onPress={onBackdropPress} />
+      <View style={[styles.modalCenter, styles.modalCenterKeyboard]} pointerEvents="box-none">
+        <ScrollView
+          style={styles.modalCardScroll}
+          contentContainerStyle={styles.modalCardScrollContent}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          {children}
+        </ScrollView>
+      </View>
+    </KeyboardLift>
+  );
+}
+
 // ─────────────── Cancel modal ───────────────
 
 interface CancelBookingModalProps {
   open: boolean;
   pending: boolean;
+  /** Why the last attempt failed — shown inline; the modal stays open to retry. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -191,6 +228,7 @@ interface CancelBookingModalProps {
 function CancelBookingModal({
   open,
   pending,
+  error,
   onCancel,
   onConfirm,
 }: Readonly<CancelBookingModalProps>) {
@@ -210,61 +248,59 @@ function CancelBookingModal({
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
-      <View style={styles.modalCenter} pointerEvents="box-none">
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Cancel Booking?</Text>
-            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
-          </View>
-          <Text style={styles.modalBody}>
-            Tell the other party why you're cancelling. This is shared with them.
-          </Text>
-          <TextInput
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Reason for cancellation..."
-            placeholderTextColor={colors.mutedText}
-            style={styles.modalInput}
-            maxLength={1000}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            editable={!pending}
-            autoFocus
-          />
-          <View style={styles.modalFooter}>
-            <Pressable
-              onPress={handleClose}
-              disabled={pending}
-              style={[styles.modalButton, styles.modalButtonSecondary]}
-              accessibilityRole="button"
-              accessibilityLabel="Keep Booking"
-            >
-              <Text style={styles.modalButtonSecondaryText}>Keep Booking</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              disabled={pending || !reason.trim()}
-              style={[
-                styles.modalButton,
-                styles.modalButtonDanger,
-                (pending || !reason.trim()) && styles.modalButtonDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Confirm Cancellation"
-            >
-              {pending ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.modalButtonDangerText}>Confirm Cancel</Text>
-              )}
-            </Pressable>
-          </View>
+      <KeyboardModalCard onBackdropPress={handleClose}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Cancel Booking?</Text>
+          <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+            <Ionicons name="close" size={20} color={colors.mutedText} />
+          </Pressable>
         </View>
-      </View>
+        <Text style={styles.modalBody}>
+          Tell the other party why you're cancelling. This is shared with them.
+        </Text>
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          placeholder="Reason for cancellation..."
+          placeholderTextColor={colors.mutedText}
+          style={styles.modalInput}
+          maxLength={1000}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          editable={!pending}
+          autoFocus
+        />
+        <FormBanner message={error} />
+        <View style={styles.modalFooter}>
+          <Pressable
+            onPress={handleClose}
+            disabled={pending}
+            style={[styles.modalButton, styles.modalButtonSecondary]}
+            accessibilityRole="button"
+            accessibilityLabel="Keep Booking"
+          >
+            <Text style={styles.modalButtonSecondaryText}>Keep Booking</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleConfirm}
+            disabled={pending || !reason.trim()}
+            style={[
+              styles.modalButton,
+              styles.modalButtonDanger,
+              (pending || !reason.trim()) && styles.modalButtonDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Confirm Cancellation"
+          >
+            {pending ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.modalButtonDangerText}>Confirm Cancel</Text>
+            )}
+          </Pressable>
+        </View>
+      </KeyboardModalCard>
     </Modal>
   );
 }
@@ -361,22 +397,40 @@ interface RejectHandoffModalProps {
   pending: boolean;
   /** Default for "do you have it?", derived from the handoff record. */
   parcelLikelyWithCarrier: boolean;
+  /** Why the last attempt failed — shown inline; the modal stays open to retry. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (reason: string, withCarrier: boolean, file?: RNUploadFile) => void;
 }
 
 const REJECT_REASON_MIN = 10;
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+/** The evidence types `uploadHandoffEvidence` accepts (web parity). */
+const EVIDENCE_TYPES: ReadonlySet<string> = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/** MIME type for a picked image, falling back to its file extension. */
+function evidenceMimeType(mimeType: string | null | undefined, name: string | null | undefined): string {
+  if (mimeType) return mimeType.toLowerCase() === "image/jpg" ? "image/jpeg" : mimeType.toLowerCase();
+  const ext = (name ?? "").split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  return ext ? `image/${ext}` : "image/jpeg";
+}
 
 function RejectHandoffModal({
   open,
   pending,
   parcelLikelyWithCarrier,
+  error,
   onCancel,
   onConfirm,
 }: Readonly<RejectHandoffModalProps>) {
   const [reason, setReason] = useState("");
   const [photo, setPhoto] = useState<RNUploadFile | null>(null);
+  // An unusable pick used to be dropped silently, leaving the person thinking
+  // their evidence was attached. Say why instead.
+  const [photoError, setPhotoError] = useState<string | null>(null);
   // Declining does not answer "where is the parcel now?" - and getting that
   // wrong is how a real parcel ends up stranded at the carrier's address.
   const [withCarrier, setWithCarrier] = useState(parcelLikelyWithCarrier);
@@ -385,21 +439,31 @@ function RejectHandoffModal({
     if (pending) return;
     setReason("");
     setPhoto(null);
+    setPhotoError(null);
     onCancel();
   };
 
   const pickPhoto = async () => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = await requestLibraryPermission();
       if (perm.status !== "granted") return;
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+      const result = await ImagePicker.launchImageLibraryAsync({ ...LIBRARY_PICK_OPTIONS, mediaTypes: ["images"], quality: 0.8 });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_EVIDENCE_BYTES) return;
+      const type = evidenceMimeType(asset.mimeType, asset.fileName);
+      if (!EVIDENCE_TYPES.has(type)) {
+        setPhotoError("That photo format isn't supported. Choose a JPEG, PNG or WebP image.");
+        return;
+      }
+      if (asset.fileSize && asset.fileSize > MAX_EVIDENCE_BYTES) {
+        setPhotoError("That photo is larger than 10 MB. Choose a smaller one.");
+        return;
+      }
+      setPhotoError(null);
       setPhoto({
         uri: asset.uri,
         name: asset.fileName ?? `evidence-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
+        type,
       });
     } catch {
       /* ignore pick failures */
@@ -416,117 +480,116 @@ function RejectHandoffModal({
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
-      <View style={styles.modalCenter} pointerEvents="box-none">
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderBubbleDanger}>
-              <Ionicons name="close-circle" size={18} color={colors.danger} />
-            </View>
-            <Text style={styles.modalTitle}>Decline this parcel?</Text>
-            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
+      <KeyboardModalCard onBackdropPress={handleClose}>
+        <View style={styles.modalHeader}>
+          <View style={styles.modalHeaderBubbleDanger}>
+            <Ionicons name="close-circle" size={18} color={colors.danger} />
           </View>
-          <Text style={styles.modalBody}>
-            Use this when the parcel has reached you but you can't carry it — unsafe,
-            oversized, or not what the listing described. The sender gets a full refund
-            with no penalty to you, and the parcel re-opens for other carriers. Tell us
-            what's wrong so we can keep records.
-          </Text>
-          <TextInput
-            value={reason}
-            onChangeText={setReason}
-            placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
-            placeholderTextColor={colors.mutedText}
-            style={styles.modalInput}
-            maxLength={1000}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            editable={!pending}
-            autoFocus
-          />
-          <Text style={styles.modalHelper}>
-            {trimmed.length}/{REJECT_REASON_MIN} characters minimum
-          </Text>
-
-          <Text style={styles.modalFieldLabel}>Where is the parcel now?</Text>
-          <View style={styles.returnWhereRow}>
-            <Pressable
-              onPress={() => setWithCarrier(true)}
-              style={[styles.returnWhereOption, withCarrier && styles.returnWhereOptionActive]}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: withCarrier }}
-              accessibilityLabel="I have the parcel"
-            >
-              <Text style={styles.returnWhereTitle}>I have it</Text>
-              <Text style={styles.returnWhereHint}>It reached me and has to go back.</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setWithCarrier(false)}
-              style={[styles.returnWhereOption, !withCarrier && styles.returnWhereOptionActive]}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: !withCarrier }}
-              accessibilityLabel="The sender has the parcel"
-            >
-              <Text style={styles.returnWhereTitle}>The sender has it</Text>
-              <Text style={styles.returnWhereHint}>Declined at the meetup - nothing to send back.</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.modalHelper}>
-            {withCarrier
-              ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
-              : "Nothing to return - the booking closes as soon as you submit."}
-          </Text>
-
-          <Pressable
-            onPress={() => void pickPhoto()}
-            disabled={pending}
-            style={[styles.photoPickerButton, photo && styles.photoPickerButtonSelected]}
-            accessibilityRole="button"
-            accessibilityLabel={photo ? "Photo selected" : "Add photo evidence"}
-          >
-            <Ionicons
-              name={photo ? "checkmark-circle" : "camera-outline"}
-              size={16}
-              color={photo ? colors.safe : colors.subtleText}
-            />
-            <Text style={[styles.photoPickerText, photo && styles.photoPickerTextSelected]} numberOfLines={1}>
-              {photo ? photo.name : "Add photo evidence (optional)"}
-            </Text>
+          <Text style={styles.modalTitle}>Decline this parcel?</Text>
+          <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+            <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
-
-          <View style={styles.modalFooter}>
-            <Pressable
-              onPress={handleClose}
-              disabled={pending}
-              style={[styles.modalButton, styles.modalButtonSecondary]}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Text style={styles.modalButtonSecondaryText}>Go back</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              disabled={pending || !reasonOk}
-              style={[
-                styles.modalButton,
-                styles.modalButtonDanger,
-                (pending || !reasonOk) && styles.modalButtonDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Decline and refund the sender"
-            >
-              {pending ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.modalButtonDangerText}>Decline and refund</Text>
-              )}
-            </Pressable>
-          </View>
         </View>
-      </View>
+        <Text style={styles.modalBody}>
+          Use this when the parcel has reached you but you can't carry it — unsafe,
+          oversized, or not what the listing described. The sender gets a full refund
+          with no penalty to you, and the parcel re-opens for other carriers. Tell us
+          what's wrong so we can keep records.
+        </Text>
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+          placeholderTextColor={colors.mutedText}
+          style={styles.modalInput}
+          maxLength={1000}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          editable={!pending}
+          autoFocus
+        />
+        <Text style={styles.modalHelper}>
+          {trimmed.length}/{REJECT_REASON_MIN} characters minimum
+        </Text>
+
+        <Text style={styles.modalFieldLabel}>Where is the parcel now?</Text>
+        <View style={styles.returnWhereRow}>
+          <Pressable
+            onPress={() => setWithCarrier(true)}
+            style={[styles.returnWhereOption, withCarrier && styles.returnWhereOptionActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: withCarrier }}
+            accessibilityLabel="I have the parcel"
+          >
+            <Text style={styles.returnWhereTitle}>I have it</Text>
+            <Text style={styles.returnWhereHint}>It reached me and has to go back.</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setWithCarrier(false)}
+            style={[styles.returnWhereOption, !withCarrier && styles.returnWhereOptionActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: !withCarrier }}
+            accessibilityLabel="The sender has the parcel"
+          >
+            <Text style={styles.returnWhereTitle}>The sender has it</Text>
+            <Text style={styles.returnWhereHint}>Declined at the meetup - nothing to send back.</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.modalHelper}>
+          {withCarrier
+            ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
+            : "Nothing to return - the booking closes as soon as you submit."}
+        </Text>
+
+        <Pressable
+          onPress={() => void pickPhoto()}
+          disabled={pending}
+          style={[styles.photoPickerButton, photo && styles.photoPickerButtonSelected]}
+          accessibilityRole="button"
+          accessibilityLabel={photo ? "Photo selected" : "Add photo evidence"}
+        >
+          <Ionicons
+            name={photo ? "checkmark-circle" : "camera-outline"}
+            size={16}
+            color={photo ? colors.safe : colors.subtleText}
+          />
+          <Text style={[styles.photoPickerText, photo && styles.photoPickerTextSelected]} numberOfLines={1}>
+            {photo ? photo.name : "Add photo evidence (optional)"}
+          </Text>
+        </Pressable>
+
+        <FormBanner message={photoError ?? error} />
+
+        <View style={styles.modalFooter}>
+          <Pressable
+            onPress={handleClose}
+            disabled={pending}
+            style={[styles.modalButton, styles.modalButtonSecondary]}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Text style={styles.modalButtonSecondaryText}>Go back</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleConfirm}
+            disabled={pending || !reasonOk}
+            style={[
+              styles.modalButton,
+              styles.modalButtonDanger,
+              (pending || !reasonOk) && styles.modalButtonDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Decline and refund the sender"
+          >
+            {pending ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.modalButtonDangerText}>Decline and refund</Text>
+            )}
+          </Pressable>
+        </View>
+      </KeyboardModalCard>
     </Modal>
   );
 }
@@ -541,6 +604,8 @@ interface CancelPostPossessionModalProps {
   parcelIsReturnEligible: boolean;
   open: boolean;
   pending: boolean;
+  /** Why the last attempt failed — shown inline; the modal stays open to retry. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (
     reason: string,
@@ -572,6 +637,7 @@ function CancelPostPossessionModal({
   open,
   pending,
   parcelIsReturnEligible,
+  error,
   onCancel,
   onConfirm,
 }: Readonly<CancelPostPossessionModalProps>) {
@@ -619,143 +685,142 @@ function CancelPostPossessionModal({
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
-      <Pressable style={styles.modalBackdrop} onPress={handleClose} />
-      <View style={styles.modalCenter} pointerEvents="box-none">
-        <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderBubbleDanger}>
-              <Ionicons name="alert-circle" size={18} color={colors.danger} />
-            </View>
-            <Text style={styles.modalTitle}>Cancel mid-trip?</Text>
-            <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
-              <Ionicons name="close" size={20} color={colors.mutedText} />
-            </Pressable>
+      <KeyboardModalCard onBackdropPress={handleClose}>
+        <View style={styles.modalHeader}>
+          <View style={styles.modalHeaderBubbleDanger}>
+            <Ionicons name="alert-circle" size={18} color={colors.danger} />
           </View>
-          <Text style={styles.modalBody}>
-            You've already accepted the parcel. A penalty applies (5–25%) based on how close
-            you are to the delivery deadline. If this parcel is returnable to its merchant,
-            the sender can waive the cash penalty.
-          </Text>
-
-          <Text style={styles.modalFieldLabel}>Why are you cancelling?</Text>
-          <TextInput
-            value={reason}
-            onChangeText={setReason}
-            placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
-            placeholderTextColor={colors.mutedText}
-            style={styles.modalInput}
-            maxLength={1000}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            editable={!pending}
-          />
-          <Text style={styles.modalHelper}>
-            {trimmed.length}/{REJECT_REASON_MIN} characters minimum
-          </Text>
-
-          {parcelIsReturnEligible ? (
-          <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>
-            Return-eligibility check
-          </Text>
-          ) : null}
-          {parcelIsReturnEligible ? (
-          <View style={styles.waiverList}>
-            {WAIVER_QUESTIONS.map((q) => {
-              const current = answers[q.key];
-              return (
-                <View key={q.key} style={styles.waiverRow}>
-                  <Text style={styles.waiverLabel}>{q.label}</Text>
-                  <View style={styles.waiverChoices}>
-                    {(["yes", "no"] as const).map((choice) => {
-                      const selected = current === choice;
-                      const isYes = choice === "yes";
-                      return (
-                        <Pressable
-                          key={choice}
-                          onPress={() =>
-                            setAnswers((prev) => ({ ...prev, [q.key]: choice }))
-                          }
-                          disabled={pending}
-                          style={[
-                            styles.waiverChoice,
-                            selected &&
-                              (isYes ? styles.waiverChoiceYes : styles.waiverChoiceNo),
-                          ]}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected }}
-                        >
-                          <Text
-                            style={[
-                              styles.waiverChoiceText,
-                              selected &&
-                                (isYes
-                                  ? styles.waiverChoiceTextYes
-                                  : styles.waiverChoiceTextNo),
-                            ]}
-                          >
-                            {isYes ? "Yes" : "No"}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-          ) : null}
-
-          {parcelIsReturnEligible && allAnswered ? (
-            <View style={allYes ? styles.waiverHintGood : styles.waiverHintNeutral}>
-              <Ionicons
-                name={allYes ? "shield-checkmark" : "information-circle-outline"}
-                size={14}
-                color={allYes ? colors.safe : colors.mutedText}
-              />
-              <Text
-                style={[
-                  styles.waiverHintText,
-                  allYes && { color: colors.safe },
-                ]}
-              >
-                {allYes
-                  ? "The sender can waive the cash penalty after reviewing — strike still applies."
-                  : "A cash penalty will be deducted from your wallet."}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.modalFooter}>
-            <Pressable
-              onPress={handleClose}
-              disabled={pending}
-              style={[styles.modalButton, styles.modalButtonSecondary]}
-              accessibilityRole="button"
-              accessibilityLabel="Don't cancel"
-            >
-              <Text style={styles.modalButtonSecondaryText}>Don't cancel</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              disabled={pending || !reasonOk || !allAnswered}
-              style={[
-                styles.modalButton,
-                styles.modalButtonDanger,
-                (pending || !reasonOk || !allAnswered) && styles.modalButtonDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel mid-trip"
-            >
-              {pending ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.modalButtonDangerText}>Cancel mid-trip</Text>
-              )}
-            </Pressable>
-          </View>
+          <Text style={styles.modalTitle}>Cancel mid-trip?</Text>
+          <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
+            <Ionicons name="close" size={20} color={colors.mutedText} />
+          </Pressable>
         </View>
-      </View>
+        <Text style={styles.modalBody}>
+          You've already accepted the parcel. A penalty applies (5–25%) based on how close
+          you are to the delivery deadline. If this parcel is returnable to its merchant,
+          the sender can waive the cash penalty.
+        </Text>
+
+        <Text style={styles.modalFieldLabel}>Why are you cancelling?</Text>
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+          placeholderTextColor={colors.mutedText}
+          style={styles.modalInput}
+          maxLength={1000}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+          editable={!pending}
+        />
+        <Text style={styles.modalHelper}>
+          {trimmed.length}/{REJECT_REASON_MIN} characters minimum
+        </Text>
+
+        {parcelIsReturnEligible ? (
+        <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>
+          Return-eligibility check
+        </Text>
+        ) : null}
+        {parcelIsReturnEligible ? (
+        <View style={styles.waiverList}>
+          {WAIVER_QUESTIONS.map((q) => {
+            const current = answers[q.key];
+            return (
+              <View key={q.key} style={styles.waiverRow}>
+                <Text style={styles.waiverLabel}>{q.label}</Text>
+                <View style={styles.waiverChoices}>
+                  {(["yes", "no"] as const).map((choice) => {
+                    const selected = current === choice;
+                    const isYes = choice === "yes";
+                    return (
+                      <Pressable
+                        key={choice}
+                        onPress={() =>
+                          setAnswers((prev) => ({ ...prev, [q.key]: choice }))
+                        }
+                        disabled={pending}
+                        style={[
+                          styles.waiverChoice,
+                          selected &&
+                            (isYes ? styles.waiverChoiceYes : styles.waiverChoiceNo),
+                        ]}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                      >
+                        <Text
+                          style={[
+                            styles.waiverChoiceText,
+                            selected &&
+                              (isYes
+                                ? styles.waiverChoiceTextYes
+                                : styles.waiverChoiceTextNo),
+                          ]}
+                        >
+                          {isYes ? "Yes" : "No"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+        ) : null}
+
+        {parcelIsReturnEligible && allAnswered ? (
+          <View style={allYes ? styles.waiverHintGood : styles.waiverHintNeutral}>
+            <Ionicons
+              name={allYes ? "shield-checkmark" : "information-circle-outline"}
+              size={14}
+              color={allYes ? colors.safe : colors.mutedText}
+            />
+            <Text
+              style={[
+                styles.waiverHintText,
+                allYes && { color: colors.safe },
+              ]}
+            >
+              {allYes
+                ? "The sender can waive the cash penalty after reviewing — strike still applies."
+                : "A cash penalty will be deducted from your wallet."}
+            </Text>
+          </View>
+        ) : null}
+
+        <FormBanner message={error} />
+
+        <View style={styles.modalFooter}>
+          <Pressable
+            onPress={handleClose}
+            disabled={pending}
+            style={[styles.modalButton, styles.modalButtonSecondary]}
+            accessibilityRole="button"
+            accessibilityLabel="Don't cancel"
+          >
+            <Text style={styles.modalButtonSecondaryText}>Don't cancel</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleConfirm}
+            disabled={pending || !reasonOk || !allAnswered}
+            style={[
+              styles.modalButton,
+              styles.modalButtonDanger,
+              (pending || !reasonOk || !allAnswered) && styles.modalButtonDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel mid-trip"
+          >
+            {pending ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.modalButtonDangerText}>Cancel mid-trip</Text>
+            )}
+          </Pressable>
+        </View>
+      </KeyboardModalCard>
     </Modal>
   );
 }
@@ -802,6 +867,9 @@ function ExpandedBody({
   const [acceptHandoffOpen, setAcceptHandoffOpen] = useState(false);
   const [rejectHandoffOpen, setRejectHandoffOpen] = useState(false);
   const [cancelPostPossessionOpen, setCancelPostPossessionOpen] = useState(false);
+  // Failure of the action an open modal runs — shown inside that modal, since
+  // the card banner is drawn underneath it. Cleared on close and on retry.
+  const [modalError, setModalError] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   // The server returns the plaintext OTP exactly once on generate-otp; if we
   // drop it here the sender can never see it again. Keep it in screen state.
@@ -870,6 +938,12 @@ function ExpandedBody({
       successMessage: string,
       /** Optional per-action mapper for friendlier copy on specific error codes. */
       formatError?: (code: string, message: string) => string,
+      /**
+       * Where a failure goes when the action runs from an open Modal. The card
+       * banner renders in the screen, UNDER the Modal, so a failure there was
+       * invisible; the modal shows it inline instead and stays open to retry.
+       */
+      onError?: (message: string) => void,
     ): Promise<T | null> => {
       setActionPending(key);
       try {
@@ -882,7 +956,8 @@ function ExpandedBody({
         const base =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
         const message = formatError ? formatError(code, base) : base;
-        showBanner({ variant: "error", title: "Action failed", message }, 6000);
+        if (onError) onError(message);
+        else showBanner({ variant: "error", title: "Action failed", message }, 6000);
         // The guard may have rejected because the state moved — re-derive actions.
         void refetch();
         return null;
@@ -993,6 +1068,7 @@ function ExpandedBody({
   };
 
   const handleRejectHandoffConfirm = async (reason: string, withCarrier: boolean, file?: RNUploadFile) => {
+    setModalError(null);
     const result = await runAction(
       "reject-handoff",
       async () => {
@@ -1005,15 +1081,20 @@ function ExpandedBody({
         return bookingsApi.rejectHandoff(booking.id, { reason, photo_path, parcel_with_carrier: withCarrier });
       },
       "Parcel declined — sender refunded in full",
+      undefined,
+      setModalError,
     );
     if (result) setRejectHandoffOpen(false);
   };
 
   const handleCancelConfirm = async (reason: string) => {
+    setModalError(null);
     const result = await runAction(
       "cancel",
       () => bookingsApi.cancel(booking.id, reason),
       "Booking cancelled",
+      undefined,
+      setModalError,
     );
     if (result) setCancelOpen(false);
   };
@@ -1022,6 +1103,7 @@ function ExpandedBody({
     reason: string,
     answers?: { will_return: boolean; was_online_order: boolean; free_return_eligible: boolean },
   ) => {
+    setModalError(null);
     const result = await runAction(
       "cancel-post-possession",
       () => bookingsApi.cancelPostPossession(booking.id, { reason, return_answers: answers }),
@@ -1033,6 +1115,7 @@ function ExpandedBody({
           return "You’ve hit the cancellation strike limit and can’t cancel mid-trip.";
         return base;
       },
+      setModalError,
     );
     if (!result) return;
     setCancelPostPossessionOpen(false);
@@ -1194,7 +1277,7 @@ function ExpandedBody({
             <View style={styles.parcelCell}>
               <Text style={styles.parcelCellKey}>Fee: </Text>
               <Text style={[styles.parcelCellValue, { color: colors.primary }]}>
-                ${bookingFee(booking).toFixed(2)}
+                {formatMoney(bookingFee(booking), booking.parcel.fee_currency)}
               </Text>
             </View>
             {booking.agreed_travel_date ? (
@@ -1287,7 +1370,11 @@ function ExpandedBody({
             accessibilityLabel="Pay now"
           >
             <Ionicons name="card" size={14} color={colors.white} />
-            <Text style={styles.actionPrimaryText}>Pay now · ${bookingFee(booking).toFixed(2)}</Text>
+            {/* The TOTAL the card is charged (fee + platform fee) in the deal's
+                currency — the same figure checkout shows. */}
+            <Text style={styles.actionPrimaryText}>
+              Pay now · {formatMoney(feeBreakdown(bookingFee(booking)).total, booking.parcel?.fee_currency)}
+            </Text>
           </Pressable>
         ) : null}
 
@@ -1643,7 +1730,11 @@ function ExpandedBody({
       <CancelBookingModal
         open={cancelOpen}
         pending={actionPending === "cancel"}
-        onCancel={() => setCancelOpen(false)}
+        error={modalError}
+        onCancel={() => {
+          setModalError(null);
+          setCancelOpen(false);
+        }}
         onConfirm={handleCancelConfirm}
       />
 
@@ -1660,7 +1751,11 @@ function ExpandedBody({
         parcelLikelyWithCarrier={
           booking.handoff_mode === "shipped" && !!booking.handoff_dispatched_at
         }
-        onCancel={() => setRejectHandoffOpen(false)}
+        error={modalError}
+        onCancel={() => {
+          setModalError(null);
+          setRejectHandoffOpen(false);
+        }}
         onConfirm={handleRejectHandoffConfirm}
       />
 
@@ -1668,7 +1763,11 @@ function ExpandedBody({
         open={cancelPostPossessionOpen}
         pending={actionPending === "cancel-post-possession"}
         parcelIsReturnEligible={returnEligible}
-        onCancel={() => setCancelPostPossessionOpen(false)}
+        error={modalError}
+        onCancel={() => {
+          setModalError(null);
+          setCancelPostPossessionOpen(false);
+        }}
         onConfirm={handleCancelPostPossessionConfirm}
       />
     </View>
@@ -1778,7 +1877,9 @@ function BookingRow({
             </Text>
           </View>
           {booking.parcel ? (
-            <Text style={styles.feeText}>${bookingFee(booking).toFixed(2)}</Text>
+            <Text style={styles.feeText}>
+              {formatMoney(bookingFee(booking), booking.parcel.fee_currency)}
+            </Text>
           ) : null}
         </View>
       </Pressable>
@@ -2387,6 +2488,17 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 12,
   },
+  flex: { flex: 1 },
+  // Keeps a keyboard-lifted card clear of the status bar.
+  modalCenterKeyboard: { paddingVertical: 24 },
+  modalCardScroll: {
+    width: "100%",
+    maxWidth: 440,
+    flexGrow: 0,
+    borderRadius: 18,
+    backgroundColor: colors.card,
+  },
+  modalCardScrollContent: { padding: 18, gap: 12 },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",

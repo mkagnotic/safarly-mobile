@@ -5,9 +5,11 @@ import { RouteProp, useFocusEffect, useNavigation, useRoute } from "@react-navig
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useKeyboardMetrics } from "@/hooks/useKeyboardMetrics";
+import { useModalHandoff } from "@/hooks/useModalHandoff";
 import {
   ActivityIndicator,
   BackHandler,
@@ -84,10 +86,25 @@ import { colors } from "@/theme/colors";
 import { currencySymbol } from "@/utils/money";
 
 type ChatNav = BottomTabNavigationProp<MainTabParamList, "OfferChatTab">;
+/** The Modals that report a failed request inline (see `modalError`). */
+type ChatModal =
+  | "match"
+  | "dealPicker"
+  | "decline"
+  | "confirm"
+  | "reportMessage"
+  | "reportUser"
+  | "travelDoc"
+  | "parcelReview";
 type ChatRoute = RouteProp<MainTabParamList, "OfferChatTab">;
 
-/** 10 MB — same cap as web (`MAX_FILE_SIZE` in CustomerMessages). */
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/**
+ * Chat attachment caps — the server's (`message-handler` upload check): images
+ * and documents up to 5 MB, video up to 10 MB. A larger client cap only let a
+ * file through the picker for the upload to be refused afterwards.
+ */
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
 
 function getBackTarget(source: "home" | "messages" | "buddies" | "travels") {
   switch (source) {
@@ -145,6 +162,8 @@ export function OfferChatScreen() {
   // The conversation hides the tab bar (FULLSCREEN_TAB), so the composer is now
   // the bottom-most element and has to clear the gesture bar itself.
   const insets = useSafeAreaInsets();
+  // Bottom sheets clear the iPhone home indicator.
+  const sheetInset = { paddingBottom: Math.max(insets.bottom, 16) + 8 };
   // Keyboard reach comes from the shared hook, which already corrects for
   // Android reporting the keyboard without the navigation bar.
   const { visible: keyboardOpen, screenOverlap } = useKeyboardMetrics();
@@ -386,6 +405,12 @@ export function OfferChatScreen() {
   // header kebab opens the conversation-actions sheet (web parity).
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  // iOS can't present a Modal (or a native picker) while another is still
+  // fading out, so anything opened from a sheet waits for it to dismiss.
+  const { after: afterAttachMenu, onDismiss: onAttachMenuDismissed } = useModalHandoff();
+  const { after: afterActionMenu, onDismiss: onActionMenuDismissed } = useModalHandoff();
+  const { after: afterBubbleMenu, onDismiss: onBubbleMenuDismissed } = useModalHandoff();
+  const { after: afterChildModal } = useModalHandoff();
   const [mediaOpen, setMediaOpen] = useState(false);
   const [reportUserOpen, setReportUserOpen] = useState(false);
   const [reportUserPending, setReportUserPending] = useState(false);
@@ -449,6 +474,12 @@ export function OfferChatScreen() {
   /** Shown when the carrier tries to accept but hasn't finished payout setup. */
   const [payoutRequiredOpen, setPayoutRequiredOpen] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
+  // A request that fails while one of the chat's Modals is open is reported
+  // INSIDE that Modal: `showToast` renders in the root view, under any open
+  // Modal, so the failure used to look like nothing happened. Tagged with the
+  // Modal it belongs to; cleared on retry and when that Modal closes.
+  const [modalError, setModalError] = useState<{ modal: ChatModal; message: string } | null>(null);
+  const errorFor = (modal: ChatModal) => (modalError?.modal === modal ? modalError.message : null);
   const flatListRef = useRef<FlatList<DisplayMessage>>(null);
   // Track newest message timestamp seen so we only auto-scroll on new arrivals,
   // not on `loadOlder()` which prepends older rows. Web does the same via
@@ -556,15 +587,31 @@ export function OfferChatScreen() {
     });
   }, [conversationId]);
 
+  // Drop a Modal's error once that Modal closes, so it never reopens stale.
+  useEffect(() => {
+    const open: Record<ChatModal, boolean> = {
+      match: matchModalOpen,
+      dealPicker: !!matchCandidates,
+      decline: declineOpen,
+      confirm: !!confirmAction,
+      reportMessage: !!reportTarget,
+      reportUser: reportUserOpen,
+      travelDoc: travelDocOpen,
+      parcelReview: parcelReviewOpen,
+    };
+    setModalError((current) => (current && !open[current.modal] ? null : current));
+  }, [matchModalOpen, matchCandidates, declineOpen, confirmAction, reportTarget, reportUserOpen,
+      travelDocOpen, parcelReviewOpen]);
+
   const handlePickImage = useCallback(async () => {
-    setAttachMenuOpen(false);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = await requestLibraryPermission();
       if (perm.status !== "granted") {
         notifyPermissionDenied("photos", perm, "attach images");
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
+        ...LIBRARY_PICK_OPTIONS,
         // SDK 54 deprecated MediaTypeOptions in favor of the string-array form.
         mediaTypes: ["images"],
         quality: 0.8,
@@ -572,7 +619,7 @@ export function OfferChatScreen() {
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        showToast({ title: "Too large", message: "Images must be under 10 MB.", variant: "error" });
+        showToast({ title: "Too large", message: "Images must be 5 MB or smaller.", variant: "error" });
         return;
       }
       const file: RNUploadFile = {
@@ -588,7 +635,6 @@ export function OfferChatScreen() {
   }, []);
 
   const handleTakePhoto = useCallback(async () => {
-    setAttachMenuOpen(false);
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
@@ -598,12 +644,12 @@ export function OfferChatScreen() {
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      // Same 10 MB cap as the library picker — high-res phones can produce
-      // 12-15 MB raw captures.
+      // Same 5 MB cap as the library picker — high-res phones can produce
+      // larger raw captures.
       if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
         showToast({
           title: "Too large",
-          message: "Photos must be under 10 MB.",
+          message: "Photos must be 5 MB or smaller.",
           variant: "error",
         });
         return;
@@ -621,7 +667,6 @@ export function OfferChatScreen() {
   }, []);
 
   const handlePickDocument = useCallback(async () => {
-    setAttachMenuOpen(false);
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: [
@@ -635,8 +680,13 @@ export function OfferChatScreen() {
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      if (asset.size && asset.size > MAX_FILE_BYTES) {
-        showToast({ title: "Too large", message: "Files must be under 10 MB.", variant: "error" });
+      const isVideo = (asset.mimeType ?? "").startsWith("video/");
+      if (asset.size && asset.size > (isVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES)) {
+        showToast({
+          title: "Too large",
+          message: isVideo ? "Videos must be 10 MB or smaller." : "Documents must be 5 MB or smaller.",
+          variant: "error",
+        });
         return;
       }
       const file: RNUploadFile = {
@@ -707,6 +757,7 @@ export function OfferChatScreen() {
     // second acceptance and the deal is now matched. If I am first, all I have
     // done is send the request - saying "Matched" there was simply wrong.
     const theyAskedFirst = !!conversation?.matched_by && conversation.matched_by !== user?.id;
+    setModalError(null);
     await matchActions.run("accept", async () => {
       try {
         await acceptMatch(conversationId, {
@@ -734,23 +785,29 @@ export function OfferChatScreen() {
         if (err instanceof ApiClientError && err.code === "MATCH_AMBIGUOUS") {
           const candidates = (err.details ?? []) as MatchCandidate[];
           if (candidates.length) {
-            setMatchModalOpen(false);
-            setMatchCandidates(candidates);
+            afterChildModal(
+              () => setMatchModalOpen(false),
+              () => setMatchCandidates(candidates),
+            );
             return;
           }
         }
-        showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
+        // From the confirmation sheet the failure belongs inside it; from the
+        // banner or the pin there is no Modal over the toast.
+        if (matchModalOpen) setModalError({ modal: "match", message: getErrorMessage(err) });
+        else showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
       }
     });
     // matchActions is rebuilt each render by design (it closes over the current
     // busy state), so it is deliberately not a dependency.
 
   }, [conversationId, acceptMatch, refetchActiveDeal, conversation?.matched_by, user?.id,
-      matchableDeal?.parcel_id, matchableDeal?.trip_id]);
+      matchableDeal?.parcel_id, matchableDeal?.trip_id, afterChildModal, matchModalOpen]);
 
   /** Retry the match naming the delivery the user picked. */
   const handlePickDeal = useCallback(async (candidate: MatchCandidate) => {
     if (!conversationId) return;
+    setModalError(null);
     try {
       await acceptMatch(conversationId, {
         parcel_id: candidate.parcel_id,
@@ -760,13 +817,14 @@ export function OfferChatScreen() {
       setMatchCandidates(null);
       showToast({ title: "Match sent", variant: "success", duration: 1800 });
     } catch (err) {
-      showToast({ title: "Couldn't accept", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "dealPicker", message: getErrorMessage(err) });
     }
   }, [conversationId, acceptMatch, refetchActiveDeal]);
 
   const handleDeclineConfirm = useCallback(
     async (reason: string) => {
       if (!conversationId) return;
+      setModalError(null);
       await matchActions.run("decline", async () => {
         try {
           await declineMatch(conversationId, reason || undefined);
@@ -776,11 +834,7 @@ export function OfferChatScreen() {
           setDeclineOpen(false);
           showToast({ title: "Match declined", variant: "info", duration: 1800 });
         } catch (err) {
-          showToast({
-            title: "Couldn't decline",
-            message: getErrorMessage(err),
-            variant: "error",
-          });
+          setModalError({ modal: "decline", message: getErrorMessage(err) });
         }
       });
     },
@@ -793,19 +847,18 @@ export function OfferChatScreen() {
   // Dialog + a "block" | "unmatch" enum (ChatActionDropdown.tsx:46-72).
   const handleUnmatch = useCallback(() => {
     if (!conversationId) return;
-    setActionMenuOpen(false);
-    setConfirmAction("unmatch");
-  }, [conversationId]);
+    afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("unmatch"));
+  }, [conversationId, afterActionMenu]);
 
   const handleBlock = useCallback(() => {
     if (!conversationId) return;
-    setActionMenuOpen(false);
-    setConfirmAction("block");
-  }, [conversationId]);
+    afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("block"));
+  }, [conversationId, afterActionMenu]);
 
   const handleConfirmAction = useCallback(async () => {
     if (!conversationId || !confirmAction) return;
     setConfirmPending(true);
+    setModalError(null);
     try {
       if (confirmAction === "block") {
         await messagesApi.blockUser(conversationId);
@@ -841,8 +894,7 @@ export function OfferChatScreen() {
           ? (err.details?.[0] as { booking_id?: string; action?: string } | undefined)
           : undefined;
       if (confirmAction === "unmatch" && blocker?.booking_id) {
-        setConfirmAction(null);
-        showAppAlert({
+        afterChildModal(() => setConfirmAction(null), () => showAppAlert({
           title: "Can't unmatch yet",
           message: getErrorMessage(err),
           actions: [
@@ -855,19 +907,15 @@ export function OfferChatScreen() {
               },
             },
           ],
-        });
+        }));
         return;
       }
 
-      showToast({
-        title: confirmAction === "block" ? "Couldn't block" : "Couldn't unmatch",
-        message: getErrorMessage(err),
-        variant: "error",
-      });
+      setModalError({ modal: "confirm", message: getErrorMessage(err) });
     } finally {
       setConfirmPending(false);
     }
-  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation]);
+  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal]);
 
   const handleUnblock = useCallback(async () => {
     if (!conversationId) return;
@@ -906,10 +954,13 @@ export function OfferChatScreen() {
 
   const handleOpenReport = useCallback(() => {
     const target = bubbleMenu;
-    setBubbleMenu(null);
-    if (!target) return;
+    if (!target) {
+      setBubbleMenu(null);
+      return;
+    }
     // Skip pending/local-only messages — they have no server id to report.
     if (target._clientStatus) {
+      setBubbleMenu(null);
       showToast({
         title: "Can't report yet",
         message: "Wait until the message has been sent.",
@@ -917,14 +968,15 @@ export function OfferChatScreen() {
       });
       return;
     }
-    setReportTarget(target);
-  }, [bubbleMenu]);
+    afterBubbleMenu(() => setBubbleMenu(null), () => setReportTarget(target));
+  }, [bubbleMenu, afterBubbleMenu]);
 
   const handleSubmitReport = useCallback(
     async ({ reason, details }: { reason: string; details: string | undefined }) => {
       const target = reportTarget;
       if (!target) return;
       setReportPending(true);
+      setModalError(null);
       try {
         await messagesApi.reportMessage(target.id, reason, details);
         setReportTarget(null);
@@ -934,11 +986,7 @@ export function OfferChatScreen() {
           variant: "success",
         });
       } catch (err) {
-        showToast({
-          title: "Couldn't submit report",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
+        setModalError({ modal: "reportMessage", message: getErrorMessage(err) });
       } finally {
         setReportPending(false);
       }
@@ -1004,120 +1052,61 @@ export function OfferChatScreen() {
     [offerComposer, liveOffer, activeDeal?.carrier_request_id, postOffer, seedOffer],
   );
 
-  /**
-   * Runs a workflow-pin CTA. The pin is a projection of the server FSM; this
-   * maps each `cta.code` to the mobile capability that satisfies it. Codes for
-   * stages that already have bespoke UI (match handshake, live offer) route to
-   * those same handlers, so behaviour stays consistent if the pin ever shows
-   * them. Travel-doc and parcel-review are not yet built on mobile (their own
-   * phases) — those codes explain that rather than dead-ending.
-   */
-  const handlePinAction = useCallback(
-    (code: string) => {
-      const bookingId = activeDeal?.booking_id ?? null;
-      switch (code) {
-        case "request_match":
-        case "request_match_again":
-          setMatchModalOpen(true);
-          return;
-        case "accept_match":
-          void handleAccept();
-          return;
-        case "make_offer":
-        case "accept_offer":
-          handleOpenOfferComposer();
-          return;
-        case "pay":
-        case "pay_grace":
-          if (bookingId) navigation.navigate("PayBookingTab", { bookingId });
-          return;
-        // Every post-payment step lives on the booking card (web parity): the
-        // pickup confirmation, the sender's delivery code and the carrier's
-        // code entry are all there, each labelled with its step. `verify_otp`
-        // used to open a standalone mock OTP screen backed by the local store,
-        // which never called the API — it could not confirm a delivery.
-        case "verify_otp":
-        case "generate_otp":
-        case "share_otp":
-        case "accept_handoff":
-        case "set_handoff_plan":
-        case "mark_handoff_sent":
-        case "set_return_resolution":
-        case "confirm_return_sent":
-          if (bookingId) navigation.navigate("BookingsTab", { expandId: bookingId });
-          return;
-        case "completed":
-          if (bookingId) navigation.navigate("DeliveryReviewTab", { bookingId });
-          return;
-        case "upload_travel_doc":
-        case "review_travel_doc":
-          setTravelDocOpen(true);
-          return;
-        case "upload_parcel_photos":
-        case "review_parcel_photos":
-          setParcelReviewOpen(true);
-          return;
-        default:
-          return;
-      }
-    },
-    [activeDeal?.booking_id, handleAccept, handleOpenOfferComposer, navigation],
-  );
-
   // ───────── Travel-doc action handlers ─────────
   // Each forwards to the hook (which refetches the doc), toasts, and — for the
   // actions that advance the FSM (approve/withdraw) — nudges the workflow pin so
   // it moves on without waiting for the realtime round-trip.
   const handleDocUpload = useCallback(
     async (file: RNUploadFile) => {
+      setModalError(null);
       try {
         await travelDoc.upload(file);
         showToast({ title: "Document uploaded", variant: "success", duration: 1800 });
       } catch (err) {
-        showToast({ title: "Upload failed", message: getErrorMessage(err), variant: "error" });
+        setModalError({ modal: "travelDoc", message: `Upload failed. ${getErrorMessage(err)}` });
       }
     },
     [travelDoc],
   );
 
   const handleDocApprove = useCallback(async () => {
+    setModalError(null);
     try {
       await travelDoc.approve();
       setTravelDocOpen(false);
       showToast({ title: "Document approved", variant: "success", duration: 1800 });
       void refetchActiveDeal();
     } catch (err) {
-      showToast({ title: "Couldn't approve", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "travelDoc", message: `Couldn't approve. ${getErrorMessage(err)}` });
     }
   }, [travelDoc, refetchActiveDeal]);
 
   const handleDocReject = useCallback(
     async (reason: string) => {
+      setModalError(null);
       try {
         await travelDoc.reject(reason);
         showToast({ title: "Re-upload requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
-        showToast({
-          title: "Couldn't request re-upload",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
+        setModalError({ modal: "travelDoc", message: `Couldn't request re-upload. ${getErrorMessage(err)}` });
       }
     },
     [travelDoc, refetchActiveDeal],
   );
 
   const handleDocAdminReview = useCallback(async () => {
+    setModalError(null);
     try {
       await travelDoc.requestAdminReview();
       showToast({ title: "Admin review requested", variant: "info", duration: 1800 });
     } catch (err) {
-      showToast({ title: "Couldn't escalate", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "travelDoc", message: `Couldn't escalate. ${getErrorMessage(err)}` });
     }
   }, [travelDoc]);
 
   const handleDocCancelMatch = useCallback(async () => {
+    setModalError(null);
     try {
       await travelDoc.withdraw();
       setTravelDocOpen(false);
@@ -1125,52 +1114,52 @@ export function OfferChatScreen() {
       void refetchActiveDeal();
       void refetchConversations();
     } catch (err) {
-      showToast({ title: "Couldn't cancel", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "travelDoc", message: `Couldn't cancel. ${getErrorMessage(err)}` });
     }
   }, [travelDoc, refetchActiveDeal, refetchConversations]);
 
   // ───────── Parcel-review action handlers ─────────
   const handleParcelUpload = useCallback(
     async (files: RNUploadFile[]) => {
+      setModalError(null);
       try {
         await parcelReview.upload(files);
         showToast({ title: "Photos submitted", variant: "success", duration: 1800 });
       } catch (err) {
-        showToast({ title: "Upload failed", message: getErrorMessage(err), variant: "error" });
+        setModalError({ modal: "parcelReview", message: `Upload failed. ${getErrorMessage(err)}` });
       }
     },
     [parcelReview],
   );
 
   const handleParcelApprove = useCallback(async () => {
+    setModalError(null);
     try {
       await parcelReview.approve();
       setParcelReviewOpen(false);
       showToast({ title: "Parcel approved", variant: "success", duration: 1800 });
       void refetchActiveDeal();
     } catch (err) {
-      showToast({ title: "Couldn't approve", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "parcelReview", message: `Couldn't approve. ${getErrorMessage(err)}` });
     }
   }, [parcelReview, refetchActiveDeal]);
 
   const handleParcelReject = useCallback(
     async (reason: ParcelReviewReason, note?: string) => {
+      setModalError(null);
       try {
         await parcelReview.reject(reason, note);
         showToast({ title: "Changes requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
-        showToast({
-          title: "Couldn't request changes",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
+        setModalError({ modal: "parcelReview", message: `Couldn't request changes. ${getErrorMessage(err)}` });
       }
     },
     [parcelReview, refetchActiveDeal],
   );
 
   const handleParcelCancel = useCallback(async () => {
+    setModalError(null);
     try {
       await parcelReview.cancel();
       setParcelReviewOpen(false);
@@ -1178,7 +1167,7 @@ export function OfferChatScreen() {
       void refetchActiveDeal();
       void refetchConversations();
     } catch (err) {
-      showToast({ title: "Couldn't cancel", message: getErrorMessage(err), variant: "error" });
+      setModalError({ modal: "parcelReview", message: `Couldn't cancel. ${getErrorMessage(err)}` });
     }
   }, [parcelReview, refetchActiveDeal, refetchConversations]);
 
@@ -1220,6 +1209,7 @@ export function OfferChatScreen() {
     async ({ reason, details }: { reason: string; details: string | undefined }) => {
       if (!conversationId) return;
       setReportUserPending(true);
+      setModalError(null);
       try {
         await messagesApi.reportMessage(conversationId, reason, details);
         setReportUserOpen(false);
@@ -1229,11 +1219,7 @@ export function OfferChatScreen() {
           variant: "success",
         });
       } catch (err) {
-        showToast({
-          title: "Couldn't submit report",
-          message: getErrorMessage(err),
-          variant: "error",
-        });
+        setModalError({ modal: "reportUser", message: getErrorMessage(err) });
       } finally {
         setReportUserPending(false);
       }
@@ -1296,6 +1282,101 @@ export function OfferChatScreen() {
       }
     },
     [rejectOffer, markOfferSettled],
+  );
+
+  /**
+   * Runs a workflow-pin CTA. The pin is a projection of the server FSM; this
+   * maps each `cta.code` to the mobile capability that satisfies it. Codes for
+   * stages that already have bespoke UI (match handshake, live offer) route to
+   * those same handlers, so behaviour stays consistent if the pin ever shows
+   * them. Travel-doc and parcel-review are not yet built on mobile (their own
+   * phases) — those codes explain that rather than dead-ending.
+   */
+  const handlePinAction = useCallback(
+    (code: string) => {
+      const bookingId = activeDeal?.booking_id ?? null;
+      switch (code) {
+        case "request_match":
+        case "request_match_again":
+          setMatchModalOpen(true);
+          return;
+        case "accept_match":
+          void handleAccept();
+          return;
+        case "make_offer":
+          handleOpenOfferComposer();
+          return;
+        case "accept_offer": {
+          // "Review" the offer waiting on me — the same accept the offer bar's
+          // Accept button runs, behind a look at the amount. This used to open
+          // the counter composer, so the pin could never actually accept. The
+          // pin only shows when the offer bar is hidden (offer not in the loaded
+          // page), so fall back to the deal's own open offer.
+          const fromDeal = activeDeal?.offer;
+          const open =
+            liveOffer && !liveOffer.mine
+              ? { id: liveOffer.offerId, amount: liveOffer.amount, currency: liveOffer.currency }
+              : fromDeal && fromDeal.status === "open" && fromDeal.proposed_by !== user?.id
+                ? { id: fromDeal.offer_id, amount: fromDeal.amount, currency: fromDeal.currency }
+                : null;
+          if (!open) {
+            handleOpenOfferComposer();
+            return;
+          }
+          showAppAlert({
+            title: `Accept ${formatMoney(open.amount, open.currency)}?`,
+            message: `${participantName} offered this as the delivery price. Accepting confirms the deal at this amount.`,
+            actions: [
+              { text: "Not now", style: "cancel" },
+              { text: "Counter", onPress: handleOpenOfferComposer },
+              { text: "Accept", onPress: () => void handleAcceptOffer(open.id) },
+            ],
+          });
+          return;
+        }
+        case "pay":
+        case "pay_grace":
+          if (bookingId) navigation.navigate("PayBookingTab", { bookingId });
+          return;
+        // Every post-payment step lives on the booking card (web parity): the
+        // pickup confirmation, the sender's delivery code and the carrier's
+        // code entry are all there, each labelled with its step. `verify_otp`
+        // used to open a standalone mock OTP screen backed by the local store,
+        // which never called the API — it could not confirm a delivery.
+        case "verify_otp":
+        case "generate_otp":
+        case "share_otp":
+        case "accept_handoff":
+        case "set_handoff_plan":
+        case "mark_handoff_sent":
+        case "set_return_resolution":
+        case "confirm_return_sent":
+        case "confirm_return_received":
+        // The carrier's journey milestones (stages 8/9/10) are buttons on the
+        // same booking card; these pin codes used to fall through to `default`
+        // and the tap did nothing.
+        case "confirm_ready_to_travel":
+        case "start_journey":
+        case "mark_ready_to_deliver":
+          if (bookingId) navigation.navigate("BookingsTab", { expandId: bookingId });
+          return;
+        case "completed":
+          if (bookingId) navigation.navigate("DeliveryReviewTab", { bookingId });
+          return;
+        case "upload_travel_doc":
+        case "review_travel_doc":
+          setTravelDocOpen(true);
+          return;
+        case "upload_parcel_photos":
+        case "review_parcel_photos":
+          setParcelReviewOpen(true);
+          return;
+        default:
+          return;
+      }
+    },
+    [activeDeal?.booking_id, activeDeal?.offer, liveOffer, user?.id, participantName,
+      handleAccept, handleAcceptOffer, handleOpenOfferComposer, navigation],
   );
 
   const handleSystemPress = useCallback(
@@ -1853,16 +1934,25 @@ export function OfferChatScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => setAttachMenuOpen(false)}
+        onDismiss={onAttachMenuDismissed}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setAttachMenuOpen(false)} />
-        <View style={styles.actionSheet}>
+        <View style={[styles.actionSheet, sheetInset]}>
           <Text style={styles.actionSheetTitle}>Attach</Text>
-          <ActionRow icon="image" label="Send a photo" onPress={handlePickImage} />
-          <ActionRow icon="camera-outline" label="Take a photo" onPress={handleTakePhoto} />
+          <ActionRow
+            icon="image"
+            label="Send a photo"
+            onPress={() => afterAttachMenu(() => setAttachMenuOpen(false), () => void handlePickImage())}
+          />
+          <ActionRow
+            icon="camera-outline"
+            label="Take a photo"
+            onPress={() => afterAttachMenu(() => setAttachMenuOpen(false), () => void handleTakePhoto())}
+          />
           <ActionRow
             icon="document-attach"
             label="Send a document or video"
-            onPress={handlePickDocument}
+            onPress={() => afterAttachMenu(() => setAttachMenuOpen(false), () => void handlePickDocument())}
           />
           <View style={styles.actionDivider} />
           <ActionRow icon="close" label="Cancel" onPress={() => setAttachMenuOpen(false)} />
@@ -1877,19 +1967,17 @@ export function OfferChatScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => setActionMenuOpen(false)}
+        onDismiss={onActionMenuDismissed}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setActionMenuOpen(false)} />
-        <View style={[styles.actionSheet, styles.actionSheetTall]}>
+        <View style={[styles.actionSheet, styles.actionSheetTall, sheetInset]}>
           <Text style={styles.actionSheetTitle}>Chat actions</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
             {matchStatus === "pending" || matchStatus === "declined" ? (
               <ActionRow
                 icon="checkmark-circle"
                 label={matchStatus === "declined" ? "Match again" : "Send match request"}
-                onPress={() => {
-                  setActionMenuOpen(false);
-                  setMatchModalOpen(true);
-                }}
+                onPress={() => afterActionMenu(() => setActionMenuOpen(false), () => setMatchModalOpen(true))}
               />
             ) : null}
             {/* Decline answers a request, so it is offered only while the other
@@ -1900,10 +1988,7 @@ export function OfferChatScreen() {
                 icon="close-circle"
                 label="Decline match"
                 tone="danger"
-                onPress={() => {
-                  setActionMenuOpen(false);
-                  setDeclineOpen(true);
-                }}
+                onPress={() => afterActionMenu(() => setActionMenuOpen(false), () => setDeclineOpen(true))}
               />
             ) : null}
             {matchStatus === "pending" || matchStatus === "declined" ? (
@@ -1913,10 +1998,7 @@ export function OfferChatScreen() {
             <ActionRow
               icon="images-outline"
               label="View media"
-              onPress={() => {
-                setActionMenuOpen(false);
-                setMediaOpen(true);
-              }}
+              onPress={() => afterActionMenu(() => setActionMenuOpen(false), () => setMediaOpen(true))}
             />
             <ActionRow
               icon={isArchived ? "arrow-undo-outline" : "archive-outline"}
@@ -1932,10 +2014,7 @@ export function OfferChatScreen() {
             <ActionRow
               icon="flag-outline"
               label="Report user"
-              onPress={() => {
-                setActionMenuOpen(false);
-                setReportUserOpen(true);
-              }}
+              onPress={() => afterActionMenu(() => setActionMenuOpen(false), () => setReportUserOpen(true))}
             />
             <ActionRow icon="scale-outline" label="Raise dispute" onPress={handleRaiseDispute} />
 
@@ -1960,9 +2039,10 @@ export function OfferChatScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => setBubbleMenu(null)}
+        onDismiss={onBubbleMenuDismissed}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setBubbleMenu(null)} />
-        <View style={styles.actionSheet}>
+        <View style={[styles.actionSheet, sheetInset]}>
           <Text style={styles.actionSheetTitle}>Message</Text>
           {bubbleMenu?.text && bubbleMenu.text !== "📎 Attachment" ? (
             <ActionRow
@@ -2003,7 +2083,7 @@ export function OfferChatScreen() {
         </Pressable>
         <Pressable
           onPress={() => setExpandedImageUrl(null)}
-          style={styles.imageCloseButton}
+          style={[styles.imageCloseButton, { top: insets.top + 8 }]}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Close image"
@@ -2018,6 +2098,7 @@ export function OfferChatScreen() {
         participantName={participantName}
         pending={decliningPending}
         matchRequestFromOther={matchedByOther}
+        error={errorFor("decline")}
         onCancel={() => {
           if (!decliningPending) setDeclineOpen(false);
         }}
@@ -2028,6 +2109,7 @@ export function OfferChatScreen() {
       <ReportMessageModal
         open={!!reportTarget}
         pending={reportPending}
+        error={errorFor("reportMessage")}
         onCancel={() => {
           if (!reportPending) setReportTarget(null);
         }}
@@ -2038,6 +2120,7 @@ export function OfferChatScreen() {
       <ReportMessageModal
         open={reportUserOpen}
         pending={reportUserPending}
+        error={errorFor("reportUser")}
         title={`Report ${participantName.split(" ")[0]}`}
         subtitle="Help us keep Safarly safe. Our trust & safety team reviews every report."
         onCancel={() => {
@@ -2068,6 +2151,7 @@ export function OfferChatScreen() {
         icon={confirmAction === "block" ? "ban" : "link"}
         tone="destructive"
         pending={confirmPending}
+        error={errorFor("confirm")}
         onCancel={() => {
           if (!confirmPending) setConfirmAction(null);
         }}
@@ -2090,6 +2174,7 @@ export function OfferChatScreen() {
         pending={matchPending}
         userRole={userRole}
         contextType={conversation?.context_type}
+        error={errorFor("match")}
         onCancel={() => {
           if (!matchPending) setMatchModalOpen(false);
         }}
@@ -2101,6 +2186,7 @@ export function OfferChatScreen() {
         open={!!matchCandidates}
         candidates={matchCandidates ?? []}
         pending={matchPending}
+        error={errorFor("dealPicker")}
         onCancel={() => setMatchCandidates(null)}
         onPick={(candidate) => void handlePickDeal(candidate)}
       />
@@ -2112,6 +2198,8 @@ export function OfferChatScreen() {
         loading={travelDoc.loading}
         pending={travelDoc.pending}
         onClose={() => setTravelDocOpen(false)}
+        error={errorFor("travelDoc")}
+        onDismissError={() => setModalError(null)}
         onUpload={(file) => void handleDocUpload(file)}
         onApprove={() => void handleDocApprove()}
         onReject={(reason) => void handleDocReject(reason)}
@@ -2129,6 +2217,8 @@ export function OfferChatScreen() {
         loading={parcelReview.loading}
         pending={parcelReview.pending}
         onClose={() => setParcelReviewOpen(false)}
+        error={errorFor("parcelReview")}
+        onDismissError={() => setModalError(null)}
         onUpload={(files) => void handleParcelUpload(files)}
         onApprove={() => void handleParcelApprove()}
         onReject={(reason, note) => void handleParcelReject(reason, note)}

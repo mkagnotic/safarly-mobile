@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +11,8 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 
 interface ReportReason {
@@ -51,6 +51,11 @@ interface ReportMessageModalProps {
   title?: string;
   /** Header subtitle. */
   subtitle?: string;
+  /**
+   * Why the last submit failed. Rendered inside the card: a toast is drawn in
+   * the root view, UNDER this Modal, so it would never be seen.
+   */
+  error?: string | null;
   onCancel: () => void;
   onSubmit: (input: { reason: string; details: string | undefined }) => void;
 }
@@ -67,6 +72,7 @@ export function ReportMessageModal({
   pending,
   title = "Report message",
   subtitle = "Help us keep Safarly safe. Our trust & safety team reviews every report.",
+  error,
   onCancel,
   onSubmit,
 }: Readonly<ReportMessageModalProps>) {
@@ -92,10 +98,7 @@ export function ReportMessageModal({
         if (!pending) onCancel();
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
+      <KeyboardLift style={styles.flex}>
         <Pressable
           style={styles.backdrop}
           onPress={() => {
@@ -162,6 +165,8 @@ export function ReportMessageModal({
               </Text>
             </ScrollView>
 
+            <FormBanner message={error} />
+
             <View style={styles.footer}>
               <Pressable
                 onPress={onCancel}
@@ -197,7 +202,7 @@ export function ReportMessageModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardLift>
     </Modal>
   );
 }

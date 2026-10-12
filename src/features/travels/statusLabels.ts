@@ -1,4 +1,5 @@
 import { colors } from "@/theme/colors";
+import { toLocalYmd } from "@/utils/travelDate";
 
 /**
  * Ported verbatim from `web app/safarly_web/src/customer/pages/CustomerMyTrips.tsx`.
@@ -18,6 +19,8 @@ export const STATUS_LABEL: Readonly<Record<string, string>> = {
   accepted: "Matched",
   looking_for_match: "Looking for Carrier",
   can_carry: "Can Carry Parcel",
+  // buddy_request_status: the sender cancelled their request.
+  withdrawn: "Cancelled",
 };
 
 export interface StatusTone {
@@ -39,6 +42,7 @@ export const STATUS_TONE: Readonly<Record<string, StatusTone>> = {
   accepted: { bg: "rgba(255, 122, 38, 0.10)", fg: colors.primary },
   looking_for_match: { bg: "rgba(245, 158, 11, 0.12)", fg: colors.warning },
   can_carry: { bg: "rgba(255, 122, 38, 0.10)", fg: colors.primary },
+  withdrawn: { bg: colors.surfaceMuted, fg: colors.mutedText },
 };
 
 const DEFAULT_TONE: StatusTone = { bg: colors.surfaceMuted, fg: colors.mutedText };
@@ -89,5 +93,5 @@ const EXPIRY_IMMUNE_STATUSES: ReadonlySet<string> = new Set([
 export function isListingExpired(status: string, date: string | null | undefined): boolean {
   if (EXPIRY_IMMUNE_STATUSES.has(status)) return false;
   if (!date) return false;
-  return date.slice(0, 10) < new Date().toLocaleDateString("en-CA");
+  return date.slice(0, 10) < toLocalYmd();
 }

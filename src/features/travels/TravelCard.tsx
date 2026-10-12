@@ -14,6 +14,7 @@ import {
 import type { Parcel, Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
+import { formatMoneyShort } from "@/utils/money";
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 
 export type TravelCardType = "flight" | "parcel";
@@ -296,12 +297,7 @@ function renderParcelMeta(parcel: Parcel): string {
   const date = formatDeliveryWindow(parcel, { year: true });
   const category = parcel.category?.trim();
   const weight = parcel.weight_kg != null ? `${parcel.weight_kg}kg` : "";
-  const fee =
-    parcel.fee_offered != null
-      ? `${parcel.fee_currency === "USD" ? "$" : ""}${parcel.fee_offered}${
-          parcel.fee_currency !== "USD" ? ` ${parcel.fee_currency}` : ""
-        }`
-      : "";
+  const fee = parcel.fee_offered != null ? formatMoneyShort(parcel.fee_offered, parcel.fee_currency) : "";
   return [date, category, weight, fee].filter(Boolean).join(" | ");
 }
 

@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +10,8 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { FormBanner } from "@/components/ui/FormBanner";
+import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 
 interface DeclineMatchModalProps {
@@ -24,6 +24,11 @@ interface DeclineMatchModalProps {
    * one you sent. Defaults to `false` (regular "Decline match" wording).
    */
   matchRequestFromOther?: boolean;
+  /**
+   * Why the last attempt failed. Rendered inside the sheet: a toast is drawn
+   * in the root view, UNDER this Modal, so it would never be seen.
+   */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -38,6 +43,7 @@ export function DeclineMatchModal({
   participantName,
   pending,
   matchRequestFromOther = false,
+  error,
   onCancel,
   onConfirm,
 }: Readonly<DeclineMatchModalProps>) {
@@ -64,10 +70,7 @@ export function DeclineMatchModal({
         if (!pending) onCancel();
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
+      <KeyboardLift style={styles.flex}>
         <Pressable
           style={styles.backdrop}
           onPress={() => {
@@ -102,6 +105,8 @@ export function DeclineMatchModal({
               // server's `decline_reason` column is unbounded TEXT.
             />
 
+            <FormBanner message={error} />
+
             <View style={styles.footer}>
               <Pressable
                 onPress={onCancel}
@@ -128,7 +133,7 @@ export function DeclineMatchModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardLift>
     </Modal>
   );
 }

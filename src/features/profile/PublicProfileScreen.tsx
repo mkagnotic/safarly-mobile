@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   CompositeNavigationProp,
   RouteProp,
+  useFocusEffect,
   useNavigation,
   useRoute,
 } from "@react-navigation/native";
@@ -10,16 +11,22 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 
+import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { UnavailableContentCard } from "@/components/moderation/UnavailableContentCard";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
 import { ProfileSkeleton } from "@/components/ui/Skeletons";
+import { useAuth } from "@/context/AuthContext";
+import { withoutBlocked } from "@/features/moderation/blockFilter";
 import { initialsFromFullName } from "@/features/profile/profileUtils";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { usePublicProfile } from "@/hooks/api/usePublicProfile";
 import { useUserReviews } from "@/hooks/api/useUserReviews";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Rating } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
 import { shadowCard } from "@/theme/elevation";
 
 type Nav = CompositeNavigationProp<
@@ -55,11 +62,44 @@ export function PublicProfileScreen() {
 
   const { profile, loading, error, refetch } = usePublicProfile(userId);
   const reviews = useUserReviews(userId, { perPage: PER_PAGE });
+  const { user } = useAuth();
+  const { hiddenUserIds, isBlockedByMe } = useBlockedUsers();
+  const isSelf = !!user?.id && user.id === userId;
+
+  // Unblocking from here leaves the screen, like blocking does. When both
+  // people had blocked each other, staying would flip this profile to
+  // "unavailable" the instant the viewer's own block lifted — telling them the
+  // other person had blocked them too. `unblock` is optimistic, so the flip is
+  // caught while rendering (no frame of the unavailable card); the menu's
+  // `onUnblocked` then leaves, and a refused unblock restores the block, which
+  // clears `leaving` again.
+  const blockedByMeNow = isBlockedByMe(userId);
+  const [tracked, setTracked] = useState({ userId, blocked: blockedByMeNow });
+  const [leaving, setLeaving] = useState(false);
+  if (tracked.userId !== userId || tracked.blocked !== blockedByMeNow) {
+    setTracked({ userId, blocked: blockedByMeNow });
+    setLeaving(tracked.userId === userId && tracked.blocked && !blockedByMeNow);
+  }
+
+  // Someone who blocked the viewer: their profile is not shown at all. A person
+  // the VIEWER blocked stays visible so they can be unblocked from here.
+  const blockedByThem = !!userId && hiddenUserIds.has(userId) && !blockedByMeNow && !leaving;
+  const visibleReviews = useMemo(
+    () => withoutBlocked(reviews.reviews, hiddenUserIds, (r) => [r.rater_id, r.rater?.id]),
+    [reviews.reviews, hiddenUserIds],
+  );
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.navigate("SearchTab");
   }, [navigation]);
+
+  // Tab screens stay mounted: a later visit starts fresh.
+  useFocusEffect(
+    useCallback(() => {
+      setLeaving(false);
+    }, []),
+  );
 
   const handleRefresh = useCallback(async () => {
     await Promise.all([refetch(), reviews.refetch()]);
@@ -89,9 +129,20 @@ export function PublicProfileScreen() {
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Profile</Text>
+        {userId && !isSelf && !blockedByThem ? (
+          <ModerationMenu
+            target={{ type: "user", id: userId }}
+            reportLabel="Report user"
+            blockUser={{ id: userId, name }}
+            onBlocked={handleBack}
+            onUnblocked={handleBack}
+          />
+        ) : null}
       </View>
 
-      {loading && !profile ? (
+      {blockedByThem ? (
+        <UnavailableContentCard onBack={handleBack} />
+      ) : loading && !profile ? (
         <ProfileSkeleton />
       ) : error && !profile ? (
         <Card style={styles.errorCard}>
@@ -181,14 +232,14 @@ export function PublicProfileScreen() {
             <Card style={styles.reviewsLoadingCard}>
               <ActivityIndicator color={colors.primary} />
             </Card>
-          ) : reviews.reviews.length === 0 ? (
+          ) : visibleReviews.length === 0 ? (
             <Card style={styles.emptyCard}>
               <Ionicons name="star-outline" size={30} color={colors.mutedText} style={styles.emptyIcon} />
               <Text style={styles.emptyText}>No reviews yet</Text>
             </Card>
           ) : (
             <View style={styles.listWrap}>
-              {reviews.reviews.map((r) => (
+              {visibleReviews.map((r) => (
                 <ReviewCard key={r.id} review={r} />
               ))}
               {reviews.hasMore ? (
@@ -254,7 +305,9 @@ function ReviewCard({ review }: Readonly<{ review: Rating }>) {
           <Image source={{ uri: raterAvatar }} style={styles.reviewAvatarImage} />
         ) : (
           <View style={styles.reviewAvatarFallback}>
-            <Text style={styles.reviewAvatarInitials}>{getInitials(raterName)}</Text>
+            <Text style={styles.reviewAvatarInitials} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+              {getInitials(raterName)}
+            </Text>
           </View>
         )}
         <View style={styles.reviewerBlock}>
