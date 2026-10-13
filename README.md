@@ -59,7 +59,7 @@ src/
   utils/                  money, dates (date-only parsing), route matching, sanitizers, ...
   store/                  Zustand stores, realtime bus
   theme/, i18n/, constants/, types/, data/, assets/
-scripts/                  start-env, guard scripts, EAS hook, smoke tests
+scripts/                  start-env, guard scripts, EAS hook
 docs/                     PUSH_NOTIFICATIONS.md, ARCHITECTURE.md
 ```
 
@@ -128,10 +128,6 @@ Push notifications do **not** work in Expo Go on SDK 54. Use a development build
 
 CI (`.github/workflows/ci.yml`, every push and every PR) runs: `npm ci` → typecheck →
 `check:errors` → `check:ux` → lint → `check:tests` → `npm test`.
-
-`scripts/smokeTest*.mjs` and `scripts/debugTripDetailsIds.mjs` are manual probes
-run with `node scripts/<file>`. They **default to the production project** when the
-`EXPO_PUBLIC_SUPABASE_*` variables are not set, so export staging values first.
 
 ## Builds and releases (EAS)
 

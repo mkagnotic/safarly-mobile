@@ -33,6 +33,8 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 gradle-build.log
+# JVM crash reports
+hs_err_pid*.log
 
 # OS
 .DS_Store
@@ -50,7 +52,7 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Local AI assistant config
+# Local tool settings (per developer, never committed)
 .claude/
 
 # E2E exploratory scripts + screenshots (local only)
