@@ -12,6 +12,7 @@ import {
   resolveNotificationRoute,
   type NotificationTarget,
 } from "./notificationRoute";
+import { loginPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
 const LAST_TOKEN_KEY = "safarly.pushToken";
@@ -141,18 +142,24 @@ export async function requestAndRegisterPushToken(): Promise<PushRegisterResult>
 }
 
 /**
- * Silent: register a token on login ONLY if permission was already granted.
- * Never prompts — a returning user who previously opted in keeps working
- * without a surprise dialog; first-time opt-in happens via the Preferences
- * toggle. Best-effort; swallows all errors.
+ * On sign-in: register this device for push. Already allowed -> register
+ * silently. Never asked (every new iPhone) -> ask ONCE, so the OS shows its
+ * dialog; a user who already answered is never asked again. See
+ * ./pushPolicy.ts for why: iOS had 0 registered devices because the only
+ * prompt lived behind the Preferences toggle. Best-effort; swallows all errors.
  */
 export async function syncPushRegistrationOnLogin(): Promise<void> {
   try {
     if (!pushSupported()) return;
     const projectId = getProjectId();
     if (!projectId) return;
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== "granted") return; // do not prompt on login
+    let { status } = await Notifications.getPermissionsAsync();
+    const action = loginPushAction(status);
+    if (action === "skip") return;
+    if (action === "ask") {
+      status = (await Notifications.requestPermissionsAsync()).status;
+      if (status !== "granted") return;
+    }
     await acquireAndRegister(projectId);
   } catch (err) {
     // eslint-disable-next-line no-console
