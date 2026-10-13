@@ -2,6 +2,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { UpdateRequiredScreen } from "@/components/UpdateRequiredScreen";
 import { AppFeedbackProvider } from "@/context/AppFeedbackContext";
 import { AuthProvider } from "@/context/AuthContext";
@@ -10,6 +11,10 @@ import { linking } from "@/navigation/linking";
 import { navigationRef } from "@/navigation/navigationRef";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { colors, screenCanvas } from "@/theme/colors";
+import { installGlobalErrorReporting } from "@/lib/errorReporter";
+
+// Crashes and unhandled errors -> Admin → Errors. Runs once, before any render.
+installGlobalErrorReporting();
 
 const appTheme = {
   ...DefaultTheme,
@@ -57,7 +62,9 @@ export default function App() {
           <AppFeedbackProvider>
             <NavigationContainer ref={navigationRef} theme={appTheme} linking={linking}>
               <StatusBar style="dark" />
-              <RootNavigator />
+              <AppErrorBoundary>
+                <RootNavigator />
+              </AppErrorBoundary>
             </NavigationContainer>
           </AppFeedbackProvider>
         </AuthProvider>
