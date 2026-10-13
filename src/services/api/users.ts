@@ -103,6 +103,14 @@ export const usersApi = {
    *
    * The access token is void once this succeeds — sign out locally straight after.
    */
+  /**
+   * Right after Sign in with Apple: hand Apple's authorization code to the
+   * server, which exchanges it and stores the refresh token (never returned)
+   * so deleting the account later - on any platform - can revoke it.
+   */
+  storeAppleToken: (authorizationCode: string) =>
+    api.post<{ stored: boolean }>("/user-handler/me/apple-token", { authorization_code: authorizationCode }),
+
   deleteMyAccount: (confirmation: AccountDeletionConfirmation) =>
     api.post<{ deleted: boolean }>("/user-handler/me/delete", confirmation),
 };

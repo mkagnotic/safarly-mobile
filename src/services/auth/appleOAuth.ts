@@ -148,6 +148,13 @@ export async function performAppleOAuth(): Promise<void> {
   }
 
   await persistAppleFullName(credential.fullName ?? null, sessionEmail ?? credential.email ?? null);
+
+  // Let the server keep Apple's refresh token, so account deletion can revoke
+  // it from any platform (Guideline 5.1.1(v)). Best-effort and never awaited
+  // by sign-in: a failure here must not affect signing in.
+  if (credential.authorizationCode) {
+    void usersApi.storeAppleToken(credential.authorizationCode).catch(() => {});
+  }
 }
 
 /**
