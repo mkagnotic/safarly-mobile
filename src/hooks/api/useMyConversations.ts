@@ -7,9 +7,15 @@ import {
   type Conversation,
 } from "@/services/api";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import {
+  INBOX_PAGE_SIZE,
+  hasMorePages,
+  mergePages,
+  type ConversationsMeta,
+} from "@/features/messages/inbox/inboxPaging";
 
 export interface UseMyConversationsOptions {
-  /** Items per page. Defaults to 50 (mobile-friendly; web uses default). */
+  /** Items per page. Defaults to `INBOX_PAGE_SIZE` (50) — the same as web. */
   perPage?: number;
   /** Logged-in user id — used to filter self-chats and identify match-request direction. */
   currentUserId: string | null;
@@ -24,6 +30,15 @@ export interface UseMyConversationsResult {
   /** True while a `markX` mutation is in flight; UI updates optimistically anyway. */
   mutating: boolean;
   refetch: () => Promise<void>;
+  /** More threads on the server than loaded — the list is paged. */
+  hasMore: boolean;
+  /** Load the next page (no-op while another load is in flight). */
+  loadMore: () => Promise<void>;
+  loadingMore: boolean;
+  /** Visible threads on the server, all pages (null until the first load). */
+  total: number | null;
+  /** Visible, non-archived threads with anything unread, all pages (server). */
+  unreadChats: number | null;
   /** Optimistically accept an incoming match request. */
   /** Accept/request a match for ONE delivery. `deal` names which — omit it only when
    *  the pair have a single delivery in common, or the server refuses (MATCH_AMBIGUOUS). */
@@ -49,7 +64,7 @@ export interface UseMyConversationsResult {
  * and decline mutations for the inbox.
  */
 export function useMyConversations({
-  perPage = 50,
+  perPage = INBOX_PAGE_SIZE,
   currentUserId,
   archived = false,
 }: UseMyConversationsOptions): UseMyConversationsResult {
@@ -57,9 +72,29 @@ export function useMyConversations({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   const [mutating, setMutating] = useState(false);
+  const [meta, setMeta] = useState<ConversationsMeta | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  const loadMoreRef = useRef<Promise<void> | null>(null);
+  /** How many pages the user has paged in — a refresh reloads all of them, so
+   *  a realtime tick never snaps a scrolled inbox back to the first page. */
+  const pagesLoadedRef = useRef(1);
+
+  /** Re-read every loaded page (in parallel) and replace the list. */
+  const fetchLoadedPages = useCallback(async () => {
+    const pageCount = Math.max(1, pagesLoadedRef.current);
+    const results = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) =>
+        messagesApi.listConversations({ page: i + 1, per_page: perPage, archived }),
+      ),
+    );
+    const rows = mergePages(results.map((r) => r.data ?? []));
+    const first = (results[0]?.meta ?? null) as ConversationsMeta | null;
+    const last = (results[results.length - 1]?.meta ?? null) as ConversationsMeta | null;
+    return { rows, meta: first && last ? { ...first, page: last.page } : first };
+  }, [perPage, archived]);
 
   const refetch = useCallback(async () => {
     if (inFlightRef.current) return inFlightRef.current;
@@ -68,9 +103,10 @@ export function useMyConversations({
       setLoading(true);
       setError(null);
       try {
-        const res = await messagesApi.listConversations({ page: 1, per_page: perPage, archived });
+        const res = await fetchLoadedPages();
         if (!mountedRef.current) return;
-        setRawConversations(res.data ?? []);
+        setRawConversations(res.rows);
+        setMeta(res.meta);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -82,7 +118,34 @@ export function useMyConversations({
 
     inFlightRef.current = promise;
     return promise;
-  }, [perPage, archived]);
+  }, [fetchLoadedPages]);
+
+  const hasMore = hasMorePages(meta);
+
+  const loadMore = useCallback(async () => {
+    if (loadMoreRef.current || inFlightRef.current || !hasMorePages(meta)) return;
+    const nextPage = (meta?.page ?? 1) + 1;
+    const promise = (async () => {
+      setLoadingMore(true);
+      try {
+        const res = await messagesApi.listConversations({ page: nextPage, per_page: perPage, archived });
+        if (!mountedRef.current) return;
+        pagesLoadedRef.current = nextPage;
+        setRawConversations((prev) => mergePages([prev, res.data ?? []]));
+        // Every page carries the current total + summary; it also advances
+        // the page cursor `hasMore` reads.
+        const m = res.meta as ConversationsMeta | undefined;
+        setMeta((prev) => m ?? prev);
+      } catch {
+        // A failed page is retried by the next scroll; the loaded rows stay.
+      } finally {
+        if (mountedRef.current) setLoadingMore(false);
+        loadMoreRef.current = null;
+      }
+    })();
+    loadMoreRef.current = promise;
+    return promise;
+  }, [meta, perPage, archived]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -184,16 +247,18 @@ export function useMyConversations({
   const resyncSatisfies = useCallback(
     async (conversationId: string, satisfied: (c: Conversation) => boolean) => {
       try {
-        const res = await messagesApi.listConversations({ page: 1, per_page: perPage, archived });
-        const rows = res.data ?? [];
-        if (mountedRef.current) setRawConversations(rows);
+        const { rows, meta: m } = await fetchLoadedPages();
+        if (mountedRef.current) {
+          setRawConversations(rows);
+          setMeta(m);
+        }
         const row = rows.find((c) => c.id === conversationId);
         return !!row && satisfied(row);
       } catch {
         return false;
       }
     },
-    [perPage, archived],
+    [fetchLoadedPages],
   );
 
   /**
@@ -328,6 +393,11 @@ export function useMyConversations({
     error,
     mutating,
     refetch,
+    hasMore,
+    loadMore,
+    loadingMore,
+    total: meta?.total ?? null,
+    unreadChats: meta?.summary?.unread_chats ?? null,
     acceptMatch,
     declineMatch,
     markConversationRead,

@@ -259,7 +259,7 @@ function MainTabs() {
         <HeroBackground />
         <Tabs.Navigator backBehavior="history" screenOptions={tabScreenOptions}>
           {/* Visible tabs */}
-          <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t(language, "tabs.home") }} />
+          <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: t(language, "tabs.home"), tabBarAccessibilityLabel: t(language, "tabs.home") }} />
           {/* Order matches web's primary nav exactly (CustomerNavbar `NAV_LINKS`):
               Home, Search, My Travels, Inbox. These two used to be transposed, so a
               user moving between the site and the app found the middle two
@@ -270,13 +270,18 @@ function MainTabs() {
               would touch ~12 navigate() call sites for no user-visible gain, so the
               user-facing labels (tabs.parcels = "My travels", tabs.trips = "Search")
               are what to trust here. Order is by position below, not by name. */}
-          <Tabs.Screen name="Trips" component={SearchScreen} options={{ tabBarLabel: t(language, "tabs.trips") }} />
-          <Tabs.Screen name="Parcels" component={MyTravelsScreen} options={{ tabBarLabel: t(language, "tabs.parcels") }} />
+          <Tabs.Screen name="Trips" component={SearchScreen} options={{ tabBarLabel: t(language, "tabs.trips"), tabBarAccessibilityLabel: t(language, "tabs.trips") }} />
+          <Tabs.Screen name="Parcels" component={MyTravelsScreen} options={{ tabBarLabel: t(language, "tabs.parcels"), tabBarAccessibilityLabel: t(language, "tabs.parcels") }} />
       <Tabs.Screen
         name="Buddies"
         component={MessagesScreen}
         options={{
           tabBarLabel: t(language, "tabs.buddies"),
+          // Explicit labels: Android otherwise joins icon + badge + text into
+          // ", 9+, Inbox". The unread count is spoken as words.
+          tabBarAccessibilityLabel: inboxBadge
+            ? `${t(language, "tabs.buddies")}, ${inboxBadge} unread`
+            : t(language, "tabs.buddies"),
           tabBarBadge: inboxBadge,
           tabBarBadgeStyle: { backgroundColor: colors.wordmark, color: colors.white, fontSize: 10, fontWeight: "800" },
         }}

@@ -26,6 +26,22 @@ interface Props {
 const isFinished = (deal: DealProjection): boolean => isDealFinished(deal);
 
 /**
+ * The heading over the chips. It counts EXACTLY the chips it sits above - it used
+ * to say "N deliveries" over every selectable deal (open requests, deals awaiting
+ * payment or handoff...), so a pair with 8 real deliveries read "827 deliveries".
+ * A deal is not a delivery until it is delivered, so the word is "deals", and the
+ * delivered ones are named separately. Same wording on web and mobile.
+ */
+export function dealSwitcherHeading(
+  shown: readonly { workflow?: { state?: string | null } | null }[],
+): string {
+  const total = shown.length;
+  const delivered = shown.filter((d) => d.workflow?.state === "COMPLETED").length;
+  const head = `${total} ${total === 1 ? "deal" : "deals"} with this person`;
+  return delivered > 0 ? `${head} · ${delivered} delivered` : head;
+}
+
+/**
  * Which delivery is this chat showing?
  *
  * A conversation is a thread between two people, but they can have several deliveries
@@ -54,7 +70,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
     <View style={styles.wrap}>
       <View style={styles.headingRow}>
         <Ionicons name="cube-outline" size={12} color={colors.subtleText} />
-        <Text style={styles.heading}>{shown.length} deliveries with this person</Text>
+        <Text style={styles.heading}>{dealSwitcherHeading(shown)}</Text>
       </View>
       {/* Horizontal scroll rather than wrapping: the pinned zone is height-capped, and
           a wrapping row of chips would eat the space the pinned action needs. */}

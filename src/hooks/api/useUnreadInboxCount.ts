@@ -10,8 +10,27 @@ export interface UseUnreadInboxCountResult {
   refetch: () => Promise<void>;
 }
 
+/** Mounted badge instances, so a screen can ask them to recount. */
+const listeners = new Set<() => void>();
+
 /**
- * Total unread message count across all the user's conversations.
+ * Ask every mounted badge to recount now.
+ *
+ * Reading a thread marks its messages read on the server (a side effect of
+ * `GET /messages`). The badge also hears that through the realtime `messages`
+ * topic, but only if the UPDATE events arrive; the Inbox calls this when it
+ * regains focus (i.e. coming back from a thread) so the badge comes down
+ * whether or not realtime delivered. Web does the same by invalidating the
+ * profile (`useThreadMessages`).
+ */
+export function refreshUnreadInboxCount(): void {
+  for (const l of listeners) l();
+}
+
+/**
+ * Total unread message count across all the user's VISIBLE conversations —
+ * `fn_visible_unread_messages` on the server, the same number the web badge
+ * reads from the profile.
  *
  * Subscribes to the `messages` topic on the realtime bus, so the count
  * stays live without polling. Drives the bottom-tab badge on the Inbox tab.
@@ -58,6 +77,14 @@ export function useUnreadInboxCount(): UseUnreadInboxCountResult {
   // Realtime: any message INSERT/UPDATE/DELETE in any of the user's
   // conversations refetches the badge count.
   useRealtimeBus("messages", refetch);
+
+  useEffect(() => {
+    const l = () => void refetch();
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, [refetch]);
 
   return { count, loading, error, refetch };
 }

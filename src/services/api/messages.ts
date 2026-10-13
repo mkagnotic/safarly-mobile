@@ -382,6 +382,16 @@ export const messagesApi = {
       archived: params?.archived ? "true" : undefined,
     }),
 
+  /**
+   * One conversation, shaped exactly like a list row (participant, unread
+   * count, archived) and through the same visibility rules - for a chat opened
+   * by link or notification that isn't on a loaded inbox page.
+   */
+  getConversation: async (id: string) => {
+    const res = await api.get<Conversation[]>("/message-handler/conversations", { id });
+    return res.data?.[0] ?? null;
+  },
+
   /** Total unread count for the inbox badge. */
   unreadCount: () =>
     api.get<{ unread_count: number }>("/message-handler/conversations/unread-count"),

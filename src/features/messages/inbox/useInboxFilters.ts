@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { useAuth } from "@/context/AuthContext";
 import { type Conversation } from "@/services/api";
 
+import { inboxChipCounts } from "./inboxPaging";
 import { type InboxFilter } from "./inboxTypes";
 
 /**
@@ -12,9 +13,17 @@ import { type InboxFilter } from "./inboxTypes";
 export function useInboxFilters({
   conversations,
   user,
+  hasMore = false,
+  serverTotal,
+  serverUnreadChats,
 }: {
   conversations: Conversation[];
   user: ReturnType<typeof useAuth>["user"];
+  /** The list is paged and more threads remain on the server. */
+  hasMore?: boolean;
+  /** Server-side counts over ALL pages (see `inboxChipCounts`). */
+  serverTotal?: number | null;
+  serverUnreadChats?: number | null;
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
@@ -42,13 +51,19 @@ export function useInboxFilters({
     return searched;
   }, [searched, filter, isAwaitingMine]);
 
+  // "unread" is unread CHATS (threads), not messages — the chip says so.
   const counts = useMemo(
     () => ({
-      all: conversations.length,
-      unread: conversations.filter((c) => (c.unread_count ?? 0) > 0).length,
+      ...inboxChipCounts({
+        loadedAll: conversations.length,
+        loadedUnread: conversations.filter((c) => (c.unread_count ?? 0) > 0).length,
+        hasMore,
+        serverTotal: serverTotal ?? undefined,
+        serverUnreadChats: serverUnreadChats ?? undefined,
+      }),
       requests: conversations.filter(isAwaitingMine).length,
     }),
-    [conversations, isAwaitingMine],
+    [conversations, isAwaitingMine, hasMore, serverTotal, serverUnreadChats],
   );
 
   const requestRows = useMemo(() => filtered.filter(isAwaitingMine), [filtered, isAwaitingMine]);

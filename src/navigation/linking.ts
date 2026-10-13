@@ -1,6 +1,7 @@
 import type { LinkingOptions } from "@react-navigation/native";
 import { Linking } from "react-native";
 
+import { coldStartReturnLink } from "./returnLinks";
 import type { RootStackParamList } from "./types";
 
 const PREFIXES = [
@@ -84,7 +85,7 @@ export const linking: LinkingOptions<RootStackParamList> = {
    * React Navigation's default `Linking` subscription untouched.
    */
   getInitialURL: async () => {
-    pendingUrl = await Linking.getInitialURL();
+    pendingUrl = coldStartReturnLink(await Linking.getInitialURL());
     return null;
   },
   config: {

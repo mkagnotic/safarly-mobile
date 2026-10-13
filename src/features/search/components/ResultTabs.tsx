@@ -12,6 +12,8 @@ interface ResultTabsProps {
   onChange: (tab: ResultsTab) => void;
   counts: { package: number; buddy: number; receiver: number };
   loading: boolean;
+  /** The last search failed: its counts are no longer true, so show none. */
+  hideCounts?: boolean;
 }
 
 export const ResultTabs = memo(function ResultTabs({
@@ -19,6 +21,7 @@ export const ResultTabs = memo(function ResultTabs({
   onChange,
   counts,
   loading,
+  hideCounts = false,
 }: Readonly<ResultTabsProps>) {
   const tabs: readonly { key: ResultsTab; label: string; count: number }[] = [
     { key: "package", label: "Packages", count: counts.package },
@@ -39,7 +42,7 @@ export const ResultTabs = memo(function ResultTabs({
           >
             <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]} numberOfLines={1}>
               {tab.label}{" "}
-              {loading ? (
+              {hideCounts ? null : loading ? (
                 <Text style={styles.tabCount}>(…)</Text>
               ) : (
                 <Text style={styles.tabCount}>({tab.count})</Text>

@@ -16,7 +16,6 @@ import {
   walletApi,
   type Earnings,
   type Transaction,
-  type TransactionsSummary,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { showToast } from "@/feedback/appFeedback";
@@ -28,6 +27,12 @@ import {
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
 import { formatMoney } from "@/utils/money";
+import {
+  hasEarnings,
+  moneyAmounts,
+  transactionCount,
+  type PaymentsSummary,
+} from "@/features/wallet/paymentsSummary";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "TransactionsTab">,
@@ -46,7 +51,7 @@ export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
 
   const [items, setItems] = useState<Transaction[]>([]);
-  const [summary, setSummary] = useState<TransactionsSummary | null>(null);
+  const [summary, setSummary] = useState<PaymentsSummary | null>(null);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -65,7 +70,7 @@ export function TransactionsScreen() {
 
   const fetchPage = useCallback(async (nextPage: number) => {
     const res = await paymentsApi.getMyTransactions({ page: nextPage, per_page: PER_PAGE });
-    const meta = res.meta as { total?: number; summary?: TransactionsSummary } | undefined;
+    const meta = res.meta as { total?: number; summary?: PaymentsSummary } | undefined;
     return { rows: res.data ?? [], total: meta?.total ?? 0, summary: meta?.summary ?? null };
   }, []);
 
@@ -133,15 +138,17 @@ export function TransactionsScreen() {
   }, [downloadingId]);
 
   const hasMore = items.length < total;
+  // The summary endpoint names its currency now; for an older backend fall back
+  // to the account's (earnings) currency, else the newest transaction's - never a
+  // hard-coded "$".
+  const fallbackCurrency = summary?.currency ?? earnings?.currency ?? items[0]?.currency ?? null;
+  const moneyLines = (field: "spent" | "refunded" | "earned") =>
+    moneyAmounts(summary, field, fallbackCurrency).map((m) => formatMoney(m.amount, m.currency));
   // Third tile mirrors web: "Total earned" when there are earnings, else "Refunded".
-  const thirdTile =
-    (summary?.total_earned ?? 0) > 0
-      ? { label: "Total earned", value: summary?.total_earned ?? 0, tone: colors.safe }
-      : { label: "Refunded", value: summary?.total_refunded ?? 0, tone: colors.mutedText };
-
-  // The summary endpoint carries no currency; use the account's (earnings) currency,
-  // else the currency of the user's transactions — never a hard-coded "$".
-  const summaryCurrency = earnings?.currency ?? items[0]?.currency ?? null;
+  // Money tiles carry one line per currency - never a sum across currencies.
+  const thirdTile = hasEarnings(summary)
+    ? { label: "Total earned", lines: moneyLines("earned"), tone: colors.safe }
+    : { label: "Refunded", lines: moneyLines("refunded"), tone: colors.mutedText };
 
   return (
     <Screen contentContainerStyle={styles.content} refreshEnabled onRefresh={load}>
@@ -167,9 +174,9 @@ export function TransactionsScreen() {
         <>
           {/* Summary tiles */}
           <View style={styles.summaryRow}>
-            <SummaryTile label="Total paid" value={summary?.total_spent ?? 0} tone={colors.text} currency={summaryCurrency} />
-            <SummaryTile label="Transactions" value={summary?.count ?? total} tone={colors.text} count />
-            <SummaryTile label={thirdTile.label} value={thirdTile.value} tone={thirdTile.tone} currency={summaryCurrency} />
+            <SummaryTile label="Total paid" lines={moneyLines("spent")} tone={colors.text} />
+            <SummaryTile label="Transactions" lines={[String(transactionCount(summary, total))]} tone={colors.text} />
+            <SummaryTile label={thirdTile.label} lines={thirdTile.lines} tone={thirdTile.tone} />
           </View>
 
           {/* Payout note — pending payout + auto-payout disclaimer + link
@@ -232,16 +239,22 @@ export function TransactionsScreen() {
 
 function SummaryTile({
   label,
-  value,
+  lines,
   tone,
-  count,
-  currency,
-}: Readonly<{ label: string; value: number; tone: string; count?: boolean; currency?: string | null }>) {
+}: Readonly<{ label: string; lines: string[]; tone: string }>) {
+  const multi = lines.length > 1;
   return (
     <View style={styles.summaryTile}>
-      <Text style={[styles.summaryValue, { color: tone }]} numberOfLines={1}>
-        {count ? String(value) : formatMoney(value || 0, currency)}
-      </Text>
+      {lines.map((line) => (
+        <Text
+          key={line}
+          style={[styles.summaryValue, multi ? styles.summaryValueSmall : null, { color: tone }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {line}
+        </Text>
+      ))}
       <Text style={styles.summaryLabel}>{label}</Text>
     </View>
   );
@@ -328,6 +341,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   summaryValue: { fontSize: 16, fontWeight: "800" },
+  summaryValueSmall: { fontSize: 13 },
   summaryLabel: { color: colors.mutedText, fontSize: 10, fontWeight: "700", letterSpacing: 0.3, textAlign: "center" },
 
   payoutNote: {

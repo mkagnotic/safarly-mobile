@@ -7,7 +7,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";
 import { KeyboardModalCard } from "@/features/bookings/components/KeyboardModalCard";
-import { REJECT_REASON_MIN } from "@/features/bookings/lib/modalValidation";
+import { REJECT_REASON_MIN, minLengthHint } from "@/features/bookings/lib/modalValidation";
 
 // ─────────────── Cancel post-possession modal (carrier mid-trip) ───────────────
 
@@ -129,9 +129,11 @@ export function CancelPostPossessionModal({
           textAlignVertical="top"
           editable={!pending}
         />
-        <Text style={sharedStyles.modalHelper}>
-          {trimmed.length}/{REJECT_REASON_MIN} characters minimum
-        </Text>
+        {minLengthHint(trimmed.length, REJECT_REASON_MIN) ? (
+          <Text style={sharedStyles.modalHelper}>
+            {minLengthHint(trimmed.length, REJECT_REASON_MIN)}
+          </Text>
+        ) : null}
 
         {parcelIsReturnEligible ? (
         <Text style={[sharedStyles.modalFieldLabel, { marginTop: 12 }]}>

@@ -18,7 +18,7 @@ export function ActionRow({
   tone?: "danger";
 }>) {
   return (
-    <Pressable onPress={onPress} style={styles.actionRow} accessibilityRole="button">
+    <Pressable onPress={onPress} style={styles.actionRow} accessibilityRole="button" accessibilityLabel={label}>
       <Ionicons name={icon} size={20} color={tone === "danger" ? colors.danger : colors.text} />
       <Text style={[styles.actionLabel, tone === "danger" && { color: colors.danger }]}>
         {label}

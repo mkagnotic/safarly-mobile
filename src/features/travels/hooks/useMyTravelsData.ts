@@ -2,7 +2,6 @@ import { useMemo } from "react";
 
 import { buddyRequestSenderIds, withoutBlocked } from "@/features/moderation/blockFilter";
 import { cancellableSentRequests } from "@/features/travels/buddyRequests";
-import { isTerminal } from "@/features/travels/statusLabels";
 import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
@@ -14,6 +13,8 @@ import { useParcels } from "@/hooks/api/useParcels";
 import { useTrips } from "@/hooks/api/useTrips";
 import type { Parcel } from "@/services/api";
 import { uniqueBy } from "@/features/travels/lib/uniqueBy";
+import { MY_TRAVELS_FILTERS } from "@/features/travels/lib/travelCounts";
+import { useMyTravelCounts } from "@/features/travels/hooks/useMyTravelCounts";
 
 /**
  * Every list My Travels shows, deduped and split into active / archived.
@@ -22,11 +23,15 @@ import { uniqueBy } from "@/features/travels/lib/uniqueBy";
 export function useMyTravelsData() {
   // Each tab gets its own list hook so loading/error/refetch are independent.
   const flights = useTrips({ filter: "my_trips" });
-  const sendParcels = useParcels({ filter: "my_delivering" });
-  const receiveParcels = useParcels({ filter: "my_parcels" });
-  const partners = useBuddyListings({ filter: "my_listings" });
+  // Server filters backed by the SAME SQL as the tab counts: the server
+  // returns only live parcels / posts here, and the past ones in the Archive.
+  const sendParcels = useParcels({ filter: MY_TRAVELS_FILTERS.delivering });
+  const receiveParcels = useParcels({ filter: MY_TRAVELS_FILTERS.sending });
+  const partners = useBuddyListings({ filter: MY_TRAVELS_FILTERS.partnerPosts });
   const archive = useTrips({ filter: "my_archived" });
-  const delivered = useBookings({ status: "delivered", perPage: 50 });
+  const delivered = useBookings({ status: "delivered", perPage: 20 });
+  const pastPackages = useParcels({ filter: MY_TRAVELS_FILTERS.pastPackages });
+  const pastPosts = useBuddyListings({ filter: MY_TRAVELS_FILTERS.pastPartnerPosts });
   const myProfile = useMyProfile();
   const requests = useBuddyRequests();
   const sentRequests = useBuddyRequests("sent");
@@ -62,9 +67,12 @@ export function useMyTravelsData() {
   const dedupedArchive = uniqueBy(archive.trips, (t) => t.id);
   const dedupedDelivered = uniqueBy(delivered.bookings, (b) => b.id);
 
-  // Terminal parcels move to Archive, not the active Send/Receive lists (§3.3 / §10.1).
-  const activeSend = dedupedSend.filter((p) => !isTerminal(p.status));
-  const activeReceive = dedupedReceive.filter((p) => !isTerminal(p.status));
+  // The server already left finished and past parcels out (they are in the
+  // Archive). Filtering a page here is what made the old tab count wrong.
+  const activeSend = dedupedSend;
+  const activeReceive = dedupedReceive;
+  const dedupedPastPackages = uniqueBy(pastPackages.parcels, (p) => p.id);
+  const dedupedPastPosts = uniqueBy(pastPosts.listings, (b) => b.id);
 
   // In-progress buddies stay in Partners; ratable ones move to Archive (§3.3 / §7.2).
   const activeBuddies = dedupedConnections.filter((c) => !(c.can_rate || c.already_rated));
@@ -85,7 +93,22 @@ export function useMyTravelsData() {
     return map;
   }, [dedupedSend, dedupedReceive]);
 
+  // The tab labels: exact, from the server, the same numbers web shows. Any
+  // list changing (an action, realtime, pull to refresh) refreshes them.
+  const listSignature = [
+    flights.total, sendParcels.total, receiveParcels.total, partners.total, archive.total,
+    delivered.total, pastPackages.total, pastPosts.total, requests.requests.length,
+    sentRequests.requests.length, connections.connections.length,
+    connections.connections.filter((c) => c.can_rate || c.already_rated).length,
+  ].join("|");
+  const travelCounts = useMyTravelCounts(listSignature);
+
   return {
+    travelCounts,
+    pastPackages,
+    pastPosts,
+    dedupedPastPackages,
+    dedupedPastPosts,
     flights,
     sendParcels,
     receiveParcels,
