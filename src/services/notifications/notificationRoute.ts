@@ -44,6 +44,12 @@ export function resolveNotificationRoute(
   // the list instead of checkout.
   const payMatch = l.match(/^\/customer\/bookings\/([0-9a-f-]{36})\/pay(?:[/?#]|$)/i);
   if (payMatch) {
+    // `?status=success|cancelled` is the website's Stripe return, not a nudge.
+    // iOS keeps that page on the web; Android app links can't exclude it, so a
+    // web checkout can land here. Open the booking, never a second checkout.
+    if (/[?&]status=(success|cancelled)(?:[&#]|$)/i.test(l)) {
+      return { screen: "BookingsTab", params: { expandId: payMatch[1] } };
+    }
     return { screen: "PayBookingTab", params: { bookingId: payMatch[1] } };
   }
 
