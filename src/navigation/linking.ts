@@ -1,13 +1,20 @@
-import type { LinkingOptions } from "@react-navigation/native";
+import { getStateFromPath as defaultGetStateFromPath, type LinkingOptions } from "@react-navigation/native";
 import { Linking } from "react-native";
 
+import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
 import { coldStartReturnLink } from "./returnLinks";
 import type { RootStackParamList } from "./types";
+import { stateForCustomerPath } from "./webLinks";
 
 const PREFIXES = [
   "safarly://",
   "https://mysafarly.com/app",
   "https://app.mysafarly.com/app",
+  // Whole-site prefixes, for the website pages the app claims (`/customer/…`,
+  // see webLinks.ts). Listed after the `/app` ones; getStateFromPath below
+  // handles a path either way.
+  "https://mysafarly.com",
+  "https://app.mysafarly.com",
 ];
 
 /**
@@ -40,12 +47,34 @@ export function consumePendingDeepLink(): string | null {
  */
 export function pathFromDeepLink(url: string): string | null {
   for (const prefix of PREFIXES) {
-    if (url.startsWith(prefix)) {
-      const rest = url.slice(prefix.length);
-      return rest.startsWith("/") ? rest : `/${rest}`;
-    }
+    if (!url.startsWith(prefix)) continue;
+    const rest = url.slice(prefix.length);
+    // Only at a path boundary: `https://mysafarly.com/apple` is not `/app`.
+    if (!prefix.endsWith("://") && rest !== "" && !/^[/?#]/.test(rest)) continue;
+    return rest.startsWith("/") ? rest : `/${rest}`;
   }
   return null;
+}
+
+/**
+ * Path → navigation state, for both link families:
+ *   - `/customer/…` website pages the app claims (webLinks.ts) open the screen
+ *     push taps open for the same link. An unclaimed `/customer/…` page
+ *     resolves to nothing, so the app stays where it is (Home on a cold start).
+ *   - everything else is an app path, with an optional leading `/app`.
+ * Never throws: an unknown path is "no state", never a crash.
+ */
+export function getStateFromPath(path: string, options?: Parameters<typeof defaultGetStateFromPath>[1]) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (/^\/customer(?:[/?#]|$)/.test(p)) {
+    return stateForCustomerPath(p, resolveNotificationRoute) as ReturnType<typeof defaultGetStateFromPath>;
+  }
+  const appPath = p.replace(/^\/app(?=[/?#]|$)/, "") || "/";
+  try {
+    return defaultGetStateFromPath(appPath, options);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -77,6 +106,7 @@ export function pathFromDeepLink(url: string): string | null {
  */
 export const linking: LinkingOptions<RootStackParamList> = {
   prefixes: PREFIXES,
+  getStateFromPath,
 
   /**
    * Cold start. Park the URL and return null so the first render is never
