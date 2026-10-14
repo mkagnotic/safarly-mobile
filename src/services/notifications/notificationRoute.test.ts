@@ -93,6 +93,16 @@ describe("listing, profile and pay deep links open their screens", () => {
     });
   });
 
+  test("the website's Stripe return opens the booking, never a second checkout", () => {
+    for (const s of ["success&session_id=cs_test_1", "cancelled"]) {
+      assert.deepEqual(resolveNotificationRoute(`/customer/bookings/${ID}/pay?status=${s}`, null), {
+        screen: "BookingsTab",
+        params: { expandId: ID },
+      });
+    }
+    assert.equal(resolveNotificationRoute(`/customer/bookings/${ID}/pay?status=pending`, null).screen, "PayBookingTab");
+  });
+
   test("a booking link that merely starts with 'pay' is not checkout", () => {
     assert.equal(resolveNotificationRoute(`/customer/bookings/${ID}/payout`, "booking").screen, "BookingsTab");
   });

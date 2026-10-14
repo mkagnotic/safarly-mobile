@@ -41,3 +41,25 @@ test("the global handler always hands the error on to the previous handler", () 
   const src = readFileSync(new URL("./errorReporter.ts", import.meta.url), "utf8");
   assert.match(src, /const previous = errorUtils\.getGlobalHandler\(\);[\s\S]*previous\(error, isFatal\);/);
 });
+
+test("tokens and personal data are masked before a report leaves the device", () => {
+  const leaky = [
+    'refresh failed {"access_token":"abc.def","refresh_token":"r3fr3sh-t0ken"} for',
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlLXZhbHVl",
+    "user mahesh.k+user1@agnotic.com typed OTP 482913 then",
+    "call +1 (555) 123-4567 or +91.98765.43210 or 555-123-4567",
+    "GET /verify?otp=123456&email=a@b.co",
+  ].join("\n");
+  const p = buildPayload({ message: leaky, stack: leaky, screen: "Delivery?otp=482913" }, "android", "1.0.2");
+  for (const field of [p.message, p.stack ?? "", p.route ?? ""]) {
+    assert.doesNotMatch(field, /r3fr3sh-t0ken|eyJhbGci|@agnotic\.com|482913|123-4567|98765|123456/, field);
+  }
+  assert.match(p.message, /"refresh_token":"<redacted>"/);
+  assert.match(p.message, /<code>/);
+});
+
+test("ordinary error text survives scrubbing", () => {
+  const p = buildPayload({ message: "TypeError: undefined is not an object (evaluating 'trip.id') at line 42:17", stack: null, screen: "TripDetail" }, "ios", "1.0.2");
+  assert.equal(p.message, "TypeError: undefined is not an object (evaluating 'trip.id') at line 42:17");
+  assert.equal(p.route, "TripDetail");
+});

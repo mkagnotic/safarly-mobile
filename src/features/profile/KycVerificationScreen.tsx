@@ -5,7 +5,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
-import { ActivityIndicator, BackHandler, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Image, Linking, Platform, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -15,6 +15,8 @@ import { Screen } from "@/components/ui/Screen";
 import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useKycStatus } from "@/hooks/api/useKycStatus";
 import { useSubmitKyc } from "@/hooks/api/useSubmitKyc";
+import { useKycConsent } from "@/hooks/api/useKycConsent";
+import { KYC_CONSENT_AGREEMENT, KYC_CONSENT_TITLE, kycConsentParagraphs } from "@/features/profile/kycConsentText";
 import { KYC_PDF_MIME, kycExtFromMime, validateKycAsset } from "@/features/profile/kycValidation";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type KycDocType } from "@/services/api";
@@ -55,6 +57,9 @@ export function KycVerificationScreen() {
   const navigation = useNavigation<Nav>();
   const kyc = useKycStatus();
   const { submit, submitting, error: submitError, clearError } = useSubmitKyc();
+  // Consent before capture: only while the server's switch is on (off until
+  // legal approves the wording). Same text and rule as web.
+  const consentGate = useKycConsent();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [docType, setDocType] = useState<KycDocType>("passport");
@@ -253,6 +258,17 @@ export function KycVerificationScreen() {
         <VerifiedCard />
       ) : kyc.isPending && !replacing ? (
         <PendingCard submission={kyc.submission} onReplace={startReplace} />
+      ) : showForm && consentGate.required && consentGate.consent ? (
+        <KycConsentCard
+          retentionDays={consentGate.consent.retention_days!}
+          contactEmail={consentGate.consent.contact_email!}
+          agreeing={consentGate.agreeing}
+          onAgree={() => {
+            void consentGate.agree().catch((err) =>
+              setBanner({ variant: "error", title: "Couldn't save your consent", message: getErrorMessage(err) }));
+          }}
+          onNotNow={goBack}
+        />
       ) : showForm ? (
         <>
           {showActionNeeded ? (
@@ -613,6 +629,37 @@ function WizardNav({
 }
 
 // ───────────────────────────── Styles ─────────────────────────────
+
+/**
+ * Shown right before ID / selfie capture while the server's consent switch is
+ * on. Explicit "I agree" button, nothing pre-ticked. Same wording as web.
+ */
+function KycConsentCard({ retentionDays, contactEmail, agreeing, onAgree, onNotNow }: {
+  retentionDays: number;
+  contactEmail: string;
+  agreeing: boolean;
+  onAgree: () => void;
+  onNotNow: () => void;
+}) {
+  return (
+    <Card style={styles.card}>
+      <Text style={styles.cardTitle}>{KYC_CONSENT_TITLE}</Text>
+      {kycConsentParagraphs({ retentionDays, contactEmail }).map((p) => (
+        <Text key={p.slice(0, 24)} style={styles.panelBody}>{p}</Text>
+      ))}
+      <Pressable
+        onPress={() => void Linking.openURL("https://mysafarly.com/privacy")}
+        accessibilityRole="link"
+        accessibilityLabel="Privacy Policy"
+      >
+        <Text style={styles.cancelLink}>Read our Privacy Policy</Text>
+      </Pressable>
+      <Text style={styles.cardTitle}>{KYC_CONSENT_AGREEMENT}</Text>
+      <AppButton label={agreeing ? "Saving…" : "I agree"} onPress={onAgree} disabled={agreeing} style={styles.panelButton} />
+      <AppButton label="Not now" variant="secondary" onPress={onNotNow} style={styles.panelButton} />
+    </Card>
+  );
+}
 
 const styles = StyleSheet.create({
   screenContent: { paddingBottom: 32 },

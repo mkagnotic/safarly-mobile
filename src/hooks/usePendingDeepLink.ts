@@ -1,7 +1,6 @@
 import { useEffect } from "react";
-import { getStateFromPath } from "@react-navigation/native";
 
-import { consumePendingDeepLink, linking, pathFromDeepLink } from "@/navigation/linking";
+import { consumePendingDeepLink, getStateFromPath, linking, pathFromDeepLink } from "@/navigation/linking";
 import { navigationRef } from "@/navigation/navigationRef";
 
 /**
