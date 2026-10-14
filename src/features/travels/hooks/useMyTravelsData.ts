@@ -43,12 +43,15 @@ export function useMyTravelsData() {
   // the list carries status + timestamps + timeline. Web parity.
   const senderBookings = useBookings({ role: "sender", perPage: 100 });
 
-  // Dedupe every list defensively so a repeated row never renders twice. Most
-  // lists are keyed by row id; buddy connections collapse by the *buddy's* id
-  // because a pair can end up with more than one active connection row.
+  // Dedupe every list defensively so a repeated row never renders twice. Every
+  // list is keyed by row id. Buddy connections included: a connection is ONE
+  // TRIP, so the same buddy legitimately appears once per trip (a finished trip
+  // under Completed buddies, a new one under Travel Partners). Collapsing them
+  // by the buddy's id hid the earlier trip, and its "Rate buddy", the moment a
+  // new one began.
   const dedupedSend = uniqueBy(sendParcels.parcels, (p) => p.id);
   const dedupedReceive = uniqueBy(receiveParcels.parcels, (p) => p.id);
-  const dedupedConnections = uniqueBy(connections.connections, (c) => c.buddy?.id ?? c.id);
+  const dedupedConnections = uniqueBy(connections.connections, (c) => c.id);
   // A pending request from a blocked person (either direction) is hidden. Existing
   // connections stay: that relationship is already under way.
   const dedupedRequests = uniqueBy(
