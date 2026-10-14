@@ -94,6 +94,8 @@ export function resolveNotificationRoute(
   // Covers web's `/customer/profile/wallet` as well as older `/customer/wallet` links.
   if (l.includes("/wallet")) return { screen: "TransactionsTab" };
   if (l.includes("/kyc")) return { screen: "KycVerificationTab" };
+  if (/^\/customer\/profile\/reviews(?:[/?#]|$)/.test(l)) return { screen: "ReviewsTab" };
+  if (/^\/customer\/notifications(?:[/?#]|$)/.test(l)) return { screen: "Notifications" };
   // After the profile sub-pages above (wallet, kyc, payout-setup) so those keep
   // their own screens; anything else under the profile opens the Profile tab.
   if (/^\/customer\/profile(?:[/?#]|$)/.test(l)) return { screen: "Profile" };

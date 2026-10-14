@@ -59,6 +59,156 @@
               "scheme": "https",
               "host": "app.mysafarly.com",
               "pathPrefix": "/app"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/messages"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/messages"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/bookings"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/bookings"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/parcels"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/parcels"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/trips"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/trips"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/search"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/search"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/my-trips"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/my-trips"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/buddies"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/buddies"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/disputes"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/disputes"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/notifications"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/notifications"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/activity"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/activity"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/kyc"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/kyc"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/payout-setup"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/payout-setup"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/profile/kyc"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/profile/kyc"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/profile/payout-setup"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/profile/payout-setup"
+            },
+            {
+              "scheme": "https",
+              "host": "mysafarly.com",
+              "pathPrefix": "/customer/profile/reviews"
+            },
+            {
+              "scheme": "https",
+              "host": "app.mysafarly.com",
+              "pathPrefix": "/customer/profile/reviews"
             }
           ],
           "category": [

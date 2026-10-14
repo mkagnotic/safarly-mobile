@@ -51,6 +51,37 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/app"/>
         <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/app"/>
+        <!-- Website pages with an app screen (src/navigation/webLinks.ts CLAIMED_CUSTOMER_PATHS). -->
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/messages"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/messages"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/bookings"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/bookings"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/parcels"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/parcels"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/trips"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/trips"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/search"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/search"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/my-trips"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/my-trips"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/buddies"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/buddies"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/disputes"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/disputes"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/notifications"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/notifications"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/activity"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/activity"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/kyc"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/kyc"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/payout-setup"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/payout-setup"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/profile/kyc"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/profile/kyc"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/profile/payout-setup"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/profile/payout-setup"/>
+        <data android:scheme="https" android:host="mysafarly.com" android:pathPrefix="/customer/profile/reviews"/>
+        <data android:scheme="https" android:host="app.mysafarly.com" android:pathPrefix="/customer/profile/reviews"/>
       </intent-filter>
     </activity>
   </application>
