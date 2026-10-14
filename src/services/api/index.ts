@@ -106,6 +106,7 @@ export type {
   KycFileType,
   KycUploadFile,
   KycSubmitInput,
+  KycConsentState,
 } from "./kyc";
 
 export { ratingsApi } from "./ratings";

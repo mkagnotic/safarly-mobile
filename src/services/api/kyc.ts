@@ -49,7 +49,25 @@ export interface KycSubmitInput {
 /** Private bucket — documents upload directly here; only paths reach the API. */
 const KYC_BUCKET = "kyc-documents";
 
+/** Whether consent is needed before verifying, and the facts the text states. */
+export interface KycConsentState {
+  required: boolean;
+  enabled: boolean;
+  policy_version: string | null;
+  retention_days: number | null;
+  contact_email: string | null;
+}
+
 export const kycApi = {
+  /** Consent before ID/selfie capture (off until legal approves the wording). */
+  getConsent: () => api.get<KycConsentState>("/kyc-handler/consent"),
+  giveConsent: (policyVersion: string, platform: "android" | "ios", appVersion: string | null) =>
+    api.post<{ consented: boolean; policy_version: string }>("/kyc-handler/consent", {
+      policy_version: policyVersion,
+      platform,
+      app_version: appVersion,
+    }),
+
   getStatus: () =>
     api.get<{ status: string; submission: KycSubmission | null }>("/kyc-handler/status"),
 
