@@ -1,10 +1,10 @@
 import "react-native-url-polyfill/auto";
 
 import { AppState, Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
 import { resilientAuthFetch } from "./authFetch";
+import { sessionStorage } from "./secureStorage";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 import type { Database } from "./types";
 
@@ -15,7 +15,9 @@ import type { Database } from "./types";
 // is incomplete in Hermes.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: AsyncStorage,
+    // The device keystore, not AsyncStorage; migrates existing sessions on the
+    // first read so nobody is signed out by the update. See secureStorage.ts.
+    storage: sessionStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: Platform.OS === "web",
@@ -35,7 +37,10 @@ export const SUPABASE_AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.sp
  */
 export async function hasStoredSession(): Promise<boolean> {
   try {
-    return (await AsyncStorage.getItem(SUPABASE_AUTH_STORAGE_KEY)) != null;
+    // Through the same adapter supabase-js uses: reading AsyncStorage directly
+    // here would answer "no session" after the move to the keystore, and
+    // AuthContext would then sign out anyone whose launch couldn't refresh.
+    return (await sessionStorage.getItem(SUPABASE_AUTH_STORAGE_KEY)) != null;
   } catch {
     return false;
   }

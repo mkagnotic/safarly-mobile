@@ -1,7 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { AppState } from "react-native";
 
-import { hasStoredSession, supabase } from "@/integrations/supabase/client";
+import { SUPABASE_AUTH_STORAGE_KEY, hasStoredSession, supabase } from "@/integrations/supabase/client";
+import { signOutThisDevice } from "@/integrations/supabase/localSignOut";
+import { createSessionRevalidator } from "@/integrations/supabase/revalidate";
+import { sessionStorage } from "@/integrations/supabase/secureStorage";
 import { authApi } from "@/services/api/auth";
 import { usersApi } from "@/services/api/users";
 import {
@@ -197,6 +201,28 @@ export function AuthProvider({ children }: Readonly<Props>) {
     };
   }, []);
 
+  // Notice a session revoked on another device (a password reset signs every
+  // device out server-side) when the app returns to the foreground — the same
+  // check web runs on tab focus. It never signs out on a transient error; see
+  // revalidate.ts for the rules.
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
+  useEffect(() => {
+    const revalidate = createSessionRevalidator({
+      hasSession: () => sessionRef.current != null,
+      getUser: () => supabase.auth.getUser(),
+      refreshSession: () => supabase.auth.refreshSession(),
+      hasStoredSession,
+      onRevoked: async () => {
+        await signOutThisDevice(supabase.auth, () => sessionStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY));
+      },
+    });
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void revalidate();
+    });
+    return () => sub.remove();
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -250,8 +276,11 @@ export function AuthProvider({ children }: Readonly<Props>) {
         // user's sessions on EVERY device, so logging out on the phone silently
         // logged the same person out of mysafarly.com. Web has always used local
         // scope for exactly this reason; the two now match.
-        const { error } = await supabase.auth.signOut({ scope: "local" });
-        if (error) throw error;
+        //
+        // signOutThisDevice: when the server can't be reached the sign-out still
+        // completes on this device, instead of leaving the user half signed out.
+        await signOutThisDevice(supabase.auth, () =>
+          sessionStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY));
       },
       signOutAfterAccountDeletion: async () => {
         await clearCachedPushToken();

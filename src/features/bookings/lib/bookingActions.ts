@@ -1,5 +1,8 @@
 import * as Clipboard from "expo-clipboard";
 
+/** How long a copied delivery code stays on the clipboard. */
+const OTP_CLIPBOARD_TTL_MS = 60_000;
+
 import {
   bookingsApi,
   type Booking,
@@ -222,6 +225,16 @@ export function createBookingActions({
     if (!generatedOtp) return;
     await Clipboard.setStringAsync(generatedOtp);
     showBanner({ variant: "success", title: "Code copied to clipboard" }, 2400);
+    // The delivery code is the proof of handoff; don't leave it on the
+    // clipboard, where other apps and clipboard sync can read it. Cleared after
+    // a minute, and only if it is still what's there, so anything the user has
+    // copied since is left alone.
+    const copied = generatedOtp;
+    setTimeout(() => {
+      void Clipboard.getStringAsync()
+        .then((current) => (current === copied ? Clipboard.setStringAsync("") : undefined))
+        .catch(() => undefined);
+    }, OTP_CLIPBOARD_TTL_MS);
   };
 
   const handleConfirmOtp = async () => {
