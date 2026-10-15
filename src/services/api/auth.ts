@@ -41,6 +41,14 @@ export const authApi = {
   checkAuthMethod: (email: string) =>
     api.post<AuthMethodInfo>("/auth-handler/check-auth-method", { email }),
 
+  /**
+   * Sign-in security signals (observe-only): the server records the hashed IP,
+   * country and this device id for the admin "Device & Network" card. Same
+   * route web calls; see services/auth/signInTracking.ts.
+   */
+  trackAuthEvent: (device_fp: string | null, event_type: "login" | "signup") =>
+    api.post<{ tracked: boolean }>("/auth-handler/track", { device_fp, event_type }),
+
   /** Admin login via edge function. */
   adminLogin: (email: string, password: string) =>
     api.post<{ user: AuthUser; session: AuthSession }>("/auth-handler/admin/login", {
