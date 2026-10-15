@@ -15,6 +15,7 @@ import {
 } from "@/services/notifications/push";
 import { performAppleOAuth } from "@/services/auth/appleOAuth";
 import { clearGoogleSession, performGoogleOAuth } from "@/services/auth/googleOAuth";
+import { trackSignIn } from "@/services/auth/signInTracking";
 import { useAppStore } from "@/store/useAppStore";
 
 export { AuthCancelledError } from "@/services/auth/googleOAuth";
@@ -158,6 +159,15 @@ export function AuthProvider({ children }: Readonly<Props>) {
         void syncPushRegistrationOnLogin();
       } else if (!next && store.authenticated) {
         store.logout();
+      }
+
+      // Sign-in security signals for the admin "Device & Network" card, once
+      // per user per launch (a restored session counts: app users rarely sign
+      // in again). Delayed so it stays out of the start-up burst of requests,
+      // as web does; observe-only, never blocks or fails anything.
+      if (next) {
+        const { id, created_at } = next.user;
+        setTimeout(() => void trackSignIn(id, created_at), 3000);
       }
 
       // Propagate the JWT to the Realtime client. Without this, RLS-gated
