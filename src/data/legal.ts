@@ -18,7 +18,7 @@ export type LegalSection = {
  * Shown on the Privacy Policy, Terms of Service and Cookie Policy.
  * Update this whenever the substance of those documents changes.
  */
-export const LEGAL_EFFECTIVE_DATE = "12 October 2026";
+export const LEGAL_EFFECTIVE_DATE = "15 October 2026";
 
 /**
  * Legal, About and Contact copy.
@@ -184,6 +184,7 @@ export const privacySections: LegalSection[] = [
       "Payment information processed through Stripe. Your card number is handled by Stripe and is not stored by Safarly",
       "Payout details: your bank account number, IFSC code or UPI ID for payouts in India through Razorpay, and the payout account status Stripe shares with us when you set up Stripe Connect",
       "Push notification tokens, so we can send notifications to your device",
+      "Sign-in security information: your IP address (stored only in a scrambled, one-way form), your approximate country, a device identifier and your browser or app version, used to keep accounts secure and prevent fraud",
       "Whether you are online or typing, which is shown to the person you are chatting with",
       "Reports you submit and users you block",
       "Usage data such as search activity and platform interactions",
