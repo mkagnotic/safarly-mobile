@@ -4,8 +4,9 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { Animated, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, StyleSheet, Text, View } from "react-native";
 
+import { PillarIcon, type PillarIconName } from "@/components/icons/PillarIcons";
 import { KycPromptDialog } from "@/components/kyc/KycPromptDialog";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
@@ -92,8 +93,6 @@ export function HomeScreen() {
   }, [kycWelcomePending, setKycWelcomePending]);
 
   const formError = profileError ? getErrorMessage(profileError) : null;
-
-  const airplaneStyle = Platform.OS === "ios" ? styles.airplaneTiltIos : styles.airplaneTilt;
 
   // Web parity (`CustomerHome.tsx:46-50`): drop self-conversations + only
   // ones the dedupe layer recognises as a real participant.
@@ -204,6 +203,18 @@ export function HomeScreen() {
           Safarly connects you with verified travelers heading your way. Ship
           parcels safely, find travel companions, and build trust across borders.
         </Text>
+        {/* Same artwork as the web home hero (public/assets/image/right-image.webp),
+            which also sits under the copy on narrow screens. */}
+        {/* The box sets the size; an Image sized only by aspectRatio falls back
+            to the file's pixel height on Android and leaves a gap above it. */}
+        <View style={styles.heroImageBox}>
+          <Image
+            source={require("../../assets/brand/home-hero.webp")}
+            style={styles.heroImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+        </View>
       </Card>
 
       {/* ───────── Primary action cards (3) ───────── */}
@@ -212,8 +223,7 @@ export function HomeScreen() {
           chip="Earn on your route"
           title="Carrier"
           subtitle="I'm traveling and can deliver parcels"
-          icon="airplane-outline"
-          iconStyle={airplaneStyle}
+          icon="carrier"
           tint={colors.wordmark}
           tintBg={colors.surfaceTintPrimary}
           gradient={CARRIER_GRADIENT}
@@ -223,7 +233,7 @@ export function HomeScreen() {
           chip="Match with travelers"
           title="Receive"
           subtitle="I need someone to bring me a package"
-          icon="download"
+          icon="receive"
           tint={colors.safe}
           tintBg={colors.surfaceTintSafe}
           gradient={RECEIVE_GRADIENT}
@@ -233,7 +243,7 @@ export function HomeScreen() {
           chip="Community match"
           title="Travel Buddy"
           subtitle="Find companions for safe travel"
-          icon="people-outline"
+          icon="buddy"
           tint={colors.warning}
           tintBg={colors.surfaceTintWarning}
           gradient={BUDDY_GRADIENT}
@@ -340,8 +350,8 @@ interface ActionCardProps {
   chip: string;
   title: string;
   subtitle: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  iconStyle?: ReturnType<typeof StyleSheet.create>[string];
+  /** Same artwork as the web home pillars (Phosphor, bold). */
+  icon: PillarIconName;
   tint: string;
   /**
    * Card surface. Must be OPAQUE — the card is elevated, and a translucent
@@ -359,7 +369,6 @@ function ActionCard({
   title,
   subtitle,
   icon,
-  iconStyle,
   tint,
   tintBg,
   gradient,
@@ -379,7 +388,7 @@ function ActionCard({
           end={{ x: 1, y: 1 }}
           style={styles.actionIconBox}
         >
-          <Ionicons name={icon} size={24} color={colors.white} style={iconStyle} />
+          <PillarIcon name={icon} size={28} color={colors.white} />
         </LinearGradient>
         <View style={styles.actionChevronCircle}>
           <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
@@ -532,6 +541,9 @@ const styles = StyleSheet.create({
   heroTitle: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
   heroAccent: { color: colors.wordmark },
   heroBody: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500" },
+  // 1080×862 source; capped so it doesn't dominate tall phones or tablets.
+  heroImageBox: { width: "100%", maxWidth: 340, aspectRatio: 1080 / 862, alignSelf: "center", marginTop: 4 },
+  heroImage: { width: "100%", height: "100%" },
 
   // Action grid (3 cards stacked)
   actionGrid: { gap: 12, marginBottom: 18 },
@@ -575,9 +587,6 @@ const styles = StyleSheet.create({
   },
   actionTitle: { color: colors.text, fontSize: 17, lineHeight: 23, fontWeight: "800" },
   actionSubtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", marginTop: 2 },
-  airplaneTilt: { transform: [{ rotate: "-42deg" }] },
-  airplaneTiltIos: { transform: [{ rotate: "-42deg" }] },
-
   // Section headers (used by the hidden Activity + Messages sections)
   sectionHeaderRow: {
     flexDirection: "row",

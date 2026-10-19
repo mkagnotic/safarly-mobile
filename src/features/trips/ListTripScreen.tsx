@@ -509,22 +509,9 @@ export function ListTripScreen() {
     );
   }
 
-  const section1Complete = !!fromCity && !!toCity;
   /** Live same-route error wins over the stale submit-time one. */
   const toCityError = isSameRoute ? SAME_ROUTE_MSG : fieldErrors.toCity;
 
-  const section2Complete = !!departDate;
-  const section3Complete = Number(maxWeight) > 0;
-  const section4Complete = openToBuddy;
-
-  /** From city, to city, travel date, max weight. */
-  const requiredTotal = 4;
-  const requiredCompleted =
-    (fromCity ? 1 : 0) +
-    (toCity ? 1 : 0) +
-    (departDate ? 1 : 0) +
-    (Number(maxWeight) > 0 ? 1 : 0);
-  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
   return (
     <Screen scroll={false}>
@@ -549,15 +536,6 @@ export function ListTripScreen() {
           Share your travel plans and we'll find the best parcel matches for you.
         </Text>
 
-      {/* Progress bar — % of required fields complete (4 required, 5 in date-range mode). */}
-      <View style={styles.progressBlock}>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
-        </View>
-        <Text style={styles.progressLabel}>
-          {requiredCompleted} of {requiredTotal} required fields complete
-        </Text>
-      </View>
 
       {formError ? (
         <View style={styles.bannerSlot}>
@@ -571,13 +549,7 @@ export function ListTripScreen() {
           sectionYs.current.section1 = e.nativeEvent.layout.y;
         }}
       >
-        <SectionCard
-          index={1}
-          title="Where are you going?"
-          subtitle="Set your departure and destination"
-          complete={section1Complete}
-          hasError={!!fieldErrors.fromCity || !!toCityError}
-        >
+        <SectionCard first>
           <Text style={styles.fieldLabel}>From</Text>
           <LocationCard
             flag={fromFlag}
@@ -634,13 +606,7 @@ export function ListTripScreen() {
           sectionYs.current.section2 = e.nativeEvent.layout.y;
         }}
       >
-        <SectionCard
-          index={2}
-          title="When are you flying?"
-          subtitle="Travel dates and flight info"
-          complete={section2Complete}
-          hasError={!!fieldErrors.departDate}
-        >
+        <SectionCard>
           {/* Single travel date only — matches web, where the Range option is
               deliberately disabled for Your Travel Details. A carrier flies on
               one date; a range belongs to the parcel's delivery window. */}
@@ -690,13 +656,7 @@ export function ListTripScreen() {
           sectionYs.current.section3 = e.nativeEvent.layout.y;
         }}
       >
-        <SectionCard
-          index={3}
-          title="What can you carry?"
-          subtitle="Help senders find the right match"
-          complete={section3Complete}
-          hasError={!!fieldErrors.maxWeight || hasSizeError}
-        >
+        <SectionCard>
         <View style={styles.labelToggleRow}>
           <Text style={styles.fieldLabel}>Max Parcel Size</Text>
           <View style={styles.optionalPill}>
@@ -779,13 +739,7 @@ export function ListTripScreen() {
           sectionYs.current.section4 = e.nativeEvent.layout.y;
         }}
       >
-      <SectionCard
-        index={4}
-        title="Looking for company?"
-        subtitle="Travel Buddies are travelers going your way"
-        complete={section4Complete}
-        hasError={!!fieldErrors.age}
-      >
+      <SectionCard last>
         <View style={styles.buddyToggleCard}>
           <View style={styles.buddyToggleText}>
             <Text style={styles.buddyOptInTitle}>I'm open to being a Travel Buddy</Text>
@@ -1201,25 +1155,6 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
   bannerSlot: { marginBottom: 14 },
 
-  progressBlock: { gap: 8, marginBottom: 18 },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 999,
-    backgroundColor: colors.wordmark,
-  },
-  progressLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    textAlign: "right",
-  },
 
   field: { gap: 8 },
   fieldLabel: {
