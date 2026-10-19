@@ -18,6 +18,8 @@ import { useSubmitKyc } from "@/hooks/api/useSubmitKyc";
 import { useKycConsent } from "@/hooks/api/useKycConsent";
 import { KYC_CONSENT_AGREEMENT, KYC_CONSENT_TITLE, kycConsentParagraphs } from "@/features/profile/kycConsentText";
 import { KYC_PDF_MIME, kycExtFromMime, validateKycAsset } from "@/features/profile/kycValidation";
+import { DiditKycPanel } from "@/features/profile/DiditKycPanel";
+import { DIDIT_COPY, kycMode } from "@/features/profile/kycFlow";
 import { RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type KycDocType } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -67,6 +69,12 @@ export function KycVerificationScreen() {
   const [selfieFile, setSelfieFile] = useState<PickedFile | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
+  // Automatic verification (server switch "didit"), or today's wizard ("manual").
+  // "manual-fallback": Didit unreachable but uploads still accepted — the wizard.
+  const [diditDown, setDiditDown] = useState(false);
+  const mode = kycMode(kyc.block, diditDown);
+  // The wizard keeps the manual consent behaviour; the Didit wording is only for Didit.
+  const manualConsentRequired = kyc.block?.provider === "didit" ? false : consentGate.required;
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -254,11 +262,32 @@ export function KycVerificationScreen() {
           <Text style={styles.panelBody}>{getErrorMessage(kyc.error)}</Text>
           <AppButton label="Try again" onPress={() => void kyc.refetch()} style={styles.panelButton} />
         </Card>
+      ) : mode === "didit" && kyc.block ? (
+        consentGate.loading ? (
+          <DetailSkeleton />
+        ) : consentGate.error ? (
+          <Card style={styles.panel}>
+            <Ionicons name="cloud-offline-outline" size={34} color={colors.mutedText} />
+            <Text style={styles.panelTitle}>Couldn't load verification details</Text>
+            <Text style={styles.panelBody}>{getErrorMessage(consentGate.error)}</Text>
+            <AppButton label="Try again" onPress={() => void consentGate.refetch()} style={styles.panelButton} />
+          </Card>
+        ) : (
+          <DiditKycPanel
+            block={kyc.block}
+            consent={consentGate.consent}
+            refresh={async () => { await Promise.all([kyc.refetch(), consentGate.refetch()]); }}
+            agreeToConsent={consentGate.agree}
+            agreeing={consentGate.agreeing}
+            onUnavailable={() => setDiditDown(true)}
+            onNotNow={goBack}
+          />
+        )
       ) : kyc.isVerified ? (
         <VerifiedCard />
       ) : kyc.isPending && !replacing ? (
         <PendingCard submission={kyc.submission} onReplace={startReplace} />
-      ) : showForm && consentGate.required && consentGate.consent ? (
+      ) : showForm && manualConsentRequired && consentGate.consent ? (
         <KycConsentCard
           retentionDays={consentGate.consent.retention_days!}
           contactEmail={consentGate.consent.contact_email!}
@@ -271,6 +300,12 @@ export function KycVerificationScreen() {
         />
       ) : showForm ? (
         <>
+          {mode === "manual-fallback" ? (
+            <View style={styles.bannerSlot}>
+              <FormBanner variant="info" title="Upload your documents" message={DIDIT_COPY.fallbackNotice} />
+            </View>
+          ) : null}
+
           {showActionNeeded ? (
             <View style={styles.bannerSlot}>
               <FormBanner variant="warning" title="Action needed" message={reviewNotes} />
