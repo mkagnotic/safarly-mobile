@@ -322,24 +322,6 @@ export function SendParcelScreen() {
     if (!feeTouched && suggestedFee != null) setFeeOffered(String(suggestedFee));
   }, [feeTouched, suggestedFee]);
 
-  const routeComplete = !!fromCity && !!toCity;
-  const datesComplete = !!deliveryBy && (dateMode === "single" || !!deliveryTo);
-  // Over the airline limit is not "complete" - the step must not show a tick
-  // (and a fee suggestion for 30 kg) that the submit check then rejects.
-  const detailsComplete =
-    Number(weight) > 0 && Number(weight) <= (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB);
-  const feeComplete = Number(feeOffered) > 0;
-
-  // 5 required fields; date-range adds the latest date as the 6th.
-  const requiredTotal = dateMode === "range" ? 6 : 5;
-  const requiredCompleted =
-    (fromCity ? 1 : 0) +
-    (toCity ? 1 : 0) +
-    (Number(weight) > 0 ? 1 : 0) +
-    (deliveryBy ? 1 : 0) +
-    (dateMode === "range" && deliveryTo ? 1 : 0) +
-    (Number(feeOffered) > 0 ? 1 : 0);
-  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
   const maxLimits = sizeUnit === "cm" ? MAX_SIZE_CM : MAX_SIZE_IN;
   const sizeErrors = {
@@ -639,15 +621,6 @@ export function SendParcelScreen() {
           Tell us where your parcel needs to go and we'll find the perfect carrier.
         </Text>
 
-        {/* Progress bar — % of required fields complete (5 required). */}
-        <View style={styles.progressBlock}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
-          </View>
-          <Text style={styles.progressLabel}>
-            {requiredCompleted} of {requiredTotal} required fields complete
-          </Text>
-        </View>
 
         {formError ? (
           <View style={styles.bannerSlot}>
@@ -661,13 +634,7 @@ export function SendParcelScreen() {
             sectionYs.current.route = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={1}
-            title="Where is it going?"
-            subtitle="Set the pickup and drop-off"
-            complete={routeComplete}
-            hasError={!!fieldErrors.fromCity || !!toCityError}
-          >
+          <SectionCard first>
             <Text style={styles.fieldLabel}>From</Text>
             <LocationCard
               flag={fromFlag}
@@ -726,13 +693,7 @@ export function SendParcelScreen() {
             sectionYs.current.dates = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={2}
-            title="When does it need to arrive?"
-            subtitle="Pick a delivery deadline"
-            complete={datesComplete}
-            hasError={!!fieldErrors.deliveryBy || !!fieldErrors.deliveryTo}
-          >
+          <SectionCard>
             <DateModeToggle<DateMode>
               options={[
                 { value: "single", label: "Single Date" },
@@ -783,13 +744,7 @@ export function SendParcelScreen() {
             sectionYs.current.details = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={3}
-            title="What's in the parcel?"
-            subtitle="Help carriers understand what you're sending"
-            complete={detailsComplete}
-            hasError={!!fieldErrors.weight || hasSizeError}
-          >
+          <SectionCard>
             <Text style={styles.fieldLabel}>Type of parcel</Text>
             <TextInput
               value={parcelType}
@@ -896,16 +851,7 @@ export function SendParcelScreen() {
             sectionYs.current.fee = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={4}
-            title="How much will you pay?"
-            subtitle="Set a fair carrier fee"
-            complete={feeComplete}
-            hasError={
-              !!fieldErrors.feeOffered || !!fieldErrors.returnLine1 || !!fieldErrors.returnCity ||
-              !!fieldErrors.returnState || !!fieldErrors.returnPostal || !!fieldErrors.returnCountry
-            }
-          >
+          <SectionCard last>
             <View style={styles.costRow}>
               <CurrencyToggle value={currency} onChange={setCurrency} />
               <View style={styles.costInputWrap}>
@@ -1350,22 +1296,6 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginBottom: 14 },
   bannerSlot: { marginBottom: 14 },
 
-  // ───── Progress bar ─────
-  progressBlock: { gap: 8, marginBottom: 18 },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    overflow: "hidden",
-  },
-  progressFill: { height: "100%", borderRadius: 999, backgroundColor: colors.wordmark },
-  progressLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    textAlign: "right",
-  },
 
   // ───── Common fields ─────
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },

@@ -168,14 +168,6 @@ export function CreateBuddyScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
   }, []);
 
-  const routeComplete = !!fromCity && !!toCity && !isSameRoute;
-  const datesComplete = !!travelDate;
-  const flightComplete = !!airline || !!layover;
-  const aboutComplete = !!age || languages.length > 0 || !!interests || !!bio;
-
-  const requiredTotal = 3;
-  const requiredCompleted = (fromCity ? 1 : 0) + (toCity ? 1 : 0) + (travelDate ? 1 : 0);
-  const progressPct = Math.round((requiredCompleted / requiredTotal) * 100);
 
   const handleAddLanguage = useCallback((lang: string) => {
     setLanguages((prev) => {
@@ -350,15 +342,6 @@ export function CreateBuddyScreen() {
           Share your travel plans and connect with fellow travelers on your route.
         </Text>
 
-        {/* Progress bar — % of the 3 required fields complete. */}
-        <View style={styles.progressBlock}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
-          </View>
-          <Text style={styles.progressLabel}>
-            {requiredCompleted} of {requiredTotal} required fields complete
-          </Text>
-        </View>
 
         {formError ? (
           <View style={styles.bannerSlot}>
@@ -372,13 +355,7 @@ export function CreateBuddyScreen() {
             sectionYs.current.route = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={1}
-            title="Where are you going?"
-            subtitle="Set your departure and destination"
-            complete={routeComplete}
-            hasError={!!fieldErrors.fromCity || !!toCityError}
-          >
+          <SectionCard first>
             <Text style={styles.fieldLabel}>From</Text>
             <LocationCard flag={fromFlag} label={fromCountryName} filled onToggle={toggleFromCountry} />
             <View>
@@ -423,13 +400,7 @@ export function CreateBuddyScreen() {
             sectionYs.current.dates = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={2}
-            title="When are you traveling?"
-            subtitle="Pick your travel date"
-            complete={datesComplete}
-            hasError={!!fieldErrors.travelDate}
-          >
+          <SectionCard>
             <DateField
               label="Travel date"
               value={travelDate ? formatDateLabel(travelDate) : null}
@@ -449,12 +420,7 @@ export function CreateBuddyScreen() {
             sectionYs.current.flight = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={3}
-            title="Your flight"
-            subtitle="Optional flight info to find buddies on the same plane"
-            complete={flightComplete}
-          >
+          <SectionCard>
             <View style={styles.labelRow}>
               <Text style={styles.fieldLabel}>Airline</Text>
               <View style={styles.optionalPill}>
@@ -500,13 +466,7 @@ export function CreateBuddyScreen() {
             sectionYs.current.about = e.nativeEvent.layout.y;
           }}
         >
-          <SectionCard
-            index={4}
-            title="About you"
-            subtitle="Optional — help travelers get to know you"
-            complete={aboutComplete}
-            hasError={!!ageError}
-          >
+          <SectionCard last>
             <View style={styles.labelRow}>
               <Text style={styles.fieldLabel}>Age</Text>
               <View style={styles.optionalPill}>
@@ -686,22 +646,6 @@ const styles = StyleSheet.create({
   },
   bannerSlot: { marginBottom: 14 },
 
-  // ───── Progress bar ─────
-  progressBlock: { gap: 8, marginBottom: 18 },
-  progressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    overflow: "hidden",
-  },
-  progressFill: { height: "100%", borderRadius: 999, backgroundColor: colors.wordmark },
-  progressLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-    textAlign: "right",
-  },
 
   // ───── Common fields ─────
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -6,63 +6,29 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
 
 interface SectionCardProps {
-  index: number;
-  title: string;
-  subtitle: string;
-  complete: boolean;
-  /** Defaults to collapsed so long forms read less overwhelming on first paint. */
-  defaultExpanded?: boolean;
-  /** Force-expands the card when an error lands in it, so the highlight is visible. */
-  hasError?: boolean;
+  /** First group of the form: rounds the card's top corners. */
+  first?: boolean;
+  /** Last group of the form: rounds the card's bottom corners. */
+  last?: boolean;
   children: ReactNode;
 }
 
-export function SectionCard({
-  index,
-  title,
-  subtitle,
-  complete,
-  defaultExpanded = false,
-  hasError = false,
-  children,
-}: Readonly<SectionCardProps>) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-
-  useEffect(() => {
-    if (hasError) setExpanded(true);
-  }, [hasError]);
+/**
+ * One group of fields in a long create form. Consecutive groups render as a
+ * single continuous card, like the web forms (one `bg-card rounded-2xl` panel,
+ * no section headings). The groups stay separate components only so screens
+ * can still measure each one for scroll-to-error.
+ */
+export function SectionCard({ first = false, last = false, children }: Readonly<SectionCardProps>) {
   return (
-    <View style={styles.sectionCard}>
-      <Pressable
-        onPress={() => setExpanded((v) => !v)}
-        style={styles.sectionHeader}
-        accessibilityRole="button"
-        accessibilityLabel={`${title}, ${expanded ? "expanded" : "collapsed"}`}
-        accessibilityState={{ expanded }}
-      >
-        <View style={[styles.sectionBadge, complete && styles.sectionBadgeComplete]}>
-          {complete ? (
-            <Ionicons name="checkmark" size={16} color={colors.white} />
-          ) : (
-            <Text style={styles.sectionBadgeText}>{index}</Text>
-          )}
-        </View>
-        <View style={styles.sectionTitleWrap}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
-        </View>
-        <Ionicons
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={18}
-          color={colors.mutedText}
-        />
-      </Pressable>
-      {expanded ? (
-        <>
-          <View style={styles.sectionDivider} />
-          <View style={styles.sectionBody}>{children}</View>
-        </>
-      ) : null}
+    <View
+      style={[
+        styles.sectionCard,
+        first ? styles.sectionCardFirst : styles.sectionCardJoined,
+        last && styles.sectionCardLast,
+      ]}
+    >
+      <View style={styles.sectionBody}>{children}</View>
     </View>
   );
 }
@@ -190,34 +156,16 @@ export function DateField({
 const styles = StyleSheet.create({
   sectionCard: {
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     borderColor: colors.border,
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
-  sectionBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.wordmark,
-    backgroundColor: colors.card,
-  },
-  sectionBadgeComplete: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
-  sectionBadgeText: { color: colors.wordmark, fontSize: 14, lineHeight: 18, fontWeight: "800" },
-  sectionTitleWrap: { flex: 1, minWidth: 0, gap: 2 },
-  sectionTitle: { color: colors.text, fontSize: 17, lineHeight: 22, fontWeight: "800" },
-  sectionSubtitle: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginTop: 14,
-    marginBottom: 14,
-  },
+  // Overlap by a pixel so sub-pixel layout can't leave a hairline seam.
+  sectionCardJoined: { marginTop: -1 },
+  sectionCardFirst: { borderTopWidth: 1, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 18 },
+  sectionCardLast: { borderBottomWidth: 1, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, paddingBottom: 18, marginBottom: 14 },
   sectionBody: { gap: 12 },
 
   locationCard: {
