@@ -11,7 +11,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShallow } from "zustand/react/shallow";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { HeroBackground } from "@/components/ui/HeroBackground";
-import { ScreenBackgroundContext } from "@/components/ui/Screen";
+import { Screen as AppScreen, ScreenBackgroundContext } from "@/components/ui/Screen";
+import { AppButton } from "@/components/ui/AppButton";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { useAuth } from "@/context/AuthContext";
 import { HomeScreen } from "@/features/tabs/HomeScreen";
 import { NotificationsScreen } from "@/features/tabs/NotificationsScreen";
 import { MyTravelsScreen } from "@/features/travels/MyTravelsScreen";
@@ -88,6 +91,22 @@ const SHOW_DATA_TOGGLE = false;
  * (configured with `slide_from_bottom`).
  */
 function AuthBootstrapScreen() {
+  const bootstrapError = useAppStore((s) => s.bootstrapError);
+  const { retryOnboardingCheck, signOut } = useAuth();
+  // The profile could not be read: say so with Try again, rather than guessing
+  // "not onboarded" and sending an existing user to ProfileSetup.
+  if (bootstrapError) {
+    return (
+      <AppScreen scroll={false} edges={["top", "bottom", "left", "right"]}>
+        <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20 }}>
+          <ErrorState error={bootstrapError} subject="your account" onRetry={retryOnboardingCheck} />
+          {/* Safety exit: never leave someone stuck on a screen whose only
+              button may keep failing. */}
+          <AppButton label="Sign out" variant="secondary" onPress={() => void signOut()} style={{ marginTop: 12 }} />
+        </View>
+      </AppScreen>
+    );
+  }
   return <LoadingScreen message="Setting things up…" />;
 }
 
@@ -339,11 +358,12 @@ export function RootNavigator() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const transitionBackground = colorScheme === "dark" ? "#0B0B0C" : screenCanvas;
-  const { splashDone, onboarded, profileSetupDone, authenticated, authBootstrapping, accountDeleted, showLiveData, toggleLiveDataVisibility } = useAppStore(
+  const { splashDone, onboarded, profileSetupDone, bootstrapError, authenticated, authBootstrapping, accountDeleted, showLiveData, toggleLiveDataVisibility } = useAppStore(
     useShallow((s) => ({
       splashDone: s.splashDone,
       onboarded: s.onboarded,
       profileSetupDone: s.profileSetupDone,
+      bootstrapError: s.bootstrapError,
       authenticated: s.authenticated,
       authBootstrapping: s.authBootstrapping,
       accountDeleted: s.accountDeleted,
@@ -424,10 +444,10 @@ export function RootNavigator() {
             <Stack.Screen name="Contact" component={ContactScreen} options={{ headerShown: false }} />
           </>
         )}
-        {!showSplash && onboarded && authenticated && authBootstrapping && (
+        {!showSplash && onboarded && authenticated && (authBootstrapping || !!bootstrapError) && (
           <Stack.Screen name="AuthBootstrap" component={AuthBootstrapScreen} options={{ headerShown: false }} />
         )}
-        {!showSplash && onboarded && authenticated && !authBootstrapping && !profileSetupDone && (
+        {!showSplash && onboarded && authenticated && !authBootstrapping && !bootstrapError && !profileSetupDone && (
           <>
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} options={{ headerShown: false }} />
