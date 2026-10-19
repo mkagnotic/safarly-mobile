@@ -548,6 +548,8 @@ export function SearchScreen() {
             isAutoMatch={isAutoMatch}
             myParcels={isAutoMatch ? pagedMyParcels : sortedMyParcels}
             myParcelsLoading={myParcelsState.loading}
+            myParcelsError={myParcelsState.error}
+            onRetryMyParcels={() => void refetchMyParcels()}
             matches={displayCarrierTrips}
             matchesByParcelId={carrierTripsByParcelId}
             navigation={navigation}
@@ -566,6 +568,8 @@ export function SearchScreen() {
             isAutoMatch={isAutoMatch}
             myTrips={isAutoMatch ? pagedMyTrips : sortedMyTrips}
             myTripsLoading={myTripsState.loading}
+            myTripsError={myTripsState.error}
+            onRetryMyTrips={() => void refetchMyTrips()}
             matches={displayReceiverRequests}
             matchesByTripId={receiverRequestsByTripId}
             navigation={navigation}
@@ -631,6 +635,8 @@ function PackageTabResults({
   isAutoMatch,
   myParcels,
   myParcelsLoading,
+  myParcelsError,
+  onRetryMyParcels,
   matches,
   matchesByParcelId,
   navigation,
@@ -640,6 +646,9 @@ function PackageTabResults({
   isAutoMatch: boolean;
   myParcels: Parcel[];
   myParcelsLoading: boolean;
+  /** Loading YOUR parcels failed: say so, rather than "No parcel listings". */
+  myParcelsError: unknown;
+  onRetryMyParcels: () => void;
   matches: PackageMatch[];
   /** Pre-filtered per-parcel match lists (same source as the tab count). */
   matchesByParcelId: Map<string, PackageMatch[]>;
@@ -654,6 +663,8 @@ function PackageTabResults({
           <MyListingSkeleton />
         </View>
       );
+    if (myParcelsError && myParcels.length === 0)
+      return <ErrorBlock message={getErrorMessage(myParcelsError)} onRetry={onRetryMyParcels} />;
     if (myParcels.length === 0)
       return (
         <EmptyResults

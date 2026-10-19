@@ -25,6 +25,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, paymentsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "PayBookingTab">,
@@ -36,6 +37,12 @@ type Route = RouteProp<MainTabParamList, "PayBookingTab">;
 // from parcel_requests.fee_currency. Printing "$" here told a sender paying
 // ₹3600 that they owed $3600, on the screen where they commit to paying.
 const money = (n: number, currency?: string | null) => formatMoney(n, currency);
+
+/** The server said the booking does not exist / is not theirs (vs. "could not load"). */
+function isMissing(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  return status === 404 || status === 403;
+}
 
 export function PayBookingScreen() {
   const navigation = useNavigation<Nav>();
@@ -218,6 +225,10 @@ export function PayBookingScreen() {
 
       {loading && !booking ? (
         <DetailSkeleton />
+      ) : error && !booking && !isMissing(error) ? (
+        // A timeout or dropped connection is not "Booking not found": say what
+        // happened and let them retry instead of sending them back.
+        <ErrorState error={error} subject="this booking" onRetry={() => void refetch()} />
       ) : error || !booking ? (
         <Card style={styles.panel}>
           <Ionicons name="receipt-outline" size={34} color={colors.mutedText} />

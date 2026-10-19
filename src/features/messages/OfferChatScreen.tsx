@@ -482,6 +482,8 @@ export function OfferChatScreen() {
         open={travelDocOpen}
         doc={travelDoc.doc}
         loading={travelDoc.loading}
+        loadError={travelDoc.error}
+        onRetryLoad={() => void travelDoc.refetch()}
         pending={travelDoc.pending}
         onClose={() => setTravelDocOpen(false)}
         error={errorFor("travelDoc")}
@@ -501,6 +503,8 @@ export function OfferChatScreen() {
         open={parcelReviewOpen}
         review={parcelReview.review}
         loading={parcelReview.loading}
+        loadError={parcelReview.error}
+        onRetryLoad={() => void parcelReview.refetch()}
         pending={parcelReview.pending}
         onClose={() => setParcelReviewOpen(false)}
         error={errorFor("parcelReview")}

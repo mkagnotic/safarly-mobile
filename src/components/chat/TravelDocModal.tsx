@@ -22,6 +22,7 @@ import { getErrorMessage, type RNUploadFile, type TravelDocState } from "@/servi
 import { colors } from "@/theme/colors";
 
 import type { TravelDocPending } from "@/hooks/api/useTravelDoc";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 /** 10 MB — same cap as chat attachments and the web uploader. */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -33,6 +34,9 @@ interface TravelDocModalProps {
   open: boolean;
   doc: TravelDocState | null;
   loading: boolean;
+  /** Loading the sheet's state failed (not an action error): show it with Retry. */
+  loadError?: unknown;
+  onRetryLoad?: () => void;
   pending: TravelDocPending;
   onClose: () => void;
   /**
@@ -81,6 +85,8 @@ export function TravelDocModal({
   open,
   doc,
   loading,
+  loadError,
+  onRetryLoad,
   pending,
   onClose,
   error,
@@ -275,6 +281,9 @@ export function TravelDocModal({
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
+          ) : loadError && !doc ? (
+            // A failed load read as "isn't available yet", which is a different story.
+            <ErrorState error={loadError} subject="this step" onRetry={onRetryLoad} />
           ) : !doc ? (
             <Text style={styles.infoBody}>
               Verification isn&apos;t available for this conversation yet.

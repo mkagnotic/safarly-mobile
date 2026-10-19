@@ -18,7 +18,7 @@ import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
 import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
 import { JourneyProgress } from "@/features/bookings/JourneyProgress";
 import { useBookings } from "@/hooks/api/useBookings";
-import { getErrorMessage, type Booking } from "@/services/api";
+import type { Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { styles } from "@/features/bookings/BookingsScreen.styles";
@@ -59,7 +59,7 @@ function ExpandedBody({
   onNavigatePay,
 }: Readonly<ExpandedBodyProps>) {
   const {
-    booking, timeline, error, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
+    booking, timeline, error, refetch, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
     setAcceptHandoffOpen, rejectHandoffOpen, setRejectHandoffOpen, cancelPostPossessionOpen,
     setCancelPostPossessionOpen, modalError, setModalError, otpCode, setOtpCode, generatedOtp,
     setGeneratedOtp, otpEmailed, setOtpEmailed, actionBanner, dismissBanner, showBanner, runAction,
@@ -73,12 +73,14 @@ function ExpandedBody({
     );
   }
 
-  if (error || !booking) {
+  if (error && !booking) {
+    return <ErrorState error={error} subject="this booking" onRetry={() => void refetch()} />;
+  }
+
+  if (!booking) {
     return (
       <View style={styles.expandedError}>
-        <Text style={styles.expandedErrorText}>
-          {error ? getErrorMessage(error) : "Booking unavailable"}
-        </Text>
+        <Text style={styles.expandedErrorText}>Booking unavailable</Text>
       </View>
     );
   }
