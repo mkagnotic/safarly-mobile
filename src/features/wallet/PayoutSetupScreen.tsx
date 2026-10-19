@@ -9,6 +9,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/ui/AppButton";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -46,6 +47,9 @@ export function PayoutSetupScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The status load failing, kept apart from button errors: without a status
+   *  the cards below would claim "Set up payouts" for an account that may be live. */
+  const [loadError, setLoadError] = useState<unknown>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -56,11 +60,12 @@ export function PayoutSetupScreen() {
   }, []);
 
   const loadStatus = useCallback(async () => {
+    setLoadError(null);
     try {
       const res = await paymentsApi.payoutStatus();
       if (mountedRef.current) setStatus(res.data ?? null);
     } catch (err) {
-      if (mountedRef.current) setError(getErrorMessage(err));
+      if (mountedRef.current) setLoadError(err);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -153,6 +158,15 @@ export function PayoutSetupScreen() {
         <Card style={styles.centerCard}>
           <ActivityIndicator color={colors.primary} />
         </Card>
+      ) : loadError && !status ? (
+        <ErrorState
+          error={loadError}
+          subject="your payout status"
+          onRetry={() => {
+            setLoading(true);
+            void loadStatus();
+          }}
+        />
       ) : (
         <>
           {/* Status card */}

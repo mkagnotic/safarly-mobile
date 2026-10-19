@@ -77,6 +77,7 @@ const initialState = {
   profileSetupDone: false,
   authenticated: false,
   authBootstrapping: false,
+  bootstrapError: null as unknown,
   showLiveData: false,
   userProfile: defaultUserProfile,
   paymentMethods: [],
@@ -108,6 +109,7 @@ export const useAppStore = create<AppState>()(
       finishProfileSetup: () => set({ profileSetupDone: true }),
       setProfileSetupDone: (done) => set({ profileSetupDone: done }),
       setAuthBootstrapping: (bootstrapping) => set({ authBootstrapping: bootstrapping }),
+      setBootstrapError: (bootstrapError) => set({ bootstrapError }),
       setPendingNotice: (notice) => set({ pendingNotice: notice }),
       clearPendingNotice: () => set({ pendingNotice: null }),
       setAccountDeleted: (accountDeleted) => set({ accountDeleted }),
@@ -129,6 +131,7 @@ export const useAppStore = create<AppState>()(
         set({
           authenticated: false,
           profileSetupDone: false,
+          bootstrapError: null,
           userProfile: defaultUserProfile,
           paymentMethods: [],
           kycWelcomePending: false,

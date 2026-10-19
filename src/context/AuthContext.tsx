@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { AppState } from "react-native";
 
@@ -7,7 +7,9 @@ import { signOutThisDevice } from "@/integrations/supabase/localSignOut";
 import { createSessionRevalidator } from "@/integrations/supabase/revalidate";
 import { sessionStorage } from "@/integrations/supabase/secureStorage";
 import { authApi } from "@/services/api/auth";
+import { ApiClientError, isTimeoutError } from "@/services/api/client";
 import { usersApi } from "@/services/api/users";
+import { checkOnboarding } from "./onboardingCheck";
 import {
   syncPushRegistrationOnLogin,
   clearCachedPushToken,
@@ -71,6 +73,8 @@ interface AuthContextValue {
    * already gone, so a normal sign-out would only fail against a dead token.
    */
   signOutAfterAccountDeletion: () => Promise<void>;
+  /** Re-run the post-sign-in onboarding check (the bootstrap screen's Try again). */
+  retryOnboardingCheck: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -94,29 +98,32 @@ interface Props {
  * concerns. It just owns the session.
  */
 /**
- * Has this user finished onboarding? Retried once.
- *
- * A single transient failure used to fall through to `profileSetupDone:
- * false`, which drops a fully onboarded user into the Terms screen — and the
- * request runs immediately after sign-in, exactly when a cold radio or a
- * just-refreshed token makes a blip most likely. One retry makes that
- * harmless.
- *
- * A genuine, repeated failure still fails closed: letting an un-onboarded
- * account into the app is the worse outcome, since the rest of the product
- * assumes terms have been accepted.
+ * Has this user finished onboarding? See `checkOnboarding` for the rules: only
+ * the server saying terms are NOT accepted routes to ProfileSetup; a profile
+ * that could not be read is "unknown" and shows an error with Try again.
  */
-const hasAcceptedTerms = async (): Promise<boolean> => {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const { data } = await usersApi.getMyProfile();
-      return !!data?.profile?.terms_accepted_at;
-    } catch {
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
-    }
-  }
-  return false;
-};
+const isUnauthenticated = (error: unknown) =>
+  error instanceof ApiClientError && (error.status === 401 || error.code === "UNAUTHENTICATED");
+/** user-handler/me answers a deleted account with UNAUTHENTICATED "This account has been deleted." */
+const isDeletedAccount = (error: unknown) =>
+  isUnauthenticated(error) && /account has been deleted/i.test((error as Error).message);
+
+const loadOnboardingStatus = () =>
+  checkOnboarding(
+    async () => (await usersApi.getMyProfile()).data?.profile?.terms_accepted_at,
+    { isTimeout: isTimeoutError, isUnauthenticated, isDeleted: isDeletedAccount },
+  );
+
+/**
+ * Drop this device's session without calling the server: used when the server
+ * has already refused it (revoked / deleted account), so a normal sign-out
+ * would only fail against a dead token.
+ */
+async function signOutLocally(): Promise<void> {
+  await clearCachedPushToken();
+  await clearGoogleSession();
+  await supabase.auth.signOut({ scope: "local" });
+}
 
 export function AuthProvider({ children }: Readonly<Props>) {
   const [session, setSession] = useState<Session | null>(null);
@@ -124,6 +131,38 @@ export function AuthProvider({ children }: Readonly<Props>) {
 
   // Avoid setting state after unmount on the initial getSession() race.
   const mountedRef = useRef(true);
+
+  /** Server-authoritative onboarding gate; also what "Try again" re-runs. */
+  const runOnboardingCheck = useCallback(async () => {
+    const store = useAppStore.getState();
+    store.setBootstrapError(null);
+    store.setAuthBootstrapping(true);
+    try {
+      const result = await loadOnboardingStatus();
+      if (!mountedRef.current) return;
+      const s2 = useAppStore.getState();
+      if (result.status === "complete") s2.setProfileSetupDone(true);
+      // "unknown": keep the user on the bootstrap screen with the error, never
+      // ProfileSetup. "incomplete": ProfileSetup, as before.
+      else if (result.status === "unknown") s2.setBootstrapError(result.error ?? new Error("unknown"));
+      else if (result.status === "deleted") {
+        // Same order as DeleteAccountScreen: flag first, so the signed-out stack
+        // opens on the confirmation screen instead of flashing Login.
+        s2.setAccountDeleted(true);
+        await signOutLocally();
+      } else if (result.status === "signedOut") {
+        s2.setPendingNotice({
+          variant: "info",
+          title: "You've been signed out",
+          message: "Your session has ended. Please sign in again.",
+          target: "login",
+        });
+        await signOutLocally();
+      }
+    } finally {
+      if (mountedRef.current) useAppStore.getState().setAuthBootstrapping(false);
+    }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -175,13 +214,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
       // the local cache already resolved setup, so returning users don't pay
       // for the round-trip on every cold start.
       if (!needsBootstrap) return;
-      try {
-        const accepted = await hasAcceptedTerms();
-        if (!mountedRef.current) return;
-        if (accepted) useAppStore.getState().setProfileSetupDone(true);
-      } finally {
-        if (mountedRef.current) useAppStore.getState().setAuthBootstrapping(false);
-      }
+      await runOnboardingCheck();
     };
 
     void supabase.auth
@@ -228,6 +261,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
       session,
       user: session?.user ?? null,
       initializing,
+      retryOnboardingCheck: () => void runOnboardingCheck(),
       signInWithPassword: async (email, password) => {
         await authApi.customerLogin(email.trim(), password);
       },
@@ -282,13 +316,9 @@ export function AuthProvider({ children }: Readonly<Props>) {
         await signOutThisDevice(supabase.auth, () =>
           sessionStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY));
       },
-      signOutAfterAccountDeletion: async () => {
-        await clearCachedPushToken();
-        await clearGoogleSession();
-        // `local` scope only drops the stored session; the server revoked every
-        // session when it deleted the account.
-        await supabase.auth.signOut({ scope: "local" });
-      },
+      // `local` scope only drops the stored session; the server revoked every
+      // session when it deleted the account.
+      signOutAfterAccountDeletion: signOutLocally,
     }),
     [session, initializing],
   );

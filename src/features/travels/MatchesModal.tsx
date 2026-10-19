@@ -30,6 +30,7 @@ import {
 import { colors } from "@/theme/colors";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -105,6 +106,9 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
     ? `Carriers on ${source?.routeLabel ?? ""} who can deliver this parcel.`
     : `Senders on ${source?.routeLabel ?? ""} with parcels that match your trip.`;
 
+  /** Bumped by Retry to re-run the load below. */
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     if (!open || !kind || !sourceId) return;
     let cancelled = false;
@@ -166,7 +170,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
     return () => {
       cancelled = true;
     };
-  }, [open, kind, sourceId]);
+  }, [open, kind, sourceId, attempt]);
 
   const handleViewProfile = useCallback(
     (personId: string | null, name: string) => {
@@ -243,9 +247,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : error ? (
-            <View style={styles.stateBox}>
-              <Text style={styles.stateText}>{getErrorMessage(error)}</Text>
-            </View>
+            <ErrorState error={error} subject="matches" onRetry={() => setAttempt((n) => n + 1)} />
           ) : rows.length === 0 ? (
             <View style={styles.stateBox}>
               <Ionicons name="people-outline" size={28} color={colors.mutedText} />

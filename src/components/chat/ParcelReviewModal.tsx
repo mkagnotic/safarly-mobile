@@ -28,6 +28,7 @@ import {
 import { colors } from "@/theme/colors";
 
 import type { ParcelReviewPending } from "@/hooks/api/useParcelReview";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 /** 10 MB per file — matches the backend cap. */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -51,6 +52,9 @@ interface ParcelReviewModalProps {
   open: boolean;
   review: ParcelReviewState | null;
   loading: boolean;
+  /** Loading the sheet's state failed (not an action error): show it with Retry. */
+  loadError?: unknown;
+  onRetryLoad?: () => void;
   pending: ParcelReviewPending;
   onClose: () => void;
   /**
@@ -80,6 +84,8 @@ export function ParcelReviewModal({
   open,
   review,
   loading,
+  loadError,
+  onRetryLoad,
   pending,
   onClose,
   error,
@@ -286,6 +292,9 @@ export function ParcelReviewModal({
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
+          ) : loadError && !review ? (
+            // A failed load read as "isn't available yet", which is a different story.
+            <ErrorState error={loadError} subject="this step" onRetry={onRetryLoad} />
           ) : !review ? (
             <Text style={styles.infoBody}>
               Parcel review isn&apos;t available for this conversation yet.

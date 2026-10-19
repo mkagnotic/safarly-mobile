@@ -141,6 +141,7 @@ export function useExpandedBooking(bookingId: string) {
     booking,
     timeline,
     error,
+    refetch,
     actionPending,
     cancelOpen,
     setCancelOpen,
