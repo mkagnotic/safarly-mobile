@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiClientError, kycApi, type KycSubmission } from "@/services/api";
+import { ApiClientError, kycApi, type KycStatusBlock, type KycSubmission } from "@/services/api";
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 
 export interface UseKycStatusResult {
   /** Raw server status string (may use either naming scheme — see flags below). */
   status: string;
   submission: KycSubmission | null;
+  /** The server's verification block (provider, state, attempts…). null on older servers. */
+  block: KycStatusBlock | null;
   /** `verified` ≡ `approved`. */
   isVerified: boolean;
   /** `pending` ≡ `submitted` (under review). */
@@ -31,6 +33,7 @@ const NOT_STARTED = new Set(["", "not_started", "none"]);
 export function useKycStatus(): UseKycStatusResult {
   const [status, setStatus] = useState<string>("");
   const [submission, setSubmission] = useState<KycSubmission | null>(null);
+  const [block, setBlock] = useState<KycStatusBlock | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
@@ -47,6 +50,7 @@ export function useKycStatus(): UseKycStatusResult {
         if (!mountedRef.current) return;
         setStatus(res.data?.status ?? "");
         setSubmission(res.data?.submission ?? null);
+        setBlock(res.data?.kyc ?? null);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -82,6 +86,7 @@ export function useKycStatus(): UseKycStatusResult {
   return {
     status,
     submission,
+    block,
     isVerified,
     isPending,
     isRejected,

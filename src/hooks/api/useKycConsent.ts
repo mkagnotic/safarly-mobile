@@ -15,14 +15,20 @@ import { kycApi, type KycConsentState } from "@/services/api";
 export function useKycConsent() {
   const [state, setState] = useState<KycConsentState | null>(null);
   const [agreeing, setAgreeing] = useState(false);
+  // For the Didit screen: a spinner while loading, and Retry on failure. The
+  // manual path keeps its rule above (a failed read never blocks).
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const mounted = useRef(true);
 
   const refetch = useCallback(async () => {
     try {
       const res = await kycApi.getConsent();
-      if (mounted.current) setState(res.data ?? null);
-    } catch {
-      if (mounted.current) setState(null);
+      if (mounted.current) { setState(res.data ?? null); setError(null); }
+    } catch (err) {
+      if (mounted.current) { setState(null); setError(err instanceof Error ? err : new Error(String(err))); }
+    } finally {
+      if (mounted.current) setLoading(false);
     }
   }, []);
 
@@ -44,5 +50,5 @@ export function useKycConsent() {
   }, [state?.policy_version, refetch]);
 
   const ready = !!(state?.required && state.policy_version && state.retention_days && state.contact_email);
-  return { required: ready, consent: state, agreeing, agree, refetch };
+  return { required: ready, consent: state, agreeing, agree, refetch, loading, error };
 }

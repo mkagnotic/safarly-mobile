@@ -1,5 +1,5 @@
 /**
- * Where a Stripe return link lands when it has to START the app.
+ * Where a Stripe (or Didit) return link lands when it has to START the app.
  *
  * Payout setup and checkout open Stripe in an in-app browser and wait for
  * `safarly://payout-return` / `safarly://pay-return`. While the app is alive,
@@ -16,6 +16,9 @@
 const COLD_START_TARGETS: Record<string, string> = {
   "payout-return": "payout-setup",
   "pay-return": "bookings",
+  // Identity verification (Didit) finishing after Android killed the app:
+  // open the verification screen, which re-reads the result from the server.
+  "kyc-return": "kyc",
 };
 
 export function coldStartReturnLink(url: string | null): string | null {
