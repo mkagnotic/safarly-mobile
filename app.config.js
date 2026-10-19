@@ -21,6 +21,10 @@
  *   "development" unless told otherwise; store builds are pointed at APNs
  *   production explicitly rather than relying on the export step to rewrite
  *   the entitlement. EAS sets EAS_BUILD_PROFILE on its builders.
+ * - The app name. A build pointed at the staging backend (EXPO_PUBLIC_ENV =
+ *   "staging", the EAS "preview" environment) is named "Safarly (Staging)" on iOS
+ *   so a UAT/TestFlight build is never mistaken for the live app. (Android's
+ *   label lives in the committed android/ project and is unchanged.)
  */
 module.exports = ({ config }) => {
   const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME?.trim();
@@ -40,8 +44,11 @@ module.exports = ({ config }) => {
     return iosUrlScheme ? [[name, { iosUrlScheme }]] : [];
   });
 
+  const staging = process.env.EXPO_PUBLIC_ENV?.trim() === "staging";
+
   return {
     ...config,
+    ...(staging ? { name: "Safarly (Staging)" } : {}),
     plugins,
     android: {
       ...config.android,
