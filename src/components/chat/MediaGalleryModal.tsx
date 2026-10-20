@@ -21,6 +21,7 @@ import {
   type ChatMediaItem,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 interface MediaGalleryModalProps {
   open: boolean;
@@ -151,8 +152,7 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
           </View>
         ) : error ? (
           <View style={styles.centered}>
-            <Ionicons name="cloud-offline-outline" size={34} color={colors.mutedText} />
-            <Text style={styles.emptyBody}>{error}</Text>
+            <ErrorState title="Couldn't load media" body={error} onRetry={() => void load()} />
           </View>
         ) : media.length === 0 ? (
           <View style={styles.centered}>

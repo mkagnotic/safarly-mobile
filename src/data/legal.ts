@@ -18,7 +18,7 @@ export type LegalSection = {
  * Shown on the Privacy Policy, Terms of Service and Cookie Policy.
  * Update this whenever the substance of those documents changes.
  */
-export const LEGAL_EFFECTIVE_DATE = "12 October 2026";
+export const LEGAL_EFFECTIVE_DATE = "20 October 2026";
 
 /**
  * Legal, About and Contact copy.
@@ -180,7 +180,7 @@ export const privacySections: LegalSection[] = [
       "Pickup and handoff addresses",
       "Parcel details and photos, and trip details such as routes, dates and capacity",
       "Chat messages, and the photos and documents you attach to them",
-      "A government ID photo and a selfie for identity verification (KYC), reviewed by our staff",
+      "For identity verification: photos of your government ID, the details read from it (such as your name, date of birth, nationality, document number and expiry date), a face scan and a face template made from it, and your IP address and device details at the time of the check",
       "Payment information processed through Stripe. Your card number is handled by Stripe and is not stored by Safarly",
       "Payout details: your bank account number, IFSC code or UPI ID for payouts in India through Razorpay, and the payout account status Stripe shares with us when you set up Stripe Connect",
       "Push notification tokens, so we can send notifications to your device",
@@ -195,7 +195,7 @@ export const privacySections: LegalSection[] = [
     bullets: [
       "Facilitate connections between users",
       "Process payments and payouts",
-      "Verify identity and prevent fraud",
+      "Verify identity and prevent fraud, including stopping one person from opening several accounts",
       "Improve platform functionality",
     ],
   },
@@ -215,17 +215,29 @@ export const privacySections: LegalSection[] = [
       "With Stripe, to process payments and Stripe Connect payouts",
       "With Razorpay, to send payouts in India",
       "With Supabase, which hosts our database, file storage and sign-in",
+      "With Didit, our identity verification provider, which checks your ID and face scan for us and stores that data in the European Union",
       "With Expo, Apple and Google, to deliver push notifications",
       "With other service providers we rely on to run Safarly, such as email delivery, only as needed to provide the service",
       "When required by law",
     ],
   },
   {
-    title: "5. Data Security",
+    title: "5. Identity Verification and Biometric Data",
+    paragraphs: [
+      "We ask you to verify your identity before you can use features that involve payment and trust between users.",
+      "How it works. Our identity verification provider, Didit, checks your government ID automatically, confirms that your face scan is of a real person who is present, and compares your face with the photo on your ID. To stop one person from opening several accounts, Didit also makes a face template (a set of measurements of your face) and compares it with other Safarly verifications. If the automatic check can't decide, a member of our team reviews the result. If automatic verification is ever unavailable, we may instead ask you to upload a photo of your ID and a selfie for our team to review.",
+      "Biometric data. Your face scan and face template are biometric data. We collect them only after you give your written consent on the verification screen, and only to verify your identity and prevent fraud. We and Didit do not sell, lease or trade your biometric data, and do not use it for advertising, for training, or for any other purpose.",
+      "Where it is processed. Didit acts as our processor, on our instructions, and processes and stores verification data in the European Union.",
+      "How long we keep it. Your ID images, face scan, face template and the details read from your ID are permanently deleted within 180 days (about 6 months) of your verification, or sooner when you delete your account or ask us to. ID photos and selfies you upload for review by our team follow the same 180-day limit. We keep only the result of the check (verified or not, the reason, and the date) for as long as you have an account.",
+      `Your choices. You can ask us to delete your verification data at ${SUPPORT_EMAIL}. Some features, such as paying for a delivery, need a verified identity, so you would need to verify again before using them.`,
+    ],
+  },
+  {
+    title: "6. Data Security",
     paragraphs: ["We implement all necessary safeguards to protect user data."],
   },
   {
-    title: "6. User Control",
+    title: "7. User Control",
     paragraphs: ["You may:"],
     bullets: [
       "Update your profile",
@@ -234,28 +246,28 @@ export const privacySections: LegalSection[] = [
     ],
   },
   {
-    title: "7. Data Retention & Deletion",
+    title: "8. Data Retention & Deletion",
     paragraphs: [
       "We keep your account data for as long as your account is active.",
       "When you delete your account, your profile, trips, parcel requests and travel-buddy listings are removed, and your remaining personal details are deleted or anonymised. Deletion is permanent. Messages and reviews you exchanged stay visible to the other person, shown as \u201cDeleted user\u201d. Records the law requires us to keep, such as completed delivery, payment and tax records, are retained for as long as required.",
-      "Identity-verification images (your ID photo and selfie) are kept only as long as needed to verify you and to meet our legal obligations.",
+      "Identity-verification data (your ID images, face scan and face template) is deleted within 180 days of your verification, and straight away when you delete your account. We keep only the verification result while your account exists.",
     ],
   },
   {
-    title: "8. Cookies & Tracking",
+    title: "9. Cookies & Tracking",
     paragraphs: [
       "Safarly does not set cookies and does not use analytics, advertising or tracking services. We store a small amount of information in your browser or app so you stay signed in and so one-time prompts are not repeated at you.",
       "Our Cookie Policy lists exactly what is stored and how to clear it.",
     ],
   },
   {
-    title: "9. International Users",
+    title: "10. International Users",
     paragraphs: [
-      "By using Safarly, you consent to data processing in the United States and other applicable regions.",
+      "By using Safarly, you consent to data processing in the United States, in the European Union (for identity verification) and in other applicable regions.",
     ],
   },
   {
-    title: "10. Changes",
+    title: "11. Changes",
     paragraphs: ["We may update this policy periodically."],
   },
   {

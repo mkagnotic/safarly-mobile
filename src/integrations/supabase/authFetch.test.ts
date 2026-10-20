@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, test } from "node:test";
+import { afterEach, beforeEach, describe, mock, test } from "node:test";
 
 import { createClient } from "@supabase/supabase-js";
 
-import { isTokenRefreshRequest, resilientAuthFetch } from "./authFetch.ts";
+import { bodyBytes, isTokenRefreshRequest, resilientAuthFetch, uploadTimeoutMs } from "./authFetch.ts";
 
 // Mirrors web's `src/test/authRefreshResilience.test.ts`.
 //
@@ -110,6 +110,108 @@ describe("token refresh during an auth outage", () => {
     network = () => json(500, { msg: "boom" });
     assert.equal((await resilientAuthFetch(`${URL_BASE}/auth/v1/token?grant_type=password`)).status, 500);
     assert.equal((await resilientAuthFetch(`${URL_BASE}/functions/v1/bookings`)).status, 500);
+  });
+});
+
+describe("default deadline on supabase-js's own requests", () => {
+  /** A network that never answers, but honours abort like a real fetch. */
+  const hung = ((_input: RequestInfo | URL, init?: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      const fail = () => {
+        const e = new Error("Aborted");
+        e.name = "AbortError";
+        reject(e);
+      };
+      if (init?.signal?.aborted) fail();
+      else init?.signal?.addEventListener("abort", fail);
+    })) as typeof fetch;
+  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    globalThis.fetch = hung;
+  });
+  afterEach(() => {
+    mock.timers.reset();
+    globalThis.fetch = realFetch;
+  });
+
+  test("a token refresh that never answers is abandoned, and the session is KEPT (nobody signed out)", async () => {
+    const { client, map } = makeClient(resilientAuthFetch);
+    let done = false;
+    void client.auth.getSession().then(() => { done = true; }, () => { done = true; });
+    // supabase-js retries a failed refresh with backoff; drive the clock until it gives up.
+    for (let i = 0; i < 600 && !done; i++) {
+      mock.timers.tick(1000);
+      await flush();
+    }
+    assert.ok(done, "getSession() settles instead of hanging forever");
+    assert.equal(map.has(STORAGE_KEY), true, "a timeout is not a rejection of the refresh token");
+  });
+
+  test("ordinary requests give up at 45s with timeout wording; storage gets 90s", async () => {
+    let rest: unknown = "pending";
+    let storage: unknown = "pending";
+    void resilientAuthFetch(`${URL_BASE}/rest/v1/user_profiles`).then(() => { rest = "resolved"; }, (e) => { rest = e; });
+    void resilientAuthFetch(`${URL_BASE}/storage/v1/object/avatars/x.jpg`, { method: "POST" }).then(() => { storage = "resolved"; }, (e) => { storage = e; });
+
+    mock.timers.tick(44_999);
+    await flush();
+    assert.equal(rest, "pending");
+    mock.timers.tick(1);
+    await flush();
+    assert.match((rest as Error).message, /timed out/, "maps to the existing 'That took too long' copy");
+    assert.equal(storage, "pending", "uploads are allowed longer");
+
+    mock.timers.tick(45_000);
+    await flush();
+    assert.match((storage as Error).message, /timed out/);
+  });
+
+  test("a caller that passes its own signal keeps control: no default deadline is added", async () => {
+    const caller = new AbortController();
+    let outcome: unknown = "pending";
+    void resilientAuthFetch(`${URL_BASE}/rest/v1/x`, { signal: caller.signal }).then(() => { outcome = "resolved"; }, (e) => { outcome = e; });
+    mock.timers.tick(120_000);
+    await flush();
+    assert.equal(outcome, "pending");
+    caller.abort();
+    await flush();
+    assert.equal((outcome as Error).name, "AbortError", "the caller's cancel, not our timeout");
+  });
+});
+
+describe("upload deadline scales with size (weak Indian uplink: 64 KB/s)", () => {
+  test("small uploads keep the 90s floor; big ones get time to finish; capped at 10 min", () => {
+    assert.equal(uploadTimeoutMs(0), 90_000);
+    assert.equal(uploadTimeoutMs(500 * 1024), 90_000);                 // avatar: floor
+    assert.equal(uploadTimeoutMs(3 * 1024 * 1024), 60_000 + 48_000);   // phone photo ~3 MB -> 108s
+    assert.equal(uploadTimeoutMs(10 * 1024 * 1024), 60_000 + 160_000); // 10 MB limit -> 220s
+    assert.equal(uploadTimeoutMs(50 * 1024 * 1024), 600_000);          // cap
+    assert.equal(uploadTimeoutMs(undefined), 600_000);                 // unknown size: generous cap
+  });
+  test("measures the bodies uploads actually send", () => {
+    assert.equal(bodyBytes(new Uint8Array(1234)), 1234);
+    assert.equal(bodyBytes(new ArrayBuffer(10)), 10);
+    assert.equal(bodyBytes(new Blob(["abcd"])), 4);
+    assert.equal(bodyBytes(undefined), 0);
+  });
+  test("a 10 MB storage upload is NOT cut off at 90s", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    globalThis.fetch = ((_i: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("Aborted"), { name: "AbortError" })));
+    })) as typeof fetch;
+    let outcome: unknown = "pending";
+    void resilientAuthFetch(`${URL_BASE}/storage/v1/object/kyc-documents/a.pdf`, { method: "POST", body: new Uint8Array(10 * 1024 * 1024) })
+      .then(() => { outcome = "resolved"; }, (e) => { outcome = e; });
+    mock.timers.tick(200_000);
+    await new Promise<void>((r) => setImmediate(r));
+    assert.equal(outcome, "pending", "still uploading at 200s");
+    mock.timers.tick(20_000);
+    await new Promise<void>((r) => setImmediate(r));
+    assert.match((outcome as Error).message, /timed out/);
+    mock.timers.reset();
+    globalThis.fetch = realFetch;
   });
 });
 

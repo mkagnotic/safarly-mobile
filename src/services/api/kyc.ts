@@ -56,6 +56,26 @@ export interface KycConsentState {
   policy_version: string | null;
   retention_days: number | null;
   contact_email: string | null;
+  /** "didit": show the automatic-verification wording. Absent = manual wording. */
+  variant?: "didit";
+}
+
+/** What the verification screen renders (server-derived; never inferred client-side). Same as web. */
+export type KycUiState = "not_started" | "in_progress" | "in_review" | "approved" | "declined" | "attempts_exhausted";
+
+export interface KycStatusBlock {
+  provider: "manual" | "didit";
+  /** Didit is on AND fully configured (consent wording, retention, contact). */
+  available: boolean;
+  state: KycUiState;
+  attempts_used: number;
+  max_attempts: number;
+  attempts_left: number;
+  can_start: boolean;
+  reason: string | null;
+  manual_upload: boolean;
+  consent_required: boolean;
+  session_started_at: string | null;
 }
 
 export const kycApi = {
@@ -69,7 +89,14 @@ export const kycApi = {
     }),
 
   getStatus: () =>
-    api.get<{ status: string; submission: KycSubmission | null }>("/kyc-handler/status"),
+    api.get<{ status: string; submission: KycSubmission | null; kyc?: KycStatusBlock }>("/kyc-handler/status"),
+
+  /**
+   * Start or resume automatic verification (Didit). The server returns Didit's
+   * hosted URL and sends the user back to safarly://kyc-return when they finish.
+   */
+  initiate: (platform: "android" | "ios") =>
+    api.post<{ url: string; session_id: string; state: string }>("/kyc-handler/initiate", { platform }),
 
   submit: (input: KycSubmitInput) =>
     api.post<{ id: string; status: string }>("/kyc-handler/submit", input),

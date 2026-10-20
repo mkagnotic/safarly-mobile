@@ -14,6 +14,12 @@ test("a checkout return that starts the app opens Bookings", () => {
   assert.equal(coldStartReturnLink("safarly://pay-return?session_id=cs_1"), "safarly://bookings?session_id=cs_1");
 });
 
+test("an identity-verification return that starts the app opens the verification screen", () => {
+  assert.equal(coldStartReturnLink("safarly://kyc-return"), "safarly://kyc");
+  // Didit appends its own hints; they pass through (the screen ignores them and asks the server).
+  assert.equal(coldStartReturnLink("safarly://kyc-return?verificationSessionId=x&status=Approved"), "safarly://kyc?verificationSessionId=x&status=Approved");
+});
+
 test("every other link is left alone", () => {
   for (const url of ["safarly://messages/abc", "https://mysafarly.com/app/kyc", "safarly://payout-returns", null]) {
     assert.equal(coldStartReturnLink(url), url);
@@ -23,5 +29,5 @@ test("every other link is left alone", () => {
 test("only the cold-start path rewrites; live return links stay unrouted", () => {
   const src = readFileSync(new URL("./linking.ts", import.meta.url), "utf8");
   assert.match(src, /pendingUrl = coldStartReturnLink\(await Linking\.getInitialURL\(\)\)/);
-  assert.doesNotMatch(src, /["']payout-return["']|["']pay-return["']/, "a live route would yank users out of signup or checkout");
+  assert.doesNotMatch(src, /["']payout-return["']|["']pay-return["']|["']kyc-return["']/, "a live route would yank users out of signup, checkout or verification");
 });

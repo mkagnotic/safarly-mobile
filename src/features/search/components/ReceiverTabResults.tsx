@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 
 import { RouteListingCard } from "@/features/search/RouteListingCard";
-import type { PackageMatch, Trip } from "@/services/api";
+import { getErrorMessage, type PackageMatch, type Trip } from "@/services/api";
 import { formatTravelDateRange } from "@/utils/travelDate";
 import { PackageMatchCard } from "@/features/search/components/PackageMatchCard";
 import {
@@ -9,7 +9,7 @@ import {
   MatchListSkeleton,
   MyListingSkeleton,
 } from "@/features/search/components/SearchSkeletons";
-import { EmptyResults } from "@/features/search/components/SearchStates";
+import { EmptyResults, ErrorBlock } from "@/features/search/components/SearchStates";
 import type { Nav } from "@/features/search/lib/navigation";
 import { sharedStyles } from "@/features/search/searchStyles";
 
@@ -18,6 +18,8 @@ export function ReceiverTabResults({
   isAutoMatch,
   myTrips,
   myTripsLoading,
+  myTripsError,
+  onRetryMyTrips,
   matches,
   matchesByTripId,
   navigation,
@@ -27,6 +29,9 @@ export function ReceiverTabResults({
   isAutoMatch: boolean;
   myTrips: Trip[];
   myTripsLoading: boolean;
+  /** Loading YOUR trips failed: say so, rather than "No trips listed". */
+  myTripsError: unknown;
+  onRetryMyTrips: () => void;
   matches: PackageMatch[];
   /** Pre-filtered per-trip match lists (same source as the tab count). */
   matchesByTripId: Map<string, PackageMatch[]>;
@@ -41,6 +46,8 @@ export function ReceiverTabResults({
           <MyListingSkeleton />
         </View>
       );
+    if (myTripsError && myTrips.length === 0)
+      return <ErrorBlock message={getErrorMessage(myTripsError)} onRetry={onRetryMyTrips} />;
     if (myTrips.length === 0)
       return (
         <EmptyResults

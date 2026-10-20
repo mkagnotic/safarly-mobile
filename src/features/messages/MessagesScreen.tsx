@@ -57,6 +57,7 @@ export function MessagesScreen() {
   const {
     conversations: archivedConversations,
     loading: archivedLoading,
+    error: archivedError,
     refetch: refetchArchived,
     hasMore: hasMoreArchived,
     loadMore: loadMoreArchived,
@@ -104,8 +105,9 @@ export function MessagesScreen() {
   );
 
   // WhatsApp behaviour: when the last archived chat is unarchived, drop back to
-  // the inbox automatically rather than leaving an empty Archived screen.
-  const noArchivedLeft = showArchived && !archivedLoading && archivedConversations.length === 0;
+  // the inbox automatically rather than leaving an empty Archived screen. Not on
+  // a failed load: that is "couldn't load", shown with Retry below.
+  const noArchivedLeft = showArchived && !archivedLoading && !archivedError && archivedConversations.length === 0;
   useEffect(() => {
     if (noArchivedLeft) setShowArchived(false);
   }, [noArchivedLeft]);
@@ -158,19 +160,24 @@ export function MessagesScreen() {
   );
 
   const renderEmpty = useCallback(() => {
-    if (loading) {
+    // The Archived view has its own request: a failure there was shown as
+    // "No conversations yet", which reads as "your archived chats are gone".
+    const listLoading = showArchived ? archivedLoading : loading;
+    const listError = showArchived ? archivedError : error;
+    const retry = showArchived ? refetchArchived : refetch;
+    if (listLoading) {
       // Web parity: 5 skeleton placeholder cards while initial load is in flight.
       return <InboxSkeleton />;
     }
-    if (error) {
+    if (listError) {
       return (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-          <Text style={styles.errorTitle}>Couldn't load inbox</Text>
-          <Text style={styles.errorBody}>{getErrorMessage(error)}</Text>
+          <Text style={styles.errorTitle}>{showArchived ? "Couldn't load archived chats" : "Couldn't load inbox"}</Text>
+          <Text style={styles.errorBody}>{getErrorMessage(listError)}</Text>
           <Pressable
             style={styles.retryButton}
-            onPress={() => void refetch()}
+            onPress={() => void retry()}
             accessibilityRole="button"
             accessibilityLabel="Retry"
           >
@@ -208,7 +215,7 @@ export function MessagesScreen() {
         ) : null}
       </View>
     );
-  }, [loading, error, search, refetch, setSearch]);
+  }, [showArchived, archivedLoading, archivedError, refetchArchived, loading, error, search, refetch, setSearch]);
 
   const keyExtractor = useCallback((c: Conversation) => c.id, []);
 

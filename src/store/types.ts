@@ -62,6 +62,8 @@ export interface AppState {
   authenticated: boolean;
   /** Transient — true while AuthContext fetches the server profile after sign-in to decide whether to show ProfileSetup. */
   authBootstrapping: boolean;
+  /** The post-sign-in onboarding check could not read the profile (not persisted). */
+  bootstrapError: unknown;
   showLiveData: boolean;
   userProfile: UserProfile;
   parcels: Parcel[];
@@ -102,6 +104,7 @@ export interface AppState {
   finishProfileSetup: () => void;
   setProfileSetupDone: (done: boolean) => void;
   setAuthBootstrapping: (bootstrapping: boolean) => void;
+  setBootstrapError: (error: unknown) => void;
   login: () => void;
   logout: () => void;
   toggleLiveDataVisibility: () => void;

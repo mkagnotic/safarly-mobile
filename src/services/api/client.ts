@@ -2,6 +2,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_ANON_KEY, SUPABASE_FUNCTIONS_URL } from "@/integrations/supabase/env";
 import { toUserMessage } from "@/lib/userFacingError";
 
+import { bodyBytes, uploadTimeoutMs } from "@/integrations/supabase/authFetch";
+
+import { abortable, withDeadline as runWithDeadline } from "./deadline";
+
 /**
  * Edge-function HTTP client.
  *
@@ -82,8 +86,12 @@ function buildQuery(params?: QueryParams): string {
   return qs ? `?${qs}` : "";
 }
 
-async function authHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
+async function authHeaders(
+  extra: Record<string, string> | undefined,
+  signal: AbortSignal,
+): Promise<Record<string, string>> {
+  // getSession() can wait on a token refresh; it takes no signal, so bound the wait.
+  const { data } = await abortable(supabase.auth.getSession(), signal);
   const token = data.session?.access_token;
   const headers: Record<string, string> = {
     apikey: SUPABASE_ANON_KEY,
@@ -93,11 +101,13 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   return headers;
 }
 
-async function parseError(response: Response): Promise<never> {
+async function parseError(response: Response, signal: AbortSignal): Promise<never> {
   let payload: ApiError | null = null;
   try {
-    payload = (await response.json()) as ApiError;
-  } catch {
+    payload = (await abortable(response.json(), signal)) as ApiError;
+  } catch (error) {
+    // Out of time or cancelled while reading the body: that is the real outcome.
+    if (signal.aborted) throw error;
     // Non-JSON body (e.g. 502 from a gateway) — fall back to a generic message.
   }
   throw new ApiClientError(
@@ -145,13 +155,53 @@ async function refreshAfterUnauthorized(): Promise<boolean> {
   return forcedRefresh;
 }
 
-async function send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+/**
+ * How long a request may hang before we stop waiting. Mirrors web's
+ * REQUEST_TIMEOUT_MS in src/services/api/client.ts (uploads: see uploadTimeoutMs).
+ *
+ * Every call here used a bare `fetch()` with no deadline, so a wedged edge
+ * function or a stalled database left a screen on its spinner for as long as the
+ * platform gateway allowed, and a connection that never answered at all left it
+ * spinning for good: the "loading for 5+ minutes" the client reported.
+ *
+ * Generous on purpose: warm calls answer in under 1.5s on this instance, so 45s
+ * only ever fires on a genuine hang. Uploads get a deadline scaled to their size
+ * (`uploadTimeoutMs`): a 10 MB document on a weak phone uplink needs minutes.
+ *
+ * The deadline covers the WHOLE request, not just the first fetch: reading the
+ * session, the request, the one 401 refresh-and-retry, and reading the body.
+ * Otherwise a hang in any of those would still spin forever.
+ */
+export const REQUEST_TIMEOUT_MS = 45000;
+
+/**
+ * Same wording and code as web, so `toUserMessage` shows the copy a real gateway
+ * timeout produces ("That took too long. Please try again.") and screens show
+ * their usual error state with Retry.
+ */
+const TIMEOUT_MESSAGE = "The request timed out. Please try again.";
+
+/** True for the deadline above (not for a caller's own cancel). */
+export function isTimeoutError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.code === "TIMEOUT";
+}
+
+/** The one deadline every request path runs under; see deadline.ts. */
+function withDeadline<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  callerSignal?: AbortSignal,
+): Promise<T> {
+  return runWithDeadline(run, ms, callerSignal, () => new ApiClientError(TIMEOUT_MESSAGE, "TIMEOUT", 504));
+}
+
+async function send(url: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
   let response = await fetch(url, { ...init, signal });
 
   // Stale token race: supabase-js may serve a JWT that just expired before its
   // own refresh fires. Force a refresh and retry exactly once.
   if (response.status === 401) {
-    if (await refreshAfterUnauthorized()) {
+    if (await abortable(refreshAfterUnauthorized(), signal)) {
       const retryHeaders = await authHeaders(
         // Preserve any non-auth headers the caller set (Content-Type, etc.).
         Object.fromEntries(
@@ -159,6 +209,7 @@ async function send(url: string, init: RequestInit, signal?: AbortSignal): Promi
             ([k]) => k.toLowerCase() !== "authorization" && k.toLowerCase() !== "apikey",
           ),
         ),
+        signal,
       );
       response = await fetch(url, { ...init, headers: retryHeaders, signal });
     }
@@ -175,18 +226,23 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
   const url = `${SUPABASE_FUNCTIONS_URL}${path}${buildQuery(params)}`;
-  const headers = await authHeaders({
-    "Content-Type": "application/json",
-    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
-  });
-  const init: RequestInit = { method, headers };
-  if (body !== undefined && method !== "GET") {
-    init.body = JSON.stringify(body);
-  }
+  return withDeadline(async (signal) => {
+    const headers = await authHeaders(
+      {
+        "Content-Type": "application/json",
+        ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+      },
+      signal,
+    );
+    const init: RequestInit = { method, headers };
+    if (body !== undefined && method !== "GET") {
+      init.body = JSON.stringify(body);
+    }
 
-  const response = await send(url, init, options?.signal);
-  if (!response.ok) await parseError(response);
-  return response.json() as Promise<ApiResponse<T>>;
+    const response = await send(url, init, signal);
+    if (!response.ok) await parseError(response, signal);
+    return abortable(response.json() as Promise<ApiResponse<T>>, signal);
+  }, REQUEST_TIMEOUT_MS, options?.signal);
 }
 
 async function requestMultipart<T>(
@@ -196,13 +252,18 @@ async function requestMultipart<T>(
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
   const url = `${SUPABASE_FUNCTIONS_URL}${path}`;
-  // No Content-Type: fetch sets the multipart boundary automatically.
-  const headers = await authHeaders();
-  const init: RequestInit = { method, headers, body: formData as unknown as BodyInit };
+  return withDeadline(async (signal) => {
+    // No Content-Type: fetch sets the multipart boundary automatically.
+    const headers = await authHeaders(undefined, signal);
+    const init: RequestInit = { method, headers, body: formData as unknown as BodyInit };
 
-  const response = await send(url, init, options?.signal);
-  if (!response.ok) await parseError(response);
-  return response.json() as Promise<ApiResponse<T>>;
+    const response = await send(url, init, signal);
+    if (!response.ok) await parseError(response, signal);
+    return abortable(response.json() as Promise<ApiResponse<T>>, signal);
+  // React Native FormData parts are `{ uri }` objects whose size is unknown
+  // here, which would mean the 10-minute cap. Use the upload minimum instead;
+  // picker files belong in `uploadRNFile(s)`, which knows the real size.
+  }, uploadTimeoutMs(bodyBytes(formData) ?? 0), options?.signal);
 }
 
 /** A React Native file blob: a local `uri` plus its display name and MIME type. */
@@ -242,7 +303,15 @@ async function uploadRNFile<T>(
   fields?: Record<string, string>,
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
-  const fileBytes = new Uint8Array(await (await fetch(file.uri)).arrayBuffer());
+  // Reading the local file is quick; it gets the ordinary deadline. Sending gets
+  // one scaled to the body's size, known only once the bytes are read.
+  const fileBytes = new Uint8Array(
+    await withDeadline(
+      (signal) => abortable<ArrayBuffer>(fetch(file.uri).then((r) => r.arrayBuffer()), signal),
+      REQUEST_TIMEOUT_MS,
+      options?.signal,
+    ),
+  );
 
   const boundary = `----safarly${newIdempotencyKey().replace(/-/g, "")}`;
   const CRLF = "\r\n";
@@ -270,15 +339,20 @@ async function uploadRNFile<T>(
   body.set(tailBytes, headBytes.length + fileBytes.length);
 
   const url = `${SUPABASE_FUNCTIONS_URL}${path}`;
-  const headers = await authHeaders({
-    "Content-Type": `multipart/form-data; boundary=${boundary}`,
-    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
-  });
-  const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
+  return withDeadline(async (signal) => {
+    const headers = await authHeaders(
+      {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+      },
+      signal,
+    );
+    const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
 
-  const response = await send(url, init, options?.signal);
-  if (!response.ok) await parseError(response);
-  return response.json() as Promise<ApiResponse<T>>;
+    const response = await send(url, init, signal);
+    if (!response.ok) await parseError(response, signal);
+    return abortable(response.json() as Promise<ApiResponse<T>>, signal);
+  }, uploadTimeoutMs(body.length), options?.signal);
 }
 
 /**
@@ -293,11 +367,16 @@ async function uploadRNFiles<T>(
   fieldName: string,
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
-  const parts = await Promise.all(
-    files.map(async (file) => ({
-      file,
-      bytes: new Uint8Array(await (await fetch(file.uri)).arrayBuffer()),
-    })),
+  const parts = await withDeadline(
+    (signal) =>
+      Promise.all(
+        files.map(async (file) => ({
+          file,
+          bytes: new Uint8Array(await abortable<ArrayBuffer>(fetch(file.uri).then((r) => r.arrayBuffer()), signal)),
+        })),
+      ),
+    REQUEST_TIMEOUT_MS,
+    options?.signal,
   );
 
   const boundary = `----safarly${newIdempotencyKey().replace(/-/g, "")}`;
@@ -324,15 +403,20 @@ async function uploadRNFiles<T>(
   }
 
   const url = `${SUPABASE_FUNCTIONS_URL}${path}`;
-  const headers = await authHeaders({
-    "Content-Type": `multipart/form-data; boundary=${boundary}`,
-    ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
-  });
-  const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
+  return withDeadline(async (signal) => {
+    const headers = await authHeaders(
+      {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        ...(options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+      },
+      signal,
+    );
+    const init: RequestInit = { method: "POST", headers, body: body as unknown as BodyInit };
 
-  const response = await send(url, init, options?.signal);
-  if (!response.ok) await parseError(response);
-  return response.json() as Promise<ApiResponse<T>>;
+    const response = await send(url, init, signal);
+    if (!response.ok) await parseError(response, signal);
+    return abortable(response.json() as Promise<ApiResponse<T>>, signal);
+  }, uploadTimeoutMs(body.length), options?.signal);
 }
 
 export const api = {
