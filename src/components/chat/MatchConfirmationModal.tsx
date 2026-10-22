@@ -148,26 +148,11 @@ export function MatchConfirmationModal({
             </BulletItem>
           </Section>
 
-          <View style={styles.divider} />
-
-          <Section icon="cube-outline" title="Responsibilities">
-            {RESPONSIBILITIES.map((line) => (
-              <BulletItem key={line}>{line}</BulletItem>
-            ))}
-          </Section>
-
-          <View style={styles.divider} />
-
-          <Section icon="warning" title="Restricted Items" tone="danger">
-            {RESTRICTED_ITEMS.map((item) => (
-              <BulletItem key={item} tone="danger">
-                {item}
-              </BulletItem>
-            ))}
-          </Section>
-
           {isBuddy ? (
             <>
+              {/* A buddy match is two people travelling together - no parcel
+                  changes hands, so the parcel Responsibilities and Restricted
+                  Items lists don't apply. Only the safety guidance does. */}
               <View style={styles.divider} />
               <Section icon="people-outline" title="Travel Buddy Safety">
                 {BUDDY_SAFETY.map((line) => (
@@ -175,7 +160,27 @@ export function MatchConfirmationModal({
                 ))}
               </Section>
             </>
-          ) : null}
+          ) : (
+            <>
+              <View style={styles.divider} />
+
+              <Section icon="cube-outline" title="Responsibilities">
+                {RESPONSIBILITIES.map((line) => (
+                  <BulletItem key={line}>{line}</BulletItem>
+                ))}
+              </Section>
+
+              <View style={styles.divider} />
+
+              <Section icon="warning" title="Restricted Items" tone="danger">
+                {RESTRICTED_ITEMS.map((item) => (
+                  <BulletItem key={item} tone="danger">
+                    {item}
+                  </BulletItem>
+                ))}
+              </Section>
+            </>
+          )}
 
           <View style={styles.divider} />
 

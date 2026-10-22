@@ -155,6 +155,14 @@ function buildCalendar(monthDate: Date): CalendarCell[] {
   return cells;
 }
 
+/** One weight rule for blur and submit. */
+function maxWeightError(v: string, unit: "kg" | "lb"): string | undefined {
+  const n = parseFloat(v);
+  if (!n || n <= 0) return "Enter a valid weight";
+  if (n > (unit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) return `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
+  return undefined;
+}
+
 export function ListTripScreen() {
   const navigation = useNavigation<Nav>();
 
@@ -356,11 +364,8 @@ export function ListTripScreen() {
       errors.departDate = "Date must be within the next 12 months";
     }
     const w = parseFloat(maxWeight);
-    if (!w || w <= 0) {
-      errors.maxWeight = "Enter a valid weight";
-    } else if (w > (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) {
-      errors.maxWeight = `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
-    }
+    const weightErr = maxWeightError(maxWeight, weightUnit);
+    if (weightErr) errors.maxWeight = weightErr;
 
     if (openToBuddy && buddyAge !== "") {
       const n = Number(buddyAge);
@@ -718,6 +723,8 @@ export function ListTripScreen() {
               setMaxWeight(sanitizeDecimalInput(v, 4, 2));
               clearFieldError("maxWeight");
             }}
+            // Checked when you leave the field, not only on submit (client, 22 Oct 2026).
+            onBlur={() => setFieldErrors((p) => ({ ...p, maxWeight: maxWeightError(maxWeight, weightUnit) }))}
             placeholder={weightUnit === "kg" ? "0 kg" : "0 lb"}
             placeholderTextColor={colors.subtleText}
             keyboardType="decimal-pad"

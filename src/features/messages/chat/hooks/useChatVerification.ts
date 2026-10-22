@@ -56,12 +56,16 @@ export function useChatVerification({
       setModalError(null);
       try {
         await travelDoc.upload(file);
+        // Done with the sheet once the step is submitted - the pin shows what is
+        // next. Client, 22 Oct 2026: it stayed open until the user found the X.
+        setTravelDocOpen(false);
         showToast({ title: "Document uploaded", variant: "success", duration: 1800 });
+        void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "travelDoc", message: `Upload failed. ${getErrorMessage(err)}` });
       }
     },
-    [travelDoc, setModalError],
+    [travelDoc, refetchActiveDeal, setModalError],
   );
 
   const handleDocApprove = useCallback(async () => {
@@ -81,6 +85,7 @@ export function useChatVerification({
       setModalError(null);
       try {
         await travelDoc.reject(reason);
+        setTravelDocOpen(false);
         showToast({ title: "Re-upload requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
@@ -94,6 +99,7 @@ export function useChatVerification({
     setModalError(null);
     try {
       await travelDoc.requestAdminReview();
+      setTravelDocOpen(false);
       showToast({ title: "Admin review requested", variant: "info", duration: 1800 });
     } catch (err) {
       setModalError({ modal: "travelDoc", message: `Couldn't escalate. ${getErrorMessage(err)}` });
@@ -119,12 +125,15 @@ export function useChatVerification({
       setModalError(null);
       try {
         await parcelReview.upload(files);
+        // Same as the travel document: submitted means done with the sheet.
+        setParcelReviewOpen(false);
         showToast({ title: "Photos submitted", variant: "success", duration: 1800 });
+        void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "parcelReview", message: `Upload failed. ${getErrorMessage(err)}` });
       }
     },
-    [parcelReview, setModalError],
+    [parcelReview, refetchActiveDeal, setModalError],
   );
 
   const handleParcelApprove = useCallback(async () => {
@@ -144,6 +153,7 @@ export function useChatVerification({
       setModalError(null);
       try {
         await parcelReview.reject(reason, note);
+        setParcelReviewOpen(false);
         showToast({ title: "Changes requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {

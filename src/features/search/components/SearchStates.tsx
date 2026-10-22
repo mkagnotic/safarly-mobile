@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-  retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
+  retryButtonWrap: { marginTop: 4, alignSelf: "center", width: "100%", maxWidth: 220 },
   emptyResults: { alignItems: "center", paddingVertical: 36, gap: 8 },
   emptyIconBox: {
     width: 56,

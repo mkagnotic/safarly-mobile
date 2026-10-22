@@ -44,3 +44,23 @@ export function cancellableSentRequests<T extends SentRequestLike>(
   }
   return out;
 }
+
+/**
+ * Label for the locked "confirm journey" chip on a buddy connection whose trip
+ * hasn't started yet. Journey confirmation is deliberately locked until the
+ * trip's start date (buddy-handler refuses an early completion), so the chip
+ * names the day it unlocks rather than a bare "Confirm after trip". The
+ * formatter is passed in so this module stays import-free for `node --test`.
+ */
+export function confirmJourneyLockedLabel(
+  journeyStart: string | null | undefined,
+  formatDate: (ymd: string) => string,
+): string {
+  const ymd = journeyStart ? journeyStart.slice(0, 10) : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Confirm after trip";
+  const label = formatDate(ymd);
+  return label && label !== "—" ? `Confirm journey from ${label}` : "Confirm after trip";
+}
+
+/** Shown under the locked chip so it reads as "not yet", not "broken". */
+export const CONFIRM_JOURNEY_LOCKED_HINT = "You can confirm your journey once your trip has started.";

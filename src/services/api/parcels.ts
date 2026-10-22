@@ -55,6 +55,8 @@ export interface Parcel {
   delivery_date_mode?: DeliveryDateMode | null;
   fee_offered: number;
   fee_currency: string;
+  /** Owner-only: offers exist, so the server refuses a currency change. */
+  currency_locked?: boolean;
   status: string;
   image_urls: string[];
   created_at: string;

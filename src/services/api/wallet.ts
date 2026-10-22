@@ -21,6 +21,8 @@ export interface Earnings {
   total_earned: number;
   available_balance: number;
   pending_payouts: number;
+  /** `{ USD: 20, INR: 900 }` — never summed across currencies. Absent on an older backend. */
+  pending_payouts_by_currency?: Record<string, number>;
   currency: string;
 }
 

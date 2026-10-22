@@ -5,7 +5,9 @@ import {
   carrierTripMatchesParcel,
   endsMeet,
   matchesLocation,
+  matchesForNewBuddyListing,
   parcelMatchesTrip,
+  postCreateBuddyTarget,
   routesOverlap,
   sameCountry,
 } from "./routeMatch.ts";
@@ -165,5 +167,48 @@ describe("parcel <-> trip pairing keeps route AND dates", () => {
       ),
       false,
     );
+  });
+});
+
+describe("postCreateBuddyTarget (web parity: postCreateDestination.ts)", () => {
+  const me = "me";
+  const listing = {
+    user_id: me,
+    from_city: "Hyderabad",
+    to_city: "New York",
+    travel_date: "2026-11-10",
+    travel_date_from: "2026-11-10",
+    travel_date_to: "2026-11-10",
+  };
+  const buddy = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    from_city: "Hyderabad",
+    to_city: "New York (JFK)",
+    travel_date: "2026-11-08",
+    travel_date_from: "2026-11-08",
+    travel_date_to: "2026-11-12",
+    user: { id: `u-${id}` },
+    ...over,
+  });
+
+  test("no matches for the new listing -> null (keep the success screen)", () => {
+    assert.equal(postCreateBuddyTarget(listing, []), null);
+    // Matches for the user's OTHER listings don't count.
+    assert.equal(postCreateBuddyTarget(listing, [buddy("a", { to_city: "Chicago" })]), null);
+    assert.equal(
+      postCreateBuddyTarget(listing, [buddy("a", { travel_date: "2026-12-01", travel_date_from: "2026-12-01", travel_date_to: "2026-12-02" })]),
+      null,
+    );
+    // Never the user's own listing.
+    assert.equal(postCreateBuddyTarget(listing, [buddy("a", { user: { id: me } })]), null);
+  });
+
+  test("exactly one match is pointed at directly", () => {
+    assert.deepEqual(postCreateBuddyTarget(listing, [buddy("a")]), { tab: "buddy", highlightId: "a" });
+  });
+
+  test("several matches open the tab holding all of them, no arbitrary highlight", () => {
+    assert.deepEqual(postCreateBuddyTarget(listing, [buddy("a"), buddy("b")]), { tab: "buddy" });
+    assert.equal(matchesForNewBuddyListing(listing, [buddy("a"), buddy("b")]).length, 2);
   });
 });

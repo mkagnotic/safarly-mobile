@@ -14,7 +14,8 @@ import { describe, test } from "node:test";
  * above, and from the user's seat the button was dead.
  *
  * Eight card actions shared the defect — Connect, Start chat and View profile
- * on both the package and buddy cards.
+ * on both the package and buddy cards. (Connect has since been removed by
+ * client decision; Start chat and View profile remain.)
  *
  * This is the worst shape of bug to leave untested: nothing throws, nothing
  * logs, every test passes, and the feature is unusable. A source fence is the
@@ -25,8 +26,8 @@ const SRC = readFileSync("src/features/search/SearchScreen.tsx", "utf8");
 
 /**
  * The cards that moved out of SearchScreen.tsx. BuddyMatchCard's state and
- * actions stayed in the screen (check:ux pins `handleConnect` there); only its
- * markup moved, to BuddyMatchCardBody.
+ * actions stayed in the screen (check:ux pins its chat-first Start chat there);
+ * only its markup moved, to BuddyMatchCardBody.
  */
 const CARD_FILES = [
   "src/features/search/components/PackageMatchCard.tsx",
@@ -74,16 +75,22 @@ describe("card actions report through the global toast, not the screen banner", 
     assert.match(SRC, /from "@\/feedback\/appFeedback"/);
   });
 
-  test("Connect still actually sends the request", () => {
-    // The point of the button. A toast proving nothing happened is worse than
-    // no toast.
-    assert.match(cardCode, /buddiesApi\.sendRequest\(/, "Connect no longer sends a buddy request");
+  test("the buddy card has no Connect button (client decision, 22 Oct 2026)", () => {
+    // A travel buddy is made like every other request: Start chat, one side
+    // taps Match, the other accepts. The accepted chat match creates the buddy
+    // connection server-side.
+    assert.doesNotMatch(cardCode, /buddiesApi\.sendRequest\(/, "the Connect action is back");
+    assert.doesNotMatch(cardCode, /handleConnect/, "the Connect action is back");
+    assert.doesNotMatch(cardCode, /["']Connect["']/, "a Connect button label is back");
   });
 
-  test("Connect cannot be double-fired", () => {
-    // Two taps would create a request, then a CONFLICT error toast on top of
-    // a success toast.
-    assert.match(cardCode, /if \(!match\.id \|\| connecting\) return;/);
+  test("Start chat on a buddy card names the buddy listing as the chat's context", () => {
+    // Without context_id the server cannot tie the accepted match to this trip,
+    // so no buddy connection (and no journey confirmation or reviews) follows.
+    assert.match(
+      cardCode,
+      /messagesApi\.createConversation\(match\.user\.id, "buddy", match\.id\)/,
+    );
   });
 
   test("the screen's own banner is still used for screen-level errors", () => {

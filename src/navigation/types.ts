@@ -23,6 +23,8 @@ export type RootStackParamList = {
         name: string;
         parcel?: string;
         source?: "home" | "messages" | "buddies" | "travels";
+        /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
+        buddyListingId?: string;
       }
     | undefined;
   SendParcel: undefined;
@@ -50,8 +52,10 @@ export type MainTabParamList = {
    *  notification (web parity: `/customer/search?match=<id>`).
    *  `tab` says WHICH results tab the notification is about — a carrier told
    *  "3 parcels match your trip" must land on Receiver Requests, not the default
-   *  Package Delivery Matches (web parity: `&tab=receiver`). */
-  Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy" } | undefined;
+   *  Package Delivery Matches (web parity: `&tab=receiver`).
+   *  `forId` is the recipient's OWN trip / parcel / buddy listing the match is
+   *  for (`&for=`): a summary of several matches scrolls to that listing's group. */
+  Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy"; forId?: string } | undefined;
   Buddies: undefined;
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
   CreateBuddyTab: undefined;
@@ -97,6 +101,8 @@ export type MainTabParamList = {
         name: string;
         parcel?: string;
         source?: "home" | "messages" | "buddies" | "travels";
+        /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
+        buddyListingId?: string;
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };

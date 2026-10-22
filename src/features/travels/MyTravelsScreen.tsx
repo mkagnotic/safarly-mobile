@@ -50,7 +50,7 @@ export function MyTravelsScreen() {
     handleDeleteReceiveParcel, handleDeleteBuddy, handleOpenTrip, handleOpenParcel, handleEditBuddy,
     handleOpenBuddy, handleEditParcel, handleEditTrip, handleRateDelivery, handleOpenDelivery,
     handleAcceptRequest, handleRejectRequest, handleCancelSentRequest, handleCompleteConnection,
-    handleDisconnect, handleChatCounterpart, handleChatConnection, handleOpenRate,
+    handleChatCounterpart, handleChatConnection, handleOpenRate,
     ...editModals
   } = useMyTravelsActions({
     navigation, flights, sendParcels, receiveParcels, partners, requests, sentRequests, connections,
@@ -258,7 +258,6 @@ export function MyTravelsScreen() {
             onReject={handleRejectRequest}
             onChat={handleChatConnection}
             onComplete={handleCompleteConnection}
-            onDisconnect={handleDisconnect}
           />
         ) : null}
 

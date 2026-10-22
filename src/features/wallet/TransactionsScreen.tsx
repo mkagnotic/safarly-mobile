@@ -26,7 +26,7 @@ import {
   txTypeMeta,
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, formatMoneyByCurrency } from "@/utils/money";
 import {
   hasEarnings,
   moneyAmounts,
@@ -191,7 +191,7 @@ export function TransactionsScreen() {
             <View style={{ flex: 1 }}>
               {(earnings?.pending_payouts ?? 0) > 0 ? (
                 <Text style={styles.payoutNoteStrong}>
-                  {`${formatMoney(earnings?.pending_payouts ?? 0, earnings?.currency)} pending payout`}
+                  {`${formatMoneyByCurrency(earnings?.pending_payouts_by_currency, earnings?.pending_payouts, earnings?.currency)} pending payout`}
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>

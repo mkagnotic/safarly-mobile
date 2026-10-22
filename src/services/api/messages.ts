@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
+import type { BuddyEntry } from "@/utils/buddyEntry";
+
 import { api, ApiClientError } from "./client";
 
 export interface Conversation {
@@ -8,6 +10,13 @@ export interface Conversation {
   participant_1: string;
   participant_2: string;
   context_type: string;
+  /** What the chat is about: a carrier_request id, or for a buddy chat the buddy listing id. */
+  context_id?: string | null;
+  /**
+   * Only on the createConversation answer: started from a Travel Buddy card but
+   * the chat stays a parcel thread, so the chat opens on its travel-buddy entry.
+   */
+  buddy_listing_id?: string | null;
   last_message: string | null;
   last_message_text: string | null;
   last_message_at: string | null;
@@ -228,6 +237,8 @@ export interface ActiveDealResponse {
   workflow: WorkflowView;
   deals?: DealProjection[];
   selected_deal_id?: string | null;
+  /** The pair's travel-buddy entry in a shared (parcel) chat; null in a pure buddy chat. */
+  buddy?: BuddyEntry | null;
 }
 
 /** The candidate deliveries a MATCH_AMBIGUOUS error hands back for the user to pick from. */
@@ -359,7 +370,12 @@ export const messagesApi = {
    * Self-chat guard: web reads the user id out of `localStorage`, which doesn't
    * exist on RN. We read it from the live Supabase session instead.
    */
-  createConversation: async (participant_id: string, context_type?: string) => {
+  /**
+   * `context_id` names what the chat is about - for a buddy chat, the buddy
+   * listing it was started from, so an accepted match can be tied to that trip.
+   * Omitted (undefined) it is left out of the body, exactly as before.
+   */
+  createConversation: async (participant_id: string, context_type?: string, context_id?: string) => {
     const { data } = await supabase.auth.getSession();
     const currentUserId = data.session?.user?.id;
     if (currentUserId && participant_id === currentUserId) {
@@ -368,6 +384,7 @@ export const messagesApi = {
     return api.post<Conversation>("/message-handler/conversations", {
       participant_id,
       context_type: context_type ?? "booking",
+      ...(context_id ? { context_id } : {}),
     });
   },
 
@@ -400,9 +417,38 @@ export const messagesApi = {
    * The server-computed workflow view that drives the pinned action bar. Same
    * endpoint web uses; the client is a pure projection of `workflow`.
    */
-  getActiveDeal: (conversationId: string, dealId?: string | null) =>
-    api.get<ActiveDealResponse>(
-      `/message-handler/conversations/${conversationId}/active-deal${dealId ? `?deal=${encodeURIComponent(dealId)}` : ""}`,
+  getActiveDeal: (conversationId: string, dealId?: string | null, buddyListingId?: string | null) => {
+    // `buddy_listing`: the chat was opened from a Travel Buddy card - the server
+    // then reports that trip as the buddy entry. The buddy entry itself is
+    // selected on the client and is never sent as `deal`.
+    const qs = [
+      dealId ? `deal=${encodeURIComponent(dealId)}` : null,
+      buddyListingId ? `buddy_listing=${encodeURIComponent(buddyListingId)}` : null,
+    ].filter(Boolean).join("&");
+    return api.get<ActiveDealResponse>(
+      `/message-handler/conversations/${conversationId}/active-deal${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  /** Travel buddy in a shared chat: ask, for one buddy listing's trip. */
+  requestBuddy: (conversationId: string, listingId: string) =>
+    api.post<{ request_id: string; status: "pending" }>(
+      `/message-handler/conversations/${conversationId}/buddy-request`,
+      { listing_id: listingId },
+    ),
+
+  /** Travel buddy in a shared chat: the person asked accepts. */
+  acceptBuddy: (conversationId: string, requestId: string) =>
+    api.post<{ request_id: string; status: "accepted"; connection_id: string | null }>(
+      `/message-handler/conversations/${conversationId}/buddy-request/${requestId}/accept`,
+      {},
+    ),
+
+  /** Travel buddy in a shared chat: the person asked declines. */
+  declineBuddy: (conversationId: string, requestId: string) =>
+    api.post<{ request_id: string; status: "rejected" }>(
+      `/message-handler/conversations/${conversationId}/buddy-request/${requestId}/decline`,
+      {},
     ),
 
   getMessages: (conversationId: string, params?: { limit?: number; before?: string }) =>

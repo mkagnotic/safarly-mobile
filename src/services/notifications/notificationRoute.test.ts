@@ -58,6 +58,20 @@ describe("match notifications open the right results tab", () => {
     assert.equal(r.params, undefined);
   });
 
+  test("`for` (the recipient's own listing) rides along so a summary lands on its group", () => {
+    const MINE = "bbbbbbbb-2222-4000-8000-bbbbbbbbbbbb";
+    assert.deepEqual(resolveNotificationRoute(`${SEARCH}?tab=receiver&for=${MINE}`, "booking").params, {
+      tab: "receiver",
+      forId: MINE,
+    });
+    assert.deepEqual(
+      resolveNotificationRoute(`${SEARCH}?match=${ID}&tab=package&for=${MINE}`, "booking").params,
+      { highlightId: ID, tab: "package", forId: MINE },
+    );
+    // not a uuid -> dropped, never trusted
+    assert.deepEqual(resolveNotificationRoute(`${SEARCH}?tab=buddy&for=x`, "buddy").params, { tab: "buddy" });
+  });
+
   test("older links with only a match id keep working", () => {
     // Notifications sent before this change are still in people's feeds.
     assert.deepEqual(resolveNotificationRoute(`${SEARCH}?match=${ID}`, "booking").params, {

@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 import { safarlyMarkXml } from "@/assets/brand/safarlyMark";
 import type { Transaction } from "@/services/api";
 import { formatTxDate, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { formatMoney } from "@/utils/money";
 
 /**
  * Native equivalent of web's `downloadTransactionReceipt`: render an HTML
@@ -24,9 +25,8 @@ export function canDownloadReceipt(status: string): boolean {
   return status === "completed" || status === "held" || status === "refunded";
 }
 
-const symbolFor = (currency?: string) => (currency?.toUpperCase() === "INR" ? "₹" : "$");
-const money = (n: number | null | undefined, currency?: string) =>
-  `${symbolFor(currency)}${(Number(n) || 0).toFixed(2)}`;
+// The shared formatter: the hand-rolled one printed "$" for any non-INR code.
+const money = (n: number | null | undefined, currency?: string) => formatMoney(Number(n) || 0, currency);
 
 function esc(s: string): string {
   return s

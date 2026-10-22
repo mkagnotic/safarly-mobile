@@ -60,6 +60,9 @@ const defaultUserProfile: UserProfile = {
  * Falls back to "not_started" so unknown values can never poison the type.
  */
 function normalizeKycStatus(value: string | null | undefined): KycStatus {
+  // The server's word for verified is "approved"; it used to fall through to
+  // "not_started" here.
+  if (value === "approved") return "verified";
   if (value === "pending" || value === "verified" || value === "rejected") return value;
   return "not_started";
 }

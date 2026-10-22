@@ -179,12 +179,14 @@ export function PayBookingScreen() {
 
   const handlePay = useCallback(async () => {
     setBanner(null);
-    if (!kyc.isApproved) {
+    // The status on screen may be from before the user verified: ask the server
+    // once more before blocking, and pay straight away if they are approved now.
+    if (!kyc.isApproved && !(await kyc.refetch())) {
       setShowKycPrompt(true);
       return;
     }
     await pay();
-  }, [kyc.isApproved, pay]);
+  }, [kyc, pay]);
 
   const headerTitle = useMemo(() => "Secure payment", []);
 
@@ -356,7 +358,9 @@ export function PayBookingScreen() {
 
           <AppButton
             label={paying ? "Opening secure checkout…" : `Pay ${money(total, bookingCurrency)}`}
-            disabled={paying || !kyc.isApproved}
+            // Not disabled for an unverified status: that status can be stale, and the
+            // tap is what re-checks it (handlePay) before showing the KYC prompt.
+            disabled={paying}
             onPress={() => void handlePay()}
             leftIcon={paying ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
             style={styles.payButton}

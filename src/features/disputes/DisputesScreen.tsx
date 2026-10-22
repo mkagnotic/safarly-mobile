@@ -352,7 +352,7 @@ function DisputeCard({
         title: "Penalty waived — carrier refunded",
         message:
           typeof refunded === "number"
-            ? `${formatMoneyShort(refunded)} returned to the carrier. The strike record stays.`
+            ? `${formatMoneyShort(refunded, res.data?.currency)} returned to the carrier. The strike record stays.`
             : "The cash penalty was waived; the strike record stays.",
       });
       await onRefetch();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { currencySymbol, formatMoney, formatMoneyShort } from "./money.ts";
+import { currencySymbol, formatMoney, formatMoneyByCurrency, formatMoneyShort } from "./money.ts";
 
 // Mirrors web's `src/test/feeCurrency.test.ts` — money.ts is a port of web's
 // formatter, so this suite exists to prove both platforms print a fee the same
@@ -95,5 +95,19 @@ describe("the bug itself", () => {
 
   test("the same number in two currencies is never displayed identically", () => {
     assert.notEqual(formatMoney(3600, "INR"), formatMoney(3600, "USD"));
+  });
+});
+
+// Pending payouts were one summed figure under the wallet's symbol, so a carrier
+// owed $20 and ₹900 read "$920.00" (22 Oct 2026).
+describe("formatMoneyByCurrency", () => {
+  test("one figure per currency, USD first, never summed", () => {
+    assert.equal(formatMoneyByCurrency({ INR: 900, USD: 20 }), "$20.00 · ₹900.00");
+    assert.equal(formatMoneyByCurrency({ inr: 900 }), "₹900.00");
+  });
+  test("zero entries are dropped; no breakdown falls back to the flat figure", () => {
+    assert.equal(formatMoneyByCurrency({ USD: 0, INR: 50 }), "₹50.00");
+    assert.equal(formatMoneyByCurrency(undefined, 12, "INR"), "₹12.00");
+    assert.equal(formatMoneyByCurrency({}, 12), "$12.00");
   });
 });

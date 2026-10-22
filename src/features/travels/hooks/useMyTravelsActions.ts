@@ -465,37 +465,6 @@ export function useMyTravelsActions({
     [connections],
   );
 
-  const handleDisconnect = useCallback(
-    (conn: BuddyConnection) => {
-      showAppAlert({
-        title: "Disconnect buddy?",
-        message: `${conn.buddy?.name ?? "This buddy"} will be removed from your travel partners. You can reconnect by sending a new request.`,
-        actions: [
-          { text: "Keep", style: "cancel" },
-          {
-            text: "Disconnect",
-            style: "destructive",
-            onPress: () => {
-              void (async () => {
-                setActioningId(conn.id);
-                setFormError(null);
-                try {
-                  await buddiesApi.disconnect(conn.id);
-                  await connections.refetch();
-                } catch (err) {
-                  setFormError(`Couldn't disconnect. ${getErrorMessage(err)}`);
-                } finally {
-                  setActioningId(null);
-                }
-              })();
-            },
-          },
-        ],
-      });
-    },
-    [connections],
-  );
-
   /**
    * Open (or create) the chat with a parcel's matched counterpart — web parity
    * with `TripCard`'s Chat button, which calls `useCreateConversation` and then
@@ -609,7 +578,6 @@ export function useMyTravelsActions({
     handleRejectRequest,
     handleCancelSentRequest,
     handleCompleteConnection,
-    handleDisconnect,
     handleChatCounterpart,
     handleChatConnection,
     handleOpenRate,

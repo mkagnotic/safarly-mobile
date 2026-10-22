@@ -17,6 +17,7 @@ import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
 import { labelDeals, selectableDeals } from "@/utils/dealLabel";
+import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount } from "@/utils/buddyEntry";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
@@ -33,6 +34,7 @@ import { chatStyles } from "./chat/chatStyles";
 import { type ChatNav, type ChatRoute } from "./chat/chatTypes";
 import { AttachSheet } from "./chat/components/AttachSheet";
 import { BubbleMenuSheet } from "./chat/components/BubbleMenuSheet";
+import { BuddyPin } from "./chat/components/BuddyPin";
 import { ChatActionsSheet } from "./chat/components/ChatActionsSheet";
 import { ChatComposer } from "./chat/components/ChatComposer";
 import { ChatHeader } from "./chat/components/ChatHeader";
@@ -74,6 +76,9 @@ export function OfferChatScreen() {
   const conversationId = route.params?.conversationId ?? null;
   const fallbackName = route.params?.name ?? "Conversation";
   const source = route.params?.source ?? "messages";
+  // Opened from a Travel Buddy card while the chat stays a parcel thread: open on
+  // the travel-buddy entry for that trip.
+  const buddyListingId = route.params?.buddyListingId ?? null;
   const fallbackBackTarget = getBackTarget(source);
 
   const {
@@ -83,7 +88,8 @@ export function OfferChatScreen() {
   // ───────── Server-owned workflow (pinned action bar) ─────────
   const {
     activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
-  } = useActiveDeal(conversationId);
+    buddy, buddySelected,
+  } = useActiveDeal(conversationId, buddyListingId);
 
   // Header badge, match banner and match-action subject — see `useChatMatchStatus`.
   const {
@@ -141,10 +147,14 @@ export function OfferChatScreen() {
    * single-delivery chat is untouched. See `utils/dealLabel.ts`.
    */
   // ⚠️ Gated on the SELECTABLE deals, exactly as the switcher is - see web.
+  // The travel-buddy entry counts as one more thing to choose between.
   const selectedDealLabel = useMemo(() => {
-    if (selectableDeals(deals ?? [], selectedDealId).length < 2) return null;
+    const shown = selectableDeals(deals ?? [], selectedDealId);
+    // Same rule as the switcher: two or more things to choose between.
+    if (selectableDeals(deals ?? [], selectedDealId).length < 2 && switcherEntryCount(shown.length, buddy) < 2) return null;
+    if (buddySelected && buddy) return { full: buddyEntryLabel(buddy) };
     return labelDeals(deals ?? []).get(selectedDealId ?? "") ?? null;
-  }, [deals, selectedDealId]);
+  }, [deals, selectedDealId, buddy, buddySelected]);
 
   const liveOffer = useMemo(() => {
     const live = offerState.live;
@@ -165,7 +175,9 @@ export function OfferChatScreen() {
   }, [workflow, liveOffer, matchBannerVisible]);
   // Delivery offers only exist in a booking context, never for buddy matches.
   const supportsOffers = isMatched && conversation?.context_type !== "buddy";
-  const offerCurrencySymbol = currencySymbol(liveOffer?.currency);
+  // The deal's currency (the parcel's) first — the server makes every offer and
+  // counter in it — then the live offer's; a rupee deal showed "$" (22 Oct 2026).
+  const offerCurrencySymbol = currencySymbol(activeDeal?.pricing?.currency ?? liveOffer?.currency);
 
   // Failures inside an open Modal are reported in that Modal — see `useChatModalError`.
   const { setModalError, errorFor } = useChatModalError();
@@ -329,7 +341,8 @@ export function OfferChatScreen() {
         />
 
         {/* ───────── Match-state banner ───────── */}
-        <MatchStateBanner
+        {/* A parcel handshake - hidden while the travel-buddy entry is on screen. */}
+        {buddySelected ? null : <MatchStateBanner
           participantName={participantName}
           matchedByOther={matchedByOther}
           matchedByMe={matchedByMe}
@@ -341,7 +354,7 @@ export function OfferChatScreen() {
           decliningPending={decliningPending}
           setMatchModalOpen={setMatchModalOpen}
           setDeclineOpen={setDeclineOpen}
-        />
+        />}
 
         {/* ───────── Offer action feedback ───────── */}
         {offerBanner ? (
@@ -369,7 +382,12 @@ export function OfferChatScreen() {
         />
 
         {/* Only rendered when the thread actually holds more than one delivery. */}
-        <ChatDealSwitcher deals={deals} selectedDealId={selectedDealId} onSelect={selectDeal} />
+        <ChatDealSwitcher
+          deals={deals}
+          selectedDealId={buddySelected ? BUDDY_ENTRY_ID : selectedDealId}
+          onSelect={selectDeal}
+          buddy={buddy}
+        />
 
         {selectedDealLabel ? (
           <View style={styles.dealContext}>
@@ -379,8 +397,18 @@ export function OfferChatScreen() {
           </View>
         ) : null}
 
+        {/* ───────── Travel-buddy entry (shared chat) ───────── */}
+        {buddySelected && buddy && conversationId ? (
+          <BuddyPin
+            conversationId={conversationId}
+            buddy={buddy}
+            counterpartName={conversation?.participant?.name ?? participantName}
+            onChanged={() => { void refetchActiveDeal(); void refetch(); }}
+          />
+        ) : null}
+
         {/* ───────── Workflow pin (server FSM) ───────── */}
-        {showWorkflowPin && workflow ? (
+        {!buddySelected && showWorkflowPin && workflow ? (
           <ChatWorkflowPin
             workflow={workflow}
             activeDeal={activeDeal}
@@ -389,7 +417,7 @@ export function OfferChatScreen() {
         ) : null}
 
         {/* ───────── Offer bar ───────── */}
-        {supportsOffers && liveOffer ? (
+        {!buddySelected && supportsOffers && liveOffer ? (
           <OfferBar
             liveOffer={liveOffer}
             participantName={participantName}

@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 40, gap: 10 },
   errorTitle: { color: colors.text, fontSize: 16, lineHeight: 22, fontWeight: "800" },
   errorBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "500", textAlign: "center", maxWidth: 280 },
-  retryButtonWrap: { marginTop: 4, alignSelf: "stretch", maxWidth: 220 },
+  retryButtonWrap: { marginTop: 4, alignSelf: "center", width: "100%", maxWidth: 220 },
   /**
    * Same surface as `emptyPanel` (the Send/Receive placeholders) so every empty
    * state in My Travels reads as one thing. Was transparent, which left the

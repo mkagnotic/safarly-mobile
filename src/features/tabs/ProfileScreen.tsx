@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
@@ -22,6 +22,7 @@ import { getErrorMessage } from "@/services/api";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
+import { isKycApprovedStatus } from "@/features/profile/kycGateStatus";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList>,
@@ -80,6 +81,13 @@ export function ProfileScreen() {
   const { signOut } = useAuth();
   const language = useAppStore((s) => s.language);
   const { profile, loading, error, refetch } = useMyProfile();
+  // Tabs stay mounted: re-read on return so a just-finished verification (or any
+  // profile change made on another screen) shows without a manual pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void refetch();
+    }, [refetch]),
+  );
   // Live-updating unread counts (subscribed to the realtime bus). Drive the
   // badges next to the Messages + Notifications menu items.
   const { count: messagesUnread } = useUnreadInboxCount();
@@ -183,7 +191,7 @@ export function ProfileScreen() {
   const rating = profile?.rating ?? 0;
   const totalTrips = profile?.total_trips ?? 0;
   const totalDeliveries = profile?.total_deliveries ?? 0;
-  const kycVerified = profile?.kyc_status === "verified";
+  const kycVerified = isKycApprovedStatus(profile?.kyc_status);
   const initials = name ? initialsFromFullName(name) : "??";
 
   return (

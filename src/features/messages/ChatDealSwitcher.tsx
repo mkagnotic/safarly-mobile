@@ -5,12 +5,18 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { DealProjection } from "@/services/api";
 import { isDealFinished, labelDeals, selectableDeals } from "@/utils/dealLabel";
+import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount, type BuddyEntry } from "@/utils/buddyEntry";
 import { colors } from "@/theme/colors";
 
 interface Props {
   deals: DealProjection[];
   selectedDealId: string | null;
   onSelect: (dealId: string) => void;
+  /**
+   * The pair's travel-buddy entry in a shared chat, shown as one more chip.
+   * `selectedDealId === "buddy"` selects it.
+   */
+  buddy?: BuddyEntry | null;
 }
 
 /**
@@ -52,7 +58,7 @@ export function dealSwitcherHeading(
  * with one delivery looks exactly as it always has. Keep in sync with web
  * `src/customer/components/ChatDealSwitcher.tsx`.
  */
-function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
+function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }: Props) {
   // A cancelled or expired delivery is history - keep it out of the picker. The one
   // exception is the deal currently on screen: removing the chip you just tapped would
   // leave the switcher pointing at nothing.
@@ -64,13 +70,17 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
   // chip - see `utils/dealLabel.ts` for the incident that caused.
   const labels = useMemo(() => labelDeals(deals ?? []), [deals]);
 
-  if (shown.length < 2) return null;
+  // Two or more things to choose between - a lone buddy entry (or a lone deal)
+  // needs no switcher.
+  if (switcherEntryCount(shown.length, buddy) < 2) return null;
+  const buddySelected = !!buddy && selectedDealId === BUDDY_ENTRY_ID;
+  const buddyLabel = buddy ? buddyEntryLabel(buddy) : "";
 
   return (
     <View style={styles.wrap}>
       <View style={styles.headingRow}>
         <Ionicons name="cube-outline" size={12} color={colors.subtleText} />
-        <Text style={styles.heading}>{dealSwitcherHeading(shown)}</Text>
+        <Text style={styles.heading}>{dealSwitcherHeading(shown)}{buddy ? " · travel buddy" : ""}</Text>
       </View>
       {/* Horizontal scroll rather than wrapping: the pinned zone is height-capped, and
           a wrapping row of chips would eat the space the pinned action needs. */}
@@ -103,6 +113,21 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect }: Props) {
             </Pressable>
           );
         })}
+        {buddy ? (
+          <Pressable
+            key={BUDDY_ENTRY_ID}
+            accessibilityRole="button"
+            accessibilityState={{ selected: buddySelected }}
+            accessibilityLabel={`Show ${buddyLabel}`}
+            onPress={() => onSelect(BUDDY_ENTRY_ID)}
+            style={[styles.chip, styles.buddyChip, buddySelected ? styles.chipOn : styles.chipOff]}
+          >
+            <Ionicons name="people-outline" size={12} color={buddySelected ? colors.text : colors.subtleText} />
+            <Text style={[styles.chipText, buddySelected ? styles.chipTextOn : styles.chipTextOff]}>
+              {buddyLabel}
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -135,6 +160,7 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.surfaceMuted, borderColor: colors.controlOutline },
   chipOff: { backgroundColor: "transparent", borderColor: colors.border },
   chipDim: { opacity: 0.6 },
+  buddyChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   chipText: { fontSize: 12, fontWeight: "700" },
   chipTextOn: { color: colors.text },
   chipTextOff: { color: colors.subtleText },

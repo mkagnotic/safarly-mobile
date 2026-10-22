@@ -10,6 +10,7 @@ import {
   isDiditUrl,
   kycMode,
   kycPollInterval,
+  statusCheckMessage,
   startLabel,
 } from "./kycFlow.ts";
 import { DIDIT_CONSENT_AGREEMENT, diditConsentParagraphs } from "./kycConsentText.ts";
@@ -113,4 +114,23 @@ test("the Didit consent wording never shows a blank and names who, what, where, 
     assert.match(text, new RegExp(must));
   }
   assert.match(DIDIT_CONSENT_AGREEMENT, /written consent/);
+});
+
+test("Check status always answers: not finished / can't reach / just checked", () => {
+  // Client, 22 Oct 2026: the button looked dead in the first minutes of a session.
+  const asked = statusCheckMessage({ state: "in_progress", check: { result: "asked" } });
+  assert.equal(asked?.tone, "info");
+  assert.match(asked!.text, /haven't finished verification yet/);
+  assert.match(asked!.text, /Continue verification/);
+  assert.equal(statusCheckMessage({ state: "in_progress", check: { result: "unreachable" } })?.tone, "warning");
+  assert.match(statusCheckMessage({ state: "in_progress", check: { result: "too_soon" } })!.text, /just checked/);
+  // An older server sends no `check`: still a sentence, never silence.
+  assert.match(statusCheckMessage({ state: "in_progress" })!.text, /No result yet/);
+});
+
+test("Check status says nothing when the screen itself moved on", () => {
+  for (const state of ["approved", "in_review", "declined", "not_started"]) {
+    assert.equal(statusCheckMessage({ state, check: { result: "asked" } }), null, state);
+  }
+  assert.equal(statusCheckMessage(null), null);
 });

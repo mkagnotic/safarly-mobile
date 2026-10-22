@@ -35,7 +35,9 @@ import {
 import { ANY_CITY, CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
-import { buddiesApi, getErrorMessage } from "@/services/api";
+import { buddiesApi, getErrorMessage, searchApi } from "@/services/api";
+import { MATCH_MY_ROUTES_QUERY } from "@/features/search/lib/searchConfig";
+import { postCreateBuddyTarget } from "@/utils/routeMatch";
 import { colors, primaryTint } from "@/theme/colors";
 import { sanitizeDigitsOnly } from "@/utils/inputSanitizers";
 
@@ -181,6 +183,27 @@ export function CreateBuddyScreen() {
     setLanguages((prev) => prev.filter((l) => l !== lang));
   }, []);
 
+  const resetForm = useCallback(() => {
+    setFromCountry("IN");
+    setToCountry("US");
+    setFromCity("");
+    setToCity("");
+    setAirline("");
+    setAirlineOpen(false);
+    setTravelDate(null);
+    setCalendarOpen(false);
+    setAge("");
+    setLanguages([]);
+    setLanguagePickerOpen(false);
+    setInterests("");
+    setLayover("");
+    setBio("");
+    setSubmitting(false);
+    setSubmitted(false);
+    setFormError(null);
+    setFieldErrors({});
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
@@ -229,7 +252,25 @@ export function CreateBuddyScreen() {
 
     setSubmitting(true);
     try {
-      await buddiesApi.create(payload);
+      const created = await buddiesApi.create(payload);
+      // The create response carries no match info, so ask the same
+      // route-matching search the Search screen runs (web parity:
+      // CustomerCreateBuddy). Matches for THIS listing -> show them on the
+      // Travel Buddy tab; none, or the check fails -> the usual success screen.
+      try {
+        const results = await searchApi.search({ ...MATCH_MY_ROUTES_QUERY });
+        const target = postCreateBuddyTarget(
+          { ...payload, user_id: created.data?.user_id },
+          results.data?.buddy_matches ?? [],
+        );
+        if (target) {
+          navigation.navigate("Trips", target);
+          resetForm();
+          return;
+        }
+      } catch {
+        // Non-fatal: the listing is saved; fall through to the success screen.
+      }
       setSubmitted(true);
     } catch (err) {
       setFormError(`Couldn't save buddy listing. ${getErrorMessage(err)}`);
@@ -250,28 +291,10 @@ export function CreateBuddyScreen() {
     interests,
     layover,
     scrollToField,
+    navigation,
+    resetForm,
   ]);
 
-  const resetForm = useCallback(() => {
-    setFromCountry("IN");
-    setToCountry("US");
-    setFromCity("");
-    setToCity("");
-    setAirline("");
-    setAirlineOpen(false);
-    setTravelDate(null);
-    setCalendarOpen(false);
-    setAge("");
-    setLanguages([]);
-    setLanguagePickerOpen(false);
-    setInterests("");
-    setLayover("");
-    setBio("");
-    setSubmitting(false);
-    setSubmitted(false);
-    setFormError(null);
-    setFieldErrors({});
-  }, []);
 
   const submittedRef = useRef(submitted);
   submittedRef.current = submitted;

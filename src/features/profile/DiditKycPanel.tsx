@@ -24,6 +24,8 @@ import {
   isDiditUrl,
   kycPollInterval,
   startLabel,
+  statusCheckMessage,
+  type KycCheckNote,
 } from "@/features/profile/kycFlow";
 
 /*
@@ -41,6 +43,8 @@ interface Props {
   block: KycStatusBlock;
   consent: KycConsentState | null;
   refresh: () => Promise<void> | void;
+  /** "Check status": asks Didit now (server `?check=1`) and returns the fresh block. */
+  checkStatus: () => Promise<KycStatusBlock | null>;
   agreeToConsent: () => Promise<void>;
   agreeing: boolean;
   /** Didit unreachable and the server still accepts uploads: show today's wizard. */
@@ -48,8 +52,10 @@ interface Props {
   onNotNow: () => void;
 }
 
-export function DiditKycPanel({ block, consent, refresh, agreeToConsent, agreeing, onUnavailable, onNotNow }: Props) {
+export function DiditKycPanel({ block, consent, refresh, checkStatus, agreeToConsent, agreeing, onUnavailable, onNotNow }: Props) {
   const [opening, setOpening] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkNote, setCheckNote] = useState<KycCheckNote | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [consentAgreed, setConsentAgreed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,9 +81,25 @@ export function DiditKycPanel({ block, consent, refresh, agreeToConsent, agreein
     else setUnavailable(true);
   }, [block.manual_upload, onUnavailable]);
 
+  // A note answers one tap; once the state moves on it no longer applies.
+  useEffect(() => { setCheckNote(null); }, [block.state]);
+
+  const check = useCallback(async () => {
+    setCheckNote(null);
+    setChecking(true);
+    try {
+      setCheckNote(statusCheckMessage(await checkStatus()));
+    } catch {
+      setCheckNote(statusCheckMessage({ state: "in_progress", check: { result: "unreachable" } }));
+    } finally {
+      setChecking(false);
+    }
+  }, [checkStatus]);
+
   const start = useCallback(async () => {
     setUnavailable(false);
     setMessage(null);
+    setCheckNote(null);
     setOpening(true);
     try {
       const res = await kycApi.initiate(Platform.OS === "ios" ? "ios" : "android");
@@ -162,7 +184,7 @@ export function DiditKycPanel({ block, consent, refresh, agreeToConsent, agreein
     );
   }
 
-  const busy = opening;
+  const busy = opening || checking;
   return (
     <>
       {view.kind === "declined" ? (
@@ -209,7 +231,24 @@ export function DiditKycPanel({ block, consent, refresh, agreeToConsent, agreein
         style={styles.button}
       />
       {view.kind === "in_progress" ? (
-        <AppButton label="Check status" variant="secondary" onPress={() => void refreshRef.current()} disabled={busy} style={styles.button} />
+        <AppButton
+          label={checking ? "Checking…" : "Check status"}
+          variant="secondary"
+          onPress={() => void check()}
+          disabled={busy}
+          leftIcon={checking ? <ActivityIndicator size="small" color={colors.primary} /> : undefined}
+          style={styles.button}
+        />
+      ) : null}
+      {checkNote ? (
+        <View style={styles.checkNote} accessibilityLiveRegion="polite">
+          <FormBanner
+            variant={checkNote.tone}
+            title={checkNote.tone === "warning" ? "Couldn't check right now" : "Not finished yet"}
+            message={checkNote.text}
+            onDismiss={() => setCheckNote(null)}
+          />
+        </View>
       ) : null}
     </>
   );
@@ -230,6 +269,7 @@ function StatusCard({ icon, tint, title, body }: { icon: keyof typeof Ionicons.g
 // Same values as KycVerificationScreen's styles: no new visual language.
 const styles = StyleSheet.create({
   bannerSlot: { marginBottom: 14 },
+  checkNote: { marginTop: 12 },
   statusCard: {
     backgroundColor: colors.card,
     borderWidth: 1,

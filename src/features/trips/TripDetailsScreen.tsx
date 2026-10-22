@@ -479,5 +479,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
-  emptyButtonWrap: { alignSelf: "stretch", maxWidth: 240 },
+  emptyButtonWrap: { alignSelf: "center", width: "100%", maxWidth: 240 },
 });

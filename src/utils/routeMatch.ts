@@ -261,3 +261,69 @@ export function parcelExceedsCapacity(
   if (weightKg == null || capacityKg == null) return false;
   return Number(weightKg) > Number(capacityKg);
 }
+
+// ───────────── After posting a buddy listing: where to send the user ─────────────
+// Mirrors web's `src/features/buddies/lib/postCreateDestination.ts`.
+
+interface NewBuddyListing {
+  user_id?: string | null;
+  from_city: string;
+  to_city: string;
+  travel_date?: string | null;
+  travel_date_from?: string | null;
+  travel_date_to?: string | null;
+}
+
+interface BuddyMatchLike {
+  id: string;
+  from_city: string;
+  to_city: string;
+  travel_date: string;
+  travel_date_from?: string | null;
+  travel_date_to?: string | null;
+  user?: { id: string } | null;
+}
+
+/** Same city rule the backend uses for buddy match notifications (`_shared/matchNotify.ts` citiesMatch). */
+function buddyCitiesMatch(a?: string | null, b?: string | null): boolean {
+  const na = normalizeLocation(a);
+  const nb = normalizeLocation(b);
+  if (!na || !nb) return false;
+  return na.includes(nb) || nb.includes(na);
+}
+
+/**
+ * Route-matching search returns buddies for ALL of the user's listings. Keep
+ * only the ones that overlap the listing just posted - the same route +
+ * date-overlap rule that sends the poster's "Travel buddies found" notification.
+ */
+export function matchesForNewBuddyListing<T extends BuddyMatchLike>(
+  listing: NewBuddyListing,
+  matches: readonly T[],
+): T[] {
+  const from = listing.travel_date_from || listing.travel_date;
+  const to = listing.travel_date_to || listing.travel_date;
+  return matches.filter(
+    (m) =>
+      (!listing.user_id || m.user?.id !== listing.user_id) &&
+      buddyCitiesMatch(listing.from_city, m.from_city) &&
+      buddyCitiesMatch(listing.to_city, m.to_city) &&
+      dateRangesOverlap(from, to, m.travel_date_from || m.travel_date, m.travel_date_to || m.travel_date),
+  );
+}
+
+/**
+ * Where to send the user after posting a buddy listing: the Search screen's
+ * Travel Buddy tab when the new listing already has matches, otherwise null
+ * (keep the existing success screen). Exactly one match is pointed at directly,
+ * mirroring the notification link (`searchLink` / `soleMatchId`); with several,
+ * the tab holding all of them is the honest destination.
+ */
+export function postCreateBuddyTarget(
+  listing: NewBuddyListing,
+  matches: readonly BuddyMatchLike[],
+): { tab: "buddy"; highlightId?: string } | null {
+  const own = matchesForNewBuddyListing(listing, matches);
+  if (own.length === 0) return null;
+  return own.length === 1 ? { tab: "buddy", highlightId: own[0].id } : { tab: "buddy" };
+}

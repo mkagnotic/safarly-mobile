@@ -277,6 +277,7 @@ export function KycVerificationScreen() {
             block={kyc.block}
             consent={consentGate.consent}
             refresh={async () => { await Promise.all([kyc.refetch(), consentGate.refetch()]); }}
+            checkStatus={kyc.checkNow}
             agreeToConsent={consentGate.agree}
             agreeing={consentGate.agreeing}
             onUnavailable={() => setDiditDown(true)}

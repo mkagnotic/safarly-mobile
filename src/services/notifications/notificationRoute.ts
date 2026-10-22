@@ -79,8 +79,12 @@ export function resolveNotificationRoute(
     // works once that row has loaded, and the "N parcels match your trip" notices
     // carry no id at all — those used to land on the default Package tab.
     const t = l.match(/[?&]tab=(package|receiver|buddy)(?:&|$)/i);
-    const params: { highlightId?: string; tab?: "package" | "receiver" | "buddy" } = {};
+    // `for` = the recipient's own listing; it scrolls a multi-match summary to
+    // that listing's group instead of leaving the user at the top of the tab.
+    const f = l.match(/[?&]for=([0-9a-f-]{36})(?:&|$)/i);
+    const params: { highlightId?: string; tab?: "package" | "receiver" | "buddy"; forId?: string } = {};
     if (m) params.highlightId = m[1];
+    if (f) params.forId = f[1];
     if (t) params.tab = t[1].toLowerCase() as "package" | "receiver" | "buddy";
     return { screen: "Trips", params: Object.keys(params).length ? params : undefined };
   }
