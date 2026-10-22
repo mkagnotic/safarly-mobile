@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { buddyRequestStatusLabel, cancellableSentRequests } from "./buddyRequests.ts";
+import {
+  CONFIRM_JOURNEY_LOCKED_HINT,
+  buddyRequestStatusLabel,
+  cancellableSentRequests,
+  confirmJourneyLockedLabel,
+} from "./buddyRequests.ts";
+import { formatLocalDate } from "../../utils/travelDate.ts";
 
 // Mirrors web's `src/test/buddyRequests.test.ts`.
 
@@ -37,5 +43,28 @@ describe("cancellableSentRequests", () => {
   });
   test("does not drop rows when the viewer id is not known yet", () => {
     assert.equal(cancellableSentRequests([{ id: "x", status: "pending", sender_id: "u" }], null).length, 1);
+  });
+});
+
+describe("confirmJourneyLockedLabel", () => {
+  const fmt = (ymd: string) => formatLocalDate(ymd, { month: "short", day: "numeric", locale: "en-US" });
+
+  test("names the day confirmation unlocks", () => {
+    assert.equal(confirmJourneyLockedLabel("2026-11-03", fmt), "Confirm journey from Nov 3");
+  });
+
+  test("reads a timestamp-shaped value by its calendar day (no UTC shift)", () => {
+    assert.equal(confirmJourneyLockedLabel("2026-11-03T00:00:00+00:00", fmt), "Confirm journey from Nov 3");
+  });
+
+  test("falls back to the old wording when the date is unknown or unreadable", () => {
+    assert.equal(confirmJourneyLockedLabel(null, fmt), "Confirm after trip");
+    assert.equal(confirmJourneyLockedLabel("", fmt), "Confirm after trip");
+    assert.equal(confirmJourneyLockedLabel("soon", fmt), "Confirm after trip");
+    assert.equal(confirmJourneyLockedLabel("2026-11-03", () => "—"), "Confirm after trip");
+  });
+
+  test("the hint says why the action is locked", () => {
+    assert.equal(CONFIRM_JOURNEY_LOCKED_HINT, "You can confirm your journey once your trip has started.");
   });
 });

@@ -121,3 +121,34 @@ export function initiateErrorAction(err: { code?: string; status?: number } | nu
   if (code === "KYC_CONSENT_REQUIRED" || code === "KYC_ATTEMPTS_EXHAUSTED" || code === "CONFLICT") return "refresh";
   return "message";
 }
+
+/**
+ * What to tell someone who tapped "Check status" (pure, tested; same on web).
+ *
+ * Client, 22 Oct 2026: the button re-read the same screen and appeared to do
+ * nothing. The server now asks Didit on a tap (`?check=1`) and says what it
+ * found; this puts that into words. null = the screen itself moved on
+ * (verified / under review / declined), which says it better than a note.
+ */
+export type KycCheckNote = { tone: "info" | "warning"; text: string };
+export function statusCheckMessage(
+  kyc: { state?: string; check?: { result: string } | null } | null | undefined,
+): KycCheckNote | null {
+  if (!kyc || kyc.state !== "in_progress") return null;
+  switch (kyc.check?.result) {
+    case "asked":
+      return {
+        tone: "info",
+        text: "You haven't finished verification yet. Tap \"Continue verification\" to pick up where you left off. Your result appears here as soon as you're done.",
+      };
+    case "unreachable":
+      return { tone: "warning", text: "We couldn't reach the verification service just now. Please try again in a minute." };
+    case "too_soon":
+      return { tone: "info", text: "We just checked. Give it a few seconds and try again." };
+    default:
+      return {
+        tone: "info",
+        text: "No result yet. If you've just finished the face scan it can take a minute to arrive, and this page updates on its own.",
+      };
+  }
+}

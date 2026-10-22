@@ -12,6 +12,7 @@ import {
 import { EmptyResults, ErrorBlock } from "@/features/search/components/SearchStates";
 import type { Nav } from "@/features/search/lib/navigation";
 import { sharedStyles } from "@/features/search/searchStyles";
+import type { PersonGroup } from "@/features/search/lib/matchDedupe";
 
 export function ReceiverTabResults({
   loading,
@@ -21,9 +22,13 @@ export function ReceiverTabResults({
   myTripsError,
   onRetryMyTrips,
   matches,
-  matchesByTripId,
+  groupsByTripId,
+  othersById,
   navigation,
   highlightId,
+  focusId,
+  ringGroupId,
+  onFocusCardLayout,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
@@ -33,10 +38,18 @@ export function ReceiverTabResults({
   myTripsError: unknown;
   onRetryMyTrips: () => void;
   matches: PackageMatch[];
-  /** Pre-filtered per-trip match lists (same source as the tab count). */
-  matchesByTripId: Map<string, PackageMatch[]>;
+  /** Pre-filtered per-trip match lists, one group per person (same source as the tab count). */
+  groupsByTripId: Map<string, PersonGroup<PackageMatch>[]>;
+  /** Flat list: each card's other listings from the same person ("+N more"). */
+  othersById: Map<string, PackageMatch[]>;
   navigation: Nav;
   highlightId?: string;
+  /** What a match notification scrolls to: one of your listings' groups, or (flat
+   *  list) the card. Its y is reported via `onFocusCardLayout`. */
+  focusId?: string | null;
+  /** Ring every match under this listing for a moment (multi-match summary). */
+  ringGroupId?: string;
+  onFocusCardLayout?: (y: number) => void;
 }>) {
   if (isAutoMatch) {
     if (myTripsLoading && myTrips.length === 0)
@@ -59,10 +72,17 @@ export function ReceiverTabResults({
     return (
       <View>
         {myTrips.map((trip) => {
-          const matched = matchesByTripId.get(trip.id) ?? [];
+          const matched = groupsByTripId.get(trip.id) ?? [];
           return (
-            <RouteListingCard
+            <View
               key={trip.id}
+              onLayout={
+                trip.id === focusId && onFocusCardLayout
+                  ? (e) => onFocusCardLayout(e.nativeEvent.layout.y)
+                  : undefined
+              }
+            >
+            <RouteListingCard
               fromCity={trip.from_city}
               toCity={trip.to_city}
               kind="trip"
@@ -80,7 +100,7 @@ export function ReceiverTabResults({
               ) : (
                 <View>
                   <Text style={sharedStyles.nestedHeading}>RECEIVER REQUESTS</Text>
-                  {matched.map((m, i) => (
+                  {matched.map(({ primary: m, others }, i) => (
                     <View
                       key={`${m.type}-${m.id}`}
                       style={i > 0 ? sharedStyles.nestedDivider : undefined}
@@ -89,13 +109,16 @@ export function ReceiverTabResults({
                         match={m}
                         navigation={navigation}
                         nested
-                        highlighted={m.id === highlightId}
+                        highlighted={m.id === highlightId || trip.id === ringGroupId}
+                        others={others}
+                        highlightId={highlightId}
                       />
                     </View>
                   ))}
                 </View>
               )}
             </RouteListingCard>
+            </View>
           );
         })}
       </View>
@@ -114,12 +137,22 @@ export function ReceiverTabResults({
   return (
     <View>
       {matches.map((m) => (
-        <PackageMatchCard
+        <View
           key={`${m.type}-${m.id}`}
-          match={m}
-          navigation={navigation}
-          highlighted={m.id === highlightId}
-        />
+          onLayout={
+            m.id === focusId && onFocusCardLayout
+              ? (e) => onFocusCardLayout(e.nativeEvent.layout.y)
+              : undefined
+          }
+        >
+          <PackageMatchCard
+            match={m}
+            navigation={navigation}
+            highlighted={m.id === highlightId}
+            others={othersById.get(m.id)}
+            highlightId={highlightId}
+          />
+        </View>
       ))}
     </View>
   );

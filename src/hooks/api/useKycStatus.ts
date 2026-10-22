@@ -19,6 +19,8 @@ export interface UseKycStatusResult {
   loading: boolean;
   error: ApiClientError | Error | null;
   refetch: () => Promise<void>;
+  /** A tapped "Check status": asks Didit now and returns the fresh block. */
+  checkNow: () => Promise<KycStatusBlock | null>;
 }
 
 const VERIFIED = new Set(["verified", "approved", "active"]);
@@ -63,6 +65,20 @@ export function useKycStatus(): UseKycStatusResult {
     return promise;
   }, []);
 
+  // Not coalesced with `refetch`: a background poll already in flight would hand
+  // back an answer that never asked Didit, and the tap would look ignored again.
+  const checkNow = useCallback(async () => {
+    const res = await kycApi.getStatus(true);
+    const next = res.data?.kyc ?? null;
+    if (mountedRef.current) {
+      setStatus(res.data?.status ?? "");
+      setSubmission(res.data?.submission ?? null);
+      setBlock(next);
+      setError(null);
+    }
+    return next;
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     void refetch();
@@ -94,5 +110,6 @@ export function useKycStatus(): UseKycStatusResult {
     loading,
     error,
     refetch,
+    checkNow,
   };
 }

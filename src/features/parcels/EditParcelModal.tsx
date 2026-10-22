@@ -98,6 +98,8 @@ interface EditParcelModalProps {
   pending: boolean;
   onCancel: () => void;
   onSubmit: (values: EditParcelFormValues) => void;
+  /** The parcel already has offers: the server refuses a currency change (409). */
+  currencyLocked?: boolean;
 }
 
 export function EditParcelModal({
@@ -106,6 +108,7 @@ export function EditParcelModal({
   pending,
   onCancel,
   onSubmit,
+  currencyLocked = false,
 }: Readonly<EditParcelModalProps>) {
   const [form, setForm] = useState<EditParcelFormValues>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -391,10 +394,15 @@ export function EditParcelModal({
                       fee_currency: prev.fee_currency === "USD" ? "INR" : "USD",
                     }))
                   }
-                  disabled={pending}
-                  style={styles.currencyToggle}
+                  disabled={pending || currencyLocked}
+                  style={[styles.currencyToggle, currencyLocked && styles.currencyToggleLocked]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Currency: ${form.fee_currency}. Tap to switch.`}
+                  accessibilityState={{ disabled: pending || currencyLocked }}
+                  accessibilityLabel={
+                    currencyLocked
+                      ? `Currency: ${form.fee_currency}. Locked once offers have been made.`
+                      : `Currency: ${form.fee_currency}. Tap to switch.`
+                  }
                 >
                   <Text style={styles.currencyToggleText}>{form.fee_currency}</Text>
                 </Pressable>
@@ -410,6 +418,9 @@ export function EditParcelModal({
                   editable={!pending}
                 />
               </View>
+              {currencyLocked ? (
+                <Text style={styles.hint}>Currency is locked once offers have been made.</Text>
+              ) : null}
               {suggestedFee != null ? (
                 <Text style={styles.hint}>
                   Suggested for {form.weight_kg} kg: {currencySymbol(form.fee_currency)}
@@ -517,6 +528,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  currencyToggleLocked: { opacity: 0.5 },
   currencyToggleText: { color: colors.text, fontSize: 13, fontWeight: "800" },
   feeInput: { flex: 1 },
   textInputError: { borderColor: colors.danger },

@@ -15,6 +15,8 @@ import { showToast } from "@/feedback/appFeedback";
 import type { Nav } from "@/features/search/lib/navigation";
 import { capitalize, formatDateLabel } from "@/features/search/lib/searchConfig";
 import { sharedStyles } from "@/features/search/searchStyles";
+import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
+import { MoreListingRow, MoreListings } from "@/features/search/components/MoreListings";
 
 // ───────────────────────── Cards ─────────────────────────
 
@@ -23,12 +25,18 @@ export function PackageMatchCard({
   navigation,
   nested,
   highlighted,
+  others = [],
+  highlightId,
 }: Readonly<{
   match: PackageMatch;
   navigation: Nav;
   nested?: boolean;
   /** Deep-link highlight (web parity: the `?match=` ring). */
   highlighted?: boolean;
+  /** The same person's other matching listings, shown behind "+N more". */
+  others?: PackageMatch[];
+  /** The deep-linked listing: rings its row when it is one of `others`. */
+  highlightId?: string;
 }>) {
   const isTrip = match.type === "carrier_trip";
   const person = isTrip ? match.carrier : match.sender;
@@ -41,6 +49,8 @@ export function PackageMatchCard({
     : formatDateLabel(match.delivery_by);
 
   const [chatStarting, setChatStarting] = useState(false);
+  // Which listing's Start chat is in flight, for its "Starting…" label.
+  const [chatFor, setChatFor] = useState<string | null>(null);
 
   const handleViewProfile = useCallback(() => {
     if (!person?.id) {
@@ -57,7 +67,8 @@ export function PackageMatchCard({
     });
   }, [person?.id, person?.name, navigation]);
 
-  const handleStartChat = useCallback(async () => {
+  const handleStartChat = useCallback(async (listingId: string = match.id) => {
+    setChatFor(listingId);
     if (!person?.id) {
       showToast({
         title: "User unavailable",
@@ -79,7 +90,7 @@ export function PackageMatchCard({
     } finally {
       setChatStarting(false);
     }
-  }, [person?.id, person?.name, navigation]);
+  }, [match.id, person?.id, person?.name, navigation]);
 
   const secondary = isTrip
     ? {
@@ -178,7 +189,7 @@ export function PackageMatchCard({
         style={sharedStyles.actionButtonFlex}
       />
       <AppButton
-        label={chatStarting ? "Starting…" : "Start chat"}
+        label={chatStarting && chatFor === match.id ? "Starting…" : "Start chat"}
         onPress={() => void handleStartChat()}
         disabled={chatStarting || !person?.id}
         gradientColors={[colors.ctaAccent, colors.ctaAccent]}
@@ -186,6 +197,45 @@ export function PackageMatchCard({
       />
     </View>
   );
+
+  // The person's other listings: dates + the same details, each with Start chat.
+  const moreBlock = others.length > 0 ? (
+    <MoreListings
+      primary={match}
+      others={others}
+      kind={match.type}
+      highlightId={highlightId}
+      renderRow={(o, showRoute) => {
+        const dates = o.type === "carrier_trip"
+          ? formatTravelDateRange(o, { year: true })
+          : formatDeliveryWindow(o, { year: true });
+        const detail = (o.type === "carrier_trip"
+          ? [
+              o.luggage_capacity_kg != null ? `${o.luggage_capacity_kg} kg capacity` : null,
+              o.airline || null,
+            ]
+          : [
+              o.category?.trim() ? capitalize(o.category.trim()) : null,
+              o.weight_kg != null ? `${o.weight_kg} kg` : null,
+              o.fee_offered != null ? formatMoneyShort(o.fee_offered, o.fee_currency) : null,
+            ]
+        ).concat(
+          o.exceeds_capacity ? (isTrip ? "Exceeds capacity" : "Exceeds your capacity") : null,
+          !isTrip && o.is_online_order ? "Online order" : null,
+        ).filter(Boolean).join(" · ");
+        return (
+          <MoreListingRow
+            title={showRoute ? `${o.from_city} → ${o.to_city} · ${dates}` : dates}
+            detail={detail || null}
+            highlighted={!!highlightId && o.id === highlightId}
+            chatStarting={chatStarting && chatFor === o.id}
+            disabled={chatStarting || !person?.id}
+            onStartChat={() => handleStartChat(o.id)}
+          />
+        );
+      }}
+    />
+  ) : null;
 
   // Nested under a listing card: no card chrome or route header (parent shows it).
   if (nested) {
@@ -196,6 +246,7 @@ export function PackageMatchCard({
         {subtitleBlock}
         {warningBlock}
         {actionsBlock}
+        {moreBlock}
       </View>
     );
   }
@@ -214,6 +265,7 @@ export function PackageMatchCard({
       <View style={styles.divider} />
       {personBlock}
       {actionsBlock}
+      {moreBlock}
     </Card>
   );
 }

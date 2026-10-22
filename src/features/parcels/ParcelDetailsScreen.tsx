@@ -512,6 +512,7 @@ export function ParcelDetailsScreen() {
         pending={editPending}
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
+        currencyLocked={!!parcel?.currency_locked}
       />
 
       <ConfirmActionModal
@@ -681,5 +682,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
-  emptyButtonWrap: { alignSelf: "stretch", maxWidth: 240 },
+  emptyButtonWrap: { alignSelf: "center", width: "100%", maxWidth: 240 },
 });

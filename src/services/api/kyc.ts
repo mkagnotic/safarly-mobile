@@ -76,6 +76,8 @@ export interface KycStatusBlock {
   manual_upload: boolean;
   consent_required: boolean;
   session_started_at: string | null;
+  /** Only on a `?check=1` read: what asking Didit found. Absent on older servers. */
+  check?: { result: "asked" | "unreachable" | "too_soon" | "nothing_to_check"; provider_status?: string | null };
 }
 
 export const kycApi = {
@@ -88,8 +90,11 @@ export const kycApi = {
       app_version: appVersion,
     }),
 
-  getStatus: () =>
-    api.get<{ status: string; submission: KycSubmission | null; kyc?: KycStatusBlock }>("/kyc-handler/status"),
+  /** `check` = the user tapped "Check status": the server asks Didit right away. */
+  getStatus: (check = false) =>
+    api.get<{ status: string; submission: KycSubmission | null; kyc?: KycStatusBlock }>(
+      check ? "/kyc-handler/status?check=1" : "/kyc-handler/status",
+    ),
 
   /**
    * Start or resume automatic verification (Didit). The server returns Didit's

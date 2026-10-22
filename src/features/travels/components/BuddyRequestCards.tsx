@@ -1,13 +1,15 @@
-import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { usePublicProfile } from "@/hooks/api/usePublicProfile";
 import type { BuddyConnection, BuddyRequest } from "@/services/api";
 import { colors } from "@/theme/colors";
-import { toLocalYmd } from "@/utils/travelDate";
+import { formatLocalDate, toLocalYmd } from "@/utils/travelDate";
 import { getInitials } from "@/features/travels/lib/initials";
+import {
+  CONFIRM_JOURNEY_LOCKED_HINT,
+  confirmJourneyLockedLabel,
+} from "@/features/travels/buddyRequests";
 
 export function BuddyRequestCard({
   request,
@@ -100,19 +102,21 @@ export function BuddyConnectionCard({
   pending,
   onChat,
   onComplete,
-  onDisconnect,
 }: Readonly<{
   connection: BuddyConnection;
   pending: boolean;
   onChat: () => void;
   onComplete: () => void;
-  onDisconnect: () => void;
 }>) {
   const c = connection;
   const route = c.from_city && c.to_city ? `${c.from_city} → ${c.to_city}` : null;
   const journeyStart = c.travel_date_from || c.travel_date;
   const journeyStarted =
     !journeyStart || journeyStart.slice(0, 10) <= toLocalYmd();
+  // No Disconnect here (client, 22 Oct 2026): a buddy trip is ended by
+  // unmatching in the chat, so the card says where that lives.
+  const confirmLocked = !c.i_confirmed_completion && !journeyStarted;
+  const showUnmatchHint = !!c.conversation_id;
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>
@@ -153,22 +157,20 @@ export function BuddyConnectionCard({
           />
         ) : (
           <View style={[styles.lcActionFlex, styles.lcChip, styles.lcChipMuted]}>
-            <Text style={styles.lcChipMutedText}>Confirm after trip</Text>
+            <Text style={styles.lcChipMutedText} numberOfLines={2}>
+              {confirmJourneyLockedLabel(journeyStart, (ymd) => formatLocalDate(ymd))}
+            </Text>
           </View>
         )}
       </View>
-      <View style={styles.lcDivider} />
-      <Pressable
-        onPress={onDisconnect}
-        disabled={pending}
-        style={styles.lcDisconnect}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel="Disconnect buddy"
-      >
-        <Ionicons name="unlink-outline" size={14} color={colors.danger} />
-        <Text style={styles.lcDisconnectText}>Disconnect</Text>
-      </Pressable>
+      {confirmLocked || showUnmatchHint ? (
+        <View style={styles.lcHints}>
+          {confirmLocked ? <Text style={styles.lcHint}>{CONFIRM_JOURNEY_LOCKED_HINT}</Text> : null}
+          {showUnmatchHint ? (
+            <Text style={styles.lcHint}>To end this, unmatch in your chat.</Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -211,13 +213,6 @@ const styles = StyleSheet.create({
   lcChipText: { color: colors.warning, fontSize: 13, lineHeight: 18, fontWeight: "800" },
   lcChipMuted: { backgroundColor: colors.surfaceMuted },
   lcChipMutedText: { color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  lcDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  lcDisconnect: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  lcDisconnectText: { color: colors.danger, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  lcHints: { gap: 4 },
+  lcHint: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
 });

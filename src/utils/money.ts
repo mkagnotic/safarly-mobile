@@ -47,3 +47,21 @@ export function formatMoneyShort(amount: number | string | null | undefined, cur
   const n = Number(amount ?? 0);
   return `${currencySymbol(currency)}${Number.isInteger(n) ? n : n.toFixed(2)}`;
 }
+
+/**
+ * Per-currency totals, one figure each: "$20.00 · ₹900.00". Rupees and dollars
+ * must never be added into one number under one symbol. Without a breakdown
+ * (older backend) the flat figure is shown in `fallbackCurrency`.
+ */
+export function formatMoneyByCurrency(
+  byCurrency: Record<string, number> | null | undefined,
+  fallbackAmount?: number | null,
+  fallbackCurrency?: string | null,
+): string {
+  const entries = Object.entries(byCurrency ?? {})
+    .map(([c, v]) => [c.toUpperCase(), Number(v) || 0] as const)
+    .filter(([, v]) => v !== 0)
+    .sort(([a], [b]) => (a === "USD" ? -1 : b === "USD" ? 1 : a.localeCompare(b)));
+  if (entries.length) return entries.map(([c, v]) => formatMoney(v, c)).join(" · ");
+  return formatMoney(fallbackAmount ?? 0, fallbackCurrency);
+}

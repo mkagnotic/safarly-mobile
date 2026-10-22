@@ -27,6 +27,13 @@ export interface UseSearchMatchesOptions {
    * skip the initial fetch (lazy mode).
    */
   initialFilters?: SearchFilters | null;
+  /**
+   * The listing a match notification points at. Sent with every search so the
+   * server includes it even when it is beyond the first 50 matches - without it
+   * a user with many matches tapped a notification and saw no highlighted card
+   * (client, 22 Oct 2026).
+   */
+  highlight?: string;
 }
 
 export interface UseSearchMatchesResult {
@@ -63,7 +70,11 @@ export interface UseSearchMatchesResult {
  */
 export function useSearchMatches({
   initialFilters,
+  highlight,
 }: UseSearchMatchesOptions = {}): UseSearchMatchesResult {
+  // A ref, so a new notification's id applies to the very next request.
+  const highlightRef = useRef(highlight);
+  highlightRef.current = highlight;
   const defaultInitial: SearchFilters | null =
     initialFilters === undefined ? { per_page: 50, match_my_routes: true } : initialFilters;
 
@@ -94,7 +105,11 @@ export function useSearchMatches({
         setError(null);
       }
       try {
-        const res = await searchApi.search(filters);
+        // Only route-matching: in a filtered or browse list the extra row would
+        // sit in results it does not belong to.
+        const res = await searchApi.search(
+          highlightRef.current && filters.match_my_routes ? { ...filters, highlight: highlightRef.current } : filters,
+        );
         if (!mountedRef.current || myToken !== requestSeqRef.current) return;
         setResults(res.data ?? null);
         if (silent) setError(null); // a good refresh clears any stale error

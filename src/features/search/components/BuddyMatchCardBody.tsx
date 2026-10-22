@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
@@ -16,27 +17,28 @@ interface BuddyMatchCardBodyProps {
   highlighted?: boolean;
   dateLabel: string;
   details: { label: string; value: string }[];
-  connecting: boolean;
-  handleConnect: () => Promise<void>;
   handleViewProfile: () => void;
   chatStarting: boolean;
   handleStartChat: () => Promise<void>;
+  /** Below the actions, inside the card (the person's other listings). */
+  footer?: ReactNode;
 }
 
 /**
- * What a travel-buddy match card shows. Its state and actions (Connect, View
- * profile, Start chat) stay in `BuddyMatchCard` in SearchScreen.tsx.
+ * What a travel-buddy match card shows. Its state and actions (View profile,
+ * Start chat) stay in `BuddyMatchCard` in SearchScreen.tsx. There is no Connect
+ * button by design: a buddy match is formed like every other request - Start
+ * chat, one side taps Match, the other accepts.
  */
 export function BuddyMatchCardBody({
   match,
   highlighted,
   dateLabel,
   details,
-  connecting,
-  handleConnect,
   handleViewProfile,
   chatStarting,
   handleStartChat,
+  footer,
 }: Readonly<BuddyMatchCardBodyProps>) {
   const { user } = useAuth();
   const canReport = !!match.user?.id && match.user.id !== user?.id;
@@ -90,12 +92,6 @@ export function BuddyMatchCardBody({
         ) : null}
       </View>
 
-      <AppButton
-        label={connecting ? "Sending…" : "Connect"}
-        onPress={() => void handleConnect()}
-        disabled={connecting || !match.id}
-        style={styles.connectButton}
-      />
       <View style={sharedStyles.actionsRow}>
         <AppButton
           label="View profile"
@@ -111,6 +107,7 @@ export function BuddyMatchCardBody({
           style={sharedStyles.actionButtonFlex}
         />
       </View>
+      {footer}
     </Card>
   );
 }
@@ -177,5 +174,4 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  connectButton: { marginTop: 12 },
 });

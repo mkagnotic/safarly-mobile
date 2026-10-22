@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { type LayoutChangeEvent, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
@@ -21,7 +21,6 @@ import { RouteListingCard } from "@/features/search/RouteListingCard";
 import { useSearchMatches } from "@/hooks/api/useSearchMatches";
 import { MainTabParamList } from "@/navigation/types";
 import {
-  buddiesApi,
   getErrorMessage,
   messagesApi,
   type BuddySearchMatch,
@@ -35,6 +34,7 @@ import { showToast } from "@/feedback/appFeedback";
 import { styles } from "@/features/search/SearchScreen.styles";
 import { AppliedFilterChips } from "@/features/search/components/AppliedFilterChips";
 import { BuddyMatchCardBody } from "@/features/search/components/BuddyMatchCardBody";
+import { MoreListingRow, MoreListings } from "@/features/search/components/MoreListings";
 import { PackageMatchCard } from "@/features/search/components/PackageMatchCard";
 import { Pagination } from "@/features/search/components/Pagination";
 import { ReceiverTabResults } from "@/features/search/components/ReceiverTabResults";
@@ -50,6 +50,7 @@ import { EmptyResults, ErrorBlock } from "@/features/search/components/SearchSta
 import { useSearchPaging } from "@/features/search/hooks/useSearchPaging";
 import { useSearchResultLists } from "@/features/search/hooks/useSearchResultLists";
 import type { Nav } from "@/features/search/lib/navigation";
+import type { PersonGroup } from "@/features/search/lib/matchDedupe";
 import {
   AUTO_BUDDY_PER_PAGE,
   AUTO_PER_PAGE,
@@ -63,6 +64,13 @@ import {
   searchDateBounds,
 } from "@/features/search/lib/searchConfig";
 import { sharedStyles } from "@/features/search/searchStyles";
+import {
+  BUDDY_HIGHLIGHT_MS,
+  buddyRingId,
+  focusScrollY,
+  matchFocusTarget,
+  RESULTS_TOP,
+} from "@/features/search/lib/matchFocus";
 
 export function SearchScreen() {
   const navigation = useNavigation<Nav>();
@@ -71,6 +79,9 @@ export function SearchScreen() {
   // an absent param is simply undefined.
   const route = useRoute<RouteProp<MainTabParamList, "Trips">>();
   const highlightId = route.params?.highlightId;
+  // The recipient's own listing the notification is about (`&for=`). Summaries of
+  // several matches carry only this - it picks the group to scroll to.
+  const forId = route.params?.forId;
 
   // Independent per-side countries, matching the create forms. Search used to
   // model this as a coupled IN_TO_US / US_TO_IN "direction", which made
@@ -102,7 +113,7 @@ export function SearchScreen() {
    * set the notification was computed from — unpaginated, so the highlight effect
    * can page to the card and scroll it into view.
    */
-  const isMatchDeepLink = !!(highlightId || requestedTab);
+  const isMatchDeepLink = !!(highlightId || requestedTab || forId);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // null `appliedFilters` = auto-match mode; per-list pages re-fire it for free.
@@ -125,7 +136,7 @@ export function SearchScreen() {
    */
   const [matchMyRoutes, setMatchMyRoutes] = useState(isMatchDeepLink);
   const { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch } =
-    useSearchMatches({ initialFilters: isMatchDeepLink ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY });
+    useSearchMatches({ initialFilters: isMatchDeepLink ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY, highlight: highlightId });
 
   // Manual search + page changes re-fire here; pagination is free (the unit was
   // already spent in handleApply).
@@ -227,7 +238,8 @@ export function SearchScreen() {
   const {
     myTripsState, myParcelsState, carrierTrips, receiverRequests, buddyMatches, displayCarrierTrips,
     displayReceiverRequests, dedupedBuddyMatches, sortedMyParcels, sortedMyTrips,
-    carrierTripsByParcelId, receiverRequestsByTripId,
+    carrierTripsByParcelId, receiverRequestsByTripId, carrierTripGroupsByParcelId,
+    receiverRequestGroupsByTripId, carrierTripOthers, receiverRequestOthers, buddyOthers,
   } = useSearchResultLists({ results, loading, highlightId });
 
   const fromCities = fromCountry === "IN" ? INDIA_CITIES : USA_CITIES;
@@ -287,6 +299,99 @@ export function SearchScreen() {
     carrierTripsByParcelId,
     receiverRequestsByTripId,
   ]);
+
+  // The notified listing can be gone by the time the user taps (the carrier
+  // deleted or closed it). Then don't leave them at the top of Search: say so,
+  // and fall back to their OWN listing the notification was about (`for`).
+  const highlightMissing =
+    !!highlightId && !loading && !!results &&
+    !buddyMatches.some((b) => b.id === highlightId) &&
+    !carrierTrips.some((m) => m.id === highlightId) &&
+    !receiverRequests.some((m) => m.id === highlightId);
+  const missingNoticeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!highlightMissing || !highlightId || missingNoticeRef.current === highlightId) return;
+    missingNoticeRef.current = highlightId;
+    showToast({
+      title: "This listing is no longer available",
+      message: forId ? "Showing the current matches for your listing instead." : "It was removed or is no longer open.",
+      variant: "info",
+    });
+  }, [highlightMissing, highlightId, forId]);
+  // The highlight to act on: none when the notified listing has gone.
+  const liveHighlightId = highlightMissing ? undefined : highlightId;
+
+  // A summary ("3 parcels match your trip") names no card, only the listing it is
+  // for: page to that listing's group. Buddy results are not grouped, so a buddy
+  // listing id simply finds nothing here.
+  const forHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!forId || liveHighlightId || loading) return;
+    if (forHandledRef.current === forId) return;
+    const parcelIdx = sortedMyParcels.findIndex((p) => p.id === forId);
+    const tripIdx = sortedMyTrips.findIndex((t) => t.id === forId);
+    if (parcelIdx < 0 && tripIdx < 0) return; // not loaded (yet), or a buddy listing
+    forHandledRef.current = forId;
+    if (hasAppliedFilters || !matchMyRoutes) return;
+    if (parcelIdx >= 0)
+      setAutoPkgPage(Math.floor(parcelIdx / AUTO_PER_PAGE) + 1);
+    else setAutoRcvPage(Math.floor(tripIdx / AUTO_PER_PAGE) + 1);
+  }, [
+    forId,
+    liveHighlightId,
+    loading,
+    hasAppliedFilters,
+    sortedMyParcels,
+    sortedMyTrips,
+  ]);
+
+  // Match deep link: scroll the target into view and ring it for a few seconds
+  // (web parity, `BuddyMatchCard.tsx`). The target is the buddy card, or - for
+  // parcels and trips, which are grouped under your own listing - that listing's
+  // group (`matchFocusTarget`). Results arrive async, so the scroll fires from
+  // whichever onLayout lands second - the results block's or the target's - and
+  // only once per link.
+  const scrollRef = useRef<ScrollView>(null);
+  const resultsYRef = useRef<number | null>(null);
+  const focusCardYRef = useRef<number | null>(null);
+  const focusedIdRef = useRef<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const deepLinkKey =
+    highlightId || forId ? `${highlightId ?? ""}|${forId ?? ""}` : null;
+  // Set below, once paging has picked what is on screen.
+  const focusableRef = useRef(false);
+  const focusTargetRef = useRef<string | null>(null);
+  const tryFocusBuddyCard = useCallback(() => {
+    const target = focusTargetRef.current;
+    if (!deepLinkKey || !target || !focusableRef.current) return;
+    const y = focusScrollY(
+      resultsYRef.current,
+      target === RESULTS_TOP ? 0 : focusCardYRef.current,
+    );
+    if (y == null) return;
+    focusedIdRef.current = deepLinkKey;
+    scrollRef.current?.scrollTo({ y, animated: true });
+    setFlashId(target);
+  }, [deepLinkKey]);
+  useEffect(() => {
+    if (!flashId) return;
+    const timer = setTimeout(() => setFlashId(null), BUDDY_HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [flashId]);
+  const onResultsLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      resultsYRef.current = e.nativeEvent.layout.y;
+      tryFocusBuddyCard();
+    },
+    [tryFocusBuddyCard],
+  );
+  const onFocusCardLayout = useCallback(
+    (y: number) => {
+      focusCardYRef.current = y;
+      tryFocusBuddyCard();
+    },
+    [tryFocusBuddyCard],
+  );
 
   // Auto-match counts = sum of nested matches under user listings; manual
   // filter counts = flat result length. Buddies is always flat.
@@ -388,6 +493,80 @@ export function SearchScreen() {
     [setBaseQuery],
   );
 
+  const displayedBuddyMatches = isAutoMatch
+    ? pagedBuddyMatches
+    : dedupedBuddyMatches;
+  const displayedMyParcels = isAutoMatch ? pagedMyParcels : sortedMyParcels;
+  const displayedMyTrips = isAutoMatch ? pagedMyTrips : sortedMyTrips;
+  const focusTarget = matchFocusTarget({
+    activeTab,
+    highlightId: liveHighlightId,
+    forId,
+    groups:
+      !isAutoMatch || activeTab === "buddy"
+        ? null
+        : activeTab === "package"
+          ? displayedMyParcels.map((p) => ({
+              id: p.id,
+              matchIds: (carrierTripsByParcelId.get(p.id) ?? []).map(
+                (m) => m.id,
+              ),
+            }))
+          : displayedMyTrips.map((t) => ({
+              id: t.id,
+              matchIds: (receiverRequestsByTripId.get(t.id) ?? []).map(
+                (m) => m.id,
+              ),
+            })),
+    flatIds: (activeTab === "buddy"
+      ? displayedBuddyMatches
+      : activeTab === "package"
+        ? displayCarrierTrips
+        : displayReceiverRequests
+    ).map((m) => m.id),
+  });
+  if (focusTargetRef.current !== focusTarget) {
+    // A different element: its old y no longer applies.
+    focusTargetRef.current = focusTarget;
+    focusCardYRef.current = null;
+  }
+  focusableRef.current =
+    !!focusTarget && !loading && focusedIdRef.current !== deepLinkKey;
+  // A refetch that keeps the same card mounted fires no new onLayout, so also
+  // try whenever the results settle.
+  useEffect(() => {
+    tryFocusBuddyCard();
+  }, [
+    loading,
+    activeTab,
+    focusTarget,
+    displayedBuddyMatches,
+    tryFocusBuddyCard,
+  ]);
+  // A summary rings every match under the listing it names; a single-match link
+  // keeps its own permanent ring on the one card.
+  const ringGroupId = !highlightId && flashId ? flashId : undefined;
+
+  // ⚠️ Tabs stay mounted, so a deep link into a Search screen that is already
+  // open (a second match notification, or "post a buddy listing -> see its
+  // matches") arrives as NEW PARAMS, not a remount - and the initial-state
+  // handling above (`requestedTab`, `isMatchDeepLink`) never sees it. Re-apply
+  // it here: open the named tab, switch to route-matching (fresh results, so a
+  // listing posted a moment ago is included) and let the highlight/focus
+  // effects run again for this id.
+  const seenParamsRef = useRef(route.params);
+  useEffect(() => {
+    if (seenParamsRef.current === route.params) return;
+    seenParamsRef.current = route.params;
+    if (!highlightId && !requestedTab && !forId) return;
+    highlightHandledRef.current = null;
+    forHandledRef.current = null;
+    focusedIdRef.current = null;
+    setFlashId(null);
+    if (requestedTab) setActiveTab(requestedTab);
+    applyMode(true);
+  }, [route.params, highlightId, requestedTab, forId, applyMode]);
+
   const handleClear = useCallback(() => {
     setFromCity("");
     setToCity("");
@@ -426,6 +605,7 @@ export function SearchScreen() {
   return (
     <Screen scroll={false}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -540,42 +720,58 @@ export function SearchScreen() {
           hideCounts={!!error}
         />
 
-        {error ? (
-          <ErrorBlock message={getErrorMessage(error)} onRetry={() => void refetch()} />
-        ) : activeTab === "package" ? (
-          <PackageTabResults
-            loading={loading}
-            isAutoMatch={isAutoMatch}
-            myParcels={isAutoMatch ? pagedMyParcels : sortedMyParcels}
-            myParcelsLoading={myParcelsState.loading}
-            myParcelsError={myParcelsState.error}
-            onRetryMyParcels={() => void refetchMyParcels()}
-            matches={displayCarrierTrips}
-            matchesByParcelId={carrierTripsByParcelId}
-            navigation={navigation}
-            highlightId={highlightId}
-          />
-        ) : activeTab === "buddy" ? (
-          <BuddyTabResults
-            loading={loading}
-            matches={isAutoMatch ? pagedBuddyMatches : dedupedBuddyMatches}
-            navigation={navigation}
-            highlightId={highlightId}
-          />
-        ) : (
-          <ReceiverTabResults
-            loading={loading}
-            isAutoMatch={isAutoMatch}
-            myTrips={isAutoMatch ? pagedMyTrips : sortedMyTrips}
-            myTripsLoading={myTripsState.loading}
-            myTripsError={myTripsState.error}
-            onRetryMyTrips={() => void refetchMyTrips()}
-            matches={displayReceiverRequests}
-            matchesByTripId={receiverRequestsByTripId}
-            navigation={navigation}
-            highlightId={highlightId}
-          />
-        )}
+        <View onLayout={onResultsLayout}>
+          {error ? (
+            <ErrorBlock
+              message={getErrorMessage(error)}
+              onRetry={() => void refetch()}
+            />
+          ) : activeTab === "package" ? (
+            <PackageTabResults
+              loading={loading}
+              isAutoMatch={isAutoMatch}
+              myParcels={displayedMyParcels}
+              myParcelsLoading={myParcelsState.loading}
+              myParcelsError={myParcelsState.error}
+              onRetryMyParcels={() => void refetchMyParcels()}
+              matches={displayCarrierTrips}
+              groupsByParcelId={carrierTripGroupsByParcelId}
+              othersById={carrierTripOthers}
+              navigation={navigation}
+              highlightId={highlightId}
+              focusId={focusTarget}
+              ringGroupId={ringGroupId}
+              onFocusCardLayout={onFocusCardLayout}
+            />
+          ) : activeTab === "buddy" ? (
+            <BuddyTabResults
+              loading={loading}
+              matches={displayedBuddyMatches}
+              othersById={buddyOthers}
+              navigation={navigation}
+              highlightId={highlightId}
+              ringId={buddyRingId(highlightId, flashId)}
+              onFocusCardLayout={onFocusCardLayout}
+            />
+          ) : (
+            <ReceiverTabResults
+              loading={loading}
+              isAutoMatch={isAutoMatch}
+              myTrips={displayedMyTrips}
+              myTripsLoading={myTripsState.loading}
+              myTripsError={myTripsState.error}
+              onRetryMyTrips={() => void refetchMyTrips()}
+              matches={displayReceiverRequests}
+              groupsByTripId={receiverRequestGroupsByTripId}
+              othersById={receiverRequestOthers}
+              navigation={navigation}
+              highlightId={highlightId}
+              focusId={focusTarget}
+              ringGroupId={ringGroupId}
+              onFocusCardLayout={onFocusCardLayout}
+            />
+          )}
+        </View>
 
         {!error ? (
           <Pagination
@@ -624,7 +820,7 @@ export function SearchScreen() {
 
 // PackageTabResults, BuddyTabResults and BuddyMatchCard's actions stay in this
 // file on purpose: `npm run check:ux` pins the carriers empty-state copy and
-// `buddiesApi.sendRequest` / `handleConnect` to SearchScreen.tsx, and
+// the buddy card's chat-first actions (no Connect) to SearchScreen.tsx, and
 // cardFeedback.test.ts fences the card actions. Everything else lives in
 // ./components, ./hooks and ./lib.
 
@@ -638,9 +834,13 @@ function PackageTabResults({
   myParcelsError,
   onRetryMyParcels,
   matches,
-  matchesByParcelId,
+  groupsByParcelId,
+  othersById,
   navigation,
   highlightId,
+  focusId,
+  ringGroupId,
+  onFocusCardLayout,
 }: Readonly<{
   loading: boolean;
   isAutoMatch: boolean;
@@ -650,10 +850,18 @@ function PackageTabResults({
   myParcelsError: unknown;
   onRetryMyParcels: () => void;
   matches: PackageMatch[];
-  /** Pre-filtered per-parcel match lists (same source as the tab count). */
-  matchesByParcelId: Map<string, PackageMatch[]>;
+  /** Pre-filtered per-parcel match lists, one group per person (same source as the tab count). */
+  groupsByParcelId: Map<string, PersonGroup<PackageMatch>[]>;
+  /** Flat list: each card's other listings from the same person ("+N more"). */
+  othersById: Map<string, PackageMatch[]>;
   navigation: Nav;
   highlightId?: string;
+  /** What a match notification scrolls to: one of your listings' groups, or (flat
+   *  list) the card. Its y is reported via `onFocusCardLayout`. */
+  focusId?: string | null;
+  /** Ring every match under this listing for a moment (multi-match summary). */
+  ringGroupId?: string;
+  onFocusCardLayout?: (y: number) => void;
 }>) {
   if (isAutoMatch) {
     if (myParcelsLoading && myParcels.length === 0)
@@ -676,45 +884,59 @@ function PackageTabResults({
     return (
       <View>
         {myParcels.map((parcel) => {
-          const matched = matchesByParcelId.get(parcel.id) ?? [];
+          const matched = groupsByParcelId.get(parcel.id) ?? [];
           return (
-            <RouteListingCard
+            <View
               key={parcel.id}
-              fromCity={parcel.from_city}
-              toCity={parcel.to_city}
-              kind="parcel"
-              dateLabel={formatDeliveryWindow(parcel, { year: true })}
-              secondary={
-                parcel.category
-                  ? { label: "CATEGORY", value: parcel.category }
+              onLayout={
+                parcel.id === focusId && onFocusCardLayout
+                  ? (e) => onFocusCardLayout(e.nativeEvent.layout.y)
                   : undefined
               }
             >
-              {loading ? (
-                <MatchCardSkeleton />
-              ) : matched.length === 0 ? (
-                <Text style={sharedStyles.nestedEmpty}>
-                  No matching carriers yet for this route or date.
-                </Text>
-              ) : (
-                <View>
-                  <Text style={sharedStyles.nestedHeading}>CARRIER TRIPS</Text>
-                  {matched.map((m, i) => (
-                    <View
-                      key={`${m.type}-${m.id}`}
-                      style={i > 0 ? sharedStyles.nestedDivider : undefined}
-                    >
-                      <PackageMatchCard
-                        match={m}
-                        navigation={navigation}
-                        nested
-                        highlighted={m.id === highlightId}
-                      />
-                    </View>
-                  ))}
-                </View>
-              )}
-            </RouteListingCard>
+              <RouteListingCard
+                fromCity={parcel.from_city}
+                toCity={parcel.to_city}
+                kind="parcel"
+                dateLabel={formatDeliveryWindow(parcel, { year: true })}
+                secondary={
+                  parcel.category
+                    ? { label: "CATEGORY", value: parcel.category }
+                    : undefined
+                }
+              >
+                {loading ? (
+                  <MatchCardSkeleton />
+                ) : matched.length === 0 ? (
+                  <Text style={sharedStyles.nestedEmpty}>
+                    No matching carriers yet for this route or date.
+                  </Text>
+                ) : (
+                  <View>
+                    <Text style={sharedStyles.nestedHeading}>
+                      CARRIER TRIPS
+                    </Text>
+                    {matched.map(({ primary: m, others }, i) => (
+                      <View
+                        key={`${m.type}-${m.id}`}
+                        style={i > 0 ? sharedStyles.nestedDivider : undefined}
+                      >
+                        <PackageMatchCard
+                          match={m}
+                          navigation={navigation}
+                          nested
+                          highlighted={
+                            m.id === highlightId || parcel.id === ringGroupId
+                          }
+                          others={others}
+                          highlightId={highlightId}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </RouteListingCard>
+            </View>
           );
         })}
       </View>
@@ -733,12 +955,22 @@ function PackageTabResults({
   return (
     <View>
       {matches.map((m) => (
-        <PackageMatchCard
+        <View
           key={`${m.type}-${m.id}`}
-          match={m}
-          navigation={navigation}
-          highlighted={m.id === highlightId}
-        />
+          onLayout={
+            m.id === focusId && onFocusCardLayout
+              ? (e) => onFocusCardLayout(e.nativeEvent.layout.y)
+              : undefined
+          }
+        >
+          <PackageMatchCard
+            match={m}
+            navigation={navigation}
+            highlighted={m.id === highlightId}
+            others={othersById.get(m.id)}
+            highlightId={highlightId}
+          />
+        </View>
       ))}
     </View>
   );
@@ -747,13 +979,22 @@ function PackageTabResults({
 function BuddyTabResults({
   loading,
   matches,
+  othersById,
   navigation,
   highlightId,
+  ringId,
+  onFocusCardLayout,
 }: Readonly<{
   loading: boolean;
   matches: BuddySearchMatch[];
+  /** Each card's other buddy listings from the same person ("+N more"). */
+  othersById: Map<string, BuddySearchMatch[]>;
   navigation: Nav;
+  /** The deep-linked card: reported via `onFocusCardLayout` so it can be scrolled to. */
   highlightId?: string;
+  /** The card ringed right now - `highlightId` until its few seconds are up. */
+  ringId?: string;
+  onFocusCardLayout?: (y: number) => void;
 }>) {
   if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
@@ -767,60 +1008,53 @@ function BuddyTabResults({
   return (
     <View>
       {matches.map((b) => (
-        <BuddyMatchCard
+        <View
           key={b.id}
-          match={b}
-          navigation={navigation}
-          highlighted={b.id === highlightId}
-        />
+          onLayout={
+            b.id === highlightId && onFocusCardLayout
+              ? (e) => onFocusCardLayout(e.nativeEvent.layout.y)
+              : undefined
+          }
+        >
+          <BuddyMatchCard
+            match={b}
+            navigation={navigation}
+            highlighted={!!ringId && b.id === ringId}
+            others={othersById.get(b.id)}
+            highlightId={highlightId}
+          />
+        </View>
       ))}
     </View>
   );
+}
+
+/** "10 Sept" or "10 Sept – 18 Sept" for a buddy listing's travel window. */
+function buddyDateLabel(match: BuddySearchMatch): string {
+  const dateFrom = match.travel_date_from || match.travel_date;
+  const dateTo = match.travel_date_to || match.travel_date;
+  return dateFrom === dateTo
+    ? formatDateLabel(dateFrom)
+    : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`;
 }
 
 function BuddyMatchCard({
   match,
   navigation,
   highlighted,
+  others = [],
+  highlightId,
 }: Readonly<{
   match: BuddySearchMatch;
   navigation: Nav;
   /** Deep-link highlight (web parity: the `?match=` ring). */
   highlighted?: boolean;
+  /** The same person's other matching buddy listings, shown behind "+N more". */
+  others?: BuddySearchMatch[];
+  /** The deep-linked listing: rings its row when it is one of `others`. */
+  highlightId?: string;
 }>) {
-  const dateFrom = match.travel_date_from || match.travel_date;
-  const dateTo = match.travel_date_to || match.travel_date;
-  const dateLabel =
-    dateFrom === dateTo
-      ? formatDateLabel(dateFrom)
-      : `${formatDateLabel(dateFrom)} – ${formatDateLabel(dateTo)}`;
-
-  // Connect is the point of a travel-buddy match, and until now there was no way
-  // to do it on either platform: `buddiesApi.sendRequest` existed, and the whole
-  // request -> accept -> connection -> two-tap completion -> rating chain was
-  // built and deployed behind it, but nothing ever called it. Production had 0
-  // buddy requests, 0 connections and 0 buddy ratings against 12 delivery
-  // ratings. Chat was all a buddy match offered, and a chat creates no
-  // connection - so journey completion and reviews were unreachable.
-  const [connecting, setConnecting] = useState(false);
-  const handleConnect = useCallback(async () => {
-    if (!match.id || connecting) return;
-    setConnecting(true);
-    try {
-      await buddiesApi.sendRequest(match.id);
-      showToast({
-        title: "Buddy request sent",
-        message: `${match.user?.name ?? "They"} will see it in My travels → Partners.`,
-        variant: "success",
-      });
-    } catch (err) {
-      // The server already explains the ordinary refusals in plain words -
-      // already connected, already sent, or they sent you one first.
-      showToast({ title: "Couldn't send request", message: getErrorMessage(err), variant: "error" });
-    } finally {
-      setConnecting(false);
-    }
-  }, [match.id, match.user?.name, connecting]);
+  const dateLabel = buddyDateLabel(match);
 
   const details: { label: string; value: string }[] = [
     ...(match.age != null ? [{ label: "AGE", value: `${match.age} yrs` }] : []),
@@ -830,7 +1064,7 @@ function BuddyMatchCard({
     ...(match.layover ? [{ label: "LAYOVER", value: match.layover }] : []),
   ];
 
-  const [chatStarting, setChatStarting] = useState(false);
+  const { chatStarting, handleStartChat } = useStartBuddyChat(match, navigation);
 
   const handleViewProfile = useCallback(() => {
     if (!match.user?.id) {
@@ -847,6 +1081,64 @@ function BuddyMatchCard({
     });
   }, [match.user?.id, match.user?.name, navigation]);
 
+  return (
+    <BuddyMatchCardBody
+      match={match}
+      highlighted={highlighted}
+      dateLabel={dateLabel}
+      details={details}
+      handleViewProfile={handleViewProfile}
+      chatStarting={chatStarting}
+      handleStartChat={handleStartChat}
+      footer={
+        others.length > 0 ? (
+          <MoreListings
+            primary={match}
+            others={others}
+            kind="travel_buddy"
+            highlightId={highlightId}
+            renderRow={(o, showRoute) => (
+              <OtherBuddyListingRow
+                match={o}
+                navigation={navigation}
+                showRoute={showRoute}
+                highlighted={!!highlightId && o.id === highlightId}
+              />
+            )}
+          />
+        ) : null
+      }
+    />
+  );
+}
+
+/**
+ * One of the person's OTHER buddy listings ("+N more"). Its Start chat names
+ * THIS listing as the chat's context_id, exactly like the card's own button.
+ */
+function OtherBuddyListingRow({
+  match,
+  navigation,
+  showRoute,
+  highlighted,
+}: Readonly<{ match: BuddySearchMatch; navigation: Nav; showRoute: boolean; highlighted: boolean }>) {
+  const { chatStarting, handleStartChat } = useStartBuddyChat(match, navigation);
+  const dates = buddyDateLabel(match);
+  return (
+    <MoreListingRow
+      title={showRoute ? `${match.from_city} → ${match.to_city} · ${dates}` : dates}
+      detail={match.airline || null}
+      highlighted={highlighted}
+      chatStarting={chatStarting}
+      disabled={!match.user?.id}
+      onStartChat={handleStartChat}
+    />
+  );
+}
+
+/** Start chat for one buddy listing - shared by the card and its "+N more" rows. */
+function useStartBuddyChat(match: BuddySearchMatch, navigation: Nav) {
+  const [chatStarting, setChatStarting] = useState(false);
   const handleStartChat = useCallback(async () => {
     if (!match.user?.id) {
       showToast({
@@ -858,30 +1150,24 @@ function BuddyMatchCard({
     }
     setChatStarting(true);
     try {
-      const res = await messagesApi.createConversation(match.user.id, "buddy");
+      // A buddy match is formed in the chat (Match -> accept), so the thread
+      // must carry the listing it came from: context_id = the buddy listing,
+      // which lets the server tie the accepted match to this trip and create
+      // the buddy connection (journey confirmation + reviews hang off it).
+      const res = await messagesApi.createConversation(match.user.id, "buddy", match.id);
       navigation.navigate("OfferChatTab", {
         conversationId: res.data.id,
         name: match.user.name || "Travel buddy",
         source: "buddies",
+        // The chat stays a parcel thread (the pair have deliveries together):
+        // open it on the travel-buddy entry for this trip.
+        ...(res.data.buddy_listing_id ? { buddyListingId: res.data.buddy_listing_id } : {}),
       });
     } catch (err) {
       showToast({ title: "Couldn't start chat", message: getErrorMessage(err), variant: "error" });
     } finally {
       setChatStarting(false);
     }
-  }, [match.user?.id, match.user?.name, navigation]);
-
-  return (
-    <BuddyMatchCardBody
-      match={match}
-      highlighted={highlighted}
-      dateLabel={dateLabel}
-      details={details}
-      connecting={connecting}
-      handleConnect={handleConnect}
-      handleViewProfile={handleViewProfile}
-      chatStarting={chatStarting}
-      handleStartChat={handleStartChat}
-    />
-  );
+  }, [match.id, match.user?.id, match.user?.name, navigation]);
+  return { chatStarting, handleStartChat };
 }

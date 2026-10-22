@@ -156,6 +156,17 @@ function sameDate(a: Date | null, b: Date): boolean {
   );
 }
 
+/** One rule each for blur and submit. */
+function parcelWeightError(v: string, unit: "kg" | "lb"): string | undefined {
+  const n = parseFloat(v);
+  if (!n || n <= 0) return "Enter the parcel weight";
+  if (n > (unit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) return `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
+  return undefined;
+}
+function feeOfferedError(v: string): string | undefined {
+  return parseFloat(v) > 0 ? undefined : "Enter a valid amount";
+}
+
 export function SendParcelScreen() {
   const navigation = useNavigation<Nav>();
 
@@ -337,11 +348,8 @@ export function SendParcelScreen() {
     if (!toCity) errors.toCity = "Select a destination city";
     if (isSameRoute) errors.toCity = SAME_ROUTE_MSG;
     const w = parseFloat(weight);
-    if (!w || w <= 0) {
-      errors.weight = "Enter the parcel weight";
-    } else if (w > (weightUnit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) {
-      errors.weight = `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
-    }
+    const weightErr = parcelWeightError(weight, weightUnit);
+    if (weightErr) errors.weight = weightErr;
     if (!deliveryBy) {
       errors.deliveryBy = dateMode === "range" ? "Pick the earliest date" : "Pick a delivery date";
     } else if (deliveryBy < today) {
@@ -362,7 +370,8 @@ export function SendParcelScreen() {
       }
     }
     const fee = parseFloat(feeOffered);
-    if (!fee || fee <= 0) errors.feeOffered = "Enter a valid amount";
+    const feeErr = feeOfferedError(feeOffered);
+    if (feeErr) errors.feeOffered = feeErr;
 
     // A returnable online order MUST carry an address that can actually be
     // posted to. This block used to accept anything, including nothing at all -
@@ -776,6 +785,8 @@ export function SendParcelScreen() {
                   setWeight(sanitizeDecimalInput(v, 4, 2));
                   clearFieldError("weight");
                 }}
+                // Checked when you leave the field, not only on submit (client, 22 Oct 2026).
+                onBlur={() => setFieldErrors((p) => ({ ...p, weight: parcelWeightError(weight, weightUnit) }))}
                 placeholder={weightUnit === "kg" ? "0 kg" : "0 lb"}
                 placeholderTextColor={colors.subtleText}
                 keyboardType="decimal-pad"
@@ -865,6 +876,7 @@ export function SendParcelScreen() {
                     setFeeOffered(sanitizeDecimalInput(v, 6, 2));
                     clearFieldError("feeOffered");
                   }}
+                  onBlur={() => setFieldErrors((p) => ({ ...p, feeOffered: feeOfferedError(feeOffered) }))}
                   placeholder="e.g. 45"
                   placeholderTextColor={colors.subtleText}
                   keyboardType="decimal-pad"

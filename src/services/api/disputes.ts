@@ -53,6 +53,8 @@ export const disputesApi = {
     api.post<{
       waived: boolean;
       refunded_amount: number;
+      /** ISO code the penalty was charged in. Absent on an older backend (USD). */
+      currency?: string;
       booking_status: string;
       strike_remains: boolean;
     }>(`/dispute-handler/${disputeId}/confirm-return-waiver`, {}, { idempotencyKey }),

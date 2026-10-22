@@ -13,6 +13,9 @@ export interface SearchFilters {
   /** comma-separated: travel_buddy,carrier,receive_request */
   looking_for?: string;
   match_my_routes?: boolean;
+  /** A listing a match notification points at: the server includes it even when
+   *  it is past the 50-row page (search-handler/highlight.ts). */
+  highlight?: string;
   page?: number;
   per_page?: number;
   /** Independent per-list pages; each falls back to `page` server-side. */

@@ -44,7 +44,6 @@ export function PartnersTab({
   onReject,
   onChat,
   onComplete,
-  onDisconnect,
 }: Readonly<{
   loading: boolean;
   error: Error | null;
@@ -66,7 +65,6 @@ export function PartnersTab({
   onReject: (id: string) => void;
   onChat: (conn: BuddyConnection) => void;
   onComplete: (id: string) => void;
-  onDisconnect: (conn: BuddyConnection) => void;
 }>) {
   const hasExtras = requests.length > 0 || sentRequests.length > 0 || activeBuddies.length > 0;
 
@@ -147,7 +145,6 @@ export function PartnersTab({
               pending={actioningId === c.id}
               onChat={() => onChat(c)}
               onComplete={() => onComplete(c.id)}
-              onDisconnect={() => onDisconnect(c)}
             />
           ))}
         </View>

@@ -12,9 +12,17 @@ import {
 } from "@/utils/routeMatch";
 import type { UseSearchMatchesResult } from "@/hooks/api/useSearchMatches";
 import {
-  dedupeBuddyMatchesByUser,
-  dedupePackageMatchesByPerson,
+  groupBuddyMatchesByUser,
+  groupPackageMatchesByPerson,
+  type PersonGroup,
 } from "@/features/search/lib/matchDedupe";
+
+/** The card each group shows - what the old one-card-per-person dedupe returned. */
+const primaries = <T,>(groups: PersonGroup<T>[]): T[] => groups.map((g) => g.primary);
+
+/** Card id -> that person's other listings in the same list ("+N more"). */
+const othersByPrimaryId = <T extends { id: string }>(groups: PersonGroup<T>[]) =>
+  new Map(groups.map((g) => [g.primary.id, g.others]));
 
 interface SearchResultListsInput {
   results: UseSearchMatchesResult["results"];
@@ -56,19 +64,27 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
 
   // Manual (filtered) lists render one card per listing, so the same person can
   // repeat when they have several listings — collapse to one card per person
-  // (mirrors web). Auto-match dedupes per-listing inside the maps above.
-  const displayCarrierTrips = useMemo(
-    () => dedupePackageMatchesByPerson(carrierTrips, highlightId),
+  // (mirrors web). Auto-match dedupes per-listing inside the maps above. The
+  // person's other listings are kept for the card's "+N more" (client, 22 Oct
+  // 2026); the lists below stay one entry per card, so counts and paging don't move.
+  const carrierTripGroups = useMemo(
+    () => groupPackageMatchesByPerson(carrierTrips, highlightId),
     [carrierTrips, highlightId],
   );
-  const displayReceiverRequests = useMemo(
-    () => dedupePackageMatchesByPerson(receiverRequests, highlightId),
+  const receiverRequestGroups = useMemo(
+    () => groupPackageMatchesByPerson(receiverRequests, highlightId),
     [receiverRequests, highlightId],
   );
-  const dedupedBuddyMatches = useMemo(
-    () => dedupeBuddyMatchesByUser(buddyMatches, highlightId),
+  const buddyGroups = useMemo(
+    () => groupBuddyMatchesByUser(buddyMatches, highlightId),
     [buddyMatches, highlightId],
   );
+  const displayCarrierTrips = useMemo(() => primaries(carrierTripGroups), [carrierTripGroups]);
+  const displayReceiverRequests = useMemo(() => primaries(receiverRequestGroups), [receiverRequestGroups]);
+  const dedupedBuddyMatches = useMemo(() => primaries(buddyGroups), [buddyGroups]);
+  const carrierTripOthers = useMemo(() => othersByPrimaryId(carrierTripGroups), [carrierTripGroups]);
+  const receiverRequestOthers = useMemo(() => othersByPrimaryId(receiverRequestGroups), [receiverRequestGroups]);
+  const buddyOthers = useMemo(() => othersByPrimaryId(buddyGroups), [buddyGroups]);
 
   const sortedMyParcels: Parcel[] = useMemo(
     () =>
@@ -89,13 +105,13 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
 
   // Pre-compute per-listing matches at the parent so the tab counts and the
   // nested cards read from the same source (no auto-match drift).
-  const carrierTripsByParcelId = useMemo(() => {
-    const map = new Map<string, PackageMatch[]>();
+  const carrierTripGroupsByParcelId = useMemo(() => {
+    const map = new Map<string, PersonGroup<PackageMatch>[]>();
     if (loading) return map;
     for (const parcel of sortedMyParcels) {
       map.set(
         parcel.id,
-        dedupePackageMatchesByPerson(
+        groupPackageMatchesByPerson(
           carrierTrips
             .filter((m) =>
               carrierTripMatchesParcel(
@@ -121,13 +137,13 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
     return map;
   }, [loading, carrierTrips, sortedMyParcels, highlightId]);
 
-  const receiverRequestsByTripId = useMemo(() => {
-    const map = new Map<string, PackageMatch[]>();
+  const receiverRequestGroupsByTripId = useMemo(() => {
+    const map = new Map<string, PersonGroup<PackageMatch>[]>();
     if (loading) return map;
     for (const trip of sortedMyTrips) {
       map.set(
         trip.id,
-        dedupePackageMatchesByPerson(
+        groupPackageMatchesByPerson(
           receiverRequests
             .filter(
               (m) =>
@@ -155,6 +171,16 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
     return map;
   }, [loading, receiverRequests, sortedMyTrips, highlightId]);
 
+  // One entry per card under each listing (the tab counts and focus read these).
+  const carrierTripsByParcelId = useMemo(
+    () => new Map([...carrierTripGroupsByParcelId].map(([id, groups]) => [id, primaries(groups)])),
+    [carrierTripGroupsByParcelId],
+  );
+  const receiverRequestsByTripId = useMemo(
+    () => new Map([...receiverRequestGroupsByTripId].map(([id, groups]) => [id, primaries(groups)])),
+    [receiverRequestGroupsByTripId],
+  );
+
   return {
     myTripsState,
     myParcelsState,
@@ -168,5 +194,10 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
     sortedMyTrips,
     carrierTripsByParcelId,
     receiverRequestsByTripId,
+    carrierTripGroupsByParcelId,
+    receiverRequestGroupsByTripId,
+    carrierTripOthers,
+    receiverRequestOthers,
+    buddyOthers,
   };
 }

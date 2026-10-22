@@ -19,6 +19,7 @@ import { CityPicker } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MAX_WEIGHT_KG, isSameRoute } from "@/features/travels/routeValidation";
 import { colors } from "@/theme/colors";
+import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 
 type Country = "IN" | "US";
 
@@ -390,7 +391,8 @@ export function EditTripModal({
               <TextInput
                 value={form.luggage_capacity_kg}
                 onChangeText={(t) => {
-                  setForm((prev) => ({ ...prev, luggage_capacity_kg: t }));
+                  // Digits and one dot only: a capacity can never be negative.
+                  setForm((prev) => ({ ...prev, luggage_capacity_kg: sanitizeDecimalInput(t, 4, 2) }));
                   clearError("capacity");
                 }}
                 keyboardType="decimal-pad"

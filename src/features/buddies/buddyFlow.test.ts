@@ -3,6 +3,12 @@ import { describe, test } from "node:test";
 
 import { resolveNotificationRoute } from "../../services/notifications/notificationRoute.ts";
 import { toUserMessage } from "../../lib/userFacingError.js";
+import {
+  BUDDY_HIGHLIGHT_MS,
+  buddyRingId,
+  canFocusBuddyCard,
+  focusScrollY,
+} from "../search/lib/matchFocus.ts";
 
 /**
  * REGRESSION FENCES over the Travel Buddy defects reported from production on
@@ -120,7 +126,7 @@ describe("a match notification shows the match it promised", () => {
     const src = readFileSync("src/features/search/SearchScreen.tsx", "utf8");
     // Browse mode returns every open listing, server-paged, so the card the
     // notification promised is usually not on the first page.
-    assert.match(src, /const isMatchDeepLink = !!\(highlightId \|\| requestedTab\)/);
+    assert.match(src, /const isMatchDeepLink = !!\(highlightId \|\| requestedTab \|\| forId\)/);
     assert.match(src, /useState\(isMatchDeepLink\)/);
     assert.match(src, /isMatchDeepLink \? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY/);
     // And the async restore must not drag the user back off it.
@@ -149,5 +155,52 @@ describe("mobile does not drift into web's date bug", () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync("src/features/buddies/EditBuddyListingModal.tsx", "utf8");
     assert.match(src, /parseYmd/);
+  });
+});
+
+describe("a buddy match deep link focuses the card it promised", () => {
+  const ID = "11111111-2222-3333-4444-555555555555";
+  const base = { highlightId: ID, focusedId: null, loading: false, activeTab: "buddy", displayedIds: ["x", ID] };
+
+  test("focuses once the card is on the buddy tab page being shown", () => {
+    assert.equal(canFocusBuddyCard(base), true);
+  });
+
+  test("waits while results are still loading (they arrive async)", () => {
+    assert.equal(canFocusBuddyCard({ ...base, loading: true }), false);
+  });
+
+  test("waits until the card is actually displayed (another page, or not loaded yet)", () => {
+    assert.equal(canFocusBuddyCard({ ...base, displayedIds: ["x"] }), false);
+    assert.equal(canFocusBuddyCard({ ...base, displayedIds: [] }), false);
+  });
+
+  test("only on the buddy tab", () => {
+    assert.equal(canFocusBuddyCard({ ...base, activeTab: "package" }), false);
+  });
+
+  test("once per deep link, not on every re-render", () => {
+    assert.equal(canFocusBuddyCard({ ...base, focusedId: ID }), false);
+    assert.equal(canFocusBuddyCard({ ...base, focusedId: "an-older-link" }), true);
+  });
+
+  test("nothing to focus without a match id", () => {
+    assert.equal(canFocusBuddyCard({ ...base, highlightId: undefined }), false);
+  });
+
+  test("scroll target needs both layouts and never goes negative", () => {
+    assert.equal(focusScrollY(null, 40), null);
+    assert.equal(focusScrollY(600, undefined), null);
+    assert.equal(focusScrollY(600, 240), 600 + 240 - 16);
+    assert.equal(focusScrollY(0, 4), 0);
+    assert.equal(focusScrollY(Number.NaN, 4), null);
+  });
+
+  test("the ring shows while its timer runs, then the card settles back", () => {
+    assert.equal(buddyRingId(ID, ID), ID);
+    assert.equal(buddyRingId(ID, null), undefined);
+    assert.equal(buddyRingId(ID, "an-older-link"), undefined);
+    assert.equal(buddyRingId(undefined, ID), undefined);
+    assert.equal(BUDDY_HIGHLIGHT_MS, 4000, "same duration as web's BuddyMatchCard");
   });
 });

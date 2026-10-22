@@ -16,6 +16,7 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, paymentsApi, PAYOUT_RETURN_URL, type PayoutStatus } from "@/services/api";
 import { RazorpayPayoutForm } from "./RazorpayPayoutForm";
 import { colors } from "@/theme/colors";
+import { useKycGate } from "@/hooks/api/useKycGate";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "PayoutSetupTab">,
@@ -42,6 +43,9 @@ type Nav = CompositeNavigationProp<
  */
 export function PayoutSetupScreen() {
   const navigation = useNavigation<Nav>();
+  // Client requirement: KYC is mandatory before setting up payouts (the server
+  // enforces it too - payment-handler requireKycForPayouts).
+  const kyc = useKycGate();
 
   const [status, setStatus] = useState<PayoutStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +142,32 @@ export function PayoutSetupScreen() {
     : isPending
       ? { icon: "time" as const, tint: colors.warning, title: "Verification pending", body: `${providerLabel} is reviewing your details. This usually takes 1–2 business days.` }
       : { icon: "card" as const, tint: colors.primary, title: "Set up payouts", body: "Connect your bank so earnings can be paid out to you automatically." };
+
+  // Not verified and no payout account yet: identity first. An account set up
+  // before this rule still shows its status.
+  if (!kyc.isLoading && !kyc.isApproved && !hasAccount) {
+    return (
+      <Screen contentContainerStyle={styles.content}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={goBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={18} color={colors.text} />
+          </Pressable>
+          <Text style={styles.title}>Payout setup</Text>
+        </View>
+        <Card>
+          <Text style={styles.kycTitle}>Verify your identity first</Text>
+          <Text style={styles.kycBody}>
+            Identity verification is required before you can set up payouts. It only takes a few minutes.
+          </Text>
+          <AppButton
+            label={kyc.isPending ? "View verification status" : "Verify identity"}
+            onPress={() => navigation.navigate("KycVerificationTab")}
+            gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          />
+        </Card>
+      </Screen>
+    );
+  }
 
   return (
     <Screen contentContainerStyle={styles.content} refreshEnabled onRefresh={loadStatus}>
@@ -298,6 +328,8 @@ function withAlpha(hex: string): string {
 }
 
 const styles = StyleSheet.create({
+  kycTitle: { color: colors.text, fontSize: 17, fontWeight: "800", marginBottom: 6 },
+  kycBody: { color: colors.mutedText, fontSize: 14, lineHeight: 20, marginBottom: 14 },
   content: { paddingTop: 16, paddingBottom: 28 },
   headerRow: { flexDirection: "row", alignItems: "center", marginTop: 16, marginBottom: 16, gap: 12, minHeight: 34 },
   backButton: {
