@@ -30,6 +30,7 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 import { RETURN_COUNTRIES, statesFor, postalHint, sanitisePostal, validateReturnAddress } from "@/utils/addressOptions";
 import { currencySymbol } from "@/utils/money";
@@ -1120,6 +1121,7 @@ function UnitToggle<T extends string>({
             accessibilityState={{ selected: active }}
           >
             <Text
+              maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
               style={[
                 styles.unitToggleText,
                 active && styles.unitToggleTextActive,
@@ -1352,10 +1354,15 @@ const styles = StyleSheet.create({
   },
 
   // ───── Per-row label + unit toggle ─────
-  labelToggleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // WRAPS: on a narrow or zoomed iPhone (320pt) / larger text, "Max Parcel Size
+  // + Optional + CM|Inches" overflowed and the toggle ran off screen (client,
+  // iPhone 8, 23 Oct 2026). The toggle now drops to its own line, kept right.
+  labelToggleRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 6 },
   labelToggleRowGap: { marginTop: 12 },
   unitToggle: {
     flexDirection: "row",
+    flexShrink: 0,
+    marginLeft: "auto",
     backgroundColor: colors.surfaceMuted,
     borderRadius: 999,
     padding: 3,

@@ -8,6 +8,7 @@ import {
   type Message,
   type RNUploadFile,
 } from "@/services/api";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 /** Local-only marker for messages that haven't reached the server yet. */
 export type ClientStatus = "pending" | "failed";
@@ -88,13 +89,12 @@ export function useChatMessages({
   const [uploading, setUploading] = useState(false);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
   const lastConvIdRef = useRef<string | null>(null);
 
   const refetch = useCallback(async () => {
     if (!conversationId) return;
-    if (inFlightRef.current) return inFlightRef.current;
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -107,11 +107,8 @@ export function useChatMessages({
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [conversationId, pageSize]);
 
   const loadOlder = useCallback(async () => {

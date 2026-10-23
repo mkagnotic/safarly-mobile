@@ -1,4 +1,4 @@
-import { type RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
@@ -7,8 +7,6 @@ import {
   Text,
   View,
   type ListRenderItem,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -27,7 +25,8 @@ interface ChatMessageListProps {
   refetch: UseChatMessagesResult["refetch"];
   keyExtractor: (item: DisplayMessage) => string;
   renderMessage: ListRenderItem<DisplayMessage>;
-  handleListScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Near the oldest loaded message: load the page before it. */
+  handleReachOldest: () => void;
 }
 
 /** ───────── Messages list ───────── */
@@ -40,8 +39,12 @@ export function ChatMessageList({
   refetch,
   keyExtractor,
   renderMessage,
-  handleListScroll,
+  handleReachOldest,
 }: Readonly<ChatMessageListProps>) {
+  // ⚠️ INVERTED list, newest first: opening a chat lands on the newest message by
+  // construction and stays there while rows, images and the bars around the
+  // list settle. See useChatAutoScroll for the iPhone 8 report this fixes.
+  const newestFirst = useMemo(() => [...messages].reverse(), [messages]);
   return (
     <View style={styles.flex}>
       {loading && messages.length === 0 ? (
@@ -62,36 +65,35 @@ export function ChatMessageList({
             <Text style={styles.retryButtonText}>Try again</Text>
           </Pressable>
         </View>
+      ) : messages.length === 0 ? (
+        // Outside the list: an inverted list would draw its empty state upside down.
+        <View style={styles.centered}>
+          <View style={styles.emptyIconBubble}>
+            <Ionicons name="chatbubbles-outline" size={26} color={colors.primary} />
+          </View>
+          <Text style={styles.centeredTitle}>Start the conversation</Text>
+          <Text style={styles.centeredBody}>Send a message to break the ice.</Text>
+        </View>
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          inverted
+          data={newestFirst}
           keyExtractor={keyExtractor}
           renderItem={renderMessage}
-          onScroll={handleListScroll}
-          scrollEventThrottle={120}
-          contentContainerStyle={[
-            styles.listContent,
-            messages.length === 0 && styles.listContentEmpty,
-          ]}
-          ListHeaderComponent={
+          onEndReached={handleReachOldest}
+          onEndReachedThreshold={0.3}
+          contentContainerStyle={styles.listContent}
+          // Inverted: the FOOTER is drawn at the top of the thread.
+          ListFooterComponent={
             // WhatsApp-style: no persistent button — scrolling near the top
-            // auto-loads older messages (see handleListScroll), and this
+            // auto-loads older messages (handleReachOldest), and this
             // spinner shows only while that fetch is in flight.
             loadingOlder ? (
               <View style={styles.loadOlderSpinner}>
                 <ActivityIndicator size="small" color={colors.mutedText} />
               </View>
             ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.centered}>
-              <View style={styles.emptyIconBubble}>
-                <Ionicons name="chatbubbles-outline" size={26} color={colors.primary} />
-              </View>
-              <Text style={styles.centeredTitle}>Start the conversation</Text>
-              <Text style={styles.centeredBody}>Send a message to break the ice.</Text>
-            </View>
           }
         />
       )}
@@ -103,8 +105,8 @@ const listStyles = StyleSheet.create({
   // List
   // gap 2 (not 8): rows carry their own margins, so consecutive bubbles sit ~6px
   // apart and system asides ~14px — the tighter grouping messaging apps use.
-  listContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 16, gap: 2 },
-  listContentEmpty: { flexGrow: 1, justifyContent: "center" },
+  // Inverted list: paddingTop is drawn at the BOTTOM (above the composer).
+  listContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 12, gap: 2 },
 
   // Top "loading older messages" spinner (WhatsApp-style, auto-load on scroll-up)
   loadOlderSpinner: {

@@ -319,7 +319,9 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, fontWeight: "800" },
   subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
 
-  body: { maxHeight: 480 },
+  // flexShrink: the sheet is capped at 92% and the footer must always fit
+  // under the body; a rigid 480 clipped the buttons on ~700pt phones.
+  body: { maxHeight: 480, flexShrink: 1 },
   errorWrap: { paddingHorizontal: 18, paddingBottom: 10 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14 },
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { ApiClientError, messagesApi } from "@/services/api";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseUnreadInboxCountResult {
   count: number;
@@ -43,11 +44,10 @@ export function useUnreadInboxCount(): UseUnreadInboxCountResult {
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
 
   const refetch = useCallback(async () => {
-    if (inFlightRef.current) return inFlightRef.current;
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -59,11 +59,8 @@ export function useUnreadInboxCount(): UseUnreadInboxCountResult {
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, []);
 
   useEffect(() => {

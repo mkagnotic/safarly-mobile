@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useMemo, useRef } from "react";
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { DealProjection } from "@/services/api";
@@ -70,6 +70,21 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
   // chip - see `utils/dealLabel.ts` for the incident that caused.
   const labels = useMemo(() => labelDeals(deals ?? []), [deals]);
 
+  // The selected chip is scrolled into view (client, 23 Oct 2026): a selected
+  // "Travel buddy" chip sat cut off past the right edge and read as unreachable.
+  const scrollRef = useRef<ScrollView>(null);
+  const chipX = useRef(new Map<string, number>());
+  const { width } = useWindowDimensions();
+  const chipMax = Math.round(width * 0.7);
+  useEffect(() => {
+    if (!selectedDealId) return;
+    const t = setTimeout(() => {
+      const x = chipX.current.get(selectedDealId);
+      if (x != null) scrollRef.current?.scrollTo({ x: Math.max(0, x - 12), animated: true });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [selectedDealId, deals, buddy]);
+
   // Two or more things to choose between - a lone buddy entry (or a lone deal)
   // needs no switcher.
   if (switcherEntryCount(shown.length, buddy) < 2) return null;
@@ -85,6 +100,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
       {/* Horizontal scroll rather than wrapping: the pinned zone is height-capped, and
           a wrapping row of chips would eat the space the pinned action needs. */}
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
@@ -100,13 +116,15 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
               accessibilityState={{ selected }}
               accessibilityLabel={`Show ${labels.get(id)?.chip ?? "delivery"}`}
               onPress={() => onSelect(id)}
+              onLayout={(e) => chipX.current.set(id, e.nativeEvent.layout.x)}
               style={[
                 styles.chip,
+                { maxWidth: chipMax },
                 selected ? styles.chipOn : styles.chipOff,
                 finished ? styles.chipDim : null,
               ]}
             >
-              <Text style={[styles.chipText, selected ? styles.chipTextOn : styles.chipTextOff]}>
+              <Text numberOfLines={1} style={[styles.chipText, selected ? styles.chipTextOn : styles.chipTextOff]}>
                 {labels.get(id)?.chip ?? "Delivery"}
                 {finished ? "  · ended" : ""}
               </Text>
@@ -120,10 +138,11 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
             accessibilityState={{ selected: buddySelected }}
             accessibilityLabel={`Show ${buddyLabel}`}
             onPress={() => onSelect(BUDDY_ENTRY_ID)}
-            style={[styles.chip, styles.buddyChip, buddySelected ? styles.chipOn : styles.chipOff]}
+            onLayout={(e) => chipX.current.set(BUDDY_ENTRY_ID, e.nativeEvent.layout.x)}
+            style={[styles.chip, styles.buddyChip, { maxWidth: chipMax }, buddySelected ? styles.chipOn : styles.chipOff]}
           >
-            <Ionicons name="people-outline" size={12} color={buddySelected ? colors.text : colors.subtleText} />
-            <Text style={[styles.chipText, buddySelected ? styles.chipTextOn : styles.chipTextOff]}>
+            <Ionicons name="people-outline" size={12} color={buddySelected ? colors.primary : colors.subtleText} />
+            <Text numberOfLines={1} style={[styles.chipText, styles.chipTextShrink, buddySelected ? styles.chipTextOn : styles.chipTextOff]}>
               {buddyLabel}
             </Text>
           </Pressable>
@@ -150,18 +169,20 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: colors.subtleText,
   },
-  row: { flexDirection: "row", gap: 6, paddingBottom: 8 },
+  row: { flexDirection: "row", gap: 6, paddingBottom: 8, paddingRight: 12 },
   chip: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  chipOn: { backgroundColor: colors.surfaceMuted, borderColor: colors.controlOutline },
+  // Selected reads at a glance, as on web: lavender fill + brand border.
+  chipOn: { backgroundColor: colors.primarySoft, borderColor: colors.primary, borderWidth: 1 },
   chipOff: { backgroundColor: "transparent", borderColor: colors.border },
   chipDim: { opacity: 0.6 },
   buddyChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   chipText: { fontSize: 12, fontWeight: "700" },
+  chipTextShrink: { flexShrink: 1 },
   chipTextOn: { color: colors.text },
   chipTextOff: { color: colors.subtleText },
 });

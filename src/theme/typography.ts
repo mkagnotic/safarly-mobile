@@ -14,3 +14,11 @@ export const defaultFontFamily =
     web: WEB_FONT_STACK,
     default: "sans-serif",
   }) ?? "sans-serif";
+
+/**
+ * Dynamic Type cap for compact controls inside a fixed row: filter chips, unit
+ * toggles, count badges. iOS's largest STANDARD text size is ~1.35x; past that
+ * (the Accessibility sizes) these pill labels would push their row off screen.
+ * Body text is NOT capped - layouts around it wrap or scroll instead.
+ */
+export const COMPACT_CONTROL_MAX_FONT_SCALE = 1.35;

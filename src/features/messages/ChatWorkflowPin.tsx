@@ -27,12 +27,14 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   review_travel_doc: { icon: "shield-checkmark-outline", tone: "primary", blurb: "The carrier uploaded their travel document — review it." },
   await_travel_doc: { icon: "time-outline", tone: "neutral", blurb: "The traveler needs to upload a boarding pass or flight ticket before you can pay." },
   await_travel_doc_reupload: { icon: "time-outline", tone: "neutral", blurb: "You asked for a new document. Waiting for the traveler to upload it." },
+  await_travel_doc_review: { icon: "time-outline", tone: "neutral", blurb: "Your travel document is uploaded. The sender is checking it — you'll be notified once it's verified." },
   await_admin_review: { icon: "time-outline", tone: "neutral", blurb: "An admin is reviewing the travel document." },
   // Parcel photos
   upload_parcel_photos: { icon: "images-outline", tone: "primary", blurb: "Add parcel photos so the carrier can review what they'll carry." },
   review_parcel_photos: { icon: "eye-outline", tone: "primary", blurb: "The sender added parcel photos — review and approve them." },
   await_parcel_photos: { icon: "time-outline", tone: "neutral", blurb: "The sender needs to add parcel photos before you can review them." },
   await_parcel_update: { icon: "time-outline", tone: "neutral", blurb: "You asked for changes. Waiting for the sender to update the parcel photos." },
+  await_parcel_review: { icon: "time-outline", tone: "neutral", blurb: "Your parcel photos are uploaded. The traveler is reviewing them." },
   // Offer
   make_offer: { icon: "pricetag-outline", tone: "primary", blurb: "Verification is done — send a delivery-fee offer." },
   accept_offer: { icon: "checkmark-circle-outline", tone: "good", blurb: "Review the current offer and accept, counter or decline." },
@@ -227,7 +229,9 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
           </Pressable>
         ) : (
           <Ionicons
-            name={expanded ? "chevron-up" : "chevron-down"}
+            // The bar sits at the bottom, above the composer, and its details
+            // grow it UPWARD: up = open, down = close (client, 23 Oct 2026).
+            name={expanded ? "chevron-down" : "chevron-up"}
             size={16}
             color={colors.mutedText}
           />
@@ -260,6 +264,15 @@ function reviewerCta(cta: WorkflowView["cta"], deal: ActiveDeal | null | undefin
   if (cta.code === "review_travel_doc") {
     if (deal?.travel_doc_status === "none") return waiting("await_travel_doc", "Awaiting the traveler's document");
     if (deal?.travel_doc_status === "rejected") return waiting("await_travel_doc_reupload", "Re-upload requested");
+  }
+  // And the uploader's side (client, 23 Oct 2026): a document or photos already
+  // waiting for review must never offer "Upload" again. The server answers this
+  // too now; this keeps the app right against an older server.
+  if (cta.code === "upload_travel_doc" && deal?.travel_doc_status === "pending") {
+    return waiting("await_travel_doc_review", "Waiting for the sender to verify your travel document");
+  }
+  if (cta.code === "upload_parcel_photos" && deal?.parcel_review_status === "pending") {
+    return waiting("await_parcel_review", "Waiting for the traveller to review your parcel photos");
   }
   if (cta.code === "review_parcel_photos") {
     if (deal?.parcel_review_status === "none") return waiting("await_parcel_photos", "Awaiting parcel photos");

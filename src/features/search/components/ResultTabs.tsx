@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import type { ResultsTab } from "@/features/search/searchPersistence";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
 // ───────────────────────── Result tabs ─────────────────────────
 
@@ -40,7 +41,16 @@ export const ResultTabs = memo(function ResultTabs({
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
           >
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]} numberOfLines={1}>
+            {/* The COUNT is the point of the tab: on a 320pt screen with larger
+                text "Packages (1…" / "Receivers (7…" hid it (23 Oct 2026). The
+                label scales down to fit before it ever truncates. */}
+            <Text
+              style={[styles.tabLabel, isActive && styles.tabLabelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
+            >
               {tab.label}{" "}
               {hideCounts ? null : loading ? (
                 <Text style={styles.tabCount}>(…)</Text>
@@ -64,7 +74,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   tab: {
-    flex: 1,
+    // Sized from its own label (equal thirds starved "Receivers (71)"), and may shrink.
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
@@ -72,7 +85,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabActive: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  tabLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700" },
+  tabLabel: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700", flexShrink: 1 },
   tabLabelActive: { color: colors.text },
   tabCount: { color: colors.subtleText, fontSize: 11, lineHeight: 15, fontWeight: "600" },
 });

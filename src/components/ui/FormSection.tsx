@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
 interface SectionCardProps {
   /** First group of the form: rounds the card's top corners. */
@@ -48,13 +49,15 @@ export function LocationCard({
   const content = (
     <>
       <Text style={styles.locationFlag}>{flag}</Text>
-      <Text style={styles.locationLabel} numberOfLines={1}>
+      {/* "United States" read "Unite..." beside Switch at 320pt + larger text
+          (23 Oct 2026): the name shrinks a little before it is ever cut. */}
+      <Text style={styles.locationLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
         {label}
       </Text>
       {onToggle ? (
         <View style={styles.locationToggleHint}>
           <Ionicons name="swap-horizontal" size={16} color={colors.wordmark} />
-          <Text style={styles.locationToggleHintText}>Switch</Text>
+          <Text style={styles.locationToggleHintText} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>Switch</Text>
         </View>
       ) : filled ? (
         <Ionicons name="checkmark-circle" size={20} color={colors.safe} />

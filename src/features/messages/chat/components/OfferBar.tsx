@@ -27,23 +27,40 @@ export function OfferBar({
   handleDeclineOffer,
   handleOpenOfferComposer,
 }: Readonly<OfferBarProps>) {
+  const firstName = participantName.split(" ")[0];
+  // The row WRAPS: on a 375pt phone (iPhone 8) the three buttons left the amount
+  // ~40pt and it rendered as "₹…" (client, 23 Oct 2026). The info block keeps a
+  // minimum width, so the buttons drop to their own line instead of squeezing it.
   return (
     <View style={styles.offerBar}>
       <View style={styles.offerBarInfo}>
         <Ionicons name="pricetag" size={16} color={colors.primary} />
         <View style={styles.flex}>
-          <Text style={styles.offerBarLabel}>
-            {liveOffer.mine
-              ? "Your offer"
-              : `${participantName.split(" ")[0]}'s offer`}
+          <Text style={styles.offerBarLabel} numberOfLines={1}>
+            {liveOffer.mine ? "Your offer" : `${firstName}'s offer`}
           </Text>
-          <Text style={styles.offerBarAmount} numberOfLines={1}>
+          <Text style={styles.offerBarAmount} numberOfLines={1} testID="offer-bar-amount">
             {formatMoney(liveOffer.amount, liveOffer.currency)}
           </Text>
         </View>
       </View>
       {liveOffer.mine ? (
-        <Text style={styles.offerBarWaiting}>Waiting…</Text>
+        // Says who it waits for, and gives a way out: a bare "Waiting…" with no
+        // action read as stuck. Change sends a new amount that replaces this offer.
+        <View style={styles.offerBarActions}>
+          <Text style={styles.offerBarWaiting} numberOfLines={1}>
+            Waiting for {firstName}…
+          </Text>
+          <Pressable
+            onPress={handleOpenOfferComposer}
+            disabled={!!offerPending}
+            style={[styles.offerBarBtn, styles.offerBarBtnOutline]}
+            accessibilityRole="button"
+            accessibilityLabel="Change your offer"
+          >
+            <Text style={styles.offerBarBtnOutlineText}>Change</Text>
+          </Pressable>
+        </View>
       ) : (
         <View style={styles.offerBarActions}>
           <Pressable
@@ -91,19 +108,22 @@ const offerBarStyles = StyleSheet.create({
   // Offer bar (above the composer)
   offerBar: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: 10,
+    columnGap: 10,
+    rowGap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: colors.surfaceTintPrimary,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  offerBarInfo: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+  // flexBasis is the amount's guaranteed room: below it the actions wrap.
+  offerBarInfo: { flexDirection: "row", alignItems: "center", gap: 8, flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 0 },
   offerBarLabel: { color: colors.mutedText, fontSize: 11, fontWeight: "700" },
   offerBarAmount: { color: colors.text, fontSize: 16, fontWeight: "800" },
-  offerBarWaiting: { color: colors.mutedText, fontSize: 12, fontWeight: "700", fontStyle: "italic" },
-  offerBarActions: { flexDirection: "row", gap: 6 },
+  offerBarWaiting: { color: colors.mutedText, fontSize: 12, fontWeight: "700", fontStyle: "italic", flexShrink: 1 },
+  offerBarActions: { flexDirection: "row", alignItems: "center", gap: 6, flexGrow: 1, justifyContent: "flex-end" },
   offerBarBtn: {
     paddingHorizontal: 12,
     minWidth: 64,

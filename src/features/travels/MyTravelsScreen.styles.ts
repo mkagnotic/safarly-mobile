@@ -12,6 +12,9 @@ export const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500", marginTop: 4 },
   bannerSlot: { marginBottom: 14 },
 
-  actionsRow: { flexDirection: "row", gap: 10, marginTop: 16, marginBottom: 18 },
-  actionButtonFlex: { flex: 1 },
+  // WRAPS: on a 320pt iPhone with larger text the two labels ran out as
+  // "Carry a P..." / "Send a Pa..." (23 Oct 2026). Below ~2 x 140pt the buttons
+  // stack full width instead; side by side on every normal phone.
+  actionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 16, marginBottom: 18 },
+  actionButtonFlex: { flexGrow: 1, flexShrink: 1, flexBasis: 140 },
 });
