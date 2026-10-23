@@ -1466,6 +1466,22 @@ const CHECKS = [
     must: ["to set up payouts…"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: "supabase/functions/parcel-handler/index.ts",
+    id: "parcel-list-carries-the-agreed-price",
+    why: "Plan AN12: My Travels showed the listing's asking price after a different amount was agreed. The list returns agreed_amount from the live booking (read in parallel, no extra round trip).",
+    must: ["agreed_amount: agreedByParcel.get(p.id) ?? null"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/travels/TravelCard.tsx",
+    id: "mobile-my-travels-shows-the-agreed-price",
+    why: "See parcel-list-carries-the-agreed-price (web repo).",
+    must: ["const agreed = parcel.agreed_amount ?? null;"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
