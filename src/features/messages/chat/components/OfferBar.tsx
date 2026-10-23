@@ -16,6 +16,8 @@ interface OfferBarProps {
   handleAcceptOffer: (offerId: string) => Promise<void>;
   handleDeclineOffer: (offerId: string) => Promise<void>;
   handleOpenOfferComposer: () => void;
+  /** The carrier can't be paid yet: say why it is waiting (client, 23 Oct 2026). */
+  waitingOnPayouts?: boolean;
 }
 
 /** ───────── Offer bar ───────── */
@@ -26,6 +28,7 @@ export function OfferBar({
   handleAcceptOffer,
   handleDeclineOffer,
   handleOpenOfferComposer,
+  waitingOnPayouts = false,
 }: Readonly<OfferBarProps>) {
   const firstName = participantName.split(" ")[0];
   // The row WRAPS: on a 375pt phone (iPhone 8) the three buttons left the amount
@@ -48,8 +51,8 @@ export function OfferBar({
         // Says who it waits for, and gives a way out: a bare "Waiting…" with no
         // action read as stuck. Change sends a new amount that replaces this offer.
         <View style={styles.offerBarActions}>
-          <Text style={styles.offerBarWaiting} numberOfLines={1}>
-            Waiting for {firstName}…
+          <Text style={styles.offerBarWaiting} numberOfLines={2}>
+            {waitingOnPayouts ? `Waiting for ${firstName} to set up payouts…` : `Waiting for ${firstName}…`}
           </Text>
           <Pressable
             onPress={handleOpenOfferComposer}

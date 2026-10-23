@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
@@ -6,7 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { messagesApi } from "@/services/api/messages";
 import { notificationsApi } from "@/services/api/notifications";
 import { getActiveConversation } from "@/store/activeConversation";
-import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import { bumpRealtimeTopic, type RealtimeTopic } from "@/store/realtimeBus";
+
+import { useResilientChannel } from "./useResilientChannel";
 
 interface MessagePayload {
   conversation_id?: string;
@@ -53,14 +54,27 @@ function notificationConversationId(n: NotificationPayload): string | null {
  * `carrier_requests`, `bookings`, `transactions`. If a table isn't in the
  * publication, its events silently never arrive.
  */
+/** Every topic: after a socket drop or a return to the foreground, re-fetch all. */
+const ALL_TOPICS: RealtimeTopic[] = [
+  "messages", "conversations", "notifications", "parcels", "trips", "buddies", "carrier-requests",
+  "bookings", "transactions", "offers", "disputes", "profile", "ratings", "discovery",
+];
+
 export function useRealtimeSync() {
   const { user } = useAuth();
+  const uid = user?.id ?? null;
 
-  useEffect(() => {
-    const uid = user?.id;
-    if (!uid) return;
+  // Self-healing (useResilientChannel): a channel that dies with the iOS
+  // background socket is rebuilt, and everything re-fetches on recovery.
+  useResilientChannel(
+    uid ? `rt:user:${uid}` : null,
+    () => buildUserChannel(uid as string),
+    () => { for (const t of ALL_TOPICS) bumpRealtimeTopic(t); },
+  );
+}
 
-    const channel = supabase
+function buildUserChannel(uid: string) {
+    return supabase
       .channel(`rt:user:${uid}`)
 
       // ───────── Notifications ─────────
@@ -343,12 +357,5 @@ export function useRealtimeSync() {
         "postgres_changes",
         { event: "*", schema: "public", table: "buddy_listings" },
         () => bumpRealtimeTopic("discovery"),
-      )
-
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [user?.id]);
+      );
 }
