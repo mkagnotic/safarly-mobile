@@ -27,7 +27,8 @@ export interface OfferComposerSubmit {
 interface OfferComposerModalProps {
   open: boolean;
   /** "seed" for the first offer, "counter" to beat the current open offer. */
-  mode: "seed" | "counter";
+  /** "revise": the viewer replacing their OWN open offer (the server supersedes it). */
+  mode: "seed" | "counter" | "revise";
   pending: boolean;
   /** Pre-fill for a counter — the amount you're responding to. */
   currentAmount?: number | null;
@@ -74,9 +75,14 @@ export function OfferComposerModal({
   const tooHigh = Number.isFinite(parsed) && parsed > MAX_OFFER_AMOUNT;
   const valid = Number.isFinite(parsed) && parsed > 0 && !tooHigh;
 
-  const title = mode === "seed" ? "Make an offer" : "Counter offer";
+  const title = mode === "seed" ? "Make an offer" : mode === "revise" ? "Change your offer" : "Counter offer";
+  const sendLabel = mode === "seed" ? "Send offer" : mode === "revise" ? "Send new offer" : "Send counter";
   const body =
-    mode === "seed"
+    mode === "revise"
+      ? currentAmount != null
+        ? `Your offer is ${currencySymbol}${currentAmount.toFixed(2)}. A new amount replaces it.`
+        : "Send a new amount. It replaces your current offer."
+      : mode === "seed"
       ? currentAmount != null && currentAmount > 0
         // Name the source: an unexplained pre-filled number is worse than none.
         ? `${currencySymbol}${currentAmount.toFixed(2)} is what this delivery is currently priced at. Send it, or change the amount.`
@@ -169,13 +175,13 @@ export function OfferComposerModal({
                   (pending || !valid) && styles.buttonDisabled,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={mode === "seed" ? "Send offer" : "Send counter"}
+                accessibilityLabel={sendLabel}
               >
                 {pending ? (
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
                   <Text style={styles.confirmText}>
-                    {mode === "seed" ? "Send offer" : "Send counter"}
+                    {sendLabel}
                   </Text>
                 )}
               </Pressable>

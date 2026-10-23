@@ -5,6 +5,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { bookingFee } from "@/features/bookings/paymentMath";
 import type { Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { formatMoney } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
 import { PaymentExpiryCountdown } from "@/features/bookings/components/PaymentExpiryCountdown";
@@ -108,7 +109,15 @@ export function BookingRowSummary({
       <View style={styles.cardFooter}>
         <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
           <Ionicons name={icon} size={11} color={tone.fg} />
-          <Text style={[styles.statusBadgeText, { color: tone.fg }]} numberOfLines={1}>
+          {/* Shrinks to fit rather than cutting the status ("CANCELLED MID-T…" at
+              320pt + larger text, 23 Oct 2026); the fee wraps below if needed. */}
+          <Text
+            style={[styles.statusBadgeText, { color: tone.fg }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
+          >
             {(STATUS_LABELS[booking.status] ?? booking.status.replace(/_/g, " ")).toUpperCase()}
           </Text>
         </View>
@@ -145,6 +154,8 @@ const styles = StyleSheet.create({
 
   cardFooter: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 6,
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,

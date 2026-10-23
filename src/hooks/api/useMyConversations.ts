@@ -13,6 +13,7 @@ import {
   mergePages,
   type ConversationsMeta,
 } from "@/features/messages/inbox/inboxPaging";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseMyConversationsOptions {
   /** Items per page. Defaults to `INBOX_PAGE_SIZE` (50) — the same as web. */
@@ -76,7 +77,7 @@ export function useMyConversations({
   const [loadingMore, setLoadingMore] = useState(false);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
   const loadMoreRef = useRef<Promise<void> | null>(null);
   /** How many pages the user has paged in — a refresh reloads all of them, so
    *  a realtime tick never snaps a scrolled inbox back to the first page. */
@@ -97,9 +98,7 @@ export function useMyConversations({
   }, [perPage, archived]);
 
   const refetch = useCallback(async () => {
-    if (inFlightRef.current) return inFlightRef.current;
-
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -112,18 +111,14 @@ export function useMyConversations({
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [fetchLoadedPages]);
 
   const hasMore = hasMorePages(meta);
 
   const loadMore = useCallback(async () => {
-    if (loadMoreRef.current || inFlightRef.current || !hasMorePages(meta)) return;
+    if (loadMoreRef.current || flight.busy || !hasMorePages(meta)) return;
     const nextPage = (meta?.page ?? 1) + 1;
     const promise = (async () => {
       setLoadingMore(true);

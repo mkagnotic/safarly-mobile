@@ -23,6 +23,7 @@ import { useMyConversations } from "@/hooks/api/useMyConversations";
 import { refreshUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { getErrorMessage, messagesApi, type Conversation } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
 import { ArchivedBanner, ArchivedEmpty, ArchivedHeader } from "./inbox/ArchivedViews";
 import { ConversationRow } from "./inbox/ConversationRow";
@@ -371,9 +372,12 @@ const ListHeader = memo(function ListHeader({
       </View>
 
       <View style={styles.headerCard}>
-        {/* Fixed set of 3 filters — spread them evenly across the row so there's
-            no dead space on the right (a horizontal scroller only hugged their
-            content width). */}
+        {/* Fixed set of 3 filters — spread across the row so there's no dead space.
+            ⚠️ They must SHRINK to the row, never overflow it: on a zoomed iPhone 8
+            (320pt) "Requests" ran off the card and "Unread chats" was cut (client,
+            23 Oct 2026). The old shrink-to-fit never worked - the label had no
+            width bound to fit into. Chips and labels now shrink (minWidth 0), the
+            label scales down a little, and truncates only as a last resort. */}
         <View style={styles.chipsRow}>
           {filters.map((f) => {
             const active = f.key === filter;
@@ -381,7 +385,8 @@ const ListHeader = memo(function ListHeader({
               <Pressable
                 key={f.key}
                 onPress={() => onFilter(f.key)}
-                style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+                // "All" is one short word: it keeps its size; the longer labels give.
+                style={[styles.chip, f.key === "all" && styles.chipFixed, active ? styles.chipActive : styles.chipInactive]}
                 // The chip paints 30dp tall, under the 44pt minimum, and unlike the
                 // other controls on this screen it carried no hitSlop at all. This
                 // lifts the touch target to 46dp without changing the visual design.
@@ -392,16 +397,16 @@ const ListHeader = memo(function ListHeader({
               >
                 <Text
                   style={[styles.chipText, active ? styles.chipTextActive : styles.chipTextInactive]}
-                  // "Unread chats" is the longest label; on the narrowest phones
-                  // it shrinks a touch rather than wrapping the chip row.
                   numberOfLines={1}
                   adjustsFontSizeToFit
-                  minimumFontScale={0.8}
+                  minimumFontScale={0.75}
+                  maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
                 >
                   {f.label}
                 </Text>
                 <View style={[styles.chipCount, active ? styles.chipCountActive : styles.chipCountInactive]}>
                   <Text
+                    maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
                     style={[
                       styles.chipCountText,
                       active ? styles.chipCountTextActive : styles.chipCountTextInactive,
@@ -478,27 +483,31 @@ const screenStyles = StyleSheet.create({
     marginBottom: 14,
     gap: 10,
   },
-  chipsRow: { flexDirection: "row", gap: 8 },
+  chipsRow: { flexDirection: "row", gap: 6 },
   chip: {
     // Grow from the label's own width (not equal thirds) so the longer
-    // "Unread chats" label gets the room it needs; still no dead space.
+    // "Unread chats" label gets the room it needs; shrink when the row is short.
     flexGrow: 1,
     flexShrink: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: 5,
+    paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
   },
+  chipFixed: { flexShrink: 0 },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipInactive: { backgroundColor: colors.card, borderColor: colors.border },
-  chipText: { fontSize: 12, fontWeight: "800" },
+  // flexShrink + minWidth give the label a width bound, which adjustsFontSizeToFit needs.
+  chipText: { fontSize: 12, fontWeight: "800", flexShrink: 1, minWidth: 0 },
   chipTextActive: { color: colors.white },
   chipTextInactive: { color: colors.mutedText },
   chipCount: {
+    flexShrink: 0,
     minWidth: 18,
     paddingHorizontal: 5,
     paddingVertical: 1,

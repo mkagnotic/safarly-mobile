@@ -49,7 +49,10 @@ describe("currencySymbol", () => {
 
 describe("formatMoney", () => {
   test("renders rupees as rupees", () => {
-    assert.equal(formatMoney(3600, "INR"), "₹3600.00");
+    assert.equal(formatMoney(3600, "INR"), "₹3,600.00");
+    assert.equal(formatMoney(100000, "INR"), "₹1,00,000.00");
+    assert.equal(formatMoney(1000, "USD"), "$1,000.00");
+    assert.equal(formatMoney(999, "INR"), "₹999.00");
   });
 
   test("renders dollars as dollars", () => {
@@ -73,7 +76,7 @@ describe("formatMoney", () => {
 
 describe("formatMoneyShort", () => {
   test("leaves a whole fee whole, so a listing does not read like a price tag", () => {
-    assert.equal(formatMoneyShort(3600, "INR"), "₹3600");
+    assert.equal(formatMoneyShort(3600, "INR"), "₹3,600");
     assert.equal(formatMoneyShort(25, "USD"), "$25");
   });
 
@@ -89,7 +92,7 @@ describe("formatMoneyShort", () => {
 describe("the bug itself", () => {
   test("₹3600 never renders as $3600", () => {
     const rendered = formatMoneyShort(3600, "INR");
-    assert.equal(rendered, "₹3600");
+    assert.equal(rendered, "₹3,600");
     assert.ok(!rendered.includes("$"), "a rupee fee must never carry a dollar sign");
   });
 

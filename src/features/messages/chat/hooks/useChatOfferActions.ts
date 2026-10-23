@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type OfferComposerSubmit } from "@/components/chat/OfferComposerModal";
-import { type ResolvedOffers } from "@/features/messages/offerResolution";
+import { offerComposerMode, type ResolvedOffers } from "@/features/messages/offerResolution";
 import { type UseActiveDealResult } from "@/hooks/api/useActiveDeal";
 import { type UseOffersResult } from "@/hooks/api/useOffers";
 import { ApiClientError, getErrorMessage, newIdempotencyKey } from "@/services/api";
@@ -20,6 +20,8 @@ interface UseChatOfferActionsInput {
   rejectOffer: UseOffersResult["rejectOffer"];
   markOfferSettled: (offerId: string) => void;
   setActionMenuOpen: (open: boolean) => void;
+  /** Re-read the deal after a refused offer (its price or currency may have moved). */
+  refetchActiveDeal?: () => Promise<void>;
 }
 
 /**
@@ -38,8 +40,9 @@ export function useChatOfferActions({
   rejectOffer,
   markOfferSettled,
   setActionMenuOpen,
+  refetchActiveDeal,
 }: UseChatOfferActionsInput) {
-  const [offerComposer, setOfferComposer] = useState<{ mode: "seed" | "counter" } | null>(null);
+  const [offerComposer, setOfferComposer] = useState<{ mode: "seed" | "counter" | "revise" } | null>(null);
   const [offerBanner, setOfferBanner] = useState<{
     variant: "success" | "error" | "info" | "warning";
     title: string;
@@ -63,9 +66,9 @@ export function useChatOfferActions({
   const handleOpenOfferComposer = useCallback(() => {
     setActionMenuOpen(false);
     setOfferBanner(null);
-    // Counter the live offer when one exists (reuses its carrier_request);
-    // otherwise seed a brand-new offer.
-    setOfferComposer({ mode: liveOffer?.carrierRequestId ? "counter" : "seed" });
+    // Counter their live offer (reuses its carrier_request), revise my own, or
+    // seed a brand-new one — see offerComposerMode.
+    setOfferComposer({ mode: offerComposerMode(liveOffer) });
   }, [liveOffer, setActionMenuOpen]);
 
   // One key per attempt at an offer: a double tap, or a retry after a dropped
@@ -88,19 +91,25 @@ export function useChatOfferActions({
       // it's only for starting a deal from scratch (no carrier_request yet).
       const carrierRequestId =
         liveOffer?.carrierRequestId ?? activeDeal?.carrier_request_id ?? null;
+      // The currency the composer SHOWED (same source as its symbol). If the sender
+      // switched currency meanwhile the server refuses instead of storing a typed
+      // "$20" as ₹20 (client, 23 Oct 2026); the refusal names the new currency.
+      const currency = activeDeal?.pricing?.currency ?? liveOffer?.currency ?? undefined;
       try {
         if (carrierRequestId) {
-          await postOffer({ carrier_request_id: carrierRequestId, amount, note }, attemptKey);
+          await postOffer({ carrier_request_id: carrierRequestId, amount, currency, note }, attemptKey);
         } else {
-          await seedOffer({ amount, note });
+          await seedOffer({ amount, currency, note });
         }
         setOfferComposer(null);
         setOfferBanner({
           variant: "success",
-          title: liveOffer ? "Counter sent" : "Offer sent",
+          title: offerComposer.mode === "revise" ? "Offer updated" : liveOffer ? "Counter sent" : "Offer sent",
         });
       } catch (err) {
         setOfferComposer(null);
+        // A refusal may mean the deal's price/currency moved: show the new one.
+        void refetchActiveDeal?.();
         setOfferBanner({
           variant: "error",
           title: "Couldn't send offer",
@@ -113,7 +122,7 @@ export function useChatOfferActions({
         offerAttemptKeyRef.current = null;
       }
     },
-    [offerComposer, liveOffer, activeDeal?.carrier_request_id, postOffer, seedOffer],
+    [offerComposer, liveOffer, activeDeal?.carrier_request_id, activeDeal?.pricing?.currency, postOffer, seedOffer, refetchActiveDeal],
   );
 
   const handleAcceptOffer = useCallback(

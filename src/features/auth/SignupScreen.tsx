@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
+  Alert,
   ActivityIndicator,
   Platform,
   ScrollView,
@@ -129,9 +130,10 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
       const rawMessage = getErrorMessage(err);
       const code = (err as { code?: unknown })?.code;
       const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null, "Apple");
-      setFormError(
-        oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signup").message,
-      );
+      const message = oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signup").message;
+      setFormError(message);
+      // Also a native alert — see LoginScreen: a failure must be impossible to miss.
+      Alert.alert("Sign in with Apple", message);
     } finally {
       setAppleSubmitting(false);
     }

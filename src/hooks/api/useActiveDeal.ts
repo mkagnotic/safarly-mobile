@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 import {
   ApiClientError,
   messagesApi,
@@ -44,6 +45,8 @@ export interface UseActiveDealResult {
  * accept/withdraw (`carrier-requests`), and payment/handoff/delivery
  * (`bookings` / `transactions`). That keeps the pin correct without polling.
  */
+const EMPTY_DEALS: DealProjection[] = [];
+
 export function useActiveDeal(conversationId: string | null, buddyListingId?: string | null): UseActiveDealResult {
   const [activeDeal, setActiveDeal] = useState<ActiveDeal | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
@@ -53,9 +56,24 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
   const [wantedDealId, setWantedDealId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(conversationId));
   const [error, setError] = useState<ApiClientError | Error | null>(null);
+  /**
+   * The conversation the state above belongs to.
+   *
+   * ⚠️ The chat screen is reused across conversations. Without this, opening chat
+   * B showed chat A's deals, step and offer until B's fetch returned — and if a
+   * refresh for A was still in flight, B's first fetch was skipped outright (it
+   * joined A's request), so A's deal could sit on B's screen (client QA, 23 Oct
+   * 2026). Data for another conversation is never shown: B's fetch queues behind
+   * A's, and A's answer is discarded on arrival.
+   */
+  const [dataConversationId, setDataConversationId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  // Never drops a refresh asked for mid-fetch — the "Waiting" over "MATCH
+  // CONFIRMED" bug. See utils/singleFlight.ts.
+  const flight = useSingleFlight();
+  const currentConversationRef = useRef(conversationId);
+  currentConversationRef.current = conversationId;
   // Read inside refetch without making it a dependency: re-creating refetch on every
   // switch would retrigger the realtime subscriptions below.
   const wantedRef = useRef<string | null>(null);
@@ -70,25 +88,27 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
       setLoading(false);
       return;
     }
-    if (inFlightRef.current) return inFlightRef.current;
+    const isCurrent = () => mountedRef.current && currentConversationRef.current === conversationId;
 
-    const promise = (async () => {
+    return flight.run(async () => {
       setError(null);
       try {
         // The buddy entry is chosen on the client - never sent to the server as a deal.
         const wanted = wantedRef.current === BUDDY_ENTRY_ID ? null : wantedRef.current;
         const res = await messagesApi.getActiveDeal(conversationId, wanted, buddyHintRef.current);
-        if (!mountedRef.current) return;
+        if (!isCurrent()) return;
+        setDataConversationId(conversationId);
         setActiveDeal(res.data?.active_deal ?? null);
         setWorkflow(res.data?.workflow ?? null);
         setDeals(res.data?.deals ?? []);
         setSelectedDealId(res.data?.selected_deal_id ?? null);
         setBuddy(res.data?.buddy ?? null);
       } catch (err) {
-        if (!mountedRef.current) return;
+        if (!isCurrent()) return;
         // A 404/403 means the conversation is gone or not ours — clear the pin
         // rather than surfacing a scary error over an otherwise-usable chat.
         if (err instanceof ApiClientError && (err.status === 404 || err.status === 403)) {
+          setDataConversationId(conversationId);
           setActiveDeal(null);
           setWorkflow(null);
           setDeals([]);
@@ -98,13 +118,10 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
           setError(err instanceof Error ? err : new Error(String(err)));
         }
       } finally {
-        if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
+        if (isCurrent()) setLoading(false);
       }
-    })();
-    inFlightRef.current = promise;
-    return promise;
-  }, [conversationId]);
+    });
+  }, [conversationId, flight]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -115,7 +132,10 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
   }, [refetch]);
 
   // A different conversation is a different set of deals, so the selection resets.
-  useEffect(() => { setWantedDealId(null); }, [conversationId]);
+  useEffect(() => {
+    setWantedDealId(null);
+    if (conversationId) setLoading(true);
+  }, [conversationId]);
 
   const selectDeal = useCallback((dealId: string | null) => {
     const wasBuddy = wantedRef.current === BUDDY_ENTRY_ID;
@@ -127,10 +147,13 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
     void refetch();
   }, [refetch]);
 
+  // Until this conversation's own answer lands, show nothing rather than the last one's.
+  const fresh = dataConversationId === conversationId;
+  const shownBuddy = fresh ? buddy : null;
   const buddySelected = isBuddyEntrySelected({
-    buddy,
+    buddy: shownBuddy,
     wantedId: wantedDealId,
-    serverSelectedDealId: selectedDealId,
+    serverSelectedDealId: fresh ? selectedDealId : null,
     openedFromBuddyCard: !!buddyListingId,
   });
 
@@ -145,5 +168,16 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
   // The pin shows a dispute banner, and dispute state is admin-driven.
   useRealtimeBus("disputes", refetch);
 
-  return { activeDeal, workflow, deals, selectedDealId, selectDeal, buddy, buddySelected, loading, error, refetch };
+  return {
+    activeDeal: fresh ? activeDeal : null,
+    workflow: fresh ? workflow : null,
+    deals: fresh ? deals : EMPTY_DEALS,
+    selectedDealId: fresh ? selectedDealId : null,
+    selectDeal,
+    buddy: shownBuddy,
+    buddySelected,
+    loading,
+    error,
+    refetch,
+  };
 }

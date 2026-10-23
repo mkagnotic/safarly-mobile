@@ -93,6 +93,12 @@ export function mapOAuthError(raw: string, code: string | null, provider: "Googl
     return `${provider} sign-in isn't available right now. Please sign in with your email and password.`;
   }
 
+  // Apple's identity token and the nonce did not match (or one was missing). The
+  // app now always sends one; if this still appears, a retry starts clean.
+  if (text.includes("nonce")) {
+    return `${provider} sign-in didn't complete. Please try again.`;
+  }
+
   if (
     text.includes("failed to fetch") ||
     text.includes("network request failed") ||

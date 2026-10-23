@@ -128,10 +128,13 @@ export const authApi = {
    * (`…@privaterelay.appleid.com`). That is a real, deliverable address, so
    * treat it like any other: never assume it maps to a person's own domain.
    */
-  appleSignInWithIdToken: async (idToken: string) => {
+  appleSignInWithIdToken: async (idToken: string, rawNonce: string) => {
+    // `nonce` is the RAW value; Apple's token carries its SHA-256 and Supabase
+    // checks they match (required — without it every sign-in was refused).
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
       token: idToken,
+      nonce: rawNonce,
     });
     if (error) throw error;
     return data;

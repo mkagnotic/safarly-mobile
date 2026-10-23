@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, kycApi, type KycStatusBlock, type KycSubmission } from "@/services/api";
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseKycStatusResult {
   /** Raw server status string (may use either naming scheme — see flags below). */
@@ -40,11 +41,10 @@ export function useKycStatus(): UseKycStatusResult {
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
 
   const refetch = useCallback(async () => {
-    if (inFlightRef.current) return inFlightRef.current;
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -58,11 +58,8 @@ export function useKycStatus(): UseKycStatusResult {
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, []);
 
   // Not coalesced with `refetch`: a background poll already in flight would hand

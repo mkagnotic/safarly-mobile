@@ -23,6 +23,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/AuthContext";
+import { isPlaceholderName } from "@/services/auth/appleOAuth";
 import { ONBOARDING_COUNTRIES } from "@/features/profile/countries";
 import { RootStackParamList } from "@/navigation/types";
 import {
@@ -108,7 +109,10 @@ export function ProfileSetupScreen() {
   };
 
   const prefill = (profile: ApiUserProfile) => {
-    setName(profile.name ?? "");
+    // An account made by Apple/Google sign-in starts with a placeholder name (the
+    // email's local part — for Apple "Hide My Email", a random relay id like
+    // "x7k2pq9abc"). Never show that as the person's name; leave it to them.
+    setName(isPlaceholderName(profile.name, user?.email ?? null) ? "" : profile.name ?? "");
     setBio(profile.bio ?? "");
     setCity(profile.city ?? "");
     setCountry(profile.country ?? null);

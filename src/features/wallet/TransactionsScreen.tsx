@@ -18,6 +18,7 @@ import {
   type Transaction,
 } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { showToast } from "@/feedback/appFeedback";
 import {
   formatTxAmount,
@@ -255,7 +256,17 @@ function SummaryTile({
           {line}
         </Text>
       ))}
-      <Text style={styles.summaryLabel}>{label}</Text>
+      {/* One line that shrinks: "Transactions" broke as "Transacti / ons" in a
+          narrow tile at larger text (23 Oct 2026). */}
+      <Text
+        style={styles.summaryLabel}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
@@ -275,7 +286,8 @@ function TxRow({
         <Ionicons name={meta.icon} size={16} color={meta.credit ? colors.safe : colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.txLabel} numberOfLines={1}>{meta.label}</Text>
+        {/* Two lines before an ellipsis: "Refu…" / "Delive…" at 320pt + larger text. */}
+        <Text style={styles.txLabel} numberOfLines={2}>{meta.label}</Text>
         <Text style={styles.txSub} numberOfLines={1}>
           {formatTxDate(tx.created_at)}
           {tx.booking_id ? ` · #${tx.booking_id.slice(0, 8)}` : ""}
@@ -286,7 +298,7 @@ function TxRow({
           {formatTxAmount(tx.amount, meta.credit, tx.currency)}
         </Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusText, { color: tone.fg }]}>{tx.status}</Text>
+          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{tx.status}</Text>
         </View>
       </View>
       {showReceipt ? (

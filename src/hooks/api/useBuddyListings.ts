@@ -6,6 +6,7 @@ import {
   buddiesApi,
   type BuddyListing,
 } from "@/services/api";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseBuddyListingsOptions {
   /** Server-side `filter` param. Web uses `"my_listings"` for the Travel Partners tab. */
@@ -37,12 +38,10 @@ export function useBuddyListings({
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
 
   const refetch = useCallback(async () => {
-    if (inFlightRef.current) return inFlightRef.current;
-
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -56,12 +55,8 @@ export function useBuddyListings({
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [filter, perPage]);
 
   const loadMore = useCallback(async () => {

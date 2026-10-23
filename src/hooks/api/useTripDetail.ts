@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { ApiClientError, tripsApi, type Trip } from "@/services/api";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseTripDetailResult {
   trip: Trip | null;
@@ -22,13 +23,11 @@ export function useTripDetail(id: string | undefined): UseTripDetailResult {
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
 
   const refetch = useCallback(async () => {
     if (!id) return;
-    if (inFlightRef.current) return inFlightRef.current;
-
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -44,12 +43,8 @@ export function useTripDetail(id: string | undefined): UseTripDetailResult {
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [id]);
 
   // Reset state synchronously when `id` changes — without this, useState's

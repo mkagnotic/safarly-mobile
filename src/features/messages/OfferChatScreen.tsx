@@ -158,8 +158,28 @@ export function OfferChatScreen() {
 
   const liveOffer = useMemo(() => {
     const live = offerState.live;
-    return live && settledOfferIds.includes(live.offerId) ? null : live;
-  }, [offerState.live, settledOfferIds]);
+    const fromThread = live && settledOfferIds.includes(live.offerId) ? null : live;
+    // The selected deal's open offer, from the server (23 Oct 2026): the thread
+    // only holds the messages loaded so far, so in a long chat the offer card was
+    // not among them — Counter opened as "Make an offer" and the bar fell back to
+    // a generic pin. The server's deal is the authority; the thread's card only
+    // adds the message id that makes the in-thread card actionable.
+    const server = activeDeal?.offer;
+    if (server && server.status === "open" && !settledOfferIds.includes(server.offer_id)) {
+      if (fromThread?.offerId === server.offer_id) return fromThread;
+      return {
+        messageId: "",
+        offerId: server.offer_id,
+        carrierRequestId: activeDeal?.carrier_request_id,
+        amount: Number(server.amount),
+        currency: server.currency,
+        mine: server.proposed_by === user?.id,
+      };
+    }
+    // No open offer on the selected deal: a card from ANOTHER deal must not drive it.
+    if (activeDeal && fromThread?.carrierRequestId && fromThread.carrierRequestId !== activeDeal.carrier_request_id) return null;
+    return fromThread;
+  }, [offerState.live, settledOfferIds, activeDeal, user?.id]);
 
   // The pin defers to the match banner and the live-offer bar only while that UI
   // is actually on screen — see `matchBannerVisible` in `useChatMatchStatus`.
@@ -221,7 +241,7 @@ export function OfferChatScreen() {
     handleDeclineOffer,
   } = useChatOfferActions({
     liveOffer, activeDeal, user, navigation, participantName, seedOffer, postOffer, acceptOffer,
-    rejectOffer, markOfferSettled, setActionMenuOpen,
+    rejectOffer, markOfferSettled, setActionMenuOpen, refetchActiveDeal,
   });
 
   const { goBack, handleOpenProfile } = useChatNavigation({
@@ -239,7 +259,7 @@ export function OfferChatScreen() {
     if (conversationId && !conversation) void refetchConversations();
   }, [conversationId, conversation, refetchConversations]);
 
-  const { handleListScroll } = useChatListScroll({
+  const { handleReachOldest } = useChatListScroll({
     flatListRef, keyboardOpen, hasMore, loadingOlder, loadOlder,
   });
 
@@ -378,7 +398,7 @@ export function OfferChatScreen() {
           refetch={refetch}
           keyExtractor={keyExtractor}
           renderMessage={renderMessage}
-          handleListScroll={handleListScroll}
+          handleReachOldest={handleReachOldest}
         />
 
         {/* Only rendered when the thread actually holds more than one delivery. */}
@@ -405,6 +425,19 @@ export function OfferChatScreen() {
             counterpartName={conversation?.participant?.name ?? participantName}
             onChanged={() => { void refetchActiveDeal(); void refetch(); }}
           />
+        ) : null}
+
+        {/* An edit made the deal stop fitting (route, dates, weight): warn, never
+            auto-cancel — same words as web (23 Oct 2026). */}
+        {!buddySelected && activeDeal?.fit_warnings?.length ? (
+          <View style={styles.fitWarning} accessibilityRole="alert" testID="deal-fit-warning">
+            {activeDeal.fit_warnings.map((w) => (
+              <View key={w} style={styles.fitWarningRow}>
+                <Ionicons name="warning-outline" size={14} color="#92400E" />
+                <Text style={styles.fitWarningText}>{w}</Text>
+              </View>
+            ))}
+          </View>
         ) : null}
 
         {/* ───────── Workflow pin (server FSM) ───────── */}
@@ -553,7 +586,7 @@ export function OfferChatScreen() {
         // agreement -> last offer -> the listing's asking price); a counter
         // still seeds from the offer being responded to.
         currentAmount={
-          offerComposer?.mode === "counter"
+          offerComposer?.mode === "counter" || offerComposer?.mode === "revise"
             ? liveOffer?.amount ?? null
             : activeDeal?.pricing?.suggested_amount ?? null
         }
@@ -589,6 +622,9 @@ const screenStyles = StyleSheet.create({
 
   // Offer feedback banner wrap
   offerBannerWrap: { paddingHorizontal: 14, paddingTop: 10 },
+  fitWarning: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#FDE68A", backgroundColor: "#FFFBEB", paddingHorizontal: 14, paddingVertical: 8, gap: 4 },
+  fitWarningRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  fitWarningText: { flex: 1, fontSize: 12, lineHeight: 16, color: "#78350F" },
 });
 
 const styles = { ...chatStyles, ...screenStyles };

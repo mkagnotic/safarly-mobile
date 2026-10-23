@@ -1,6 +1,6 @@
 import { type MatchUserRole } from "@/components/chat/MatchConfirmationModal";
 import { type Conversation } from "@/services/api";
-import { currencySymbol } from "@/utils/money";
+import { formatMoney as formatMoneyCanonical } from "@/utils/money";
 
 /**
  * Chat attachment caps — the server's (`message-handler` upload check): images
@@ -67,6 +67,5 @@ export function getRoleForConversation(
 
 export function formatMoney(amount?: number, currency?: string): string {
   if (typeof amount !== "number") return "";
-  const sym = currencySymbol(currency);
-  return `${sym}${amount.toFixed(2)}`;
+  return formatMoneyCanonical(amount, currency);
 }

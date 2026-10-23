@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, ratingsApi, type Rating, type UserRatings } from "@/services/api";
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseUserReviewsOptions {
   perPage?: number;
@@ -47,12 +48,11 @@ export function useUserReviews(
   const [error, setError] = useState<ApiClientError | Error | null>(null);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
 
   const refetch = useCallback(async () => {
     if (!userId) return;
-    if (inFlightRef.current) return inFlightRef.current;
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -71,11 +71,8 @@ export function useUserReviews(
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [userId, perPage, role]);
 
   const loadMore = useCallback(async () => {

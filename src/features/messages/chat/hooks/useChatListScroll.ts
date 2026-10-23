@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type RefObject } from "react";
-import { type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { type FlatList } from "react-native";
 
 import { type DisplayMessage, type UseChatMessagesResult } from "@/hooks/api/useChatMessages";
 
@@ -22,30 +22,28 @@ export function useChatListScroll({
   // Follow to the newest message when the keyboard opens. Without this the
   // thread just gets shorter and you're left reading older messages while
   // typing — every messaging app scrolls down here. The delay lets the
-  // keyboard-driven resize settle before measuring.
+  // keyboard-driven resize settle before measuring. The list is inverted, so
+  // the newest message is offset 0.
   //
   // `flatListRef` is a stable ref object (see `useChatAutoScroll`), so listing it
   // changes nothing: the effect still runs only when `keyboardOpen` changes.
   useEffect(() => {
     if (!keyboardOpen) return;
     const timer = setTimeout(
-      () => flatListRef.current?.scrollToEnd({ animated: true }),
+      () => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }),
       80,
     );
     return () => clearTimeout(timer);
   }, [keyboardOpen, flatListRef]);
 
-  // Auto-load older messages when the user scrolls within 80px of the top —
-  // matches web (CustomerMessages.tsx:232-239). Manual button stays as a
-  // visible affordance for users who don't realize the scroll trigger exists.
-  const handleListScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (!hasMore || loadingOlder) return;
-      if (event.nativeEvent.contentOffset.y > 80) return;
-      void loadOlder();
-    },
-    [hasMore, loadingOlder, loadOlder],
-  );
+  // Auto-load older messages near the top of the thread — WhatsApp-style, web
+  // parity (CustomerMessages.tsx:232-239). In the inverted list the oldest
+  // message is the list's END, so this is `onEndReached`; prepended history
+  // lands above the view without moving it.
+  const handleReachOldest = useCallback(() => {
+    if (!hasMore || loadingOlder) return;
+    void loadOlder();
+  }, [hasMore, loadingOlder, loadOlder]);
 
-  return { handleListScroll };
+  return { handleReachOldest };
 }

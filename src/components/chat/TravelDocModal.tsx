@@ -735,7 +735,8 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
 
   permissionBanner: { paddingHorizontal: 18, paddingTop: 12 },
-  body: { maxHeight: 520 },
+  // Shrink to the sheet instead of a fixed 520 — see ParcelReviewModal.
+  body: { flexShrink: 1 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28 },
   centered: { paddingVertical: 40, alignItems: "center", justifyContent: "center" },
 

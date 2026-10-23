@@ -5,6 +5,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { type Conversation } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
 import {
   flagsForConversation,
@@ -107,7 +108,7 @@ export const ConversationRow = memo(function ConversationRow({
           </Text>
           {miniStatus ? (
             <View style={[styles.miniStatusPill, { backgroundColor: miniStatus.bg }]}>
-              <Text style={[styles.miniStatusText, { color: miniStatus.fg }]}>
+              <Text style={[styles.miniStatusText, { color: miniStatus.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>
                 {miniStatus.label}
               </Text>
             </View>
@@ -249,10 +250,14 @@ const styles = StyleSheet.create({
   },
 
   body: { flex: 1, minWidth: 0 },
-  topRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // WRAPS: on a 320pt screen with larger text the status pill + "Match again"
+  // left the name zero width and it rendered as "…". The pill now drops under
+  // the name when the row is short; the name is never squeezed away.
+  topRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 8, rowGap: 2 },
   name: { color: colors.text, fontSize: 15, fontWeight: "600", flexShrink: 1 },
   nameUnread: { fontWeight: "800" },
-  miniStatusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  // Never squeezed: "Unmatched" broke as "Unmatch / ed"; it wraps under the name instead.
+  miniStatusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, flexShrink: 0 },
   miniStatusText: { fontSize: 9, fontWeight: "800", letterSpacing: 0.4 },
   preview: { color: colors.mutedText, fontSize: 13, marginTop: 4 },
   previewUnread: { color: colors.text, fontWeight: "600" },

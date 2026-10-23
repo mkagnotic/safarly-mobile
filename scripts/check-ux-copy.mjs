@@ -25,7 +25,7 @@
  * Run: `npm run check:ux`
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const HERE = process.cwd();
@@ -1024,6 +1024,336 @@ const CHECKS = [
     must: ["retry: retryUnlessClientError", "refetchOnWindowFocus: false"],
     mustNot: [],
   },
+  // ===================== 23 Oct 2026 client QA + E2E findings =====================
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/fsm.ts",
+    id: "verification-steps-never-offer-a-waiting-upload",
+    why: "Client: after uploading the travel document the carrier was shown 'Upload' again while the sender had not reviewed it. The mobile apps render this CTA as-is, so the step answers from the upload status: whoever must act gets the action, the other side waits.",
+    must: ["await_travel_doc_review", "await_parcel_review", "ctx.travelDocStatus === 'pending'", "ctx.parcelReviewStatus === 'pending'"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/carrier-request-handler/index.ts",
+    id: "no-travel-doc-reupload-while-pending",
+    why: "Each upload spends one of the carrier's limited attempts; a stale Upload button could burn them before the sender ever looked.",
+    must: ["Your travel document is with the sender for review."],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/offerPricing.ts",
+    id: "repriced-listing-beats-old-agreement",
+    why: "Client: a $20 parcel opened the offer box at 3 - a re-match suggested the previous, cancelled deal's agreed price ahead of the listing the sender had since re-priced.",
+    must: ["listingIsNewer"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/stripe.ts",
+    id: "inr-payout-in-settlement-currency",
+    why: "A rupee charge settles to the US platform's USD balance and Stripe refuses a rupee transfer against it: every INR delivery left the carrier unpaid. Pay the share in the settled currency at the charge's own rate; reverse in the transfer's currency.",
+    must: ["settledTransferAmount(", "export async function reversalMinorUnits("],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/buddyTripChange.ts",
+    id: "any-date-field-is-a-change",
+    why: "Comparing the date window first read an edit of only travel_date / delivery_by as 'no change': the booked-trip lock and the notices both missed it (E2E PLAN-A6/B1/B11).",
+    must: ["day(prior.travel_date) !== day(next.travel_date)"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/trip-handler/index.ts",
+    id: "booked-trip-route-and-dates-locked",
+    why: "Client: a matched user changing dates must not silently move a booked deal. Same rule the parcel side already had for its route; matched-not-booked deals are told instead.",
+    must: ["TRIP_LOCK_MESSAGE", "tellDealCounterparts(", "syncCompanionBuddyListing("],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/migrations/20261023120000_race_guards_capacity_and_buddy_requests.sql",
+    id: "race-guards-in-the-database",
+    why: "Many-user E2E: two simultaneous 4 kg handovers into 6 kg were both accepted, and two crossing buddy requests both landed. The database enforces both rules now - do not weaken them.",
+    must: ["OR pr.locked_booking_id = b.id", "uq_buddy_requests_one_pending_per_pair"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "public/boot-profile.js",
+    id: "boot-profile-skips-expired-token",
+    why: "Every return visit sent an expired token first: a guaranteed 401, a console error and a wasted round trip before the refresh.",
+    must: ["expiresAt * 1000 <= Date.now() + 30000"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "src/features/bookings/pages/CustomerCheckout.tsx",
+    id: "pay-page-kyc-refusal-shows-prompt",
+    why: "KYC revoked after accept: the pay page showed a bare error toast instead of the verify prompt, and trusted a minute-old KYC answer.",
+    must: ['err.code === "KYC_REQUIRED"', 'queryKey: ["kyc", "status"]'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/services/auth/appleOAuth.ts",
+    id: "apple-sign-in-sends-the-nonce",
+    why: "Production auth log: every iOS Apple sign-in refused with 'Passed nonce and nonce in id_token should either both exist or not' - no account was ever created. Apple gets SHA-256(nonce), Supabase the raw value (Apple + Supabase documented flow). App Review tests Sign in with Apple.",
+    must: ["nonce: nonce.hashed", "appleSignInWithIdToken(credential.identityToken, nonce.raw)"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/services/api/auth.ts",
+    id: "apple-id-token-carries-raw-nonce",
+    why: "See apple-sign-in-sends-the-nonce.",
+    must: ["nonce: rawNonce"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/auth/LoginScreen.tsx",
+    id: "apple-failure-is-never-silent-login",
+    why: "A tester saw 'nothing happen' when Apple sign-in failed. A failure must be impossible to miss.",
+    must: ['Alert.alert("Sign in with Apple", message)'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/auth/SignupScreen.tsx",
+    id: "apple-failure-is-never-silent-signup",
+    why: "See apple-failure-is-never-silent-login.",
+    must: ['Alert.alert("Sign in with Apple", message)'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/ChatWorkflowPin.tsx",
+    id: "pin-arrow-and-uploader-wait",
+    why: "Client: the collapsible pin's arrow pointed the wrong way (it grows upward); and an upload already waiting for review must never offer Upload again.",
+    must: ['name={expanded ? "chevron-down" : "chevron-up"}', 'waiting("await_travel_doc_review"'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/components/chat/ParcelReviewModal.tsx",
+    id: "review-sheet-shrinks-to-fit",
+    why: "Client: Accept / Reject were cut off at the bottom on a ~700pt phone - a fixed 540 scroll height overflowed the 88%-capped sheet.",
+    must: ["body: { flexShrink: 1 }"],
+    mustNot: ["body: { maxHeight: 540 }"],
+  },
+  {
+    repo: "mobile",
+    file: "src/components/chat/TravelDocModal.tsx",
+    id: "travel-doc-sheet-shrinks-to-fit",
+    why: "See review-sheet-shrinks-to-fit.",
+    must: ["body: { flexShrink: 1 }"],
+    mustNot: ["body: { maxHeight: 520 }"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/OfferChatScreen.tsx",
+    id: "live-offer-from-the-server",
+    why: "Android QA: in a long chat the offer card was not among the loaded messages, so Counter opened as 'Make an offer'. The selected deal's open offer comes from the server.",
+    must: ['server.status === "open"'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/ChatDealSwitcher.tsx",
+    id: "selected-deal-chip-visible",
+    why: "Client: the selected 'Travel buddy' chip sat cut off past the right edge and read as unclickable; scroll it into view and mark the selection clearly, as on web.",
+    must: ["scrollRef.current?.scrollTo", "chipOn: { backgroundColor: colors.primarySoft"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/components/SearchFilterFields.tsx",
+    id: "search-labels-not-clipped-on-android",
+    why: "Android drew only 'Travel' of 'Travel Buddy' - a shrink-wrapped row under-measured the bold label.",
+    must: ['alignSelf: "stretch"', "checkboxLabel: { flex: 1"],
+    mustNot: [],
+  },
+  // ============ 23 Oct 2026 (later): iPhone 8 / small-screen + stale-chat ============
+  {
+    repo: "mobile",
+    dir: "src/hooks/api",
+    id: "data-hooks-never-drop-a-refresh",
+    why: "Client, iPhone: the chat sat on 'Waiting · Match request sent' over a 'MATCH CONFIRMED' message, and the document step was hidden behind the stale banner. `if (inFlight) return inFlight` DROPPED every realtime refresh that arrived while a fetch ran; accepting a match is a burst of writes, so the first fetch read too early and the rest joined it. Every data hook goes through useSingleFlight, which queues one trailing run.",
+    must: [],
+    mustNot: ["return inFlightRef.current", "if (inFlightRef.current)"],
+  },
+  {
+    repo: "mobile",
+    file: "src/utils/singleFlight.ts",
+    id: "single-flight-queues-a-trailing-run",
+    why: "See data-hooks-never-drop-a-refresh. Coalescing must queue the LATEST request, never discard it.",
+    must: ["queued = task;", "next = queued;"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/hooks/api/useActiveDeal.ts",
+    id: "chat-deal-state-is-per-conversation",
+    why: "Opening chat B showed chat A's deals, step and offer until B's fetch returned, and a refresh for A in flight made B skip its own fetch. Data for another conversation is never shown.",
+    must: ["dataConversationId === conversationId", "flight.run(", "currentConversationRef.current === conversationId"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/chat/components/ChatMessageList.tsx", "src/features/messages/chat/hooks/useChatAutoScroll.ts"],
+    id: "chat-opens-on-the-newest-message",
+    why: "Client, iPhone 8: the chat opened mid-thread and read as 'messages not loading'. A one-off scrollToEnd lost the race with rows/images/bars settling (3 of 5 emulator runs). The list is INVERTED: it starts at the newest message by construction.",
+    must: ["inverted", "data={newestFirst}", "onEndReached={handleReachOldest}", "scrollToOffset({ offset: 0"],
+    mustNot: ["scrollToEnd("],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/chat/components/OfferBar.tsx",
+    id: "offer-bar-amount-always-visible-and-own-offer-actionable",
+    why: "Client, iPhone 8: the amount rendered as '₹…' beside three buttons; and 'Waiting…' with no action read as stuck. The row wraps (the amount keeps 150pt) and your own offer offers Change (the server supersedes it).",
+    must: ['flexWrap: "wrap"', "flexBasis: 150", 'accessibilityLabel="Change your offer"', "Waiting for {firstName}…"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/MessagesScreen.tsx",
+    id: "inbox-filter-chips-fit-any-width",
+    why: "Client, zoomed iPhone 8 (320pt): 'Requests' ran off the card and 'Unread chats' was cut. The chips shrink to the row and the label scales to fit - it needs a width bound (minWidth 0 + flexShrink) for adjustsFontSizeToFit to work.",
+    must: ["adjustsFontSizeToFit", 'chipText: { fontSize: 12, fontWeight: "800", flexShrink: 1, minWidth: 0 }', "maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/inbox/ConversationRow.tsx",
+    id: "inbox-row-name-never-squeezed-away",
+    why: "320pt + larger text: the status pill and 'Match again' left the name zero-width ('…'). The pill wraps under the name.",
+    must: ['topRow: { flexDirection: "row", flexWrap: "wrap"'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/trips/ListTripScreen.tsx", "src/features/parcels/SendParcelScreen.tsx"],
+    id: "unit-toggles-never-run-off-screen",
+    why: "Client, iPhone 8: 'Inches' and 'LBS' ran off the right edge. The label row wraps and the toggle keeps its size on the right.",
+    must: ['labelToggleRow: { flexDirection: "row", flexWrap: "wrap"', 'marginLeft: "auto"'],
+    mustNot: ['labelToggleRow: { flexDirection: "row", alignItems: "center", gap: 8 }'],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/components/ResultTabs.tsx",
+    id: "search-result-counts-visible",
+    why: "320pt + larger text cut 'Packages (1…' / 'Receivers (7…' - the count is the point of the tab.",
+    must: ["adjustsFontSizeToFit", "minWidth: 0"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/search/components/SearchFilterFields.tsx",
+    id: "search-country-chip-label-visible",
+    why: "Android at larger text drew only the flag of '🇺🇸 USA' (bold text under-measured in a centred row).",
+    must: ['styles.countryChipText} numberOfLines={1} textBreakStrategy="simple"'],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "src/features/messages/components/ChatOfferPrompt.tsx",
+    id: "own-open-offer-can-be-changed",
+    why: "Client: 'Waiting' shown for a long time with no way out. The person waiting on their own offer can Change it (the server supersedes their open offer). Same as mobile.",
+    must: ['intent: "revise"', "Waiting for {counterpartName}…"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/message-handler/routes/offers.ts",
+    id: "offer-in-a-stale-currency-is-refused",
+    why: "Client: the sender switched $ to ₹ while the carrier's chat still showed $; the carrier's typed '20' was stored as ₹20. An offer whose currency is not the parcel's is refused, naming the new currency (apps send the currency they showed).",
+    must: ["export function offerCurrencyMismatch(", "if (mismatch) return errorResponse('CONFLICT', mismatch);", "if (seedMismatch) return errorResponse('CONFLICT', seedMismatch);"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/parcel-handler/index.ts",
+    id: "price-or-currency-change-is-told-in-chat",
+    why: "A price/currency change posted nothing to the chat, so the other side's open chat kept the old price and currency.",
+    must: ["priceLabel: formatMoney(", "storedCurrency(prior.fee_currency) !== storedCurrency(now.fee_currency)"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "src/features/messages/components/MatchAndDeclineModals.tsx",
+    id: "web-offer-sends-the-currency-it-showed",
+    why: "See offer-in-a-stale-currency-is-refused.",
+    must: ["amount, currency, note, idempotencyKey", "amount, currency, note }"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/chat/hooks/useChatOfferActions.ts",
+    id: "mobile-offer-sends-the-currency-it-showed",
+    why: "See offer-in-a-stale-currency-is-refused (web repo).",
+    must: ["amount, currency, note }, attemptKey", "seedOffer({ amount, currency, note })", "void refetchActiveDeal?.();"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["supabase/migrations/20261023140000_buddy_trip_cap_in_db.sql", "supabase/functions/_shared/buddyRequests.ts", "supabase/functions/_shared/buddyTrips.ts"],
+    id: "five-buddy-cap-is-a-database-rule",
+    why: "Plan AD5/G5: the 5-buddies-per-trip cap was count-then-insert, so accepts racing for the last slot could add a 6th. A trigger locks the listing and refuses; the app puts the losing request back to pending.",
+    must: ["BEFORE INSERT ON public.buddy_connections", "FOR UPDATE", "if (isBuddyTripFull(connErr))", "if (isBuddyTripFull(error))"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/rateLimit.ts", "supabase/functions/trip-handler/index.ts", "supabase/functions/parcel-handler/index.ts", "supabase/functions/buddy-handler/index.ts"],
+    id: "listing-creation-is-rate-limited",
+    why: "Plan AJ1: creating trips/parcels/buddy listings had no limit, so one account could flood search with fake listings.",
+    must: ["name: 'trip-create'", "name: 'parcel-create'", "name: 'buddy-create'", "ROUTE_LIMITS['trip-handler']", "ROUTE_LIMITS['parcel-handler']", "ROUTE_LIMITS['buddy-handler']"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/travels/MyTravelsScreen.styles.ts",
+    id: "travels-action-buttons-stack-when-narrow",
+    why: "320pt iPhone + larger text: 'Carry a P...' / 'Send a Pa...'. The two buttons stack below ~2x140pt.",
+    must: ['actionsRow: { flexDirection: "row", flexWrap: "wrap"', "flexBasis: 140"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/wallet/TransactionsScreen.tsx",
+    id: "payments-labels-never-broken-mid-word",
+    why: "320pt + larger text: the 'Transactions' tile broke as 'Transacti / ons'; row labels cut to 'Refu...'.",
+    must: ["minimumFontScale={0.7}", '<Text style={styles.txLabel} numberOfLines={2}>'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/bookings/components/BookingRowSummary.tsx",
+    id: "booking-status-pill-fits",
+    why: "320pt + larger text: 'CANCELLED MID-T...'. The status shrinks to fit and the fee wraps below.",
+    must: ["minimumFontScale={0.75}", 'flexWrap: "wrap",'],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/messages/inbox/ConversationRow.tsx",
+    id: "inbox-status-pill-not-broken",
+    why: "320pt + larger text: the 'Unmatched' pill broke as 'Unmatch / ed'.",
+    must: ["borderRadius: 999, flexShrink: 0 }"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/components/ui/FormSection.tsx",
+    id: "country-name-shrinks-before-cut",
+    why: "320pt + larger text: 'United States' read 'Unite...' beside the Switch pill on every listing form.",
+    must: ["numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
@@ -1044,7 +1374,18 @@ for (const c of CHECKS) {
   // `file` may list several files when the pinned code was split across
   // modules (a page and the components/hooks extracted from it): they are
   // checked as one unit, so a needle may live in any of them.
-  const files = Array.isArray(c.file) ? c.file : [c.file];
+  // `dir` checks EVERY source file in a folder - for rules that must also hold
+  // for files added later (e.g. no data hook may drop a refresh).
+  const files = c.dir
+    ? (existsSync(join(HERE, c.dir)) ? readdirSync(join(HERE, c.dir)) : [])
+        .filter((n) => /\.(ts|tsx)$/.test(n) && !/\.test\./.test(n))
+        .map((n) => `${c.dir}/${n}`)
+    : Array.isArray(c.file) ? c.file : [c.file];
+  if (c.dir && files.length === 0) {
+    failures.push(`${c.id}: ${c.dir} has no source files.
+      why: ${c.why}`);
+    continue;
+  }
   const missingFile = files.find((f) => !existsSync(join(HERE, f)));
   if (missingFile) {
     failures.push(`${c.id}: ${missingFile} is missing.\n      why: ${c.why}`);
@@ -1058,14 +1399,14 @@ for (const c of CHECKS) {
   for (const needle of c.must) {
     if (!code.includes(norm(needle))) {
       failures.push(
-        `${c.id}  (${c.file})\n      MISSING: ${needle}\n      why: ${c.why}`,
+        `${c.id}  (${c.file ?? c.dir})\n      MISSING: ${needle}\n      why: ${c.why}`,
       );
     }
   }
   for (const needle of c.mustNot) {
     if (code.includes(norm(needle))) {
       failures.push(
-        `${c.id}  (${c.file})\n      REVERTED TO: ${needle}\n      why: ${c.why}`,
+        `${c.id}  (${c.file ?? c.dir})\n      REVERTED TO: ${needle}\n      why: ${c.why}`,
       );
     }
   }
@@ -1077,7 +1418,7 @@ for (const c of CHECKS) {
       if (at[i - 1] === -1 || at[i] === -1) break; // already reported by `must`
       if (at[i - 1] > at[i]) {
         failures.push(
-          `${c.id}  (${c.file})\n      OUT OF ORDER: "${c.ordered[i - 1]}" must come BEFORE "${c.ordered[i]}"\n      why: ${c.why}`,
+          `${c.id}  (${c.file ?? c.dir})\n      OUT OF ORDER: "${c.ordered[i - 1]}" must come BEFORE "${c.ordered[i]}"\n      why: ${c.why}`,
         );
       }
     }

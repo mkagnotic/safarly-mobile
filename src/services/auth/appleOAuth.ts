@@ -7,11 +7,13 @@
 // (Expo Go, or any Android build), which would take the whole app down at boot.
 
 import type * as AppleAuthenticationModule from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
 import { Platform } from "react-native";
 
 import { authApi } from "@/services/api/auth";
 import { usersApi } from "@/services/api/users";
 
+import { makeAppleNonce } from "./appleNonce";
 import { AuthCancelledError, mapOAuthError } from "./oauthErrors";
 
 export { AuthCancelledError } from "./oauthErrors";
@@ -100,7 +102,7 @@ async function persistAppleFullName(
  * trigger falls back to the email's local part (for a private-relay address,
  * something like `x7k2pq9abc`) — treat that, or a blank, as "not set".
  */
-function isPlaceholderName(current: string | null | undefined, email: string | null): boolean {
+export function isPlaceholderName(current: string | null | undefined, email: string | null): boolean {
   const name = current?.trim() ?? "";
   if (!name) return true;
   const localPart = email?.split("@")[0]?.trim() ?? "";
@@ -116,6 +118,13 @@ function isPlaceholderName(current: string | null | undefined, email: string | n
 export async function performAppleOAuth(): Promise<void> {
   const AppleAuthentication = loadNativeModule();
 
+  // A fresh nonce per attempt: its hash goes to Apple (baked into the identity
+  // token), the raw value to Supabase, which must match — see appleNonce.ts.
+  const nonce = await makeAppleNonce({
+    randomBytes: (n) => Crypto.getRandomBytes(n),
+    sha256Hex: (v) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, v, { encoding: Crypto.CryptoEncoding.HEX }),
+  });
+
   let credential: AppleAuthenticationModule.AppleAuthenticationCredential;
   try {
     credential = await AppleAuthentication.signInAsync({
@@ -123,6 +132,7 @@ export async function performAppleOAuth(): Promise<void> {
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
+      nonce: nonce.hashed,
     });
   } catch (err) {
     // Apple reports a user-dismissed sheet as ERR_REQUEST_CANCELED.
@@ -140,7 +150,7 @@ export async function performAppleOAuth(): Promise<void> {
 
   let sessionEmail: string | null = null;
   try {
-    const data = await authApi.appleSignInWithIdToken(credential.identityToken);
+    const data = await authApi.appleSignInWithIdToken(credential.identityToken, nonce.raw);
     sessionEmail = data.user?.email ?? null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

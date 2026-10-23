@@ -94,3 +94,19 @@ export function resolveOffers(
 
   return { statusById, live };
 }
+
+/**
+ * What the offer composer does for the deal's live offer.
+ *
+ * - none open: "seed" — a first offer;
+ * - theirs: "counter";
+ * - MINE: "revise" — a new amount that replaces it (the server supersedes the
+ *   proposer's own open offer). "Waiting…" with no way out read as stuck
+ *   (client, iPhone 8, 23 Oct 2026).
+ */
+export function offerComposerMode(
+  live: Pick<NonNullable<ResolvedOffers["live"]>, "mine" | "carrierRequestId"> | null | undefined,
+): "seed" | "counter" | "revise" {
+  if (live?.mine) return "revise";
+  return live?.carrierRequestId ? "counter" : "seed";
+}

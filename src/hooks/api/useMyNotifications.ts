@@ -6,6 +6,7 @@ import {
   notificationsApi,
   type Notification,
 } from "@/services/api";
+import { useSingleFlight } from "@/hooks/useSingleFlight";
 
 export interface UseMyNotificationsOptions {
   /** Items per page. Defaults to 20 (mobile-friendly; web uses 15). */
@@ -62,13 +63,11 @@ export function useMyNotifications(
   const [loadingMore, setLoadingMore] = useState(false);
 
   const mountedRef = useRef(true);
-  const inFlightRef = useRef<Promise<void> | null>(null);
+  const flight = useSingleFlight();
   const pageRef = useRef(1);
 
   const refetch = useCallback(async () => {
-    if (inFlightRef.current) return inFlightRef.current;
-
-    const promise = (async () => {
+    return flight.run(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -83,16 +82,12 @@ export function useMyNotifications(
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         if (mountedRef.current) setLoading(false);
-        inFlightRef.current = null;
       }
-    })();
-
-    inFlightRef.current = promise;
-    return promise;
+    });
   }, [perPage]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || inFlightRef.current) return;
+    if (loadingMore || !hasMore || flight.busy) return;
     setLoadingMore(true);
     try {
       const next = pageRef.current + 1;

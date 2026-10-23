@@ -82,7 +82,7 @@ export function SearchFilterFields({
             accessibilityRole="button"
             accessibilityLabel={`Departure country: ${fromCountryLabel}. Tap to switch.`}
           >
-            <Text style={styles.countryChipText}>
+            <Text style={styles.countryChipText} numberOfLines={1} textBreakStrategy="simple">
               {COUNTRY_FLAG[fromCountry]} {fromCountryLabel}
             </Text>
             <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
@@ -104,7 +104,7 @@ export function SearchFilterFields({
             accessibilityRole="button"
             accessibilityLabel={`Arrival country: ${toCountryLabel}. Tap to switch.`}
           >
-            <Text style={styles.countryChipText}>
+            <Text style={styles.countryChipText} numberOfLines={1} textBreakStrategy="simple">
               {COUNTRY_FLAG[toCountry]} {toCountryLabel}
             </Text>
             <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
@@ -160,7 +160,10 @@ export function SearchFilterFields({
                   <Ionicons name="checkmark" size={14} color={colors.white} />
                 ) : null}
               </View>
-              <Text style={styles.checkboxLabel}>{opt.label}</Text>
+              {/* The row stretches and the label fills it (flex: 1): a shrink-wrapped row
+                  let Android under-measure the bold label and draw only "Travel" of
+                  "Travel Buddy" (23 Oct 2026). */}
+              <Text style={styles.checkboxLabel} textBreakStrategy="simple">{opt.label}</Text>
             </Pressable>
           );
         })}
@@ -209,10 +212,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: colors.surfaceMuted,
   },
-  countryChipText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  // One line that may shrink: Android under-measured the bold "🇺🇸 USA" in this
+  // centred row at larger text and drew only the flag (same quirk as the
+  // "Travel Buddy" label below).
+  countryChipText: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700", flexShrink: 1 },
   dateRow: { flexDirection: "row", gap: 8 },
   lookingForCol: { gap: 14, marginTop: 4 },
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 12, alignSelf: "stretch" },
   checkbox: {
     width: 22,
     height: 22,
@@ -224,7 +230,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkboxChecked: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
-  checkboxLabel: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  checkboxLabel: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "600" },
   applyRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   applyButtonFlex: { flex: 1 },
 });

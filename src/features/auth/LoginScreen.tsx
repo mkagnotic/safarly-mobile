@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
+  Alert,
   ActivityIndicator,
   Animated,
   Easing,
@@ -198,7 +199,11 @@ export function LoginScreen() {
       const rawMessage = getErrorMessage(err);
       const code = (err as { code?: unknown })?.code;
       const oauthMapped = mapOAuthError(rawMessage, typeof code === "string" ? code : null, "Apple");
-      setFormError(oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signin").message);
+      const message = oauthMapped !== rawMessage ? oauthMapped : mapAuthError(err, "signin").message;
+      setFormError(message);
+      // Also a native alert: a tester saw "nothing happen" when Apple sign-in
+      // failed (23 Oct 2026) — a failure must be impossible to miss.
+      Alert.alert("Sign in with Apple", message);
     } finally {
       setAppleSubmitting(false);
     }

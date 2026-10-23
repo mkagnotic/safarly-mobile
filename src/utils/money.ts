@@ -31,12 +31,32 @@ export function currencySymbol(currency?: string | null): string {
 
 /**
  * Canonical money formatter — `<symbol><amount>` with 2 decimals ("$45.00",
- * "₹1200.00"). A missing currency falls back to USD, which is what every
+ * "₹1,200.00"). A missing currency falls back to USD, which is what every
  * hardcoded call site already assumed, so nothing regresses where a currency is
  * genuinely absent.
  */
+/**
+ * Digits with thousands separators: Indian grouping for rupees ("1,00,000.00"),
+ * western for everything else ("100,000.00") - what Stripe's checkout shows.
+ * Hand-rolled rather than Intl so every runtime (browser, Hermes, Deno) prints
+ * the same string (client, 23 Oct 2026: "₹100000.00" was hard to read).
+ */
+export function groupedAmount(n: number, currency?: string | null): string {
+  const [int, dec] = Math.abs(n).toFixed(2).split(".");
+  let grouped: string;
+  if (String(currency ?? "").toUpperCase() === "INR" && int.length > 3) {
+    const head = int.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+    grouped = `${head},${int.slice(-3)}`;
+  } else {
+    grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+  return `${n < 0 ? "-" : ""}${grouped}.${dec}`;
+}
+
 export function formatMoney(amount: number | string | null | undefined, currency?: string | null): string {
-  return `${currencySymbol(currency)}${Number(amount ?? 0).toFixed(2)}`;
+  const n = Number(amount ?? 0);
+  const v = Number.isFinite(n) ? n : 0;
+  return `${v < 0 ? "-" : ""}${currencySymbol(currency)}${groupedAmount(Math.abs(v), currency)}`;
 }
 
 /**
@@ -45,7 +65,8 @@ export function formatMoney(amount: number | string | null | undefined, currency
  */
 export function formatMoneyShort(amount: number | string | null | undefined, currency?: string | null): string {
   const n = Number(amount ?? 0);
-  return `${currencySymbol(currency)}${Number.isInteger(n) ? n : n.toFixed(2)}`;
+  if (!Number.isInteger(n)) return formatMoney(n, currency);
+  return `${currencySymbol(currency)}${groupedAmount(n, currency).slice(0, -3)}`;
 }
 
 /**

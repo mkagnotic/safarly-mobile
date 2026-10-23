@@ -755,7 +755,10 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
 
   permissionBanner: { paddingHorizontal: 18, paddingTop: 12 },
-  body: { maxHeight: 540 },
+  // Shrink to the sheet (capped at 88% of the screen, minus the nav bar)
+  // instead of a fixed 540: on a ~700pt phone the fixed height pushed the
+  // Accept / Reject row out of the sheet (client, 23 Oct 2026).
+  body: { flexShrink: 1 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 28 },
   centered: { paddingVertical: 40, alignItems: "center", justifyContent: "center" },
 
