@@ -458,6 +458,7 @@ export function OfferChatScreen() {
             handleAcceptOffer={handleAcceptOffer}
             handleDeclineOffer={handleDeclineOffer}
             handleOpenOfferComposer={handleOpenOfferComposer}
+            waitingOnPayouts={activeDeal?.carrier_payout_ready === false}
           />
         ) : null}
 

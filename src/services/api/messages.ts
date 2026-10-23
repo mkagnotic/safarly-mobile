@@ -149,6 +149,8 @@ export interface ActiveDeal {
   trip_capacity_kg: number | null;
   /** Before booking: why the deal may no longer fit after an edit (server-worded). */
   fit_warnings?: string[];
+  /** Before booking: false while the carrier has not finished payout setup (no offer can be accepted). */
+  carrier_payout_ready?: boolean;
   /** Everything the price conversation already knows, so the offer step never
    *  starts from a blank box when the system is already holding a number. */
   pricing?: {

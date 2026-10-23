@@ -9,6 +9,7 @@ import {
   type RNUploadFile,
 } from "@/services/api";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
+import { useResilientChannel } from "@/hooks/realtime/useResilientChannel";
 
 /** Local-only marker for messages that haven't reached the server yet. */
 export type ClientStatus = "pending" | "failed";
@@ -164,9 +165,13 @@ export function useChatMessages({
   // ───────── Realtime subscription ─────────
   // Subscribe to INSERTs (new messages from the other side) and UPDATEs
   // (read_at changes for read receipts). Filter to our conversation only.
-  useEffect(() => {
-    if (!conversationId) return;
-    const channel = supabase
+  // Self-healing (useResilientChannel): iOS kills the socket in the background
+  // and this channel never came back, so an OPEN chat stopped receiving new
+  // messages and offer cards until the user logged out and in (client,
+  // 23 Oct 2026). Rebuilt on drop; the thread re-fetches on recovery/foreground.
+  useResilientChannel(
+    conversationId ? `messages:${conversationId}` : null,
+    () => supabase
       .channel(`messages:${conversationId}`)
       .on(
         "postgres_changes",
@@ -197,13 +202,9 @@ export function useChatMessages({
           const updated = payload.new as Partial<Message> | undefined;
           setServerMessages((prev) => applyMessageUpdate(prev, updated));
         },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [conversationId]);
+      ),
+    () => { void refetch(); },
+  );
 
   // Drop pending entries that now exist on the server (match by text + close created_at).
   useEffect(() => {
