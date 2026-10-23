@@ -297,7 +297,12 @@ function renderParcelMeta(parcel: Parcel): string {
   const date = formatDeliveryWindow(parcel, { year: true });
   const category = parcel.category?.trim();
   const weight = parcel.weight_kg != null ? `${parcel.weight_kg}kg` : "";
-  const fee = parcel.fee_offered != null ? formatMoneyShort(parcel.fee_offered, parcel.fee_currency) : "";
+  // Once booked, the price is what was AGREED, not the listing's asking price:
+  // a $20 listing agreed at $23 read "$20" (plan AN12, 23 Oct 2026).
+  const agreed = parcel.agreed_amount ?? null;
+  const fee = agreed != null
+    ? `${formatMoneyShort(agreed, parcel.fee_currency)} agreed`
+    : parcel.fee_offered != null ? formatMoneyShort(parcel.fee_offered, parcel.fee_currency) : "";
   return [date, category, weight, fee].filter(Boolean).join(" | ");
 }
 
