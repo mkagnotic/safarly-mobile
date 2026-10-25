@@ -15,6 +15,7 @@ import { formatBubbleTime, formatMoney } from "../chatHelpers";
 import { chatStyles } from "../chatStyles";
 import { Attachment } from "./Attachment";
 import { OfferCardBubble } from "./OfferCardBubble";
+import { BuddyRateRow } from "./BuddyRateRow";
 import { SystemRow, type SystemRowProps } from "./SystemRow";
 
 // ───────────────────────── Bubble ─────────────────────────
@@ -86,6 +87,9 @@ export function MessageBubble({
   }
   if (kind === "system_event") {
     const p = (payload as SystemEventPayload | null) ?? null;
+    if (p?.event === "buddy_journey_completed" && typeof p.connection_id === "string") {
+      return <BuddyRateRow text={message.text?.trim() || "Journey completed"} connectionId={p.connection_id} />;
+    }
     // Concise label for known events; else the server's human text, else "Update".
     const mapped = p?.event ? SYSTEM_EVENT_LABELS[p.event] : undefined;
     const label = mapped ?? (message.text?.trim() || p?.event || "Update");

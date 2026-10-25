@@ -179,6 +179,8 @@ export interface ActiveDeal {
     proposed_by: string;
   } | null;
   booking_id: string | null;
+  /** The viewer already rated this (delivered) booking - the pin stops asking. */
+  viewer_has_rated?: boolean;
   booking_status: string | null;
   /** Stages 8/9/10 - the carrier's own journey milestones. */
   journey?: {
@@ -315,6 +317,8 @@ export type SystemEventName =
 export interface SystemEventPayload {
   event: SystemEventName | string;
   booking_id?: string;
+  /** Set on the buddy journey events - the buddy connection they belong to. */
+  connection_id?: string;
   details?: Record<string, unknown>;
 }
 
