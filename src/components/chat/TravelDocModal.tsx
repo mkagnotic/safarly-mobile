@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   ScrollView,
@@ -29,6 +30,22 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 /** Web parity (`ChatDocVerifyPrompt.tsx:21`). */
 const isPdfUrl = (u: string | null): boolean => !!u && /\.pdf(\?|$)/i.test(u);
+/**
+ * Only a URL that is clearly an image is drawn inline. iOS often uploaded files
+ * with no extension ("document"), stored as "<uuid>.document": drawn as an Image
+ * it showed nothing and the document "did not open" (client, 25 Oct 2026). Any
+ * other file gets an Open button instead.
+ */
+const isImageUrl = (u: string | null): boolean => !!u && /\.(jpe?g|png|webp|gif|heic|heif)(\?|$)/i.test(u);
+
+/** Open the document; never fail silently (a swallowed rejection read as "nothing happens"). */
+async function openDocument(url: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert("Couldn't open the document", "Please try again. If it keeps happening, ask the traveller to upload it again.");
+  }
+}
 
 interface TravelDocModalProps {
   open: boolean;
@@ -127,10 +144,15 @@ export function TravelDocModal({
 
   // A fresh document arriving (status flip) clears the staged file — after a
   // successful upload the "under review" view should not still show a preview.
+  // ⚠️ Keyed on status + attempts, NEVER on doc_url: that is a freshly SIGNED url,
+  // different on every refetch, and a refetch runs on every return to the
+  // foreground - including coming back from the photo picker or camera. The picked
+  // file was wiped before the carrier could tap Upload, so a re-upload "did not
+  // send" (client, 25 Oct 2026).
   useEffect(() => {
     setFile(null);
     setPreviewUri(null);
-  }, [doc?.status, doc?.doc_url]);
+  }, [doc?.status, doc?.attempts]);
 
   const pickImage = async () => {
     setLocalError(null);
@@ -551,7 +573,7 @@ function SenderContent(props: Readonly<ContentProps>) {
   }
 
   // status === "pending" → sender reviews
-  const pdf = isPdfUrl(doc.doc_url);
+  const pdf = isPdfUrl(doc.doc_url) || !isImageUrl(doc.doc_url);
   return (
     <View style={styles.stack}>
       <InfoBlock
@@ -564,18 +586,18 @@ function SenderContent(props: Readonly<ContentProps>) {
       {doc.doc_url ? (
         pdf ? (
           <Pressable
-            onPress={() => void Linking.openURL(doc.doc_url as string)}
+            onPress={() => void openDocument(doc.doc_url as string)}
             style={styles.viewDocButton}
             accessibilityRole="button"
-            accessibilityLabel="View document PDF"
+            accessibilityLabel="Open document"
           >
             <Ionicons name="document-text" size={16} color={colors.primary} />
-            <Text style={styles.viewDocText}>View document (PDF)</Text>
+            <Text style={styles.viewDocText}>{isPdfUrl(doc.doc_url) ? "View document (PDF)" : "Open document"}</Text>
             <Ionicons name="open-outline" size={14} color={colors.mutedText} />
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => void Linking.openURL(doc.doc_url as string)}
+            onPress={() => void openDocument(doc.doc_url as string)}
             accessibilityRole="button"
             accessibilityLabel="View full document"
           >
