@@ -75,8 +75,13 @@ export function useChatActionMenu({
         showToast({ title: "Blocked", variant: "info" });
       } else {
         // End the delivery on screen, not whichever one the server would have picked.
+        // ⚠️ activeDeal, NOT matchableDeal: Unmatch is only offered once the deal is
+        // MATCHED, which is past the match step, so matchableDeal is always null here.
+        // Sending nothing made the server guess, and every finished delivery with this
+        // person still reads "accepted" - "Choose which one to end" with nothing live
+        // (client, 25 Oct 2026).
         await messagesApi.unmatchConversation(conversationId, {
-          carrier_request_id: matchableDeal?.carrier_request_id ?? undefined,
+          carrier_request_id: (activeDeal ?? matchableDeal)?.carrier_request_id ?? undefined,
         });
         showToast({ title: "Unmatched", variant: "info" });
       }
@@ -126,7 +131,7 @@ export function useChatActionMenu({
       setConfirmPending(false);
     }
   }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal,
-      setModalError]);
+      setModalError, activeDeal?.carrier_request_id, matchableDeal?.carrier_request_id]);
 
   const handleUnblock = useCallback(async () => {
     if (!conversationId) return;
