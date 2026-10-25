@@ -80,6 +80,7 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   await_return_sent: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for the carrier to confirm the parcel is on its way back." },
   // Terminal
   completed: { icon: "checkmark-done-outline", tone: "good", blurb: "Delivered — rate this delivery to finish." },
+  completed_rated: { icon: "star", tone: "good", blurb: "Delivered. Thanks for rating - it helps others know who to trust." },
   return_flow: { icon: "return-up-back-outline", tone: "warn", blurb: "A return is in progress for this parcel." },
 };
 
@@ -277,6 +278,10 @@ function reviewerCta(cta: WorkflowView["cta"], deal: ActiveDeal | null | undefin
   if (cta.code === "review_parcel_photos") {
     if (deal?.parcel_review_status === "none") return waiting("await_parcel_photos", "Awaiting parcel photos");
     if (deal?.parcel_review_status === "rejected") return waiting("await_parcel_update", "Waiting for the sender to update the parcel");
+  }
+  // Once rated, the bar says so instead of asking again (client, 25 Oct 2026).
+  if (cta.code === "completed" && deal?.viewer_has_rated) {
+    return waiting("completed_rated", "Delivered - you rated this delivery");
   }
   return cta;
 }
