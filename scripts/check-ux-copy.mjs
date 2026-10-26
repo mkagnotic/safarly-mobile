@@ -1666,6 +1666,22 @@ const CHECKS = [
     must: ["withMyTravelsDay(params)", "{ today: localDay() }"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/money.ts", "supabase/functions/parcel-handler/index.ts", "supabase/functions/message-handler/routes/offers.ts", "src/features/messages/components/NewOfferDialog.tsx", "src/features/parcels/pages/CustomerSendParcel.tsx", "src/features/parcels/components/EditParcelDialog.tsx"],
+    id: "minimum-amount-5-usd-500-inr",
+    why: "Client 26 Oct 2026: nothing below $5 / ₹500 can be listed, offered or countered. One server rule (minAmountProblem) at parcel create/edit, seed offer, counter-offer and a named bid amount; the forms and the offer dialog show the same message before sending.",
+    must: ["export const MIN_AMOUNT: Record<string, number> = { USD: 5, INR: 500 };", "minAmountProblem(fee_offered, fee_currency)", "minAmountProblem(amount, (cr as any).parcel?.fee_currency ?? currency)", "minAmountProblem(parsed, defaultCurrency)"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/utils/minAmount.ts", "src/components/chat/OfferComposerModal.tsx", "src/features/parcels/SendParcelScreen.tsx", "src/features/parcels/EditParcelModal.tsx"],
+    id: "mobile-minimum-amount-5-usd-500-inr",
+    why: "See minimum-amount-5-usd-500-inr (web repo).",
+    must: ["export const MIN_AMOUNT: Record<string, number> = { USD: 5, INR: 500 };", "minAmountProblem(parsed, currencySymbol", "minAmountProblem(fee, form.fee_currency)"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

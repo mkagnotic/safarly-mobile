@@ -12,7 +12,8 @@ export function localDay(d: Date = new Date()): string {
 }
 
 /** Adds `today` to a list request when it is one of the viewer's own (`my_*`) lists. */
-export function withMyTravelsDay<T extends { filter?: string } | undefined>(params: T): T {
-  if (!params?.filter?.startsWith("my_")) return params;
+export function withMyTravelsDay<T extends object | undefined>(params: T): T {
+  const filter = (params as { filter?: unknown } | undefined)?.filter;
+  if (typeof filter !== "string" || !filter.startsWith("my_")) return params;
   return { ...params, today: localDay() } as T;
 }

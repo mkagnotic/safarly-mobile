@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { minAmountProblem } from "@/utils/minAmount";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
@@ -73,7 +74,12 @@ export function OfferComposerModal({
 
   const parsed = Number(amount);
   const tooHigh = Number.isFinite(parsed) && parsed > MAX_OFFER_AMOUNT;
-  const valid = Number.isFinite(parsed) && parsed > 0 && !tooHigh;
+  // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026). The deal's
+  // currency arrives as its symbol here.
+  const tooSmall = amount.trim() !== "" && Number.isFinite(parsed) && parsed > 0
+    ? minAmountProblem(parsed, currencySymbol === "₹" ? "INR" : "USD")
+    : undefined;
+  const valid = Number.isFinite(parsed) && parsed > 0 && !tooHigh && !tooSmall;
 
   const title = mode === "seed" ? "Make an offer" : mode === "revise" ? "Change your offer" : "Counter offer";
   const sendLabel = mode === "seed" ? "Send offer" : mode === "revise" ? "Send new offer" : "Send counter";
@@ -138,6 +144,7 @@ export function OfferComposerModal({
               />
             </View>
             {tooHigh ? <Text style={styles.errorText}>Amount is too high</Text> : null}
+            {tooSmall ? <Text style={styles.errorText}>{tooSmall}</Text> : null}
 
             <TextInput
               value={note}

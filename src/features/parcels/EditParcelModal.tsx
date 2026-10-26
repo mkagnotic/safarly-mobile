@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { minAmountProblem } from "@/utils/minAmount";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -190,6 +191,9 @@ export function EditParcelModal({
     if (!form.fee_offered || Number.isNaN(fee) || fee <= 0) {
       return setError("Enter a valid amount");
     }
+    // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
+    const tooSmall = minAmountProblem(fee, form.fee_currency);
+    if (tooSmall) return setError(tooSmall);
     setError(null);
     // In single mode both dates collapse to the deadline, matching what the
     // handler would do anyway — sending them aligned keeps client and server

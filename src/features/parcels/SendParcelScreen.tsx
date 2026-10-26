@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { minAmountProblem } from "@/utils/minAmount";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -164,8 +165,9 @@ function parcelWeightError(v: string, unit: "kg" | "lb"): string | undefined {
   if (n > (unit === "kg" ? MAX_WEIGHT_KG : MAX_WEIGHT_LB)) return `Exceeds airline limit of ${WEIGHT_LIMIT_LABEL} per item`;
   return undefined;
 }
-function feeOfferedError(v: string): string | undefined {
-  return parseFloat(v) > 0 ? undefined : "Enter a valid amount";
+// Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
+function feeOfferedError(v: string, currency: string): string | undefined {
+  return parseFloat(v) > 0 ? minAmountProblem(parseFloat(v), currency) : "Enter a valid amount";
 }
 
 export function SendParcelScreen() {
@@ -371,7 +373,7 @@ export function SendParcelScreen() {
       }
     }
     const fee = parseFloat(feeOffered);
-    const feeErr = feeOfferedError(feeOffered);
+    const feeErr = feeOfferedError(feeOffered, currency);
     if (feeErr) errors.feeOffered = feeErr;
 
     // A returnable online order MUST carry an address that can actually be
@@ -877,7 +879,7 @@ export function SendParcelScreen() {
                     setFeeOffered(sanitizeDecimalInput(v, 6, 2));
                     clearFieldError("feeOffered");
                   }}
-                  onBlur={() => setFieldErrors((p) => ({ ...p, feeOffered: feeOfferedError(feeOffered) }))}
+                  onBlur={() => setFieldErrors((p) => ({ ...p, feeOffered: feeOfferedError(feeOffered, currency) }))}
                   placeholder="e.g. 45"
                   placeholderTextColor={colors.subtleText}
                   keyboardType="decimal-pad"

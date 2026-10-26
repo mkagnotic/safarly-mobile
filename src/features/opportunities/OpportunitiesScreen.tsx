@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { minAmountProblem } from "@/utils/minAmount";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -164,6 +165,12 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
     const amount = parseFloat(offerAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setFormError("Offer amount must be greater than 0.");
+      return;
+    }
+    // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
+    const tooSmall = minAmountProblem(amount, parcel.fee_currency);
+    if (tooSmall) {
+      setFormError(tooSmall);
       return;
     }
     onSubmit({ selectedTripId, offerAmount, message });
