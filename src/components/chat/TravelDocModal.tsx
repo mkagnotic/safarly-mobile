@@ -92,10 +92,12 @@ interface TravelDocModalProps {
  */
 function attemptsHint(attempts: number, maxAttempts: number): string {
   const left = Math.max(0, maxAttempts - attempts);
-  if (attempts === 0) return `You can upload up to ${maxAttempts} times.`;
-  if (left <= 0) return "No attempts left — our team can review it for you.";
-  if (left === 1) return "Last attempt — after this, our team will review it.";
-  return `${left} attempts left.`;
+  // "tries" (not "uploads"/"times"): the files line below also counts to 3, and the two
+  // must not read as one limit (client, 26 Oct 2026).
+  if (attempts === 0) return `You get ${maxAttempts} tries to have your document approved.`;
+  if (left <= 0) return "No tries left — our team can review it for you.";
+  if (left === 1) return "Last try — after this, our team will review it.";
+  return `${left} tries left to have it approved.`;
 }
 
 /**
@@ -516,7 +518,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
         </View>
       ) : null}
       <Text style={styles.attemptsText}>
-        {files.length}/{maxFiles} files - ticket, boarding pass or ID page
+        Add 1 to {maxFiles} files (ticket, boarding pass or ID page) · {files.length}/{maxFiles} added
       </Text>
 
       <Pressable

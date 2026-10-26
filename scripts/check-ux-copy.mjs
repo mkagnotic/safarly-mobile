@@ -1698,6 +1698,38 @@ const CHECKS = [
     must: ["<ListingFilesField", "uploadStagedListingFiles("],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["src/features/home/pages/CustomerHome.tsx", "supabase/functions/payment-handler/index.ts"],
+    id: "home-states-the-10-percent-fee",
+    why: "Client 26 Oct 2026: the home hero is short and states the fee up front. The 10% must match what checkout charges (payment-handler adds 10% of the agreed amount) - change both together.",
+    must: ["Safarly's fee is 10%, including Stripe payment processing.", "trusted travelers", "const platformFee = Math.round(amount * 0.1 * 100) / 100;"],
+    mustNot: ["Safarly connects you with verified travelers heading your way."],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/tabs/HomeScreen.tsx",
+    id: "mobile-home-states-the-10-percent-fee",
+    why: "See home-states-the-10-percent-fee (web repo).",
+    must: ["Safarly's fee is 10%, including Stripe payment processing.", "trusted travelers"],
+    mustNot: ["Safarly connects you with verified travelers heading your way."],
+  },
+  {
+    repo: "web",
+    file: "src/features/messages/components/ChatDocVerifyPrompt.tsx",
+    id: "travel-doc-tries-vs-files-wording",
+    why: "Client 26 Oct 2026: 'You can upload up to 3 times' sat above '0/3 files' - two different 3s read as one limit. Tries are 'tries', files say 'Add 1 to 3 files'.",
+    must: ["tries to have your document approved.", "Add 1 to {maxFiles} files"],
+    mustNot: ["You can upload up to ${maxAttempts} times."],
+  },
+  {
+    repo: "mobile",
+    file: "src/components/chat/TravelDocModal.tsx",
+    id: "mobile-travel-doc-tries-vs-files-wording",
+    why: "See travel-doc-tries-vs-files-wording (web repo).",
+    must: ["tries to have your document approved.", "Add 1 to {maxFiles} files"],
+    mustNot: ["You can upload up to ${maxAttempts} times."],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

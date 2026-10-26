@@ -196,13 +196,21 @@ export function HomeScreen() {
           <Text style={styles.heroBadgeText}>Peer-to-peer delivery network</Text>
         </View>
         <Text style={styles.heroTitle}>
-          Send & receive parcels with{"\n"}
-          <Text style={styles.heroAccent}>trusted carriers</Text>
+          Send parcels with{"\n"}
+          <Text style={styles.heroAccent}>trusted travelers</Text>
         </Text>
         <Text style={styles.heroBody}>
-          Safarly connects you with verified travelers heading your way. Ship
-          parcels safely, find travel companions, and build trust across borders.
+          Verified travelers carry your parcels across borders. Going somewhere?
+          Find a travel buddy too.
         </Text>
+        {/* Client, 26 Oct 2026: state the fee up front. Matches checkout
+            (payment-handler: 10% on the agreed amount). Web parity. */}
+        <View style={styles.heroFee} testID="home-fee-note">
+          <Ionicons name="receipt-outline" size={14} color={colors.primary} />
+          <Text style={styles.heroFeeText}>
+            Safarly's fee is 10%, including Stripe payment processing.
+          </Text>
+        </View>
         {/* Same artwork as the web home hero (public/assets/image/right-image.webp),
             which also sits under the copy on narrow screens. */}
         {/* The box sets the size; an Image sized only by aspectRatio falls back
@@ -541,6 +549,8 @@ const styles = StyleSheet.create({
   heroTitle: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
   heroAccent: { color: colors.wordmark },
   heroBody: { color: colors.mutedText, fontSize: 14, lineHeight: 20, fontWeight: "500" },
+  heroFee: { flexDirection: "row", alignItems: "center", gap: 6 },
+  heroFeeText: { flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   // 1080×862 source; capped so it doesn't dominate tall phones or tablets.
   heroImageBox: { width: "100%", maxWidth: 340, aspectRatio: 1080 / 862, alignSelf: "center", marginTop: 4 },
   heroImage: { width: "100%", height: "100%" },
