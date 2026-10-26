@@ -490,7 +490,7 @@ function DisputeCard({
 
           {!isFiler && !isResolved ? (
             <Text style={styles.addEvidenceHint} testID="dispute-other-party-note">
-              The other person opened this dispute. Our team is reviewing it and will contact you if they need anything from you.
+              The other person opened this dispute. The Safarly support team is reviewing it and will contact you if they need anything from you.
             </Text>
           ) : null}
 

@@ -158,7 +158,7 @@ export function FileDisputeScreen() {
           </View>
           <Text style={styles.successTitle}>Dispute filed</Text>
           <Text style={styles.successSubtitle}>
-            We've received your report. Our team will review it and follow up here.
+            Your report has been sent. The Safarly support team will review it and reply here.
           </Text>
           <AppButton
             label="View Disputes"
