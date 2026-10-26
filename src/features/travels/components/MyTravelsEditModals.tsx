@@ -50,6 +50,7 @@ export function MyTravelsEditModals({
       {editingTrip ? (
         <EditTripModal
           open
+          listingId={editingTrip.id}
           initial={{
             from_city: editingTrip.any_from ? ANY_CITY : (editingTrip.from_city ?? ""),
             from_country: (editingTrip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
@@ -83,6 +84,7 @@ export function MyTravelsEditModals({
       {editingParcel ? (
         <EditParcelModal
           open
+          listingId={editingParcel.id}
           initial={{
             from_city: editingParcel.any_from ? ANY_CITY : (editingParcel.from_city ?? ""),
             from_country: (editingParcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",

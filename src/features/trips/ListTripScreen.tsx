@@ -1,4 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RNUploadFile } from "@/services/api";
+import { uploadStagedListingFiles } from "@/lib/uploadStagedListingFiles";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -352,6 +355,7 @@ export function ListTripScreen() {
     fromCountry === toCountry &&
     fromCity === toCity;
 
+  const [ownerFiles, setOwnerFiles] = useState<RNUploadFile[]>([]);
   const handleSubmit = useCallback(async () => {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
@@ -408,7 +412,7 @@ export function ListTripScreen() {
 
     setSubmitting(true);
     try {
-      await tripsApi.create({
+      const created = await tripsApi.create({
         from_city: isAnyFrom ? "Any" : fromCity,
         from_country: fromCountry,
         to_city: isAnyTo ? "Any" : toCity,
@@ -438,6 +442,9 @@ export function ListTripScreen() {
             .filter(Boolean)
             .join(" | ") || undefined,
       });
+      // Optional travel document, kept with the trip for the carrier only (26 Oct 2026).
+      const createdId = (created as { data?: { id?: string } } | undefined)?.data?.id;
+      if (createdId) await uploadStagedListingFiles("trip", createdId, ownerFiles);
       setSubmitted(true);
     } catch (err) {
       setFormError(`Couldn't post trip. ${getErrorMessage(err)}`);
@@ -468,6 +475,7 @@ export function ListTripScreen() {
     buddyInterests,
     buddyLayover,
     scrollToField,
+    ownerFiles,
   ]);
 
   if (submitted) {
@@ -861,6 +869,16 @@ export function ListTripScreen() {
           </View>
         ) : null}
       </SectionCard>
+      </View>
+
+      <View style={styles.submitRow}>
+        <ListingFilesField
+          kind="trip"
+          staged={ownerFiles}
+          onStagedChange={setOwnerFiles}
+          label="Travel document"
+          hint="ticket, boarding pass or ID page (PDF or photos), only you can see these"
+        />
       </View>
 
       <View style={styles.submitRow}>

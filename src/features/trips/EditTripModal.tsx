@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -111,11 +112,14 @@ interface EditTripModalProps {
   pending: boolean;
   onCancel: () => void;
   onSubmit: (values: EditTripFormValues) => void;
+  /** The listing being edited: its optional owner files are managed here (26 Oct 2026). */
+  listingId?: string;
 }
 
 export function EditTripModal({
   open,
   initial,
+  listingId,
   pending,
   onCancel,
   onSubmit,
@@ -421,6 +425,10 @@ export function EditTripModal({
               />
             </View>
             </ScrollView>
+
+            {listingId ? (
+              <ListingFilesField kind="trip" listingId={listingId} label="Travel document" hint="ticket, boarding pass or ID page (PDF or photos), only you can see these" />
+            ) : null}
 
             <View style={styles.footer}>
               <AppButton

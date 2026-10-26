@@ -508,6 +508,7 @@ export function ParcelDetailsScreen() {
 
       <EditParcelModal
         open={editOpen}
+        listingId={parcelId}
         initial={editInitial}
         pending={editPending}
         onCancel={handleEditCancel}

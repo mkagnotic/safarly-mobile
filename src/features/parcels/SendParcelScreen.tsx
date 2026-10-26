@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RNUploadFile } from "@/services/api";
+import { uploadStagedListingFiles } from "@/lib/uploadStagedListingFiles";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
 import { minAmountProblem } from "@/utils/minAmount";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -196,6 +199,7 @@ export function SendParcelScreen() {
   /** Once the sender edits the amount, stop auto-filling the suggestion. */
   const [feeTouched, setFeeTouched] = useState(false);
   const [currency, setCurrency] = useState<Currency>("USD");
+  const [ownerFiles, setOwnerFiles] = useState<RNUploadFile[]>([]);
   // Online-order pre-declare — unlocks the post-possession return-waiver path
   // server-side; captured here, sent through in PR2.
   const [isOnlineOrder, setIsOnlineOrder] = useState(false);
@@ -434,7 +438,7 @@ export function SendParcelScreen() {
 
     setSubmitting(true);
     try {
-      await parcelsApi.create({
+      const created = await parcelsApi.create({
         from_city: isAnyFrom ? "Any" : fromCity,
         from_country: fromCountry,
         to_city: isAnyTo ? "Any" : toCity,
@@ -482,6 +486,9 @@ export function SendParcelScreen() {
             }
           : {}),
       });
+      // Optional parcel photos or documents, for the sender only (26 Oct 2026).
+      const createdId = (created as { data?: { id?: string } } | undefined)?.data?.id;
+      if (createdId) await uploadStagedListingFiles("parcel", createdId, ownerFiles);
       setSubmitted(true);
     } catch (err) {
       setFormError(`Couldn't post request. ${getErrorMessage(err)}`);
@@ -519,6 +526,7 @@ export function SendParcelScreen() {
     returnReference,
     maxLimits,
     scrollToField,
+    ownerFiles,
   ]);
 
   const resetForm = useCallback(() => {
@@ -1057,6 +1065,15 @@ export function SendParcelScreen() {
           </View>
         </View>
 
+        <View style={styles.submitRow}>
+          <ListingFilesField
+            kind="parcel"
+            staged={ownerFiles}
+            onStagedChange={setOwnerFiles}
+            label="Parcel photos or documents"
+            hint="photos, invoice or order screenshot (PDF or photos), only you can see these"
+          />
+        </View>
         <View style={styles.submitRow}>
           <AppButton
             label={submitting ? "Posting…" : "Submit & find carriers"}

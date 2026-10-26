@@ -365,6 +365,7 @@ export function TripDetailsScreen() {
 
       <EditTripModal
         open={editOpen}
+        listingId={tripId}
         initial={editInitial}
         pending={editPending}
         onCancel={handleEditCancel}

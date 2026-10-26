@@ -1682,6 +1682,22 @@ const CHECKS = [
     must: ["export const MIN_AMOUNT: Record<string, number> = { USD: 5, INR: 500 };", "minAmountProblem(parsed, currencySymbol", "minAmountProblem(fee, form.fee_currency)"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/listingFiles.ts", "supabase/functions/_shared/errors.ts", "src/features/trips/pages/CustomerListTrip.tsx", "src/features/parcels/pages/CustomerSendParcel.tsx", "src/features/trips/components/EditTripDialog.tsx", "src/features/parcels/components/EditParcelDialog.tsx"],
+    id: "listing-owner-files-private-and-separate",
+    why: "Client 26 Oct 2026: optional travel document on the trip form (up to 3) and parcel photos/documents on the parcel form (up to 5), visible to the owner only, editable, and never part of the deal's 1-3 / 3-5 verification. owner_file_paths is stripped from every response.",
+    must: ["trip: { table: 'travel_listings', owner: 'carrier_id', max: 3", "parcel: { table: 'parcel_requests', owner: 'sender_id', max: 5", "const NEVER_SENT = new Set(['owner_file_paths']);", "<ListingFilesField"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/trips/ListTripScreen.tsx", "src/features/parcels/SendParcelScreen.tsx", "src/features/trips/EditTripModal.tsx", "src/features/parcels/EditParcelModal.tsx"],
+    id: "mobile-listing-owner-files",
+    why: "See listing-owner-files-private-and-separate (web repo).",
+    must: ["<ListingFilesField", "uploadStagedListingFiles("],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

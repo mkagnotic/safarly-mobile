@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
 import { minAmountProblem } from "@/utils/minAmount";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -99,6 +100,8 @@ interface EditParcelModalProps {
   pending: boolean;
   onCancel: () => void;
   onSubmit: (values: EditParcelFormValues) => void;
+  /** The listing being edited: its optional owner files are managed here (26 Oct 2026). */
+  listingId?: string;
   /** The parcel already has offers: the server refuses a currency change (409). */
   currencyLocked?: boolean;
 }
@@ -106,6 +109,7 @@ interface EditParcelModalProps {
 export function EditParcelModal({
   open,
   initial,
+  listingId,
   pending,
   onCancel,
   onSubmit,
@@ -452,6 +456,10 @@ export function EditParcelModal({
             </View>
             {error ? <Text style={styles.formError}>{error}</Text> : null}
             </ScrollView>
+
+            {listingId ? (
+              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos), only you can see these" />
+            ) : null}
 
             <View style={styles.footer}>
               <AppButton
