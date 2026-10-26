@@ -240,6 +240,9 @@ function DisputeCard({
   const [uploading, setUploading] = useState(false);
 
   const isResolved = dispute.status === "resolved";
+  // The dispute is the filer talking to our team (client, 26 Oct 2026): the other
+  // party sees the dispute and its outcome, not a chat. Web parity.
+  const isFiler = dispute.filed_by === userId;
   // Web parity: the sender can grant the waiver when the counterparty filed a
   // return-eligibility waiver request that isn't resolved yet.
   const isWaiverRequest =
@@ -485,8 +488,14 @@ function DisputeCard({
             </>
           ) : null}
 
-          {/* Late evidence (open disputes only) */}
-          {!isResolved ? (
+          {!isFiler && !isResolved ? (
+            <Text style={styles.addEvidenceHint} testID="dispute-other-party-note">
+              The other person opened this dispute. Our team is reviewing it and will contact you if they need anything from you.
+            </Text>
+          ) : null}
+
+          {/* Late evidence (open disputes, filer only) */}
+          {isFiler && !isResolved ? (
             <View style={styles.addEvidenceBlock}>
               {evidence.length === 0 ? (
                 <Text style={[styles.detailLabel, styles.detailLabelGap]}>EVIDENCE</Text>
@@ -547,8 +556,8 @@ function DisputeCard({
             </>
           ) : null}
 
-          {/* Add message (hidden once resolved, web parity) */}
-          {!isResolved ? (
+          {/* Add message (filer only, hidden once resolved, web parity) */}
+          {isFiler && !isResolved ? (
             <View style={styles.addMsgRow}>
               <TextInput
                 value={draft}

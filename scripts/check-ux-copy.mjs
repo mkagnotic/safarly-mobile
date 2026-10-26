@@ -1746,6 +1746,22 @@ const CHECKS = [
     must: ["export function VerifiedAvatarBadge(", "if (verified !== true) return null;", "verified={conversation.participant?.is_verified}", "<VerifiedAvatarBadge verified={participantVerified}"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/dispute-handler/thread.ts", "supabase/functions/dispute-handler/index.ts", "supabase/migrations/20261026130000_dispute_thread_filer_only.sql", "src/features/disputes/pages/CustomerDisputes.tsx"],
+    id: "dispute-thread-filer-and-team-only",
+    why: "Client 26 Oct 2026: the two booking parties were chatting inside a dispute (and the other party's messages were labelled 'Support'). A dispute is the filer talking to Safarly's team; the other party sees the dispute and its outcome but cannot read, post or add evidence. Server, RLS and both apps enforce it.",
+    must: ["if (viewerId !== filedBy) return [];", "Only the person who opened this dispute can message our team.", "Only the person who opened this dispute can add evidence.", "CREATE POLICY \"Dispute filer can add messages\"", "dispute.filed_by === currentUserId && dispute.status !== \"resolved\""],
+    mustNot: ["Open it to respond."],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/disputes/DisputesScreen.tsx",
+    id: "mobile-dispute-thread-filer-and-team-only",
+    why: "See dispute-thread-filer-and-team-only (web repo).",
+    must: ["const isFiler = dispute.filed_by === userId;", "{isFiler && !isResolved ? ("],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
