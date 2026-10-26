@@ -52,10 +52,10 @@ export function useChatVerification({
   // actions that advance the FSM (approve/withdraw) — nudges the workflow pin so
   // it moves on without waiting for the realtime round-trip.
   const handleDocUpload = useCallback(
-    async (file: RNUploadFile) => {
+    async (files: RNUploadFile[]) => {
       setModalError(null);
       try {
-        await travelDoc.upload(file);
+        await travelDoc.upload(files);
         // Done with the sheet once the step is submitted - the pin shows what is
         // next. Client, 22 Oct 2026: it stayed open until the user found the X.
         setTravelDocOpen(false);

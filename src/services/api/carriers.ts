@@ -16,6 +16,10 @@ export interface TravelDocState {
   rejection_reason: string | null;
   escalated: boolean;
   doc_url: string | null;
+  /** Every file of the document (1-3), first = doc_url. Older servers omit it. */
+  doc_urls?: string[];
+  /** Files allowed in one upload (3). */
+  max_files?: number;
   carrier_id: string;
   sender_id: string | null;
   viewer_role: "carrier" | "sender";
@@ -114,10 +118,12 @@ export const carriersApi = {
    * `api.upload`: a plain `FormData` file part built from a picker `uri` reaches
    * the edge function empty under Expo/Hermes and 422s. See `client.ts`.
    */
-  uploadTravelDoc: (requestId: string, file: RNUploadFile) =>
-    api.uploadRNFile<{ status: string; attempts: number; path: string; url: string }>(
+  /** 1 to 3 files, all under `file` (26 Oct 2026: ticket, boarding pass, ID page). */
+  uploadTravelDoc: (requestId: string, files: RNUploadFile[]) =>
+    api.uploadRNFiles<{ status: string; attempts: number; path: string; url: string }>(
       `/carrier-request-handler/travel-doc/${requestId}/upload`,
-      file,
+      files,
+      "file",
     ),
 
   /** Sender approves the uploaded document (unlocks payment). */

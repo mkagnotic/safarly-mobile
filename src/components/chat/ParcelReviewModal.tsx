@@ -76,7 +76,7 @@ interface ParcelReviewModalProps {
  * Parcel-photo review, in-chat. Mobile counterpart of web's
  * `ChatParcelReviewPrompt`, opened from the workflow pin's "Upload" / "Review"
  * CTA. Mirror of [[TravelDocModal]] with the uploader/reviewer roles swapped:
- * the SENDER adds at least 2 parcel photos (image or PDF), the CARRIER approves
+ * the SENDER adds 3 to 5 parcel photos (image or PDF), the CARRIER approves
  * or requests changes with a reason. Approval (with the travel doc) unlocks
  * payment — enforced server-side.
  */
@@ -129,8 +129,8 @@ export function ParcelReviewModal({
     setFiles([]);
   }, [review?.status]);
 
-  const maxPhotos = review?.max_photos ?? 8;
-  const minPhotos = review?.min_photos ?? 2;
+  const maxPhotos = review?.max_photos ?? 5;
+  const minPhotos = review?.min_photos ?? 3;
   const busy = pending !== null;
 
   const addFiles = (incoming: RNUploadFile[]) => {

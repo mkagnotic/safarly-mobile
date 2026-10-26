@@ -948,7 +948,7 @@ const CHECKS = [
     id: "verification-sheet-autocloses",
     why: "Client, 22 Oct 2026: after submitting parcel photos (sender) or a travel document (carrier) the sheet stayed open over the chat until the user found the X. Submit, request-changes and escalate now close it like approve/cancel already did; the pin shows the next step.",
     must: [
-      "await travelDoc.upload(file); setTravelDocOpen(false);",
+      "await travelDoc.upload(files); setTravelDocOpen(false);",
       "await travelDoc.reject(reason); setTravelDocOpen(false);",
       "await parcelReview.upload(files); setParcelReviewOpen(false);",
       "await parcelReview.reject(reason, note); setParcelReviewOpen(false);",
@@ -1519,7 +1519,7 @@ const CHECKS = [
     file: "src/components/chat/TravelDocModal.tsx",
     id: "travel-doc-opens-any-stored-file",
     why: "Client 25 Oct 2026: on iPhone a document sometimes would not open. Anything that is not clearly an image opens externally, and a failed open says so.",
-    must: ["const pdf = isPdfUrl(doc.doc_url) || !isImageUrl(doc.doc_url);", "Couldn't open the document"],
+    must: ["const pdf = isPdfUrl(url) || !isImageUrl(url);", "Couldn't open the document"],
     mustNot: [],
   },
   {
@@ -1632,6 +1632,22 @@ const CHECKS = [
     id: "mobile-deep-linked-booking-opens-first",
     why: "See blocked-unmatch-names-and-opens-the-booking (web repo): expandId only worked when the booking was already loaded.",
     must: ["void bookingsApi.getById(expandId)", "const list = target ? [target, ...bookings.filter((b) => b.id !== target.id)] : bookings;"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["supabase/functions/carrier-request-handler/index.ts", "src/features/messages/components/ChatDocVerifyPrompt.tsx"],
+    id: "travel-doc-1-to-3-files-parcel-3-to-5",
+    why: "Client 26 Oct 2026: a travel document took one file (a ticket + boarding pass + ID page are often separate), and parcel photos were 2-8. Now 1-3 files per travel-doc upload (one attempt), and 3-5 parcel photos with a clear refusal outside that.",
+    must: ["const TRAVEL_DOC_MAX_FILES = 3;", "const PARCEL_REVIEW_MIN_PHOTOS = 3;", "const PARCEL_REVIEW_MAX_PHOTOS = 5;", "travel_doc_paths: filePaths", "multiple"],
+    mustNot: ["for (const file of files.slice(0, PARCEL_REVIEW_MAX_PHOTOS))"],
+  },
+  {
+    repo: "mobile",
+    file: "src/components/chat/TravelDocModal.tsx",
+    id: "mobile-travel-doc-1-to-3-files",
+    why: "See travel-doc-1-to-3-files-parcel-3-to-5 (web repo).",
+    must: ["const MAX_FILES = 3;", "allowsMultipleSelection: room > 1,", "const docUrls = doc.doc_urls?.length ? doc.doc_urls : doc.doc_url ? [doc.doc_url] : [];"],
     mustNot: [],
   },
 ];

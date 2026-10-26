@@ -25,7 +25,7 @@ export interface UseTravelDocResult {
   pending: TravelDocPending;
   refetch: () => Promise<void>;
   /** Carrier: upload/re-upload a boarding pass or ticket (image or PDF). */
-  upload: (file: RNUploadFile) => Promise<void>;
+  upload: (files: RNUploadFile[]) => Promise<void>;
   /** Sender: approve the uploaded document (unlocks payment). */
   approve: () => Promise<void>;
   /** Sender: request a re-upload with a reason. */
@@ -110,11 +110,11 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
   }, []);
 
   const upload = useCallback(
-    async (file: RNUploadFile) => {
+    async (files: RNUploadFile[]) => {
       if (!requestId) return;
       setPending("upload");
       try {
-        await carriersApi.uploadTravelDoc(requestId, file);
+        await carriersApi.uploadTravelDoc(requestId, files);
         await refetch();
         syncDealPin();
       } finally {
