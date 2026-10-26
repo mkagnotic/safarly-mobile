@@ -877,7 +877,7 @@ export function ListTripScreen() {
           staged={ownerFiles}
           onStagedChange={setOwnerFiles}
           label="Travel document"
-          hint="ticket, boarding pass or ID page (PDF or photos), only you can see these"
+          hint="ticket, boarding pass or ID page (PDF or photos)"
         />
       </View>
 

@@ -427,7 +427,7 @@ export function EditTripModal({
             </ScrollView>
 
             {listingId ? (
-              <ListingFilesField kind="trip" listingId={listingId} label="Travel document" hint="ticket, boarding pass or ID page (PDF or photos), only you can see these" />
+              <ListingFilesField kind="trip" listingId={listingId} label="Travel document" hint="ticket, boarding pass or ID page (PDF or photos)" />
             ) : null}
 
             <View style={styles.footer}>

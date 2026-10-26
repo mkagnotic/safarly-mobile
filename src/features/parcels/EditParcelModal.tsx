@@ -458,7 +458,7 @@ export function EditParcelModal({
             </ScrollView>
 
             {listingId ? (
-              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos), only you can see these" />
+              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos)" />
             ) : null}
 
             <View style={styles.footer}>

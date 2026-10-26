@@ -1071,7 +1071,7 @@ export function SendParcelScreen() {
             staged={ownerFiles}
             onStagedChange={setOwnerFiles}
             label="Parcel photos or documents"
-            hint="photos, invoice or order screenshot (PDF or photos), only you can see these"
+            hint="photos, invoice or order screenshot (PDF or photos)"
           />
         </View>
         <View style={styles.submitRow}>
