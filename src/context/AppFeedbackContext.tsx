@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -49,6 +50,47 @@ function ToastBanner({
   const accent = toastAccent(variant);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-14)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
+  // Swipe it away - sideways or up - as in any chat app. A tap opens what a
+  // notification toast is about now, so without this nothing just dismissed it
+  // (client, 26 Oct 2026). Only a clear drag claims the gesture; a tap stays a tap.
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 8 || g.dy < -8,
+      onPanResponderMove: (_e, g) => {
+        translateX.setValue(g.dx);
+        if (g.dy < 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_e, g) => {
+        const sideways = Math.abs(g.dx) > 80 || Math.abs(g.vx) > 0.8;
+        const upward = g.dy < -40 || g.vy < -0.8;
+        if (sideways || upward) {
+          Animated.parallel([
+            Animated.timing(sideways ? translateX : translateY, {
+              toValue: sideways ? Math.sign(g.dx || 1) * 500 : -160,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+          ]).start(() => dismissRef.current());
+          return;
+        }
+        Animated.parallel([
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
+        ]).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.parallel([
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
+          Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
+        ]).start();
+      },
+    }),
+  ).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -72,8 +114,9 @@ function ToastBanner({
       style={[
         styles.toastWrap,
         { top: topOffset },
-        { opacity, transform: [{ translateY }] },
+        { opacity, transform: [{ translateX }, { translateY }] },
       ]}
+      {...pan.panHandlers}
     >
       <Pressable
         onPress={() => {
@@ -91,7 +134,7 @@ function ToastBanner({
         ]}
         accessibilityRole={payload.onPress ? "button" : "alert"}
         accessibilityLabel={[payload.title, payload.message].filter(Boolean).join(". ")}
-        accessibilityHint={payload.onPress ? "Opens it" : undefined}
+        accessibilityHint={payload.onPress ? "Opens it. Swipe to dismiss." : "Swipe to dismiss."}
       >
         <View style={[styles.toastIconCircle, { backgroundColor: accent.bg }]}>
           <Ionicons name={accent.icon} size={22} color={accent.fg} />

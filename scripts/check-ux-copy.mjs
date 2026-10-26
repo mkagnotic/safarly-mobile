@@ -1599,7 +1599,7 @@ const CHECKS = [
     file: ["src/hooks/realtime/useRealtimeSync.ts", "src/context/AppFeedbackContext.tsx"],
     id: "mobile-notification-toast-opens-its-target",
     why: "Client 26 Oct 2026: tapping the in-app notification banner on Android only dismissed it. It now opens resolveNotificationRoute's answer, the same screen a push tap or the Notifications list opens.",
-    must: ["navigateToNotificationTarget(resolveNotificationRoute(n.data?.link, n.type, n.title));", "payload.onPress?.();"],
+    must: ["navigateToNotificationTarget(resolveNotificationRoute(n.data?.link, n.type, n.title));", "payload.onPress?.();", "onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 8 || g.dy < -8,"],
     mustNot: [],
   },
   {
