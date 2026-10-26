@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
@@ -18,7 +18,7 @@ import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
 import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
 import { JourneyProgress } from "@/features/bookings/JourneyProgress";
 import { useBookings } from "@/hooks/api/useBookings";
-import type { Booking } from "@/services/api";
+import { bookingsApi, type Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { styles } from "@/features/bookings/BookingsScreen.styles";
@@ -433,26 +433,44 @@ export function BookingsScreen() {
     return () => clearTimeout(id);
   }, [search]);
 
-  // Auto-expand if a notification deep-link or other navigator passed `expandId`.
-  // Mirrors web's `/customer/bookings` page where deep-links land on the list
-  // and the user finds their booking in the list.
+  // A deep link (notification, "Go to booking", "Cancel the booking first") opens
+  // THAT booking: shown first and expanded. It used to expand only when the booking
+  // happened to be on the loaded page, so anyone with more than a page of bookings
+  // landed on the list with nothing opened and could not tell which one was meant
+  // (client, 26 Oct 2026). Not on the page -> fetched by id.
+  const expandId = route.params?.expandId;
+  const [fetchedTarget, setFetchedTarget] = useState<Booking | null>(null);
+  // Opened once per link: a refetch must not re-open a booking the user closed.
+  const expandedFor = useRef<string | null>(null);
   useEffect(() => {
-    const expandId = route.params?.expandId;
-    if (expandId && bookings.some((b) => b.id === expandId)) {
+    if (!expandId) return;
+    if (expandedFor.current !== expandId) {
+      expandedFor.current = expandId;
       setExpandedId(expandId);
     }
-  }, [route.params?.expandId, bookings]);
+    if (bookings.some((b) => b.id === expandId)) return;
+    let cancelled = false;
+    void bookingsApi.getById(expandId)
+      .then((res) => { if (!cancelled && res.data?.booking) setFetchedTarget(res.data.booking as Booking); })
+      .catch(() => { /* not yours or gone: the list stays as it is */ });
+    return () => { cancelled = true; };
+  }, [expandId, bookings]);
+  const target = expandId
+    ? bookings.find((b) => b.id === expandId) ?? (fetchedTarget?.id === expandId ? fetchedTarget : null)
+    : null;
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return bookings;
-    return bookings.filter(
+    // The deep-linked booking leads the list (once), whatever page it is on.
+    const list = target ? [target, ...bookings.filter((b) => b.id !== target.id)] : bookings;
+    if (!q) return list;
+    return list.filter(
       (b) =>
         b.id.toLowerCase().includes(q) ||
         b.parcel?.from_city?.toLowerCase().includes(q) ||
         b.parcel?.to_city?.toLowerCase().includes(q),
     );
-  }, [bookings, debouncedSearch]);
+  }, [bookings, debouncedSearch, target]);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();

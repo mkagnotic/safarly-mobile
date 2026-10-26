@@ -1618,6 +1618,22 @@ const CHECKS = [
     must: ["const reallyOffline = !s.browserOnline && !s.realtimeOpen && s.probeOk !== true;"],
     mustNot: ["if (!browserOnline) return \"offline\";"],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/message-handler/routes/declineUnmatch.ts", "src/features/bookings/pages/CustomerBookings.tsx"],
+    id: "blocked-unmatch-names-and-opens-the-booking",
+    why: "Client 26 Oct 2026: 'This delivery is already in progress' did not say which, and Go to booking opened the list with nothing expanded unless the booking was on page 1. The message names the route; a deep-linked booking off the page is fetched and shown first, opened.",
+    must: ["const which = from && to ? `Your ${from} → ${to} delivery` : 'This delivery';", "useBookingDetail(", "aria-expanded={isExpanded}"],
+    mustNot: ["'This delivery is already in progress. Cancel the booking first to end the match.'"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/bookings/BookingsScreen.tsx",
+    id: "mobile-deep-linked-booking-opens-first",
+    why: "See blocked-unmatch-names-and-opens-the-booking (web repo): expandId only worked when the booking was already loaded.",
+    must: ["void bookingsApi.getById(expandId)", "const list = target ? [target, ...bookings.filter((b) => b.id !== target.id)] : bookings;"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
