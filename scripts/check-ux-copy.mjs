@@ -1638,8 +1638,8 @@ const CHECKS = [
     repo: "web",
     file: ["supabase/functions/carrier-request-handler/index.ts", "src/features/messages/components/ChatDocVerifyPrompt.tsx"],
     id: "travel-doc-1-to-3-files-parcel-3-to-5",
-    why: "Client 26 Oct 2026: a travel document took one file (a ticket + boarding pass + ID page are often separate), and parcel photos were 2-8. Now 1-3 files per travel-doc upload (one attempt), and 3-5 parcel photos with a clear refusal outside that.",
-    must: ["const TRAVEL_DOC_MAX_FILES = 3;", "const PARCEL_REVIEW_MIN_PHOTOS = 3;", "const PARCEL_REVIEW_MAX_PHOTOS = 5;", "travel_doc_paths: filePaths", "multiple"],
+    why: "Client 26 Oct 2026: a travel document took one file (a ticket + boarding pass + ID page are often separate), and parcel photos were 2-8. Now 1-3 files per travel-doc upload (one attempt). Parcel photos (corrected same day): 1-3 photos per try, 5 tries, each try replaces the set, no replacing while under review.",
+    must: ["const TRAVEL_DOC_MAX_FILES = 3;", "const PARCEL_REVIEW_MIN_PHOTOS = 1;", "const PARCEL_REVIEW_MAX_PHOTOS = 3;", "const PARCEL_REVIEW_MAX_ATTEMPTS = 5;", "parcel_review_attempts: attemptsUsed + 1,", "travel_doc_paths: filePaths", "multiple"],
     mustNot: ["for (const file of files.slice(0, PARCEL_REVIEW_MAX_PHOTOS))"],
   },
   {

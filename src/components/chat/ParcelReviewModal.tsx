@@ -129,8 +129,9 @@ export function ParcelReviewModal({
     setFiles([]);
   }, [review?.status]);
 
-  const maxPhotos = review?.max_photos ?? 5;
-  const minPhotos = review?.min_photos ?? 3;
+  // Server-driven; fallbacks match it (client, 26 Oct 2026: 1-3 photos, 5 tries).
+  const maxPhotos = review?.max_photos ?? 3;
+  const minPhotos = review?.min_photos ?? 1;
   const busy = pending !== null;
 
   const addFiles = (incoming: RNUploadFile[]) => {
@@ -533,9 +534,28 @@ function SenderView({
     );
   }
 
-  // none | rejected → upload / re-upload
+  // none | rejected → upload / re-upload (1-3 photos, 5 tries; web parity)
   const rejected = review.status === "rejected";
   const canAddMore = files.length < maxPhotos;
+  const maxAttempts = review.max_attempts ?? 5;
+  const triesLeft = Math.max(0, maxAttempts - (review.attempts ?? 0));
+  if (triesLeft === 0) {
+    return (
+      <View style={styles.stack} testID="parcel-tries-used">
+        <InfoBlock
+          icon="alert-circle"
+          tone="warning"
+          title={`You've used all ${maxAttempts} tries for parcel photos.`}
+          body="Please contact the Safarly support team, or cancel the request."
+        />
+      </View>
+    );
+  }
+  const triesHint = triesLeft === maxAttempts
+    ? `You get ${maxAttempts} tries to have your photos approved.`
+    : triesLeft === 1
+      ? "Last try — choose your photos carefully."
+      : `${triesLeft} tries left.`;
   return (
     <View style={styles.stack}>
       <InfoBlock
@@ -545,9 +565,10 @@ function SenderView({
         body={
           rejected
             ? `Reason: ${reasonLabel(review.reason)}${review.reason_note ? ` — ${review.reason_note}` : ""}`
-            : `Add at least ${minPhotos} photos (an invoice or order screenshot is optional) so the carrier can approve carrying it.`
+            : `Add ${minPhotos} to ${maxPhotos} photos (an invoice or order screenshot is optional) so the carrier can approve carrying it.`
         }
       />
+      <Text style={styles.attemptsText} testID="parcel-tries-hint">{triesHint}</Text>
 
       {files.length > 0 ? (
         <View style={styles.fileList}>
@@ -586,7 +607,7 @@ function SenderView({
       ) : null}
 
       <Text style={styles.attemptsText}>
-        {files.length}/{maxPhotos} selected · minimum {minPhotos}
+        {files.length}/{maxPhotos} selected
       </Text>
 
       <Pressable

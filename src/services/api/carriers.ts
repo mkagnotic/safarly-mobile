@@ -51,6 +51,9 @@ export interface ParcelReviewState {
   reason_note: string | null;
   min_photos: number;
   max_photos: number;
+  /** Uploads used / allowed (client, 26 Oct 2026: 5 tries of 1-3 photos). */
+  attempts?: number;
+  max_attempts?: number;
   carrier_id: string;
   sender_id: string | null;
   viewer_role: "carrier" | "sender";
