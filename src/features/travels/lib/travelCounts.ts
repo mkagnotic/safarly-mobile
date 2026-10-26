@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import { localDay } from "@/utils/localDay";
 
 /**
  * My Travels tab counts - exact, from the server, the SAME numbers web shows.
@@ -31,7 +32,8 @@ export interface MyTravelCounts {
 export const TRAVEL_COUNTS_PATH = "/user-handler/me/travel-counts";
 
 export async function fetchMyTravelCounts(): Promise<MyTravelCounts> {
-  const res = await api.get<MyTravelCounts>(TRAVEL_COUNTS_PATH);
+  // Your own day ends your listings (see localDay) - lists and labels agree.
+  const res = await api.get<MyTravelCounts>(TRAVEL_COUNTS_PATH, { today: localDay() });
   return res.data;
 }
 

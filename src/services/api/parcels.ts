@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { withMyTravelsDay } from "@/utils/localDay";
 
 /** `parcel_requests.delivery_date_mode` — a single deadline or a window. */
 export type DeliveryDateMode = "single" | "range";
@@ -151,7 +152,7 @@ export const parcelsApi = {
   },
 
   list: async (params?: ParcelListParams) => {
-    const res = await api.get<Parcel[]>("/parcel-handler/", params);
+    const res = await api.get<Parcel[]>("/parcel-handler/", withMyTravelsDay(params));
     if (Array.isArray(res.data)) {
       res.data = res.data.map((p) => normalizeParcel(p as unknown as RawParcel));
     }

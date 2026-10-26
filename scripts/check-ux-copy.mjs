@@ -1650,6 +1650,22 @@ const CHECKS = [
     must: ["const MAX_FILES = 3;", "allowsMultipleSelection: room > 1,", "const docUrls = doc.doc_urls?.length ? doc.doc_urls : doc.doc_url ? [doc.doc_url] : [];"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/trip-handler/index.ts", "supabase/functions/user-handler/index.ts", "src/services/api/trips.ts", "src/features/my-trips/lib/travelCounts.ts"],
+    id: "own-trips-archive-on-the-viewers-day",
+    why: "Client 26 Oct 2026: a carrier's trip stayed in My Flights a full day after it ended (public UTC-minus-one slack). Own lists and tab counts end listings on the viewer's local day (today param, honoured within a day of UTC).",
+    must: ["? myTravelsLiveFrom(url.searchParams.get('today'))", "myTravelsLiveFrom(today)", "withMyTravelsDay(params)", "{ today: localDay() }"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/services/api/trips.ts", "src/features/travels/lib/travelCounts.ts"],
+    id: "mobile-own-trips-archive-on-the-viewers-day",
+    why: "See own-trips-archive-on-the-viewers-day (web repo).",
+    must: ["withMyTravelsDay(params)", "{ today: localDay() }"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { withMyTravelsDay } from "@/utils/localDay";
 
 /**
  * Server response shape — the list endpoint already aliases `luggage_capacity`
@@ -109,7 +110,7 @@ export const tripsApi = {
   },
 
   list: async (params?: TripListParams) => {
-    const res = await api.get<Trip[]>("/trip-handler/", params);
+    const res = await api.get<Trip[]>("/trip-handler/", withMyTravelsDay(params));
     if (Array.isArray(res.data)) {
       res.data = res.data.map((t) => normalizeTrip(t as unknown as RawTrip));
     }

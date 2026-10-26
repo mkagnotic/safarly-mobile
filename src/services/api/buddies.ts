@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { withMyTravelsDay } from "@/utils/localDay";
 
 export interface BuddyListingUser {
   id: string;
@@ -100,7 +101,7 @@ export const buddiesApi = {
     api.delete<{ deleted: boolean }>(`/buddy-handler/${listingId}`),
 
   list: (params?: { page?: number; per_page?: number; filter?: string }) =>
-    api.get<BuddyListing[]>("/buddy-handler/", params),
+    api.get<BuddyListing[]>("/buddy-handler/", withMyTravelsDay(params)),
 
   /** DB matching function — route + date + airline. */
   findMatches: (listingId: string) =>
