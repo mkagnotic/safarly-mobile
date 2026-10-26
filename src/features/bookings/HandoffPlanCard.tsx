@@ -568,9 +568,8 @@ export function HandoffPlanCard({
       {header(`Waiting for ${senderName} to send the parcel`)}
       {planBlock}
       <Text style={styles.footnote}>
-        They have been notified. Once they mark it as sent you will be prompted to
-        inspect it and then accept or decline - you can also accept right away if it is
-        already in your hands.
+        They have been notified. Once they mark it as sent (or handed over), you can
+        inspect it and then accept or decline.
       </Text>
       <Pressable
         onPress={startEditing}

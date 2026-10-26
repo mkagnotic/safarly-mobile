@@ -1762,6 +1762,22 @@ const CHECKS = [
     must: ["const isFiler = dispute.filed_by === userId;", "{isFiler && !isResolved ? ("],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/booking-handler/routes/possession.ts", "src/features/bookings/components/HandoffActions.tsx", "src/features/bookings/components/HandoffPlanCard.tsx", "src/features/messages/components/ChatHandoffPrompt.tsx"],
+    id: "handoff-inspect-after-sent",
+    why: "Client 26 Oct 2026: 'I've inspected it - accept' was live before the sender had sent anything - nothing to inspect. Accept waits for the sender's sent / handed over (server refuses earlier; legacy pre-paid bookings exempt); the carrier's cancel stays open throughout.",
+    must: ["if (!booking.handoff_dispatched_at && !alreadyPaid) {", "disabled={busy || !parcelDispatched}", "Waiting for your sender to mark the parcel as sent"],
+    mustNot: ["you can also accept right away", "or accept straight away if it's already in your hands"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/components/AcceptHandoffStep.tsx", "src/features/bookings/HandoffPlanCard.tsx"],
+    id: "mobile-handoff-inspect-after-sent",
+    why: "See handoff-inspect-after-sent (web repo).",
+    must: ["disabled={actionPending !== null || !handoffDispatched}", "Waiting for your sender to mark the parcel as sent"],
+    mustNot: ["you can also accept right away"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
