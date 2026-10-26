@@ -1771,6 +1771,22 @@ const CHECKS = [
     mustNot: ["you can also accept right away", "or accept straight away if it's already in your hands"],
   },
   {
+    id: "refund-wording-follows-the-money",
+    repo: "web",
+    file: ["supabase/functions/booking-handler/routes/possession.ts", "supabase/functions/booking-handler/routes/cancel.ts", "supabase/functions/booking-handler/routes/list.ts", "src/features/bookings/components/ParcelReturnCard.tsx"],
+    why: "Client 26 Oct 2026: a carrier declining at handoff told an unpaid sender 'You've been refunded in full' (under handoff-first nobody has paid yet). Refund wording now follows the real refund / payment_made.",
+    must: ["const moneyLine = refund.refunded ? \"You've been refunded in full.\" : \"You haven't been charged anything.\";", "payment_made: paidIds.has(b.id)", "{booking.payment_made ? \"You've been refunded in full.\" : \"You haven't been charged for this delivery.\"}"],
+    mustNot: ["You've been refunded in full — now tell them where to send the parcel back."],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/bookings/ParcelReturnCard.tsx",
+    id: "mobile-refund-wording-follows-the-money",
+    why: "See refund-wording-follows-the-money (web repo).",
+    must: ["{booking.payment_made ? \"You've been refunded in full.\" : \"You haven't been charged for this delivery.\"}"],
+    mustNot: [],
+  },
+  {
     repo: "mobile",
     file: ["src/features/bookings/components/AcceptHandoffStep.tsx", "src/features/bookings/HandoffPlanCard.tsx"],
     id: "mobile-handoff-inspect-after-sent",

@@ -127,8 +127,8 @@ export function AcceptHandoffStep({
       ) : null}
       <Text style={sharedStyles.stepCardFootnote}>
         {handoffDispatched
-          ? "Declining refunds the sender in full with no penalty to you. "
-          : "This is how you cancel at this step - it refunds your sender in full, with no penalty to you. "}
+          ? "Declining ends the delivery with no penalty to you, and your sender won't be charged. "
+          : "This is how you cancel at this step - no penalty to you, and your sender won't be charged. "}
         {returnEligible
           ? "This order can go back to the seller — the sender arranges the return."
           : "The sender then arranges collection of the parcel from you."}

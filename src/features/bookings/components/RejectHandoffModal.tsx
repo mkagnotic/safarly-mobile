@@ -104,8 +104,8 @@ export function RejectHandoffModal({
         </View>
         <Text style={sharedStyles.modalBody}>
           Use this when the parcel has reached you but you can't carry it — unsafe,
-          oversized, or not what the listing described. The sender gets a full refund
-          with no penalty to you, and the parcel re-opens for other carriers. Tell us
+          oversized, or not what the listing described. There's no penalty to you, your
+          sender won't be charged, and the parcel re-opens for other carriers. Tell us
           what's wrong so we can keep records.
         </Text>
         <TextInput

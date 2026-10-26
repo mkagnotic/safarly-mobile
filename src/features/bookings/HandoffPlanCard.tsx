@@ -495,7 +495,7 @@ export function HandoffPlanCard({
         {!isCarrier ? (
           <Text style={styles.footnote}>
             If they accept, this booking moves to {journeyStepRef("payment")} — you will
-            have 48 hours to pay. If they decline after inspecting, you are refunded in full
+            have 48 hours to pay. If they decline after inspecting, you won't be charged
             {booking.parcel?.return_eligible
               ? " and can have it returned to the seller."
               : " and arrange collection of the parcel."}

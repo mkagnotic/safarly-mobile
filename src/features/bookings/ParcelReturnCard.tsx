@@ -293,8 +293,10 @@ export function ParcelReturnCard({
         <View style={styles.card}>
           {header(`Tell ${carrierName} what to do with the parcel`)}
           <Text style={styles.body}>
-            You have been refunded in full. The parcel itself is still with your carrier,
-            so it needs somewhere to go before this is finished.
+            {/* Only claim a refund for a booking that was actually paid (client, 26 Oct 2026). */}
+            {booking.payment_made ? "You've been refunded in full." : "You haven't been charged for this delivery."}{" "}
+            The parcel itself is still with your carrier, so it needs somewhere to go before
+            this is finished.
           </Text>
           {addressBlock}
           <View style={styles.optionList}>

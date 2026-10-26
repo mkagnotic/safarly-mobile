@@ -146,7 +146,7 @@ export function createBookingActions({
         }
         return bookingsApi.rejectHandoff(booking.id, { reason, photo_path, parcel_with_carrier: withCarrier });
       },
-      "Parcel declined — sender refunded in full",
+      "Parcel declined — your sender has been notified",
       undefined,
       setModalError,
     );
@@ -201,7 +201,7 @@ export function createBookingActions({
         {
           variant: "warning",
           title: `Penalty applied: ${formatMoney(data.penalty_amount, (data as { currency?: string }).currency)}`,
-          message: `Tier: ${data.tier}. The sender has been refunded in full.`,
+          message: `Tier: ${data.tier}. ${Number((data as { refund_amount?: number }).refund_amount ?? 0) > 0 ? "The sender has been refunded in full." : "The sender hadn't paid yet, so they weren't charged."}`,
         },
         7000,
       );

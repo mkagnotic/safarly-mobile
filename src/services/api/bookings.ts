@@ -142,6 +142,8 @@ export interface Booking {
   /** A live delivery code exists = step 6. Server-derived; the raw OTP
    *  columns are never sent to either client. */
   delivery_code_issued?: boolean | null;
+  /** The sender actually paid (held, released or refunded) - never say "refunded" otherwise. */
+  payment_made?: boolean | null;
   /** Reported delay. A delay reschedules; it never starts a return by itself. */
   delay_reason?: JourneyDelayReason | null;
   delay_note?: string | null;
