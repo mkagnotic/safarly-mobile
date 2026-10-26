@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Card } from "@/components/ui/Card";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
@@ -127,13 +128,16 @@ function ReviewCard({ review }: Readonly<{ review: Rating }>) {
   return (
     <Card style={styles.reviewCard}>
       <View style={styles.reviewTop}>
-        {raterAvatar ? (
-          <Image source={{ uri: raterAvatar }} style={styles.avatarImage} />
-        ) : (
-          <View style={styles.avatarFallback}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </View>
-        )}
+        <View>
+          {raterAvatar ? (
+            <Image source={{ uri: raterAvatar }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            </View>
+          )}
+          <VerifiedAvatarBadge verified={review.rater?.is_verified} avatarSize={40} />
+        </View>
         <View style={styles.reviewerBlock}>
           <Text style={styles.reviewerName} numberOfLines={1}>
             {raterName}

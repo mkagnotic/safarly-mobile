@@ -126,7 +126,7 @@ function ExpandedBody({
         <View style={styles.partiesRow}>
           {booking.sender ? (
             <View style={styles.partyItem}>
-              <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} />
+              <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} verified={booking.sender.is_verified} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Receiver</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
@@ -137,7 +137,7 @@ function ExpandedBody({
           ) : null}
           {booking.carrier ? (
             <View style={styles.partyItem}>
-              <Avatar name={booking.carrier.name} uri={booking.carrier.avatar_url} size={36} />
+              <Avatar name={booking.carrier.name} uri={booking.carrier.avatar_url} size={36} verified={booking.carrier.is_verified} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Carrier</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>

@@ -6,6 +6,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { isKycApprovedStatus } from "@/features/profile/kycGateStatus";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { useUnreadNotificationsCount } from "@/hooks/api/useUnreadNotificationsCount";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -80,27 +82,35 @@ export function PrimaryHeaderActions() {
           </View>
         ) : null}
       </Pressable>
-      <Pressable
-        style={styles.avatarBadge}
-        onPress={() => navigation.navigate("Profile")}
-        accessibilityRole="button"
-        accessibilityLabel="Open profile"
-        disabled={showSkeleton}
-      >
-        {showSkeleton ? (
-          <SkeletonCircle />
-        ) : profile?.avatar_url ? (
-          <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-        ) : initials ? (
-          <View style={[styles.avatarImage, styles.avatarFallback]}>
-            <Text style={styles.avatarInitialsText}>{initials}</Text>
-          </View>
-        ) : (
-          <View style={[styles.avatarImage, styles.avatarFallback]}>
-            <Ionicons name="person" size={18} color={colors.wordmark} />
-          </View>
-        )}
-      </Pressable>
+      {/* The circle clips its photo, so the verified badge sits beside it in a
+          non-clipping wrapper. */}
+      <View>
+        <Pressable
+          style={styles.avatarBadge}
+          onPress={() => navigation.navigate("Profile")}
+          accessibilityRole="button"
+          accessibilityLabel="Open profile"
+          disabled={showSkeleton}
+        >
+          {showSkeleton ? (
+            <SkeletonCircle />
+          ) : profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+          ) : initials ? (
+            <View style={[styles.avatarImage, styles.avatarFallback]}>
+              <Text style={styles.avatarInitialsText}>{initials}</Text>
+            </View>
+          ) : (
+            <View style={[styles.avatarImage, styles.avatarFallback]}>
+              <Ionicons name="person" size={18} color={colors.wordmark} />
+            </View>
+          )}
+        </Pressable>
+        <VerifiedAvatarBadge
+          verified={!showSkeleton && (profile?.is_verified === true || isKycApprovedStatus(profile?.kyc_status))}
+          avatarSize={42}
+        />
+      </View>
     </View>
   );
 }

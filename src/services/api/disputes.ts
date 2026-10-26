@@ -13,7 +13,7 @@ export interface Dispute {
   created_at: string;
   updated_at: string;
   booking?: { id: string; parcel_id: string; sender_id: string; carrier_id: string };
-  filer?: { id: string; name: string; avatar_url: string | null };
+  filer?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   messages?: { id: string; sender_id: string; text: string; created_at: string }[];
 }
 

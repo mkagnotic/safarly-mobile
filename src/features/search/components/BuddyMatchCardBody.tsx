@@ -45,7 +45,7 @@ export function BuddyMatchCardBody({
   return (
     <Card style={[sharedStyles.matchCard, highlighted && sharedStyles.matchHighlighted]}>
       <View style={sharedStyles.personRow}>
-        <Avatar name={match.user?.name} uri={match.user?.avatar_url} size={48} />
+        <Avatar name={match.user?.name} uri={match.user?.avatar_url} size={48} verified={match.user?.is_verified} />
         <View style={sharedStyles.personInfo}>
           <View style={styles.buddyTitleRow}>
             <Text style={sharedStyles.personName} numberOfLines={2}>

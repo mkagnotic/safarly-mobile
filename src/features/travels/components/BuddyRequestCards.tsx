@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { usePublicProfile } from "@/hooks/api/usePublicProfile";
 import type { BuddyConnection, BuddyRequest } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -22,8 +23,11 @@ export function BuddyRequestCard({
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>
-        <View style={styles.lcAvatar}>
-          <Text style={styles.lcAvatarText}>{getInitials(sender?.name)}</Text>
+        <View>
+          <View style={styles.lcAvatar}>
+            <Text style={styles.lcAvatarText}>{getInitials(sender?.name)}</Text>
+          </View>
+          <VerifiedAvatarBadge verified={sender?.is_verified} avatarSize={44} />
         </View>
         <View style={styles.lcPersonInfo}>
           <Text style={styles.lcName} numberOfLines={1}>
@@ -72,8 +76,11 @@ export function SentBuddyRequestCard({
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>
-        <View style={styles.lcAvatar}>
-          <Text style={styles.lcAvatarText}>{getInitials(recipient?.name)}</Text>
+        <View>
+          <View style={styles.lcAvatar}>
+            <Text style={styles.lcAvatarText}>{getInitials(recipient?.name)}</Text>
+          </View>
+          <VerifiedAvatarBadge verified={recipient?.is_verified} avatarSize={44} />
         </View>
         <View style={styles.lcPersonInfo}>
           <Text style={styles.lcName} numberOfLines={1}>
@@ -120,8 +127,11 @@ export function BuddyConnectionCard({
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>
-        <View style={styles.lcAvatar}>
-          <Text style={styles.lcAvatarText}>{getInitials(c.buddy?.name)}</Text>
+        <View>
+          <View style={styles.lcAvatar}>
+            <Text style={styles.lcAvatarText}>{getInitials(c.buddy?.name)}</Text>
+          </View>
+          <VerifiedAvatarBadge verified={c.buddy?.is_verified} avatarSize={44} />
         </View>
         <View style={styles.lcPersonInfo}>
           <Text style={styles.lcName} numberOfLines={1}>

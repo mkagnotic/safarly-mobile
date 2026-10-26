@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { colors } from "@/theme/colors";
 
 import { chatStyles } from "../chatStyles";
@@ -14,6 +15,8 @@ interface ChatHeaderProps {
   participantName: string;
   participantInitials: string;
   participantAvatarUrl: string | null;
+  /** Identity check approved: blue tick after the name. */
+  participantVerified: boolean;
   matchStatus: string;
   isBlocked: boolean;
   matchedByOther: boolean;
@@ -32,6 +35,7 @@ export function ChatHeader({
   participantName,
   participantInitials,
   participantAvatarUrl,
+  participantVerified,
   matchStatus,
   isBlocked,
   matchedByOther,
@@ -89,13 +93,16 @@ export function ChatHeader({
         accessibilityRole="button"
         accessibilityLabel={`View ${participantName}'s profile`}
       >
-        {participantAvatarUrl ? (
-          <Image source={{ uri: participantAvatarUrl }} style={styles.headerAvatarImage} />
-        ) : (
-          <View style={styles.headerAvatar}>
-            <Text style={styles.headerAvatarText}>{participantInitials}</Text>
-          </View>
-        )}
+        <View>
+          {participantAvatarUrl ? (
+            <Image source={{ uri: participantAvatarUrl }} style={styles.headerAvatarImage} />
+          ) : (
+            <View style={styles.headerAvatar}>
+              <Text style={styles.headerAvatarText}>{participantInitials}</Text>
+            </View>
+          )}
+          <VerifiedAvatarBadge verified={participantVerified} avatarSize={36} />
+        </View>
         <View style={styles.headerTextWrap}>
           <View style={styles.headerTitleRow}>
             <Text style={styles.headerTitle} numberOfLines={1}>

@@ -83,7 +83,7 @@ export function OfferChatScreen() {
 
   const {
     conversation, acceptMatch, declineMatch, refetchConversations,
-    participantName, participantInitials, participantId, participantAvatarUrl,
+    participantName, participantInitials, participantId, participantAvatarUrl, participantVerified,
   } = useChatConversation({ conversationId, fallbackName, user });
   // ───────── Server-owned workflow (pinned action bar) ─────────
   const {
@@ -351,6 +351,7 @@ export function OfferChatScreen() {
           participantName={participantName}
           participantInitials={participantInitials}
           participantAvatarUrl={participantAvatarUrl}
+          participantVerified={participantVerified}
           matchStatus={matchStatus}
           isBlocked={isBlocked}
           matchedByOther={matchedByOther}

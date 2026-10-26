@@ -68,8 +68,8 @@ export interface PackageMatch {
    * match still shows but wears a warning pill.
    */
   exceeds_capacity?: boolean;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
-  sender?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
 export interface BuddySearchMatch {
@@ -86,7 +86,7 @@ export interface BuddySearchMatch {
   languages?: string[];
   interests?: string;
   layover?: string;
-  user: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  user: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
 export interface SearchResults {

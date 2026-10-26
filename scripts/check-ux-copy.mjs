@@ -1730,6 +1730,22 @@ const CHECKS = [
     must: ["tries to have your document approved.", "Add 1 to {maxFiles} files"],
     mustNot: ["You can upload up to ${maxAttempts} times."],
   },
+  {
+    repo: "web",
+    file: ["supabase/migrations/20261026120000_profile_is_verified.sql", "src/components/ui/UserAvatar.tsx", "src/features/messages/components/ConversationRow.tsx", "src/features/messages/components/ChatHeader.tsx", "src/features/profile/pages/CustomerPublicProfile.tsx", "supabase/functions/message-handler/routes/conversations.ts"],
+    id: "verified-tick-on-avatar",
+    why: "Client 26 Oct 2026: a blue tick on the top-right of the avatar of every KYC-approved person (inbox, chat, search, profiles, bookings, buddies, reviews). One definition: user_profiles.is_verified, generated from kyc_status = 'approved'; other users see only the yes/no, never the raw status.",
+    must: ["GENERATED ALWAYS AS (kyc_status = 'approved'::public.kyc_status) STORED", "'is_verified', up.is_verified", "if (verified !== true) return avatar;", "verified={c.participant?.is_verified}", "verified={activeConversation?.participant?.is_verified}", "verified={profile.is_verified}", ".select('id, name, avatar_url, is_verified').in('id', otherIds)"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/components/ui/Avatar.tsx", "src/features/messages/inbox/ConversationRow.tsx", "src/features/messages/chat/components/ChatHeader.tsx"],
+    id: "mobile-verified-tick-on-avatar",
+    why: "See verified-tick-on-avatar (web repo).",
+    must: ["export function VerifiedAvatarBadge(", "if (verified !== true) return null;", "verified={conversation.participant?.is_verified}", "<VerifiedAvatarBadge verified={participantVerified}"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

@@ -120,7 +120,7 @@ export function PackageMatchCard({
 
   const personBlock = (
     <View style={sharedStyles.personRow}>
-      <Avatar name={person?.name} uri={person?.avatar_url} size={40} />
+      <Avatar name={person?.name} uri={person?.avatar_url} size={40} verified={person?.is_verified} />
       <View style={sharedStyles.personInfo}>
         <Text style={sharedStyles.personName} numberOfLines={2}>
           {person?.name || "Unknown user"}

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { minAmountProblem } from "@/utils/minAmount";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -345,8 +346,11 @@ function OpportunityCard({
 
       {sender ? (
         <View style={styles.senderRow}>
-          <View style={styles.senderAvatar}>
-            <Text style={styles.senderAvatarText}>{getInitials(sender.name)}</Text>
+          <View>
+            <View style={styles.senderAvatar}>
+              <Text style={styles.senderAvatarText}>{getInitials(sender.name)}</Text>
+            </View>
+            <VerifiedAvatarBadge verified={sender.is_verified} avatarSize={32} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.senderName} numberOfLines={2}>

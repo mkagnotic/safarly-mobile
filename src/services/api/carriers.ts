@@ -69,6 +69,7 @@ export interface CarrierRequest {
     id: string;
     name: string;
     avatar_url: string | null;
+    is_verified?: boolean | null;
     rating: number;
     delivery_count?: number;
   };

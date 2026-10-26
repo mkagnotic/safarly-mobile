@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { type Conversation } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
@@ -96,6 +97,7 @@ export const ConversationRow = memo(function ConversationRow({
           </View>
         )}
         {flags.hasUnread ? <View style={styles.unreadDot} /> : null}
+        <VerifiedAvatarBadge verified={conversation.participant?.is_verified} avatarSize={46} />
       </View>
 
       <View style={styles.body} pointerEvents="none">

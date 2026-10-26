@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { showAppAlert } from "@/feedback/appFeedback";
 import {
   isImplicitStatus,
@@ -43,7 +44,7 @@ interface Props {
    * The matched sender/carrier on the other side of this parcel. Renders a
    * footer row with a Chat entry point, mirroring web's `TripCard`.
    */
-  counterpart?: { id?: string; name?: string | null } | null;
+  counterpart?: { id?: string; name?: string | null; is_verified?: boolean | null } | null;
   /** Label for the counterpart's role, e.g. "carrier" / "sender". */
   counterpartRole?: string;
   onChat?: () => void;
@@ -246,8 +247,11 @@ export const TravelCard = memo(function TravelCard({
 
       {counterpart ? (
         <View style={styles.counterpartRow}>
-          <View style={styles.counterpartAvatar}>
-            <Text style={styles.counterpartAvatarText}>{initialsOf(counterpart.name)}</Text>
+          <View>
+            <View style={styles.counterpartAvatar}>
+              <Text style={styles.counterpartAvatarText}>{initialsOf(counterpart.name)}</Text>
+            </View>
+            <VerifiedAvatarBadge verified={counterpart.is_verified} avatarSize={36} />
           </View>
           <View style={styles.counterpartCol}>
             <Text style={styles.counterpartName} numberOfLines={1}>

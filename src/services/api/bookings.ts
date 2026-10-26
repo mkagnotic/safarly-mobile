@@ -206,8 +206,8 @@ export interface Booking {
     return_state?: string | null;
     return_country?: string | null;
   };
-  sender?: { id?: string; name: string; avatar_url: string | null; rating?: number };
-  carrier?: { id?: string; name: string; avatar_url: string | null; rating?: number };
+  sender?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
+  carrier?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
   /** Deal-level travel-document verification — drives the tracker's "Flight Verified". */
   carrier_request?: {
     travel_doc_status?: "none" | "pending" | "approved" | "rejected";

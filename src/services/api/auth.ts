@@ -9,6 +9,7 @@ export interface AuthUser {
   role: string;
   name: string;
   avatar_url: string | null;
+  is_verified?: boolean | null;
   kyc_status: string;
   is_suspended: boolean;
 }

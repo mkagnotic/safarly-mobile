@@ -57,6 +57,7 @@ export function useChatConversation({
   const participantInitials = getInitials(participantName);
   const participantId = conversation?.participant?.id ?? null;
   const participantAvatarUrl = conversation?.participant?.avatar_url ?? null;
+  const participantVerified = conversation?.participant?.is_verified === true;
 
   return {
     conversation,
@@ -67,5 +68,6 @@ export function useChatConversation({
     participantInitials,
     participantId,
     participantAvatarUrl,
+    participantVerified,
   };
 }

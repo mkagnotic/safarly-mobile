@@ -34,6 +34,7 @@ export interface Conversation {
     id: string;
     name: string;
     avatar_url: string | null;
+    is_verified?: boolean | null;
   };
 }
 
@@ -339,7 +340,7 @@ export interface Message {
   read_at?: string | null;
   attachment_url?: string | null;
   attachment_type?: string | null;
-  sender?: { id: string; name: string; avatar_url: string | null };
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   /** Discriminates typed offer/system messages; absent on legacy text rows. */
   message_kind?: MessageKind;
   payload?: MessagePayload | null;

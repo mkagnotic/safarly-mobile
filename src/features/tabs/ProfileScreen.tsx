@@ -7,6 +7,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
 import { ProfileSkeleton } from "@/components/ui/Skeletons";
@@ -230,6 +231,7 @@ export function ProfileScreen() {
             >
               <Ionicons name="camera-outline" size={14} color={colors.white} />
             </Pressable>
+            <VerifiedAvatarBadge verified={kycVerified} avatarSize={76} />
           </View>
 
           <View style={styles.profileTextWrap}>

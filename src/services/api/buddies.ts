@@ -5,6 +5,7 @@ export interface BuddyListingUser {
   id: string;
   name: string;
   avatar_url: string | null;
+  is_verified?: boolean | null;
   rating: number;
   total_trips: number;
   city?: string | null;
@@ -40,10 +41,10 @@ export interface BuddyRequest {
   message: string | null;
   status: string;
   created_at: string;
-  requester?: { id: string; name: string; avatar_url: string | null };
+  requester?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   /** Server joins the sender profile under this key on the list response — on a
    *  SENT request that is the viewer, not the recipient. */
-  user_profiles?: { id?: string; name: string; avatar_url: string | null } | null;
+  user_profiles?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null } | null;
 }
 
 export interface BuddyConnection {
@@ -52,7 +53,7 @@ export interface BuddyConnection {
   user_b_id: string;
   conversation_id: string | null;
   created_at: string;
-  buddy?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  buddy?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
   from_city?: string | null;
   to_city?: string | null;
   travel_date?: string | null;

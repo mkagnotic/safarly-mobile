@@ -8,6 +8,7 @@ export interface UserProfile {
   country: string | null;
   role: string;
   avatar_url: string | null;
+  is_verified?: boolean | null;
   rating: number;
   on_time_rate: number;
   response_rate: number;

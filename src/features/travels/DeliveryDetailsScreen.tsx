@@ -11,6 +11,7 @@ import { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -164,10 +165,13 @@ export function DeliveryDetailsScreen() {
 
       {counterpart ? (
         <Card style={styles.personCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
-              {initialsOf(counterpart.name)}
-            </Text>
+          <View>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+                {initialsOf(counterpart.name)}
+              </Text>
+            </View>
+            <VerifiedAvatarBadge verified={counterpart.is_verified} avatarSize={44} />
           </View>
           <View style={styles.personCol}>
             <Text style={styles.personName} numberOfLines={1}>

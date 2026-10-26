@@ -64,14 +64,14 @@ export interface Parcel {
   image_urls: string[];
   created_at: string;
   updated_at: string;
-  sender?: { id: string; name: string; avatar_url: string | null; rating: number };
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number };
   /**
    * Matched carrier, once one is committed. `parcel-handler`'s list resolves it
    * from `carrier_id` and attaches it per row; `normalizeParcel` spreads the raw
    * row, so both already arrived at runtime before being declared here.
    */
   carrier_id?: string | null;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
   /** Marketplace return flow — mirrors `parcel_requests` column names. */
   is_online_order?: boolean;
   return_eligible?: boolean;
@@ -97,7 +97,7 @@ export interface ParcelCarrierMatch {
   airline: string | null;
   open_to_buddy?: boolean;
   match_score?: number;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
 export interface ParcelListParams {

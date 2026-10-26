@@ -55,7 +55,7 @@ export interface Trip {
    *  the owner's own list (filter=my_trips). */
   used_capacity_kg?: number | null;
   remaining_capacity_kg?: number | null;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number };
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number };
 }
 
 /** A parcel that matches a trip — from `/trip-handler/find-parcels`. */
@@ -74,7 +74,7 @@ export interface TripParcelMatch {
   fee_offered: number;
   category: string;
   match_score?: number;
-  sender?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
 export interface TripListParams {
