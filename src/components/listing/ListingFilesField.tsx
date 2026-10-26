@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Linking, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Linking, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -18,6 +18,12 @@ import { colors } from "@/theme/colors";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
 
 const MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_NAME = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
+
+/** A saved file has only a name; a staged one also has its MIME type. */
+function isImageFile(name: string, type?: string | null): boolean {
+  return type ? type.startsWith("image/") : IMAGE_NAME.test(name);
+}
 
 /**
  * The optional files field on the trip and parcel forms (client, 26 Oct 2026).
@@ -151,9 +157,13 @@ export function ListingFilesField({
   };
 
   const rows = listingId
-    ? saved.map((f) => ({ key: f.path, name: f.name, url: f.url, onRemove: () => void removeSaved(f.path) }))
+    ? saved.map((f) => ({
+        key: f.path, name: f.name, url: f.url, preview: isImageFile(f.name) ? f.url : null,
+        onRemove: () => void removeSaved(f.path),
+      }))
     : (staged ?? []).map((f, i) => ({
         key: `${f.uri}-${i}`, name: f.name, url: null as string | null,
+        preview: isImageFile(f.name, f.type) ? f.uri : null,
         onRemove: () => onStagedChange?.((staged ?? []).filter((_, j) => j !== i)),
       }));
 
@@ -173,7 +183,20 @@ export function ListingFilesField({
       ) : null}
       {rows.map((r) => (
         <View key={r.key} style={styles.row}>
-          <Ionicons name="document-text-outline" size={18} color={colors.primary} />
+          <Pressable
+            onPress={() => { if (r.url) void Linking.openURL(r.url).catch(() => undefined); }}
+            disabled={!r.url}
+            accessibilityRole={r.url ? "button" : "image"}
+            accessibilityLabel={r.url ? `Open ${r.name}` : r.name}
+          >
+            {r.preview ? (
+              <Image source={{ uri: r.preview }} style={styles.thumb} testID="listing-file-thumb" />
+            ) : (
+              <View style={[styles.thumb, styles.docThumb]}>
+                <Ionicons name="document-text-outline" size={20} color={colors.primary} />
+              </View>
+            )}
+          </Pressable>
           {r.url ? (
             <Text
               style={[styles.name, styles.link]}
@@ -241,6 +264,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
+  thumb: { width: 44, height: 44, borderRadius: 8 },
+  docThumb: { alignItems: "center", justifyContent: "center", backgroundColor: "rgba(93, 63, 211, 0.08)" },
   name: { flex: 1, color: colors.text, fontSize: 13 },
   link: { color: colors.primary, textDecorationLine: "underline" },
   chips: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
