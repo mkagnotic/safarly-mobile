@@ -4,6 +4,8 @@ import { showToast } from "@/feedback/appFeedback";
 import { supabase } from "@/integrations/supabase/client";
 import { messagesApi } from "@/services/api/messages";
 import { notificationsApi } from "@/services/api/notifications";
+import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
+import { navigateToNotificationTarget } from "@/services/notifications/push";
 import { getActiveConversation } from "@/store/activeConversation";
 import { bumpRealtimeTopic, type RealtimeTopic } from "@/store/realtimeBus";
 
@@ -99,7 +101,19 @@ function buildUserChannel(uid: string) {
             if (n.id) void notificationsApi.markAsRead(n.id).catch(() => {});
             return;
           }
-          showToast({ title: n.title, message: n.body, variant: "info", duration: 4200 });
+          // Tapping it opens what it is about - the same screen a push tap or the
+          // Notifications list opens (resolveNotificationRoute). It used to only
+          // dismiss, unlike web (client, 26 Oct 2026).
+          showToast({
+            title: n.title,
+            message: n.body,
+            variant: "info",
+            duration: 4200,
+            onPress: () => {
+              if (n.id) void notificationsApi.markAsRead(n.id).catch(() => {});
+              navigateToNotificationTarget(resolveNotificationRoute(n.data?.link, n.type, n.title));
+            },
+          });
         },
       )
       .on(

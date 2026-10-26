@@ -145,3 +145,19 @@ describe("listing, profile and pay deep links open their screens", () => {
     assert.notEqual(resolveNotificationRoute("/customer/profiles", null).screen, "Profile");
   });
 });
+
+// Client, 26 Oct 2026: tapping the in-app notification banner did nothing on
+// Android. The banner now opens resolveNotificationRoute's answer, like a push tap.
+describe("the in-app notification banner opens what it is about", () => {
+  const CONV = "11111111-2222-3333-4444-555555555555";
+  test("a new message opens that chat, named after the sender", () => {
+    const t = resolveNotificationRoute(`/customer/messages/${CONV}`, "message", "New message from User One");
+    assert.equal(t.screen, "OfferChatTab");
+    assert.equal((t.params as { conversationId: string }).conversationId, CONV);
+    assert.equal((t.params as { name: string }).name, "User One");
+  });
+  test("no link still lands somewhere sensible for its type", () => {
+    assert.equal(resolveNotificationRoute(undefined, "message", "hey").screen, "MessagesTab");
+    assert.ok(resolveNotificationRoute(null, null, null).screen, "always a screen");
+  });
+});

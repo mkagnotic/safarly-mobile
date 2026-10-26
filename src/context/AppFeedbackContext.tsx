@@ -76,7 +76,10 @@ function ToastBanner({
       ]}
     >
       <Pressable
-        onPress={onDismiss}
+        onPress={() => {
+          onDismiss();
+          payload.onPress?.();
+        }}
         style={({ pressed }) => [
           styles.toastCard,
           shadowCard(),
@@ -86,8 +89,9 @@ function ToastBanner({
             opacity: pressed ? 0.94 : 1,
           },
         ]}
-        accessibilityRole="alert"
+        accessibilityRole={payload.onPress ? "button" : "alert"}
         accessibilityLabel={[payload.title, payload.message].filter(Boolean).join(". ")}
+        accessibilityHint={payload.onPress ? "Opens it" : undefined}
       >
         <View style={[styles.toastIconCircle, { backgroundColor: accent.bg }]}>
           <Ionicons name={accent.icon} size={22} color={accent.fg} />

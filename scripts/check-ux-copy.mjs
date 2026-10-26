@@ -1586,6 +1586,30 @@ const CHECKS = [
     must: [".or(`sender_id.eq.${userId},carrier_id.eq.${userId}`, { referencedTable: 'bookings' });", "if (listErr) return errorResponse('INTERNAL_ERROR', listErr.message);"],
     mustNot: ["booking_id.in.(${bookingIds.join(',')})"],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/message-handler/routes/activeDeal.ts", "supabase/functions/buddy-handler/index.ts"],
+    id: "rated-state-reaches-installed-apps",
+    why: "25 Oct 2026: iOS could not be rebuilt before release. The rated state rides on the server's step label (installed apps render it), and the buddy line says where to rate for apps without the button.",
+    must: ["code: 'completed_rated', label: 'Delivered - you rated this delivery'", "rate each other here or in My Travels → Travel Partners."],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/hooks/realtime/useRealtimeSync.ts", "src/context/AppFeedbackContext.tsx"],
+    id: "mobile-notification-toast-opens-its-target",
+    why: "Client 26 Oct 2026: tapping the in-app notification banner on Android only dismissed it. It now opens resolveNotificationRoute's answer, the same screen a push tap or the Notifications list opens.",
+    must: ["navigateToNotificationTarget(resolveNotificationRoute(n.data?.link, n.type, n.title));", "payload.onPress?.();"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["src/hooks/useRealtimeSync.ts", "src/lib/notificationLink.ts"],
+    id: "web-notification-toast-uses-the-shared-resolver",
+    why: "26 Oct 2026: the toast's View used the raw link - a legacy link went nowhere, a missing one gave no View. It resolves like the Notifications page, with the type fallback.",
+    must: [": toastPath(n.data?.link, n.type);", "return resolved.kind === \"navigate\" ? resolved.path : fallbackPathForType(type);"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
