@@ -1779,6 +1779,22 @@ const CHECKS = [
     mustNot: ["You've been refunded in full — now tell them where to send the parcel back."],
   },
   {
+    repo: "web",
+    file: ["supabase/migrations/20261027100000_archive_on_completion.sql", "supabase/functions/_shared/liveListings.ts", "src/features/my-trips/components/TripCard.tsx", "src/features/my-trips/lib/helpers.ts"],
+    id: "finished-listings-archive-at-once",
+    why: "Client 27 Oct 2026: a carrier's trip goes to Archive once its deliveries are done (status 'completed', leaves search) and a buddy post once its buddy trip is completed (completed_at); date-passed listings show 'Expired', finished ones 'Completed' / 'Cancelled', at every screen width.",
+    must: ["CREATE TRIGGER trg_complete_trip_after_delivery", "CREATE TRIGGER trg_complete_buddy_listing", ".is('completed_at', null)", "const buddyCompleted = type === \"buddy\"", "FINISHED_LABEL.has(shownStatus)", "delivery_by_to || (item as Parcel).delivery_by"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/travels/BuddyPartnerCard.tsx", "src/features/travels/TravelCard.tsx"],
+    id: "mobile-finished-listings-archive-at-once",
+    why: "See finished-listings-archive-at-once (web repo).",
+    must: ["const completed = !!(item as { completed_at?: string | null }).completed_at;", "delivery_by_to || (item as Parcel).delivery_by"],
+    mustNot: [],
+  },
+  {
     repo: "mobile",
     file: "src/features/bookings/ParcelReturnCard.tsx",
     id: "mobile-refund-wording-follows-the-money",

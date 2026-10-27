@@ -88,7 +88,7 @@ export const TravelCard = memo(function TravelCard({
   // || travel_date), so a multi-day trip isn't marked expired while still ongoing.
   const expiryDate =
     type === "parcel"
-      ? (item as Parcel).delivery_by
+      ? ((item as Parcel & { delivery_by_to?: string | null }).delivery_by_to || (item as Parcel).delivery_by)
       : ((item as FlightItem & { travel_date_to?: string | null }).travel_date_to ??
         (item as FlightItem).travel_date);
   const expired = isListingExpired(status, expiryDate);

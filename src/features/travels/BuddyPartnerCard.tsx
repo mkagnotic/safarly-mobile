@@ -45,10 +45,12 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   isDeleting,
 }: Readonly<Props>) {
   const rawStatus = (item.status ?? "").toLowerCase();
-  const isMatched = MATCHED_STATUSES.has(rawStatus);
-  const statusLabel = isMatched ? "Matched" : "Looking for Match";
+  // A buddy post whose buddy trip was marked complete reads "Completed" (27 Oct 2026, web parity).
+  const completed = !!(item as { completed_at?: string | null }).completed_at;
+  const isMatched = completed || MATCHED_STATUSES.has(rawStatus);
+  const statusLabel = completed ? "Completed" : isMatched ? "Matched" : "Looking for Match";
   // Web parity: a buddy listing whose travel window has passed reads as expired.
-  const expired = isListingExpired(
+  const expired = !completed && isListingExpired(
     rawStatus,
     item.travel_date_to ?? item.travel_date_from ?? item.travel_date,
   );

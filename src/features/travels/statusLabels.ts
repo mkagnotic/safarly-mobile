@@ -15,6 +15,7 @@ export const STATUS_LABEL: Readonly<Record<string, string>> = {
   completed: "Completed",
   cancelled: "Cancelled",
   expired: "Expired",
+  archived: "Expired",
   pending: "Looking for Match",
   accepted: "Matched",
   looking_for_match: "Looking for Carrier",
@@ -84,6 +85,7 @@ const EXPIRY_IMMUNE_STATUSES: ReadonlySet<string> = new Set([
   "completed",
   "cancelled",
   "expired",
+  "archived",
 ]);
 
 /**
