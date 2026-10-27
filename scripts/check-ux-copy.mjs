@@ -1819,6 +1819,14 @@ const CHECKS = [
     mustNot: [],
   },
   {
+    repo: "web",
+    file: ["supabase/functions/_shared/paymentRecovery.ts", "supabase/functions/_shared/refund.ts", "supabase/functions/_shared/duplicatePayment.ts", "supabase/functions/scheduled-workflow-timeouts/index.ts"],
+    id: "payments-never-stick",
+    why: "Client 27 Oct 2026: a payment arriving after the window closed sat captured until someone refunded it by hand (payer told nothing); a refund the processor rejected was still recorded 'completed'; payouts waited for an admin click. Late payments refund automatically, unconfirmed refunds stay 'pending' and are retried with the same key, lost confirmations are reconciled with the processor, stuck payouts retry.",
+    must: ["key: `late-refund:${p.paymentId}`,", "status: refundId || !providerPaymentId ? 'completed' : 'pending',", "export async function retryPendingRefunds(", "export async function reconcilePendingPayments(", "export async function retryStuckPayouts(", "retryPendingRefunds(supabase),"],
+    mustNot: ["'Late payment needs a decision'"],
+  },
+  {
     repo: "mobile",
     file: "src/features/bookings/ParcelReturnCard.tsx",
     id: "mobile-refund-wording-follows-the-money",
