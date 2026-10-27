@@ -2042,6 +2042,30 @@ const CHECKS = [
     must: ["export async function forgetThisDevice(", "export async function retryPendingForget(", "export function foregroundPresentation(", "setActiveChat(conversationId);", "void dismissChatNotifications(conversationId);", '"/user-handler/push-token/forget"', "await forgetThisDevice();\n        await signOutThisDevice("],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: "src/features/onboarding/pages/CustomerOnboarding.tsx",
+    id: "onboarding-verify-before-payouts",
+    why: "27 Oct 2026 onboarding flow test: the last step's 'Set up payouts' always failed for a new person (the server requires a verified identity first, KYC_REQUIRED). Unverified people now get 'Verify my identity', which finishes onboarding and opens the ID check; an identity check in progress says so.",
+    must: ["const kyc = useKycGate();", "First, a quick identity check.", "Verify my identity", 'navigate("/customer/profile/kyc", { replace: true });'],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "src/features/onboarding/pages/CustomerOnboarding.tsx",
+    id: "onboarding-plain-wording-and-limits",
+    why: "Client 27 Oct 2026: onboarding wording must be user-friendly (no 'peer-to-peer' / 'not liable for items in transit'), steps labelled, the profile save says the server's reason, name capped at 100 and bio at 280 with a counter.",
+    must: ['const STEP_LABELS = ["Terms", "Profile", "Payouts"];', "We connect people, we don't carry parcels.", "I understand that Safarly only connects people", "maxLength={NAME_MAX}", 'data-testid="onboarding-bio-count"', "toast.error(getErrorMessage(err) || "],
+    mustNot: ["Peer-to-Peer Nature.", "is a peer-to-peer platform and is not liable"],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/auth/ProfileSetupScreen.tsx",
+    id: "mobile-onboarding-verify-before-payouts-and-wording",
+    why: "See onboarding-verify-before-payouts and onboarding-plain-wording-and-limits (web repo); mobile also took a 1-letter name the server refuses.",
+    must: ["const kyc = useKycGate();", 'label="Verify my identity"', 'navigateToNotificationTarget({ screen: "KycVerificationTab" } as never);', "We connect people, we don't carry parcels.", "if (name.trim().length < 2) {", "maxLength={100}"],
+    mustNot: ['heading: "Peer-to-peer nature."', "is a peer-to-peer platform and is not liable"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

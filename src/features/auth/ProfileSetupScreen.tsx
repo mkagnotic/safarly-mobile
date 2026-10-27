@@ -39,6 +39,8 @@ import {
 import { mapAuthError } from "@/services/auth/authErrors";
 import { useAppStore } from "@/store/useAppStore";
 import { RazorpayPayoutForm } from "@/features/wallet/RazorpayPayoutForm";
+import { useKycGate } from "@/hooks/api/useKycGate";
+import { navigateToNotificationTarget } from "@/services/notifications/push";
 import { colors } from "@/theme/colors";
 
 const TERMS_VERSION = "v1";
@@ -134,8 +136,13 @@ export function ProfileSetupScreen() {
         setStep(2);
         return;
       }
-      if (!name.trim()) {
-        setNameError("Name is required");
+      // The server's rule (user-handler profileRules): 2-100 characters.
+      if (name.trim().length < 2) {
+        setNameError("Enter your full name (at least 2 characters)");
+        return;
+      }
+      if (name.trim().length > 100) {
+        setNameError("Name must be 100 characters or fewer");
         return;
       }
       setSubmitting(true);
@@ -158,7 +165,8 @@ export function ProfileSetupScreen() {
         });
         if (mountedRef.current) setStep(2);
       } catch (err) {
-        if (mountedRef.current) setFormError(mapAuthError(err, "signup").message);
+        // The server's own reason (e.g. "Bio must be 280 characters or fewer.").
+        if (mountedRef.current) setFormError(getErrorMessage(err) || "Couldn't save your profile. Please try again.");
       } finally {
         if (mountedRef.current) setSubmitting(false);
       }
@@ -236,6 +244,27 @@ export function ProfileSetupScreen() {
       if (mountedRef.current) setSubmitting(false);
     }
   }, [submitting, commitTerms, refreshPayoutStatus]);
+
+  // Payout setup needs a verified identity (the server answers KYC_REQUIRED
+  // otherwise), so a brand-new person is sent to verify first (27 Oct 2026).
+  const kyc = useKycGate();
+  const setKycWelcomePending = useAppStore((st) => st.setKycWelcomePending);
+  const handleVerifyIdentity = useCallback(async () => {
+    if (submitting) return;
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      if (await commitTerms()) {
+        // They are verifying now: no welcome prompt asking them to.
+        setKycWelcomePending(false);
+        // Opens once the main app is on screen (onboarding is its own stack).
+        navigateToNotificationTarget({ screen: "KycVerificationTab" } as never);
+        finishProfileSetup();
+      }
+    } finally {
+      if (mountedRef.current) setSubmitting(false);
+    }
+  }, [submitting, commitTerms, finishProfileSetup, setKycWelcomePending]);
 
   /** "I'll do this later" / "Continue" — commit terms and enter the app. */
   const handleFinishSetup = useCallback(async () => {
@@ -344,6 +373,10 @@ export function ProfileSetupScreen() {
             onSetUp={handleSetUpPayouts}
             onFinish={handleFinishSetup}
             onRefresh={refreshPayoutStatus}
+            kycApproved={kyc.isApproved}
+            kycPending={kyc.isPending}
+            kycLoading={kyc.isLoading}
+            onVerifyIdentity={handleVerifyIdentity}
           />
         ) : null}
       </View>
@@ -391,16 +424,16 @@ interface TermsStepProps {
 
 const TERMS_SUMMARY: readonly Readonly<{ heading: string; body: string }>[] = [
   {
-    heading: "Platform usage.",
-    body: "Safarly connects individuals who need to send items with travelers willing to carry them, and enables travel companionship between users.",
+    heading: "What Safarly is.",
+    body: "Safarly connects people who need to send parcels with travelers who can carry them, and helps travelers find a travel buddy. Please use it responsibly and within the law.",
   },
   {
-    heading: "Peer-to-peer nature.",
-    body: "Safarly facilitates connections only — we don't physically handle, transport, or store items. All arrangements are between users.",
+    heading: "We connect people, we don't carry parcels.",
+    body: "Safarly doesn't handle, carry, store or insure parcels. Each delivery is agreed between the sender and the traveler.",
   },
   {
-    heading: "User responsibility.",
-    body: "You're responsible for providing accurate information, complying with applicable laws and airline rules, and not sending prohibited or illegal items.",
+    heading: "Your responsibility.",
+    body: "Make sure everything you send or carry is allowed by the law, the airline and customs, and that the details you give are accurate.",
   },
   {
     heading: "Age.",
@@ -412,7 +445,7 @@ const TERMS_SUMMARY: readonly Readonly<{ heading: string; body: string }>[] = [
   },
   {
     heading: "Privacy.",
-    body: "We process personal data as described in our Privacy Policy. Tap below to read the full policy.",
+    body: "We use your personal data only as described in our Privacy Policy, to run and improve Safarly. Tap below to read it.",
   },
 ];
 
@@ -464,7 +497,7 @@ function TermsStep({
         <Checkbox
           checked={liabilityAccepted}
           onChange={onLiability}
-          label="I understand that Safarly is a peer-to-peer platform and is not liable for items in transit"
+          label="I understand that Safarly only connects people: it doesn't carry or insure parcels and isn't responsible for them while they travel"
         />
       </View>
 
@@ -549,7 +582,7 @@ function ProfileStep({
         </Pressable>
         <Text style={styles.authTitle}>Complete profile</Text>
       </View>
-      <Text style={styles.authSubtitle}>Help others trust you by completing your profile.</Text>
+      <Text style={styles.authSubtitle}>A photo and a few details help senders and travelers trust you.</Text>
 
       {formError ? (
         <View style={styles.bannerSlot}>
@@ -580,6 +613,7 @@ function ProfileStep({
             if (formError) onClearFormError();
           }}
           placeholder="Your full name"
+          maxLength={100}
           autoCapitalize="words"
           autoCorrect
           editable={!submitting}
@@ -616,7 +650,7 @@ function ProfileStep({
           label="Short bio"
           value={bio}
           onChangeText={onBio}
-          placeholder="Tell others about yourself…"
+          placeholder="A line or two about you, like where you often travel"
           multiline
           editable={!submitting}
           maxLength={280}
@@ -624,7 +658,7 @@ function ProfileStep({
       </View>
 
       <PrimaryButton
-        label="Complete profile"
+        label="Save and continue"
         onPress={onComplete}
         loading={submitting}
       />
@@ -652,6 +686,10 @@ interface PayoutStepProps {
   onFinish: () => void;
   /** Re-read payout status after the inline (non-hosted) form saves. */
   onRefresh: () => void | Promise<void>;
+  kycApproved: boolean;
+  kycPending: boolean;
+  kycLoading: boolean;
+  onVerifyIdentity: () => void;
 }
 
 /**
@@ -670,6 +708,10 @@ function PayoutStep({
   onSetUp,
   onFinish,
   onRefresh,
+  kycApproved,
+  kycPending,
+  kycLoading,
+  onVerifyIdentity,
 }: Readonly<PayoutStepProps>) {
   const connected = !!status?.connected;
   const pending = !connected && !!status?.details_submitted;
@@ -727,6 +769,17 @@ function PayoutStep({
                 <Text style={styles.payoutNoticeStrong}>Verification in progress.</Text>{" "}
                 {providerLabel} is still reviewing your details — this usually takes a few minutes.
               </>
+            ) : !kycApproved && kycPending ? (
+              <>
+                <Text style={styles.payoutNoticeStrong}>Your identity check is in progress.</Text> Once
+                it's approved you can connect your bank from your profile. Senders don't need this.
+              </>
+            ) : !kycApproved ? (
+              <>
+                <Text style={styles.payoutNoticeStrong}>First, a quick identity check.</Text> To keep
+                everyone safe, carriers verify their ID with a photo and a selfie (about 2 minutes)
+                before connecting a bank. Senders don't need this.
+              </>
             ) : (
               <>
                 Payouts are handled securely by{" "}
@@ -743,7 +796,11 @@ function PayoutStep({
         <PrimaryButton label="Continue" onPress={onFinish} loading={submitting} />
       ) : (
         <>
-          {isHostedSetup ? (
+          {!kycApproved ? (
+            kycPending ? null : (
+              <PrimaryButton label="Verify my identity" onPress={onVerifyIdentity} loading={submitting} disabled={kycLoading} />
+            )
+          ) : isHostedSetup ? (
             <PrimaryButton
               label={pending ? "Continue setup" : "Set up payouts"}
               onPress={onSetUp}
