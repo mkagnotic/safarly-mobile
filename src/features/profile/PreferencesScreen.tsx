@@ -50,7 +50,7 @@ const TOGGLES: readonly ToggleConfig[] = [
     field: "push_enabled",
     icon: "notifications-outline",
     label: "Push Notifications",
-    desc: "Mobile push notifications",
+    desc: "Alerts on this phone and your other devices, even when Safarly is closed",
   },
 ] as const;
 
@@ -204,7 +204,8 @@ export function PreferencesScreen() {
               icon={toggle.icon}
               label={toggle.label}
               desc={pushUnavailable ? PUSH_UNAVAILABLE_COPY[pushAvailability] : toggle.desc}
-              value={isPush ? pushValue : Boolean(preferences?.[toggle.field])}
+              // An unset email preference means ON (server default, web parity).
+              value={isPush ? pushValue : (preferences?.[toggle.field] ?? true) !== false}
               disabled={pushUnavailable}
               saving={savingField === toggle.field}
               onChange={(nextValue) =>
@@ -236,7 +237,7 @@ export function PreferencesScreen() {
             <FormBanner
               variant="error"
               title="Couldn't turn on push notifications"
-              message="Something went wrong setting up push on this device. Please try again."
+              message="We couldn't set up notifications on this phone. Please try again."
               onDismiss={() => setPushNotice(null)}
             />
           )}
@@ -246,7 +247,7 @@ export function PreferencesScreen() {
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={16} color={colors.mutedText} />
         <Text style={styles.noteText}>
-          Some essential emails — security alerts and payment receipts — are always sent.
+          Essential emails — payments, payouts, delivery codes, identity checks and cancellations — are always sent, even with email notifications off.
         </Text>
       </View>
     </Screen>

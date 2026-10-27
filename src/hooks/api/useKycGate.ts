@@ -11,6 +11,8 @@ export interface UseKycGateResult {
   isLoading: boolean;
   /** Raw status string from the server (for copy/debug). */
   status: string | null;
+  /** The status could not be read - NOT the same as "not verified". */
+  isError: boolean;
   /**
    * Re-reads the status from the server and resolves to whether it is approved
    * NOW — so a caller can act on the fresh answer instead of the state from the
@@ -31,6 +33,7 @@ export interface UseKycGateResult {
 export function useKycGate(): UseKycGateResult {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
   const mountedRef = useRef(true);
 
   const refetch = useCallback(async (): Promise<boolean> => {
@@ -38,11 +41,11 @@ export function useKycGate(): UseKycGateResult {
     try {
       const res = await kycApi.getStatus();
       const next = res.data?.status ?? null;
-      if (mountedRef.current) setStatus(next);
+      if (mountedRef.current) { setStatus(next); setIsError(false); }
       return isKycApprovedStatus(next);
     } catch {
       // Fail safe to "not approved" — the server still enforces KYC_REQUIRED.
-      if (mountedRef.current) setStatus(null);
+      if (mountedRef.current) { setStatus(null); setIsError(true); }
       return false;
     } finally {
       if (mountedRef.current) setIsLoading(false);
@@ -75,6 +78,7 @@ export function useKycGate(): UseKycGateResult {
     isApproved: isKycApprovedStatus(status),
     isPending: isKycPendingStatus(status),
     isLoading,
+    isError,
     status,
     refetch,
   };

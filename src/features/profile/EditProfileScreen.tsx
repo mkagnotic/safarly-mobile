@@ -77,7 +77,9 @@ export function EditProfileScreen() {
 
   const validate = useCallback((): boolean => {
     const next: ProfileFormErrors = {};
-    if (!name.trim()) next.name = "Name is required";
+    // The server's rule (profileRules.ts): 2-100 characters. Same words as web.
+    if (name.trim().length < 2) next.name = "Enter your full name (at least 2 characters)";
+    else if (name.trim().length > 100) next.name = "Name must be 100 characters or fewer";
     setErrors(next);
     return Object.keys(next).length === 0;
   }, [name]);
@@ -94,8 +96,10 @@ export function EditProfileScreen() {
     try {
       const res = await usersApi.updateMyProfile({
         name: name.trim(),
-        bio: bio.trim() || undefined,
-        city: city.trim() || undefined,
+        // "" (not undefined) when emptied: undefined was dropped from the request,
+        // so a cleared bio/city came back while it said "Profile updated" (web parity).
+        bio: bio.trim(),
+        city: city.trim(),
         country: country ?? undefined,
         // Web parity: always send avatar_url; "" clears it server-side.
         avatar_url: avatarUrl ?? "",

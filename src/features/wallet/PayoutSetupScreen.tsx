@@ -17,6 +17,8 @@ import { getErrorMessage, paymentsApi, PAYOUT_RETURN_URL, type PayoutStatus } fr
 import { RazorpayPayoutForm } from "./RazorpayPayoutForm";
 import { colors } from "@/theme/colors";
 import { useKycGate } from "@/hooks/api/useKycGate";
+import { useMyProfile } from "@/hooks/api/useMyProfile";
+import { countryName, payoutBlock } from "@/utils/payoutEligibility";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "PayoutSetupTab">,
@@ -87,6 +89,10 @@ export function PayoutSetupScreen() {
   // behaving exactly as before while the status request is in flight.
   const isHostedSetup = (status?.setup_kind ?? "hosted") === "hosted";
   const providerLabel = status?.provider_label ?? "Stripe";
+  // An India-profile carrier can't be onboarded by the US Stripe platform: say so
+  // here instead of a Set-up button that ends in a Stripe error (web parity).
+  const { profile } = useMyProfile();
+  const countryBlock = !isConnected ? payoutBlock(status?.provider ?? "stripe", profile?.country) : null;
 
   const openOnboarding = useCallback(async () => {
     if (busy) return;
@@ -129,7 +135,7 @@ export function PayoutSetupScreen() {
     } finally {
       if (mountedRef.current) setBusy(false);
     }
-  }, [busy]);
+  }, [busy, providerLabel]);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -145,7 +151,16 @@ export function PayoutSetupScreen() {
 
   // Not verified and no payout account yet: identity first. An account set up
   // before this rule still shows its status.
-  if (!kyc.isLoading && !kyc.isApproved && !hasAccount) {
+  // Wait for the payout status too: an older account that isn't verified used
+  // to flash "Verify your identity first" until its status arrived.
+  if (!kyc.isLoading && kyc.isError && !hasAccount && !loading) {
+    return (
+      <Screen contentContainerStyle={styles.content}>
+        <ErrorState error={new Error("Couldn't check your identity verification.")} subject="your verification status" onRetry={() => void kyc.refetch()} />
+      </Screen>
+    );
+  }
+  if (!kyc.isLoading && !kyc.isApproved && !hasAccount && !loading) {
     return (
       <Screen contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
@@ -180,7 +195,7 @@ export function PayoutSetupScreen() {
 
       {error ? (
         <View style={{ marginBottom: 14 }}>
-          <FormBanner variant="error" title="Something went wrong" message={error} onDismiss={() => setError(null)} />
+          <FormBanner variant="error" title="Couldn't open payout setup" message={error} onDismiss={() => setError(null)} />
         </View>
       ) : null}
 
@@ -217,7 +232,7 @@ export function PayoutSetupScreen() {
           {/* Benefits — only before an account exists */}
           {!hasAccount ? (
             <Card style={styles.card}>
-              <Benefit icon="lock-closed-outline" title="Secure verification" body={`${providerLabel} verifies your identity and bank details — we never see them.`} />
+              <Benefit icon="lock-closed-outline" title="Secure verification" body={`${providerLabel}, our payment partner, checks your bank details${isHostedSetup ? " and identity" : ""}.`} />
               <Benefit icon="cash-outline" title="Direct bank deposits" body="Earnings are deposited straight to your bank account." />
               <Benefit icon="pricetag-outline" title="No fees to connect" body="Setting up payouts is free." last />
             </Card>
@@ -236,7 +251,8 @@ export function PayoutSetupScreen() {
             Raised by a carrier who hit exactly this. The suggested wording is
             offered verbatim so there is nothing to compose.
           */}
-          {!hasAccount ? (
+          {/* Only Stripe's hosted page asks "what do you sell"; Razorpay is a form here. */}
+          {!hasAccount && isHostedSetup && !countryBlock ? (
             <Card style={styles.hintCard}>
               <Text style={styles.hintTitle}>Before you continue</Text>
               <Text style={styles.hintBody}>
@@ -251,8 +267,20 @@ export function PayoutSetupScreen() {
             </Card>
           ) : null}
 
+          {countryBlock ? (
+            <Card style={styles.hintCard}>
+              <Text style={styles.hintTitle}>We can't pay into {countryName(countryBlock.country)} yet</Text>
+              <Text style={styles.hintBody}>
+                Your profile country is {countryName(countryBlock.country)}. Payouts to banks there aren't
+                switched on yet; you'll be able to finish setup once they are. If your bank account is in
+                the United States, change your country in Edit profile and you can set up payouts now.
+              </Text>
+              <AppButton label="Edit profile" variant="secondary" onPress={() => navigation.navigate("EditProfileTab")} style={styles.action} />
+            </Card>
+          ) : null}
+
           {/* Actions */}
-          {isHostedSetup ? (
+          {countryBlock ? null : isHostedSetup ? (
             isConnected ? (
               <>
                 <AppButton
@@ -283,7 +311,7 @@ export function PayoutSetupScreen() {
             // Razorpay: no hosted flow and no carrier-facing dashboard — entering
             // (or updating) the destination account IS the whole surface.
             <Card style={styles.card}>
-              <RazorpayPayoutForm hasAccount={hasAccount} onSaved={loadStatus} />
+              <RazorpayPayoutForm hasAccount={hasAccount} onSaved={loadStatus} defaultName={profile?.name ?? undefined} />
             </Card>
           )}
 
@@ -292,7 +320,7 @@ export function PayoutSetupScreen() {
             <Text style={styles.faqHeading}>How payouts work</Text>
             <Faq q="When do I get paid?" a="Earnings pay out automatically to your linked bank 2–7 business days after each delivery (your first payout can take 7–14 days)." />
             <Faq q="What's the platform fee?" a="Safarly adds a 10% platform fee on top of the delivery fee, paid by the sender — you receive your full quoted fee." />
-            <Faq q="What do I need?" a={`A government ID and your bank details, entered securely on ${providerLabel}.`} last />
+            <Faq q="What do I need?" a={isHostedSetup ? `A government ID and your bank details, entered securely on ${providerLabel}.` : "Your bank account number and IFSC code, or a UPI ID."} last />
           </Card>
         </>
       )}

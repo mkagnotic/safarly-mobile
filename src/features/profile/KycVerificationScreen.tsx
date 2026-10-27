@@ -213,7 +213,8 @@ export function KycVerificationScreen() {
   const showIntro = kyc.isNotStarted && !replacing;
   const showActionNeeded = kyc.isRejected;
   const reviewNotes =
-    kyc.submission?.review_notes ??
+    // || not ??: an empty note left a blank "Action needed" banner (web parity).
+    kyc.submission?.review_notes ||
     "Your verification wasn't approved. Please review and resubmit your documents.";
 
   // Android hardware back on step 2/3 steps back through the wizard instead of
@@ -461,6 +462,7 @@ function PendingCard({
         </Card>
       ) : null}
 
+      <Text style={styles.replaceHint}>Uploaded the wrong document? You can replace it while it's under review.</Text>
       <AppButton label="Replace documents" variant="secondary" onPress={onReplace} style={styles.replaceButton} />
     </>
   );
@@ -763,6 +765,7 @@ const styles = StyleSheet.create({
   replaceLabel: { color: colors.text, fontSize: 14, fontWeight: "700" },
   cancelLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },
   replaceButton: { marginTop: 2 },
+  replaceHint: { color: colors.subtleText, fontSize: 12, lineHeight: 17, marginTop: 10, marginBottom: 6 },
 
   // Stepper
   stepper: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16, paddingHorizontal: 4 },

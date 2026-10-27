@@ -2066,6 +2066,30 @@ const CHECKS = [
     must: ["const kyc = useKycGate();", 'label="Verify my identity"', 'navigateToNotificationTarget({ screen: "KycVerificationTab" } as never);', "We connect people, we don't carry parcels.", "if (name.trim().length < 2) {", "maxLength={100}"],
     mustNot: ['heading: "Peer-to-peer nature."', "is a peer-to-peer platform and is not liable"],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/auth-handler/index.ts", "supabase/functions/_shared/validation.ts"],
+    id: "email-change-is-verified-and-one-password-rule",
+    why: "27 Oct 2026 account-setup flow test: change-email set the new address instantly with no email (a typo locked the user out) while saying 'Verification email sent', checked 'taken' against one page of users, and answered a wrong password with 401 (apps sign out on 401). Change/reset also demanded upper+lower case while sign-up and Supabase ('Letters and digits') do not.",
+    must: ["const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user${redirect}`, {", "if (signInError) return errorResponse('VALIDATION_ERROR', 'Your current password is incorrect.');", "return 'Password must contain both letters and numbers';"],
+    mustNot: ["await supabase.auth.admin.updateUserById(authResult.user.id, { email: new_email as string });", "if (signInError) return errorResponse('UNAUTHENTICATED', 'Wrong password');", "Password must contain at least one uppercase letter"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/profile/components/AccountSecuritySettings.tsx", "src/features/profile/pages/CustomerPreferences.tsx", "src/features/payments/pages/CustomerPayoutSetup.tsx", "src/features/payments/components/RazorpayPayoutForm.tsx", "src/features/profile/pages/CustomerEditProfile.tsx", "src/features/profile/pages/CustomerKyc.tsx"],
+    id: "web-account-setup-fixes",
+    why: "27 Oct 2026 account-setup flow test: change email was 'contact support'; prefs switches showed unsaved values and web push could read ON unsubscribed; payout copy contradicted the fee model (sender pays the 10%, carrier gets the full quote); Stripe-only hints shown to Razorpay users; no re-enter account number; KYC lookup failure read as 'not verified'; name/city uncapped; 'KYC Verification' jargon; double toasts.",
+    must: ["Send confirmation link", "await updatePrefs.mutateAsync(", "Safarly adds a 10% platform fee on top of the delivery fee, paid by the sender", "Re-enter account number", "if (kycGate.isError && !hasAccount) {", ">Verify your identity</h1>", "maxLength={100}"],
+    mustNot: ["To update the email on your account, please contact support.", "Platform fees are deducted from delivery earnings.", ">KYC Verification</h1>"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/profile/ChangeEmailScreen.tsx", "src/features/profile/EditProfileScreen.tsx", "src/features/profile/ProfileFormFields.tsx", "src/features/wallet/PayoutSetupScreen.tsx", "src/features/wallet/RazorpayPayoutForm.tsx", "src/features/profile/ChangePasswordScreen.tsx", "src/utils/payoutEligibility.ts", "src/hooks/api/useKycGate.ts"],
+    id: "mobile-account-setup-fixes",
+    why: "See web-account-setup-fixes: plus mobile could not clear its bio/city, took a 1-letter name, sent India-profile carriers into Stripe setup that cannot finish, left the Razorpay name blank and never said the bank details were saved.",
+    must: ["Send confirmation link", "        bio: bio.trim(),", "export function payoutBlock(", "Re-enter account number", "defaultName={profile?.name ?? undefined}", 'hint="At least 8 characters, with letters and numbers"'],
+    mustNot: ["To update the email on your account, please contact support.", "bio: bio.trim() || undefined,"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

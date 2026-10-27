@@ -18,16 +18,13 @@ import { colors } from "@/theme/colors";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "ChangePasswordTab">;
 
-// Stricter than the shared passwordPolicy because the backend's change-password
-// route (auth-handler) enforces upper + lower + digit — validate the same rule
-// client-side so a valid-looking password never bounces off the server. Mirrors
-// web's AccountSecuritySettings.handleChangePassword.
+// The shared rule (passwordPolicy): 8+ characters with letters and numbers - the
+// same as sign-up, reset and the server (27 Oct 2026; change used to demand upper
+// AND lower case too). Mirrors web's AccountSecuritySettings.handleChangePassword.
 const MIN_LEN = 8;
 function validateNewPassword(current: string, next: string): string | null {
   if (next.length < MIN_LEN) return `Password must be at least ${MIN_LEN} characters`;
-  if (!/[A-Z]/.test(next)) return "Include at least one uppercase letter";
-  if (!/[a-z]/.test(next)) return "Include at least one lowercase letter";
-  if (!/\d/.test(next)) return "Include at least one number";
+  if (!/[A-Za-z]/.test(next) || !/\d/.test(next)) return "Use both letters and numbers";
   if (current && current === next) return "New password must be different from current";
   return null;
 }
@@ -165,7 +162,7 @@ export function ChangePasswordScreen() {
             clearFormError();
           }}
           placeholder="Enter a new password"
-          hint="At least 8 characters, with upper & lower case and a number"
+          hint="At least 8 characters, with letters and numbers"
           secureTextEntry={!showNew}
           autoCapitalize="none"
           autoCorrect={false}
