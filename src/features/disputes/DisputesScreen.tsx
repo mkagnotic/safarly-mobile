@@ -352,10 +352,10 @@ function DisputeCard({
       const refunded = res.data?.refunded_amount;
       onBanner({
         variant: "success",
-        title: "Penalty waived — carrier refunded",
+        title: "Penalty waived",
         message:
           typeof refunded === "number"
-            ? `${formatMoneyShort(refunded, res.data?.currency)} returned to the carrier. The strike record stays.`
+            ? `The carrier's ${formatMoneyShort(refunded, res.data?.currency)} penalty is cancelled. The strike record stays.`
             : "The cash penalty was waived; the strike record stays.",
       });
       await onRefetch();
@@ -419,7 +419,7 @@ function DisputeCard({
               </View>
               <Text style={styles.waiverBody}>
                 The carrier asked to waive their cash penalty because this parcel is returnable.
-                Confirming refunds the penalty to the carrier; the strike on their record stays.
+                Confirming cancels the carrier's penalty; the strike on their record stays.
               </Text>
               <Pressable
                 onPress={() => void confirmWaiver()}
@@ -433,7 +433,7 @@ function DisputeCard({
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={14} color={colors.white} />
-                    <Text style={styles.waiverButtonText}>Confirm waiver — refund penalty</Text>
+                    <Text style={styles.waiverButtonText}>Confirm waiver — cancel penalty</Text>
                   </>
                 )}
               </Pressable>
