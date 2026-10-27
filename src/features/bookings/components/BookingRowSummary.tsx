@@ -1,3 +1,4 @@
+import { payDeadline } from "@/features/bookings/paymentMath";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -92,7 +93,7 @@ export function BookingRowSummary({
       booking.agreed_travel_date ? (
         <View style={styles.cardPillsRow}>
           {booking.status === "pending_payment" && booking.payment_expires_at ? (
-            <PaymentExpiryCountdown expiresAt={booking.payment_expires_at} />
+            <PaymentExpiryCountdown expiresAt={(() => { const d = payDeadline(booking); return d ? new Date(d.at).toISOString() : booking.payment_expires_at; })()} />
           ) : null}
           {booking.agreed_travel_date ? (
             <View style={styles.travelDatePill}>

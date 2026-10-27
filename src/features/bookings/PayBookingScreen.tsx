@@ -17,7 +17,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
-import { bookingFee, feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { bookingFee, feeBreakdown, formatCountdown, isUrgent, payDeadline } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useKycGate } from "@/hooks/api/useKycGate";
 import { usePayBooking } from "@/hooks/api/usePayBooking";
@@ -103,13 +103,13 @@ export function PayBookingScreen() {
   const isPayable = booking?.status === "pending_payment";
   const paying = phase === "paying";
 
-  const expiresAt = booking?.payment_expires_at
-    ? new Date(booking.payment_expires_at).getTime()
-    : null;
-  const msLeft = expiresAt != null && nowTs > 0 ? expiresAt - nowTs : null;
+  // The 48 h window, then the 24 h grace while the carrier holds the parcel.
+  const deadline = booking && nowTs > 0 ? payDeadline(booking, nowTs) : null;
+  const inGrace = !!deadline?.grace;
+  const msLeft = deadline ? deadline.at - nowTs : null;
   const expired =
-    booking?.status === "expired_unpaid" || (msLeft != null && msLeft <= 0);
-  const urgent = msLeft != null && isUrgent(msLeft);
+    booking?.status === "expired_unpaid" || booking?.status === "unpaid_return" || (msLeft != null && msLeft <= 0);
+  const urgent = msLeft != null && (inGrace || isUrgent(msLeft));
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -301,7 +301,7 @@ export function PayBookingScreen() {
             <View style={[styles.countdown, urgent && styles.countdownUrgent]}>
               <Ionicons name="time-outline" size={14} color={urgent ? colors.danger : colors.warning} />
               <Text style={[styles.countdownText, urgent && { color: colors.danger }]}>
-                {formatCountdown(msLeft)}
+                {inGrace ? `Grace period: ${formatCountdown(msLeft)}` : formatCountdown(msLeft)}
               </Text>
             </View>
           ) : null}

@@ -49,3 +49,14 @@ test("urgent under 6h, not when expired (Part 3 §7)", () => {
   assert.equal(isUrgent(0), false);
   assert.equal(isUrgent(-1), false);
 });
+
+test("payDeadline: window, then the 24 h grace once the carrier holds the parcel", async () => {
+  const { payDeadline } = await import("./paymentMath.ts");
+  const now = Date.parse("2026-10-27T12:00:00Z");
+  const h = (n: number) => new Date(now + n * 3_600_000).toISOString();
+  assert.deepEqual(payDeadline({ payment_expires_at: h(5), handoff_accepted_at: h(-1) }, now), { at: Date.parse(h(5)), grace: false });
+  assert.deepEqual(payDeadline({ payment_expires_at: h(-2), payment_grace_started_at: h(-1), handoff_accepted_at: h(-50) }, now), { at: Date.parse(h(23)), grace: true });
+  assert.deepEqual(payDeadline({ payment_expires_at: h(-2), handoff_accepted_at: h(-50) }, now), { at: Date.parse(h(22)), grace: true });
+  assert.deepEqual(payDeadline({ payment_expires_at: h(-2) }, now), { at: Date.parse(h(-2)), grace: false });
+  assert.equal(payDeadline({ payment_expires_at: null }, now), null);
+});

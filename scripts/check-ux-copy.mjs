@@ -1946,6 +1946,22 @@ const CHECKS = [
     must: ["Updating results…", "Loading bookings…", "Loading your bookings…", "Loading your trips…", "setUnblockPending(true);"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/payment-handler/index.ts", "src/lib/payDeadline.ts", "src/features/bookings/pages/CustomerCheckout.tsx", "src/features/bookings/pages/CustomerBookings.tsx"],
+    id: "sender-can-pay-during-the-grace",
+    why: "27 Oct 2026 flow test (FL2-a): during the 24 h grace the sender was told 'Please pay ... You have 24 hours left', but opening the checkout was refused with PAYMENT_EXPIRED and the checkout showed no deadline. With the parcel at the carrier the grace sweep (unpaid_return) is the cut-off, as settleEscrowPayment already treated it.",
+    must: ["if (!booking.handoff_accepted_at && booking.payment_expires_at && new Date(booking.payment_expires_at) < new Date()) {", "export function payDeadline(", "formatCountdown(deadline.at, deadline.grace)", "payDeadline(booking)?.at"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/paymentMath.ts", "src/features/bookings/PayBookingScreen.tsx", "src/features/bookings/components/BookingRowSummary.tsx"],
+    id: "mobile-sender-can-pay-during-the-grace",
+    why: "See sender-can-pay-during-the-grace (web repo): the Pay screen said 'Payment window expired' and blocked paying during the grace.",
+    must: ["export function payDeadline(", "const deadline = booking && nowTs > 0 ? payDeadline(booking, nowTs) : null;", "Grace period: "],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
