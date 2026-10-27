@@ -85,6 +85,8 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
       const next: FormErrors = {};
       // Web parity: a single letter is not a name.
       if (fullName.trim().length < 2) next.fullName = "Enter your full name";
+      // 2-100, the profile editor's limit; the column is varchar(100).
+      else if (fullName.trim().length > 100) next.fullName = "Name must be 100 characters or fewer";
       if (!nextEmail) next.email = "Email is required";
       else if (!EMAIL_RE.test(nextEmail)) next.email = "Enter a valid email";
       next.password = validatePassword(password) ?? undefined;
@@ -271,6 +273,7 @@ export function SignupScreen({ onSwitchToLogin }: Readonly<Props>) {
                 if (formError) setFormError(null);
               }}
               placeholder="Enter your full name"
+              maxLength={100}
               autoCapitalize="words"
               autoCorrect
               editable={!busy}

@@ -19,10 +19,10 @@ import {
 } from "@/features/auth/passwordPolicy";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
-import { sanitizeDigitsOnly } from "@/utils/inputSanitizers";
+import { EMAIL_CODE_MAX, isEmailCode, sanitizeDigitsOnly } from "@/utils/inputSanitizers";
 
-/** Supabase emails a 6-digit recovery OTP. */
-const CODE_LENGTH = 6;
+/** Supabase emails a 6-10 digit recovery code (a project setting). */
+const CODE_LENGTH = EMAIL_CODE_MAX;
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ResetPassword">;
 type Route = RouteProp<RootStackParamList, "ResetPassword">;
@@ -55,7 +55,7 @@ export function ResetPasswordScreen() {
 
   const validate = useCallback(() => {
     const next: { code?: string; password?: string; confirm?: string } = {};
-    if (code.length !== CODE_LENGTH) next.code = `Enter the ${CODE_LENGTH}-digit code`;
+    if (!isEmailCode(code)) next.code = "Enter the code from your email";
     next.password = validatePassword(password) ?? undefined;
     next.confirm = validatePasswordConfirm(password, confirm) ?? undefined;
     setErrors(next);
@@ -151,7 +151,7 @@ export function ResetPasswordScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            Enter the {CODE_LENGTH}-digit code we sent to{" "}
+            Enter the code we sent to{" "}
             <Text style={styles.email}>{email}</Text>, then choose a new password.
           </Text>
 

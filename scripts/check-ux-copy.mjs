@@ -1951,7 +1951,7 @@ const CHECKS = [
     file: ["supabase/functions/payment-handler/index.ts", "src/lib/payDeadline.ts", "src/features/bookings/pages/CustomerCheckout.tsx", "src/features/bookings/pages/CustomerBookings.tsx"],
     id: "sender-can-pay-during-the-grace",
     why: "27 Oct 2026 flow test (FL2-a): during the 24 h grace the sender was told 'Please pay ... You have 24 hours left', but opening the checkout was refused with PAYMENT_EXPIRED and the checkout showed no deadline. With the parcel at the carrier the grace sweep (unpaid_return) is the cut-off, as settleEscrowPayment already treated it.",
-    must: ["if (!booking.handoff_accepted_at && booking.payment_expires_at && new Date(booking.payment_expires_at) < new Date()) {", "export function payDeadline(", "formatCountdown(deadline.at, deadline.grace)", "payDeadline(booking)?.at"],
+    must: ["if (!booking.handoff_accepted_at && booking.payment_expires_at && new Date(booking.payment_expires_at) < new Date()) {", "export function payDeadline(", "formatCountdown(payBy.at, payBy.grace)", "payDeadline(booking)?.at"],
     mustNot: [],
   },
   {
@@ -1969,6 +1969,30 @@ const CHECKS = [
     why: "27 Oct 2026 regression run (N02b, flaky): a really lost network left the realtime socket claiming 'open' until its heartbeat timed out, and an open socket overruled everything, so 'You're offline' came late or not at all. The server probe decides once the browser says offline; it still overrules iPhone Safari's false offline.",
     must: ["const reallyOffline = !s.browserOnline && (s.probeOk === false || (s.probeOk === null && !s.realtimeOpen));"],
     mustNot: ["const reallyOffline = !s.browserOnline && !s.realtimeOpen && s.probeOk !== true;"],
+  },
+  {
+    repo: "web",
+    file: "supabase/migrations/20261027150000_signup_profile_limits.sql",
+    id: "signup-never-fails-on-the-name",
+    why: "27 Oct 2026 sign-up flow test: a name over 100 characters (user_profiles.name is varchar(100)) made the whole sign-up fail with 'Database error saving new user', and the trigger stored any avatar_url string it was sent.",
+    must: ["LEFT(COALESCE(", "), 100),", "CASE WHEN v_avatar ~ '^https://[^\\s]+$' AND length(v_avatar) <= 2048 THEN v_avatar ELSE '' END"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["src/features/auth/components/RoleSignup.tsx", "src/lib/validation.ts"],
+    id: "web-signup-hardening",
+    why: "27 Oct 2026 sign-up flow test: the email code was hard-coded to 6 digits (Supabase's length is a project setting; staging sends 8); the name had no 100 cap; a sign-up that returned a session still waited for a code no email would bring; a double Enter made the second request look like 'pending verification'; 'User already registered' left the user on the form.",
+    must: ["if (!/^\\d{6,10}$/.test(code)) {", "maxLength={100}", '.max(100, "Name must be 100 characters or fewer")', "if (result.session) {", "if (signupInFlightRef.current) return;", "const handleEmailAlreadyRegistered = async () => {", 'code === "user_already_exists"'],
+    mustNot: ["if (!/^\\d{6}$/.test(code)) {"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/utils/inputSanitizers.ts", "src/features/auth/VerifyEmailScreen.tsx", "src/features/auth/ResetPasswordScreen.tsx", "src/features/auth/SignupScreen.tsx"],
+    id: "mobile-email-code-any-length",
+    why: "See web-signup-hardening: the sign-up and password-reset code screens only took 6 digits; the name had no 100 cap.",
+    must: ["export function isEmailCode(", "const CODE_LENGTH = EMAIL_CODE_MAX;", "if (!isEmailCode(code))", "maxLength={100}"],
+    mustNot: ["if (code.length !== CODE_LENGTH)"],
   },
 ];
 
