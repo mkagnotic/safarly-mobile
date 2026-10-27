@@ -73,7 +73,9 @@ function getProjectId(): string | undefined {
 
 /** Physical device + native support required — Expo Go (SDK 54) and web can't mint tokens. */
 function pushSupported(): boolean {
-  return Platform.OS !== "web" && Device.isDevice;
+  // EXPO_PUBLIC_PUSH_ON_EMULATOR=1 is for test builds only: a Google-APIs emulator
+  // can receive FCM, which is how push delivery is verified without a phone.
+  return Platform.OS !== "web" && (Device.isDevice || process.env.EXPO_PUBLIC_PUSH_ON_EMULATOR === "1");
 }
 
 /**

@@ -1795,6 +1795,14 @@ const CHECKS = [
     mustNot: [],
   },
   {
+    repo: "web",
+    file: ["supabase/functions/_shared/push.ts", "public/sw.js", "src/lib/browserPush.ts", "supabase/migrations/20261027110000_web_push_subscriptions.sql"],
+    id: "push-shows-on-the-device-screen",
+    why: "Client 27 Oct 2026: only in-app notifications worked. Android pushes carried no channelId, so they landed in a low-importance fallback channel (no banner); Expo's reply was discarded so failures were invisible; web had no real push. Now: channel 'default' + high priority, ticket errors logged and dead tokens removed, and VAPID web push via a service worker.",
+    must: ["channelId: 'default',", "priority: 'high' as const,", "if (ticket.details?.error === 'DeviceNotRegistered' && token) dead.push(token);", "self.addEventListener(\"push\"", "reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: wanted })", "CREATE TABLE IF NOT EXISTS public.web_push_subscriptions"],
+    mustNot: [],
+  },
+  {
     repo: "mobile",
     file: "src/features/bookings/ParcelReturnCard.tsx",
     id: "mobile-refund-wording-follows-the-money",
