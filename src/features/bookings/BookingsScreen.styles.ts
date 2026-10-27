@@ -123,4 +123,7 @@ export const styles = StyleSheet.create({
   listContent: { paddingBottom: 24 },
   listContentEmpty: { flexGrow: 1 },
   footerLoading: { paddingVertical: 16, alignItems: "center" },
+  updatingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
+  updatingText: { fontSize: 12, color: colors.subtleText },
+  listUpdating: { opacity: 0.6 },
 });

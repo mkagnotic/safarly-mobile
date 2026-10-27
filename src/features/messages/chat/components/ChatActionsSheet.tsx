@@ -37,6 +37,7 @@ export function ChatActionsSheet({
     afterActionMenu,
     isArchived,
     archivePending,
+    unblockPending,
     setMediaOpen,
     setReportUserOpen,
     handleArchiveToggle,
@@ -95,6 +96,7 @@ export function ChatActionsSheet({
                   : "Archive chat"
             }
             onPress={handleArchiveToggle}
+            busy={archivePending}
           />
           <ActionRow
             icon="flag-outline"
@@ -104,7 +106,7 @@ export function ChatActionsSheet({
           <ActionRow icon="scale-outline" label="Raise dispute" onPress={handleRaiseDispute} />
 
           {isBlocked ? (
-            <ActionRow icon="checkmark-circle" label="Unblock user" onPress={handleUnblock} />
+            <ActionRow icon="checkmark-circle" label={unblockPending ? "Unblocking…" : "Unblock user"} onPress={handleUnblock} busy={unblockPending} />
           ) : (
             <ActionRow icon="ban" label="Block user" tone="danger" onPress={handleBlock} />
           )}

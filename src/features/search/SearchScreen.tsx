@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import { type LayoutChangeEvent, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, type LayoutChangeEvent, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
@@ -720,7 +720,20 @@ export function SearchScreen() {
           hideCounts={!!error}
         />
 
-        <View onLayout={onResultsLayout}>
+        {/* A new mode/filter is loading over the old results: say so and keep the
+            old cards out of reach until the new ones land (27 Oct 2026, web parity). */}
+        {loading && !!results && !error ? (
+          <View style={styles.updatingRow} accessibilityRole="progressbar" accessibilityLabel="Updating results" testID="search-updating">
+            <ActivityIndicator size="small" color={colors.subtleText} />
+            <Text style={styles.updatingText}>Updating results…</Text>
+          </View>
+        ) : null}
+
+        <View
+          onLayout={onResultsLayout}
+          style={loading && !!results && !error ? styles.resultsUpdating : undefined}
+          pointerEvents={loading && !!results && !error ? "none" : "auto"}
+        >
           {error ? (
             <ErrorBlock
               message={getErrorMessage(error)}

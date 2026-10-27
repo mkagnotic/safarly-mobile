@@ -578,10 +578,19 @@ export function BookingsScreen() {
           })}
         </View>
 
+        {/* A filter tap reloads the list: the previous filter's bookings stayed up,
+            expandable and actionable, with no sign of loading (27 Oct 2026). */}
+        {loading && bookings.length > 0 ? (
+          <View style={styles.updatingRow} accessibilityRole="progressbar" accessibilityLabel="Loading bookings" testID="bookings-updating">
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.updatingText}>Loading bookings…</Text>
+          </View>
+        ) : null}
+
         {/* List (infinite scroll) */}
         <FlatList
           data={filtered}
-          style={styles.list}
+          style={[styles.list, loading && bookings.length > 0 && styles.listUpdating]}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ListEmptyComponent={listEmpty}

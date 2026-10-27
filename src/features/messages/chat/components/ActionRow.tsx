@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text } from "react-native";
+import { ActivityIndicator, StyleSheet, Text } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
@@ -11,15 +11,20 @@ export function ActionRow({
   label,
   onPress,
   tone,
+  busy = false,
 }: Readonly<{
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   tone?: "danger";
+  /** The action is running: spinner in place of the icon, taps ignored. */
+  busy?: boolean;
 }>) {
   return (
-    <Pressable onPress={onPress} style={styles.actionRow} accessibilityRole="button" accessibilityLabel={label}>
-      <Ionicons name={icon} size={20} color={tone === "danger" ? colors.danger : colors.text} />
+    <Pressable onPress={onPress} disabled={busy} style={styles.actionRow} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ busy, disabled: busy }}>
+      {busy
+        ? <ActivityIndicator size="small" color={colors.primary} />
+        : <Ionicons name={icon} size={20} color={tone === "danger" ? colors.danger : colors.text} />}
       <Text style={[styles.actionLabel, tone === "danger" && { color: colors.danger }]}>
         {label}
       </Text>

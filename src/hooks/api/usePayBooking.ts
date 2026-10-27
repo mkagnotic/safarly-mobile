@@ -49,9 +49,12 @@ export function usePayBooking(bookingId: string | undefined): UsePayBookingResul
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   const [cancelled, setCancelled] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
+  // One checkout at a time: a double tap used to open two.
+  const inFlightRef = useRef(false);
 
   const pay = useCallback(async (): Promise<ConfirmPaymentResult | null> => {
-    if (!bookingId) return null;
+    if (!bookingId || inFlightRef.current) return null;
+    inFlightRef.current = true;
     setError(null);
     setCancelled(false);
     setPhase("paying");
@@ -97,6 +100,8 @@ export function usePayBooking(bookingId: string | undefined): UsePayBookingResul
       setError(err instanceof Error ? err : new Error(String(err)));
       setPhase("idle");
       return null;
+    } finally {
+      inFlightRef.current = false;
     }
   }, [bookingId]);
 

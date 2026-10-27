@@ -1914,6 +1914,38 @@ const CHECKS = [
     must: ["const switchingDeal = fresh && wantedParcel !== null && servedForDealId !== wantedParcel;", "testID=\"deal-switching\"", "{!buddySelected && !switchingDeal && showWorkflowPin && workflow ? ("],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: "src/features/parcels/pages/CustomerOpportunities.tsx",
+    id: "opportunities-trips-loading-is-not-no-trips",
+    why: "27 Oct 2026 loaders audit: the bid form said 'No trips listed. Create one first' while the user's trips were still loading (and forever on a failed load).",
+    must: ["Loading your trips…", "Couldn't load your trips."],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["src/features/admin/components/AdminUsersPage.tsx", "src/features/admin/components/AdminDisputesPage.tsx", "src/features/admin/components/AdminParcelsPage.tsx", "src/features/admin/components/AdminReportsPage.tsx", "src/features/admin/components/AdminErrorsPage.tsx", "src/features/admin/components/AdminDashboardOverview.tsx"],
+    id: "admin-lists-say-they-are-updating",
+    why: "27 Oct 2026 loaders audit: admin filters, search and paging kept the old rows with no cue that new ones were loading.",
+    must: ["<UpdatingPill active={"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/PayBookingScreen.tsx", "src/hooks/api/usePayBooking.ts"],
+    id: "mobile-pay-cannot-be-double-tapped",
+    why: "27 Oct 2026 loaders audit: Pay waited on an identity re-check with the button still live, and pay() had no in-flight guard, so two taps could open two checkouts.",
+    must: ["disabled={paying || checking}", "if (!bookingId || inFlightRef.current) return null;"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/search/SearchScreen.tsx", "src/features/bookings/BookingsScreen.tsx", "src/features/disputes/FileDisputeScreen.tsx", "src/features/opportunities/OpportunitiesScreen.tsx", "src/features/messages/chat/hooks/useChatActionMenu.ts"],
+    id: "mobile-loaders-where-the-screen-waits",
+    why: "27 Oct 2026 loaders audit: search mode/filter and booking filter chips kept old results with no cue; File a Dispute and the bid form showed 'no bookings' / 'no trips' while loading; Unblock and Archive closed the menu and gave no feedback.",
+    must: ["Updating results…", "Loading bookings…", "Loading your bookings…", "Loading your trips…", "setUnblockPending(true);"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

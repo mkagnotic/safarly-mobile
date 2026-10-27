@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
@@ -177,15 +177,27 @@ export function PayBookingScreen() {
     return () => clearTimeout(t);
   }, [phase, navigation, bookingId]);
 
+  // The identity re-check below is a network call: without this the button looked
+  // dead during it and a second tap could open a second checkout (27 Oct 2026).
+  const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
   const handlePay = useCallback(async () => {
-    setBanner(null);
-    // The status on screen may be from before the user verified: ask the server
-    // once more before blocking, and pay straight away if they are approved now.
-    if (!kyc.isApproved && !(await kyc.refetch())) {
-      setShowKycPrompt(true);
-      return;
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    setChecking(true);
+    try {
+      setBanner(null);
+      // The status on screen may be from before the user verified: ask the server
+      // once more before blocking, and pay straight away if they are approved now.
+      if (!kyc.isApproved && !(await kyc.refetch())) {
+        setShowKycPrompt(true);
+        return;
+      }
+      await pay();
+    } finally {
+      checkingRef.current = false;
+      setChecking(false);
     }
-    await pay();
   }, [kyc, pay]);
 
   const headerTitle = useMemo(() => "Secure payment", []);
@@ -357,12 +369,12 @@ export function PayBookingScreen() {
           </View>
 
           <AppButton
-            label={paying ? "Opening secure checkout…" : `Pay ${money(total, bookingCurrency)}`}
+            label={paying ? "Opening secure checkout…" : checking ? "Checking…" : `Pay ${money(total, bookingCurrency)}`}
             // Not disabled for an unverified status: that status can be stale, and the
             // tap is what re-checks it (handlePay) before showing the KYC prompt.
-            disabled={paying}
+            disabled={paying || checking}
             onPress={() => void handlePay()}
-            leftIcon={paying ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
+            leftIcon={paying || checking ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
             style={styles.payButton}
           />
         </>

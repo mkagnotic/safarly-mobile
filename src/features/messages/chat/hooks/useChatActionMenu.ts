@@ -46,6 +46,7 @@ export function useChatActionMenu({
   const [reportUserOpen, setReportUserOpen] = useState(false);
   const [reportUserPending, setReportUserPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
+  const [unblockPending, setUnblockPending] = useState(false);
   // Two destructive-confirm states reuse one ConfirmActionModal — `null` when
   // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
   // pattern in `ChatActionDropdown.tsx:46`.
@@ -133,13 +134,16 @@ export function useChatActionMenu({
   }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal,
       setModalError, activeDeal?.carrier_request_id, matchableDeal?.carrier_request_id]);
 
+  // The sheet stays open on a spinner until the call answers: it used to close at
+  // once and the chat sat blocked with no sign anything was happening (27 Oct 2026).
   const handleUnblock = useCallback(async () => {
-    if (!conversationId) return;
-    setActionMenuOpen(false);
+    if (!conversationId || unblockPending) return;
+    setUnblockPending(true);
     try {
       await messagesApi.unblockUser(conversationId);
+      setActionMenuOpen(false);
       showToast({ title: "Unblocked", variant: "info" });
-      void refetchConversations();
+      await refetchConversations();
     } catch (err) {
       void refetchConversations();
       showToast({
@@ -147,15 +151,17 @@ export function useChatActionMenu({
         message: getErrorMessage(err),
         variant: "error",
       });
+    } finally {
+      setUnblockPending(false);
     }
-  }, [conversationId, refetchConversations]);
+  }, [conversationId, refetchConversations, unblockPending]);
 
   // ───────── Header action-menu handlers (web parity) ─────────
   const isArchived = conversation?.archived === true;
 
   const handleArchiveToggle = useCallback(async () => {
-    if (!conversationId) return;
-    setActionMenuOpen(false);
+    if (!conversationId || archivePending) return;
+    // Pending BEFORE the sheet closes, so "Working…" is actually seen.
     setArchivePending(true);
     try {
       if (isArchived) {
@@ -165,13 +171,14 @@ export function useChatActionMenu({
         await messagesApi.archiveConversation(conversationId);
         showToast({ title: "Chat archived", variant: "info", duration: 1600 });
       }
+      setActionMenuOpen(false);
       void refetchConversations();
     } catch (err) {
       showToast({ title: "Couldn't update", message: getErrorMessage(err), variant: "error" });
     } finally {
       setArchivePending(false);
     }
-  }, [conversationId, isArchived, refetchConversations]);
+  }, [conversationId, isArchived, refetchConversations, archivePending]);
 
   // Raise a dispute: jump to the filing screen pre-scoped to this deal's booking
   // when one exists, otherwise the disputes list where the user can pick one.
@@ -217,6 +224,7 @@ export function useChatActionMenu({
     setReportUserOpen,
     reportUserPending,
     archivePending,
+    unblockPending,
     confirmAction,
     setConfirmAction,
     confirmPending,

@@ -64,6 +64,9 @@ export const styles = StyleSheet.create({
   modeToggleLabelActive: {
     color: colors.text,
   },
+  updatingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+  updatingText: { fontSize: 12, color: colors.subtleText },
+  resultsUpdating: { opacity: 0.6 },
   noteText: {
     color: colors.mutedText,
     fontSize: 11,

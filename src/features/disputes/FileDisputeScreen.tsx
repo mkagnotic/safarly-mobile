@@ -55,7 +55,8 @@ export function FileDisputeScreen() {
   const route = useRoute<RouteProp<MainTabParamList, "FileDisputeTab">>();
   const presetBookingId = route.params?.bookingId;
 
-  const { bookings } = useBookings({ perPage: 100 });
+  // Loading and a failed load used to read as "No eligible bookings" (27 Oct 2026).
+  const { bookings, loading: bookingsLoading, error: bookingsError, refetch: refetchBookings } = useBookings({ perPage: 100 });
   const disputable = useMemo(
     () => bookings.filter((b) => DISPUTABLE_STATUSES.has(b.status)),
     [bookings],
@@ -209,6 +210,15 @@ export function FileDisputeScreen() {
             <Text style={styles.bookingSummaryMeta}>{selectedBooking.parcel.category}</Text>
           ) : null}
         </Card>
+      ) : bookingsLoading && bookings.length === 0 ? (
+        <View style={styles.loadingRow} accessibilityRole="progressbar" accessibilityLabel="Loading your bookings">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.helperText}>Loading your bookings…</Text>
+        </View>
+      ) : bookingsError && bookings.length === 0 ? (
+        <Pressable onPress={() => void refetchBookings()} accessibilityRole="button">
+          <Text style={styles.helperText}>Couldn't load your bookings. Tap to try again.</Text>
+        </Pressable>
       ) : disputable.length === 0 ? (
         <Text style={styles.helperText}>
           No eligible bookings to dispute yet. Disputes can be raised on confirmed, in-transit, or
@@ -312,8 +322,10 @@ export function FileDisputeScreen() {
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
           </View>
-          {disputable.length === 0 ? (
-            <Text style={styles.sheetEmpty}>No eligible bookings to dispute.</Text>
+          {bookingsLoading && disputable.length === 0 ? (
+            <ActivityIndicator style={styles.sheetLoading} size="small" color={colors.primary} />
+          ) : disputable.length === 0 ? (
+            <Text style={styles.sheetEmpty}>{bookingsError ? "Couldn't load your bookings. Close and try again." : "No eligible bookings to dispute."}</Text>
           ) : (
             <FlatList
               data={disputable}
@@ -484,6 +496,8 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
   sheetEmpty: { color: colors.mutedText, fontSize: 13, paddingVertical: 24, textAlign: "center" },
+  sheetLoading: { paddingVertical: 24 },
+  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   sheetSep: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   sheetRow: {
     flexDirection: "row",

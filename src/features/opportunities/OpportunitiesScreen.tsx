@@ -72,6 +72,8 @@ function getInitials(name: string | undefined): string {
 interface TripPickerModalProps {
   open: boolean;
   trips: Trip[];
+  /** Still fetching the user's trips: not the same as having none (27 Oct 2026). */
+  tripsLoading?: boolean;
   selectedTripId: string;
   onSelect: (tripId: string) => void;
   onClose: () => void;
@@ -80,6 +82,7 @@ interface TripPickerModalProps {
 function TripPickerModal({
   open,
   trips,
+  tripsLoading = false,
   selectedTripId,
   onSelect,
   onClose,
@@ -95,7 +98,9 @@ function TripPickerModal({
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
           </View>
-          {trips.length === 0 ? (
+          {trips.length === 0 && tripsLoading ? (
+            <ActivityIndicator style={styles.modalLoading} size="small" color={colors.primary} />
+          ) : trips.length === 0 ? (
             <Text style={styles.modalEmpty}>You don't have any trips yet.</Text>
           ) : (
             <View style={styles.modalList}>
@@ -139,6 +144,7 @@ function TripPickerModal({
 interface BidFormProps {
   parcel: Parcel;
   trips: Trip[];
+  tripsLoading?: boolean;
   pending: boolean;
   onSubmit: (values: {
     selectedTripId: string;
@@ -148,7 +154,7 @@ interface BidFormProps {
   onListTrip: () => void;
 }
 
-function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidFormProps>) {
+function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onListTrip }: Readonly<BidFormProps>) {
   const [selectedTripId, setSelectedTripId] = useState("");
   const [offerAmount, setOfferAmount] = useState(`${parcel.fee_offered}`);
   const [message, setMessage] = useState("");
@@ -202,7 +208,9 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
           </Text>
           <Ionicons name="chevron-down" size={14} color={colors.mutedText} />
         </Pressable>
-        {trips.length === 0 ? (
+        {trips.length === 0 && tripsLoading ? (
+          <Text style={styles.fieldHelpRow}>Loading your trips…</Text>
+        ) : trips.length === 0 ? (
           <Text style={styles.fieldHelpRow}>
             No trips listed.{" "}
             <Text style={styles.fieldHelpLink} onPress={onListTrip}>
@@ -264,6 +272,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
       <TripPickerModal
         open={pickerOpen}
         trips={trips}
+        tripsLoading={tripsLoading}
         selectedTripId={selectedTripId}
         onSelect={setSelectedTripId}
         onClose={() => setPickerOpen(false)}
@@ -277,6 +286,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
 interface OpportunityCardProps {
   parcel: Parcel;
   trips: Trip[];
+  tripsLoading?: boolean;
   expanded: boolean;
   submitted: boolean;
   pending: boolean;
@@ -293,6 +303,7 @@ interface OpportunityCardProps {
 function OpportunityCard({
   parcel,
   trips,
+  tripsLoading = false,
   expanded,
   submitted,
   pending,
@@ -397,6 +408,7 @@ function OpportunityCard({
         <BidForm
           parcel={parcel}
           trips={trips}
+          tripsLoading={tripsLoading}
           pending={pending}
           onSubmit={(values) =>
             onSubmit({
@@ -418,7 +430,7 @@ export function OpportunitiesScreen() {
   const { opportunities, loading, loadingMore, error, hasMore, total, refetch, loadMore } =
     useOpportunities({ perPage: PER_PAGE });
   // The user's own trips populate the bid-form's trip dropdown.
-  const { trips } = useTrips({ filter: "my_trips" });
+  const { trips, loading: tripsLoading } = useTrips({ filter: "my_trips" });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<Category>("All");
@@ -619,6 +631,7 @@ export function OpportunitiesScreen() {
               key={parcel.id}
               parcel={parcel}
               trips={trips}
+              tripsLoading={tripsLoading}
               expanded={expandedId === parcel.id}
               submitted={submittedIds.has(parcel.id)}
               pending={pendingId === parcel.id}
@@ -859,6 +872,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   modalTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  modalLoading: { paddingVertical: 24 },
   modalEmpty: { color: colors.mutedText, fontSize: 13, paddingVertical: 16, textAlign: "center" },
   modalList: { gap: 6 },
   tripOption: {
