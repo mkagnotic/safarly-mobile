@@ -47,6 +47,8 @@ export interface AccountDeletionStatus {
   apple_linked: boolean;
   blocked: boolean;
   blocked_reason: string | null;
+  /** Which way out to offer when blocked: My Bookings, or support for money held. */
+  blocked_kind?: "delivery" | "money" | null;
 }
 
 export interface AccountDeletionConfirmation {

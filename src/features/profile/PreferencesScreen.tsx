@@ -43,13 +43,13 @@ const TOGGLES: readonly ToggleConfig[] = [
   {
     field: "email_notifications",
     icon: "mail-outline",
-    label: "Email Notifications",
-    desc: "Matches, offers, reminders and reviews via email",
+    label: "Email notifications",
+    desc: "Matches, offers, reminders and reviews by email",
   },
   {
     field: "push_enabled",
     icon: "notifications-outline",
-    label: "Push Notifications",
+    label: "Push notifications",
     desc: "Alerts on this phone and your other devices, even when Safarly is closed",
   },
 ] as const;

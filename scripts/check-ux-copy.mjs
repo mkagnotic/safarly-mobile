@@ -2167,6 +2167,21 @@ const CHECKS = [
     why: "See web-security-screen and security-password-checks. Plus: mobile had NO Blocked users list - a blocked person is hidden everywhere and their chat closes, so nobody could ever be unblocked; the old Settings screen (only reachable by the 'settings' link) had four rows that did nothing and a 'Payment Methods' feature that doesn't exist; 'Manage your account credentials' was jargon.",
     must: ['navigation.navigate("BlockedUsersTab")', '<Tabs.Screen name="BlockedUsersTab" component={BlockedUsersScreen}', '<Tabs.Screen name="SettingsTab" component={SecurityScreen}', "Couldn't load your blocked users.", "loadFailed: true", "res.data?.signed_out_here", "Your other devices have been signed out.", "Your email, password, blocked users and account."],
     mustNot: ["component={SettingsScreen}", "Manage your account credentials.", "/current password|wrong|incorrect|invalid/i"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/user-handler/index.ts", "src/features/profile/components/DeleteAccountView.tsx", "src/features/profile/pages/CustomerPreferences.tsx"],
+    id: "delete-account-way-out",
+    why: "27 Oct 2026 preferences/delete flow: money held blocked deletion with 'Withdraw it' - the apps have no wallet or withdraw screen, so the account could never be deleted (App Store 5.1.1(v)); support settles it now. A blocked account was only offered 'Back' - now My Bookings or Email support (blocked_kind). Password guesses on Delete account had no cap (codes did). Web Preferences showed push OFF with no reason when this browser hadn't allowed notifications.",
+    must: ["Safarly is still holding money for you. Email ${SUPPORT_EMAIL} and we'll pay it out", "blocked_kind: blocker?.kind ?? null,", "rateLimit(`pw-check:${uid}`, PASSWORD_CHECK_LIMIT, PASSWORD_CHECK_WINDOW_MS)", 'status.blocked_kind === "delivery"', "Open My Bookings", "Email support", "Notifications are off in this browser"],
+    mustNot: ["Withdraw it before deleting your account."],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/profile/DeleteAccountScreen.tsx", "src/features/profile/AccountDeletedScreen.tsx", "src/features/profile/PreferencesScreen.tsx"],
+    id: "mobile-delete-account-way-out",
+    why: "See delete-account-way-out (web repo). Plus mobile's confirmation said 'personal data have been removed' while delivery and payment records are kept (the warning says so); Preferences labels were Title Case and said 'via email'.",
+    must: ['status.blocked_kind === "delivery"', 'label="Open My Bookings"', 'label="Email support"', "Records of completed deliveries and payments are kept,", 'label: "Email notifications",', "reviews by email"],
+    mustNot: ["Your Safarly account and personal data have been removed", 'label: "Email Notifications",', "reviews via email"],
   },
 ];
 

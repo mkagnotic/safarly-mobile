@@ -25,8 +25,11 @@ export function AccountDeletedScreen() {
           Your account has been deleted
         </Text>
         <Text style={styles.message}>
-          Your Safarly account and personal data have been removed, and you've been signed out on
-          every device. Thanks for travelling with us.
+          {/* Same words as web: "personal data removed" over-promised - delivery and
+              payment records are kept, as the warning screen says (27 Oct 2026). */}
+          You've been signed out everywhere. Records of completed deliveries and payments are kept,
+          as the law requires. You're welcome back any time — signing up again starts a fresh
+          account.
         </Text>
       </View>
       <AppButton label="Done" onPress={() => setAccountDeleted(false)} />

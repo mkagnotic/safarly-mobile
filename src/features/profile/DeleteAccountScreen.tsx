@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
 import { AppInput } from "@/components/ui/AppInput";
@@ -17,6 +17,7 @@ import { usersApi, type AccountDeletionStatus } from "@/services/api/users";
 import { requestAppleAuthorizationCode } from "@/services/auth/appleOAuth";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
+import { SUPPORT_EMAIL } from "@/constants/company";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "DeleteAccountTab">;
 
@@ -254,6 +255,12 @@ export function DeleteAccountScreen() {
                 title="You can't delete your account yet"
                 message={status.blocked_reason ?? undefined}
               />
+              {/* A way out, not just "Back" (27 Oct 2026). */}
+              {status.blocked_kind === "delivery" ? (
+                <AppButton label="Open My Bookings" onPress={() => navigation.navigate("BookingsTab")} />
+              ) : status.blocked_kind === "money" ? (
+                <AppButton label="Email support" onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Account deletion")}`)} />
+              ) : null}
               <AppButton label="Back" onPress={goBack} variant="secondary" />
             </>
           ) : (
