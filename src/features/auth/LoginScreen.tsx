@@ -26,7 +26,7 @@ import { LegalConsentText } from "@/components/ui/LegalConsentText";
 import { Screen } from "@/components/ui/Screen";
 import { AuthCancelledError, useAuth } from "@/context/AuthContext";
 import { RootStackParamList } from "@/navigation/types";
-import { getErrorMessage } from "@/services/api";
+import { authApi, getErrorMessage } from "@/services/api";
 import { mapAuthError } from "@/services/auth/authErrors";
 import { isGoogleSignInConfigured } from "@/services/auth/googleOAuth";
 import { mapOAuthError } from "@/services/auth/oauthErrors";
@@ -148,6 +148,15 @@ export function LoginScreen() {
         setFormError(SIGN_IN_FAILED_MESSAGE);
         return;
       }
+      // Signed up but never entered the code: send a fresh one and open the code
+      // screen. It said "check your inbox for the verification link" - the email
+      // has no link - and stopped there (27 Oct 2026). Web parity.
+      const errCode = (err as { code?: unknown })?.code;
+      if (errCode === "email_not_confirmed" || raw.includes("not confirmed")) {
+        try { await authApi.resendEmailOtp(normalizedEmail); } catch { /* resend throttle: VerifyEmail has its own Resend */ }
+        navigation.navigate("VerifyEmail", { email: normalizedEmail });
+        return;
+      }
       const mapped = mapAuthError(err, "signin");
       if (mapped.target === "email") {
         setErrors((e) => ({ ...e, email: mapped.message }));
@@ -161,7 +170,7 @@ export function LoginScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [email, password, signInWithPassword, submitting, validate]);
+  }, [email, password, signInWithPassword, submitting, validate, navigation]);
 
   const handleGoogleSignIn = useCallback(async () => {
     if (googleSubmitting) return;

@@ -1994,6 +1994,30 @@ const CHECKS = [
     must: ["export function isEmailCode(", "const CODE_LENGTH = EMAIL_CODE_MAX;", "if (!isEmailCode(code))", "maxLength={100}"],
     mustNot: ["if (code.length !== CODE_LENGTH)"],
   },
+  {
+    repo: "web",
+    file: ["src/features/auth/components/RoleLogin.tsx", "src/features/auth/components/RoleSignup.tsx"],
+    id: "unconfirmed-login-opens-the-code-step",
+    why: "27 Oct 2026 login flow test (LI-03): an account that never entered its sign-up code got 'Email not confirmed' at login and nothing else - the email has no link. Login now sends a fresh code and opens the code step.",
+    must: ['navigate("/signup/customer", { state: { verifyEmail: normalizedEmail } });', 'useState<Step>(verifyEmailFromLogin ? "email-verify" : "form")'],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/auth.ts", "supabase/functions/user-handler/index.ts"],
+    id: "deleted-account-cannot-write",
+    why: "27 Oct 2026 login flow test (LI-05): tokens are verified locally, so a deleted account's other devices kept a working token for up to an hour and could still post, message and book. Every write already reads the profile for suspension; it now refuses a deleted account too.",
+    must: ["if (row?.deleted_at) return { code: 'UNAUTHENTICATED', message: 'This account has been deleted.' };", ".select('is_suspended, deleted_at')", "const refused = await checkSuspended(result.user!.id, { ignoreSuspension: allowWhileSuspended });", "if ((mePayload.profile as { deleted_at?: string | null } | null | undefined)?.deleted_at) {"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/auth/LoginScreen.tsx", "src/services/auth/authErrors.ts"],
+    id: "mobile-unconfirmed-login-opens-the-code-step",
+    why: "See unconfirmed-login-opens-the-code-step (web repo): mobile said 'check your inbox for the verification link' (there is no link) and stopped.",
+    must: ['navigation.navigate("VerifyEmail", { email: normalizedEmail });', "enter the verification code we emailed you."],
+    mustNot: ["check your inbox for the verification link"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
