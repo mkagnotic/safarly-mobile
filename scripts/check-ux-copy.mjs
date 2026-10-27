@@ -2090,6 +2090,22 @@ const CHECKS = [
     must: ["Send confirmation link", "        bio: bio.trim(),", "export function payoutBlock(", "Re-enter account number", "defaultName={profile?.name ?? undefined}", 'hint="At least 8 characters, with letters and numbers"'],
     mustNot: ["To update the email on your account, please contact support.", "bio: bio.trim() || undefined,"],
   },
+  {
+    repo: "web",
+    file: ["src/services/i18n/translations.ts", "src/features/customer-shell/components/CustomerNavbar.tsx", "src/features/customer-shell/layouts/CustomerLayout.tsx"],
+    id: "forgot-password-and-logout-wording",
+    why: "27 Oct 2026 logout / forgot-password flow: 'Reset Link Sent!' told an unknown email it was sent (it is silent on purpose, so say 'if an account exists'); Title Case shouting; logout read 'Logout' on web, 'Sign out' on the account gate and 'Logout' on mobile - one verb, 'Log out', everywhere.",
+    must: ['"auth.resetLinkSent": "Check your email",', "If an account exists for that email, we've sent a link to reset your password.", "Log out"],
+    mustNot: ['"auth.resetLinkSent": "Reset Link Sent!",', ">Sign out</Button>"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/auth/ForgotPasswordScreen.tsx", "src/i18n/translations.ts"],
+    id: "mobile-forgot-password-one-story",
+    why: "See forgot-password-and-logout-wording (web repo): mobile said 'we'll send a link', then 'we've sent a 6-digit code', then 'we've sent another link'. The email carries a code (and, on some templates, a link); the screen now says both, and no fixed digit count.",
+    must: ["we'll email you a code to choose a new password.", "Enter it on the next screen, or tap the link in the email.", '"profile.signOut": "Log out",'],
+    mustNot: ["we've sent a 6-digit", "We've sent another link."],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

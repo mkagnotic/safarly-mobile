@@ -102,7 +102,7 @@ const enUS: Dict = {
   "profile.reviews": "Reviews",
   "profile.settings": "Settings",
   "profile.language": "Language",
-  "profile.signOut": "Logout",
+  "profile.signOut": "Log out",
   "profile.fieldFullName": "Full name",
   "profile.fieldEmail": "Email",
   "profile.fieldPhone": "Phone",

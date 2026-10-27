@@ -106,7 +106,7 @@ export function ForgotPasswordScreen() {
         if (!mountedRef.current) return;
         setSentTo(normalized);
         setResendIn(RESEND_COOLDOWN_SECONDS);
-        if (resend) setResendNotice("We've sent another link.");
+        if (resend) setResendNotice("We've sent you another email.");
       } catch (err) {
         if (!mountedRef.current) return;
         setFormError(mapPasswordResetError(err));
@@ -219,7 +219,7 @@ function RequestState({
   return (
     <>
       <Text style={styles.subtitle}>
-        Enter the email you signed up with and we'll send you a link to reset your password.
+        Enter the email you signed up with and we'll email you a code to choose a new password.
       </Text>
 
       {formError ? (
@@ -246,7 +246,7 @@ function RequestState({
 
       <View style={styles.actions}>
         <AppButton
-          label={submitting ? "Sending…" : "Send reset link"}
+          label={submitting ? "Sending…" : "Send reset email"}
           onPress={onSubmit}
           disabled={submitting}
           gradientColors={[colors.ctaAccent, colors.ctaAccent]}
@@ -315,8 +315,9 @@ function SentState({
         Change one and this copy has to change with it.
       */}
       <Text style={styles.sentBody}>
-        If an account exists for <Text style={styles.sentEmail}>{email}</Text>, we've sent a 6-digit
-        code to reset your password. It expires in 10 minutes.
+        If an account exists for <Text style={styles.sentEmail}>{email}</Text>, we've emailed you a
+        code to reset your password. Enter it on the next screen, or tap the link in the email. Use it
+        soon - it stops working after a short while.
       </Text>
 
       {error ? (

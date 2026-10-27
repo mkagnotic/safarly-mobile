@@ -111,7 +111,7 @@ export function ResetPasswordScreen() {
       setFormError(
         err instanceof Error && err.message
           ? "Can't reach the server. Check your connection and try again."
-          : "Something went wrong. Please try again.",
+          : "We couldn't reset your password. Please try again.",
       );
     } finally {
       if (mountedRef.current) setSubmitting(false);
@@ -151,7 +151,7 @@ export function ResetPasswordScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            Enter the code we sent to{" "}
+            Enter the code from the email we sent to{" "}
             <Text style={styles.email}>{email}</Text>, then choose a new password.
           </Text>
 
