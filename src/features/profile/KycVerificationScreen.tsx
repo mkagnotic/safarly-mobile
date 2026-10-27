@@ -238,7 +238,7 @@ export function KycVerificationScreen() {
         <Pressable style={styles.backButton} onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
-        <Text style={styles.screenTitle}>Identity Verification</Text>
+        <Text style={styles.screenTitle}>Verify your identity</Text>
       </View>
 
       {banner ? (

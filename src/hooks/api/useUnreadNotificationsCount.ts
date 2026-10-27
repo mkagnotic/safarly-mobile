@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
+import * as Notifications from "expo-notifications";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { ApiClientError, notificationsApi } from "@/services/api";
@@ -33,7 +35,11 @@ export function useUnreadNotificationsCount(): UseUnreadNotificationsCountResult
       try {
         const res = await notificationsApi.getUnreadCount();
         if (!mountedRef.current) return;
-        setCount(res.data?.unread_count ?? 0);
+        const unread = res.data?.unread_count ?? 0;
+        setCount(unread);
+        // Keep the app-icon badge in step with the bell: it only moved when a push
+        // arrived, so reading everything in the app left the old number (27 Oct 2026).
+        if (Platform.OS !== "web") void Notifications.setBadgeCountAsync(unread).catch(() => undefined);
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));

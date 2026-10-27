@@ -194,7 +194,7 @@ export function PublicProfileScreen() {
                 {verified ? (
                   <View style={styles.kycRow}>
                     <Ionicons name="shield-checkmark-outline" size={13} color={colors.safe} />
-                    <Text style={styles.kycText}>KYC Verified</Text>
+                    <Text style={styles.kycText}>Identity verified</Text>
                   </View>
                 ) : null}
               </View>

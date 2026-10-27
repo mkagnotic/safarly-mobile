@@ -4,7 +4,8 @@ import * as Sharing from "expo-sharing";
 
 import { safarlyMarkXml } from "@/assets/brand/safarlyMark";
 import type { Transaction } from "@/services/api";
-import { formatTxDate, penaltyView, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { formatTxDate, penaltyView, txStatusLabel, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { SUPPORT_EMAIL } from "@/constants/company";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -27,6 +28,17 @@ export function canDownloadReceipt(status: string): boolean {
 
 // The shared formatter: the hand-rolled one printed "$" for any non-INR code.
 const money = (n: number | null | undefined, currency?: string) => formatMoney(Number(n) || 0, currency);
+
+/** What the document is (27 Oct 2026: every one said "PAYMENT RECEIPT", refunds and earnings too). */
+export function receiptTitle(type: string): string {
+  switch (type) {
+    case "payment": return "PAYMENT RECEIPT";
+    case "refund": return "REFUND RECEIPT";
+    case "payout": return "EARNINGS STATEMENT";
+    case "penalty": return "PENALTY STATEMENT";
+    default: return "TRANSACTION RECEIPT";
+  }
+}
 
 function esc(s: string): string {
   return s
@@ -59,7 +71,7 @@ function receiptHtml(tx: Transaction): string {
       ? [{ label: "Route", value: `${tx.route_from ?? "—"} → ${tx.route_to ?? "—"}` }]
       : []),
     { label: "Booking", value: tx.booking_id ? `#${tx.booking_id.slice(0, 8)}` : "—" },
-    { label: "Reference", value: reference },
+    { label: "Payment reference", value: reference },
     { label: "Currency", value: (currency || "USD").toUpperCase() },
   ];
 
@@ -111,14 +123,14 @@ function receiptHtml(tx: Transaction): string {
         <span class="name">Safarly</span>
       </div>
       <div class="doc">
-        <div class="t">PAYMENT RECEIPT</div>
+        <div class="t">${esc(receiptTitle(tx.type))}</div>
         <div class="r">Receipt #${esc(tx.id)}</div>
       </div>
     </div>
     <div class="rule"></div>
     <div class="meta">
       <div><div class="lbl">Issued</div><div class="val">${esc(formatTxDate(tx.created_at) || "—")}</div></div>
-      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(penaltyView(tx)?.status ?? (tx.status || "—"))}</div></div>
+      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(penaltyView(tx)?.status ?? (tx.status ? txStatusLabel(tx.status) : "—"))}</div></div>
     </div>
     <h2>Transaction details</h2>
     <table>${rowsHtml}</table>
@@ -129,7 +141,7 @@ function receiptHtml(tx: Transaction): string {
       <div class="line"><span>Platform fee</span><span>${platformFee != null ? money(platformFee, currency) : "—"}</span></div>
       <div class="line net"><span class="lbl">Net amount</span><span>${netAmount != null ? money(netAmount, currency) : "—"}</span></div>`}
     </div>
-    <div class="foot">This is a system-generated receipt from Safarly. For questions, contact support@safarly.com.</div>
+    <div class="foot">This is a system-generated receipt from Safarly. For questions, contact ${esc(SUPPORT_EMAIL)}.</div>
   </div>
 </body></html>`;
 }

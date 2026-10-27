@@ -24,16 +24,17 @@ export function txTypeMeta(type: string): TxTypeMeta {
     case "refund":
       return { label: "Refund", credit: true, icon: "arrow-down-outline" };
     case "payout":
-      return { label: "Delivery earning", credit: true, icon: "arrow-down-outline" };
+      return { label: "Delivery earnings", credit: true, icon: "arrow-down-outline" };
     case "wallet_topup":
       return { label: "Wallet top-up", credit: false, icon: "arrow-up-outline" };
     case "wallet_withdrawal":
-      return { label: "Withdrawal", credit: true, icon: "arrow-down-outline" };
+      // Money leaving to the bank: an outgoing, not an incoming (it showed as "+").
+      return { label: "Paid out to bank", credit: false, icon: "arrow-up-outline" };
     // A carrier's cancellation penalty: Safarly's, taken from the next payout (27 Oct 2026).
     case "penalty":
       return { label: "Cancellation penalty", credit: false, icon: "remove-circle-outline" };
     default:
-      return { label: type.replace(/_/g, " "), credit: false, icon: "swap-horizontal-outline" };
+      return { label: humanise(type), credit: false, icon: "swap-horizontal-outline" };
   }
 }
 
@@ -47,6 +48,27 @@ export function penaltyView(tx: { type: string; status: string; amount: number }
   const status = credit ? (tx.status === "completed" ? "Credited" : "To be credited")
     : tx.status === "completed" ? "Deducted" : tx.status === "refunded" ? "Waived" : "Owed";
   return { label: credit ? "Penalty waived" : "Cancellation penalty", credit, status };
+}
+
+/**
+ * A transaction status in plain words (27 Oct 2026): the raw code ("held",
+ * "pending_payment") used to reach the pill. Twin of the other app's copy.
+ */
+export function txStatusLabel(status: string): string {
+  switch (status) {
+    case "held": return "Held until delivery";
+    case "pending": return "Processing";
+    case "completed": return "Completed";
+    case "refunded": return "Refunded";
+    case "failed": return "Failed";
+    case "cancelled": return "Cancelled";
+    default: return humanise(status);
+  }
+}
+
+function humanise(code: string): string {
+  const s = String(code ?? "").replace(/_/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
 }
 
 /** Status pill colours, mirroring web's `statusClass`. */

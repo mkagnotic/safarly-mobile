@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
@@ -17,6 +17,7 @@ import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useMyNotifications } from "@/hooks/api/useMyNotifications";
+import { useUnreadNotificationsCount } from "@/hooks/api/useUnreadNotificationsCount";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Notification } from "@/services/api";
 import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
@@ -83,7 +84,12 @@ export function NotificationsScreen() {
     clearAll,
   } = useMyNotifications({ perPage: 20 });
 
-  const hasUnread = useMemo(() => notifications.some((n) => !n.read), [notifications]);
+  // From the account, not just the loaded rows: an unread notice further down used to
+  // hide "Mark all as read" while the bell still counted it (27 Oct 2026, web parity).
+  const { count: unreadTotal } = useUnreadNotificationsCount();
+  const hasUnread = useMemo(() => unreadTotal > 0 || notifications.some((n) => !n.read), [notifications, unreadTotal]);
+  // One delete per row at a time: a double tap sent two DELETEs.
+  const deletingRef = useRef(new Set<string>());
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -122,10 +128,14 @@ export function NotificationsScreen() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (deletingRef.current.has(id)) return;
+      deletingRef.current.add(id);
       try {
         await remove(id);
       } catch (err) {
         showToast({ title: "Couldn't delete", message: getErrorMessage(err), variant: "error" });
+      } finally {
+        deletingRef.current.delete(id);
       }
     },
     [remove],
@@ -274,7 +284,7 @@ export function NotificationsScreen() {
           <Ionicons name="notifications-outline" size={22} color={colors.primary} />
         </View>
         <Text style={styles.emptyTitle}>You're all caught up!</Text>
-        <Text style={styles.emptySubtitle}>No new notifications right now.</Text>
+        <Text style={styles.emptySubtitle}>You don't have any notifications.</Text>
       </View>
     );
   }, [loading, error, refetch]);

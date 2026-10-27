@@ -26,6 +26,7 @@ import {
   txStatusTone,
   txTypeMeta,
   penaltyView,
+  txStatusLabel,
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
 import { formatMoney, formatMoneyByCurrency } from "@/utils/money";
@@ -193,7 +194,7 @@ export function TransactionsScreen() {
             <View style={{ flex: 1 }}>
               {(earnings?.pending_payouts ?? 0) > 0 ? (
                 <Text style={styles.payoutNoteStrong}>
-                  {`${formatMoneyByCurrency(earnings?.pending_payouts_by_currency, earnings?.pending_payouts, earnings?.currency)} pending payout`}
+                  {`${formatMoneyByCurrency(earnings?.pending_payouts_by_currency, earnings?.pending_payouts, earnings?.currency)} payout on the way`}
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>
@@ -300,7 +301,7 @@ function TxRow({
           {formatTxAmount(tx.amount, meta.credit, tx.currency)}
         </Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{pen ? pen.status : tx.status}</Text>
+          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{pen ? pen.status : txStatusLabel(tx.status)}</Text>
         </View>
       </View>
       {showReceipt ? (

@@ -106,7 +106,7 @@ export function ProfileScreen() {
           { icon: "alert-circle", label: "My Disputes", target: "DisputesTab" },
           { icon: "card-outline", label: "Payments", target: "TransactionsTab" },
           { icon: "business-outline", label: "Payout setup", target: "PayoutSetupTab" },
-          { icon: "shield-checkmark-outline", label: "KYC Verification", target: "KycVerificationTab" },
+          { icon: "shield-checkmark-outline", label: "Verify your identity", target: "KycVerificationTab" },
           { icon: "star", label: "Reviews", target: "ReviewsTab" },
           {
             icon: "chatbubble-ellipses",

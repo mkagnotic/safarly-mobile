@@ -2106,6 +2106,22 @@ const CHECKS = [
     must: ["we'll email you a code to choose a new password.", "Enter it on the next screen, or tap the link in the email.", '"profile.signOut": "Log out",'],
     mustNot: ["we've sent a 6-digit", "We've sent another link."],
   },
+  {
+    repo: "web",
+    file: ["src/features/payments/pages/CustomerTransactions.tsx", "src/utils/receiptPdf.ts", "src/features/notifications/pages/CustomerNotifications.tsx", "src/features/customer-shell/components/CustomerNavbar.tsx", "src/features/profile/pages/CustomerProfile.tsx", "src/services/i18n/translations.ts", "supabase/functions/_shared/push.ts"],
+    id: "account-settings-fixes",
+    why: "27 Oct 2026 account-settings flow: Payments showed $0.00 tiles while loading and on error, raw status codes ('held'), a bank payout as '+' income and every receipt titled PAYMENT RECEIPT; Clear all deleted every notification with no question; Mark all as read hid when the unread notice was on another page; the navbar said 'Account Settings' for a page titled Preferences; 'KYC' jargon; the app badge counted deleted notifications.",
+    must: ["{!txQuery.isLoading && !txQuery.isError && (", 'case "held": return "Held until delivery";', 'case "wallet_withdrawal": return { label: "Paid out to bank", Icon: ArrowUpRight, credit: false };', "title: receiptTitle(tx.type),", "Clear all notifications?", "onClick={() => setConfirmClear(true)}", "useUnreadCount()", 'label: "Preferences", icon: Settings }', '"mobile.kycVerification": "Verify your identity",', '"customer.kycVerified": "Identity verified",', "await logout();", ".is('read_at', null).is('deleted_at', null)"],
+    mustNot: ["onClick={() => clearAll.mutate()}", 'label: "Account Settings", icon: Settings }', '"KYC Verification"', "{pen ? pen.status : tx.status}"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/wallet/transactionDisplay.ts", "src/features/wallet/TransactionsScreen.tsx", "src/features/wallet/receiptPdf.ts", "src/features/tabs/NotificationsScreen.tsx", "src/features/tabs/ProfileScreen.tsx", "src/features/profile/KycVerificationScreen.tsx", "src/features/profile/PublicProfileScreen.tsx", "src/hooks/api/useUnreadNotificationsCount.ts", "src/services/notifications/push.ts"],
+    id: "mobile-account-settings-fixes",
+    why: "See account-settings-fixes (web repo): plus mobile's Mark all read used only the loaded page, a double tap deleted twice, and the app icon badge never followed reads or logout.",
+    must: ['return { label: "Paid out to bank", credit: false, icon: "arrow-up-outline" };', "export function txStatusLabel(", "txStatusLabel(tx.status)", "receiptTitle(tx.type)", "useUnreadNotificationsCount()", "deletingRef.current.has(id)", 'label: "Verify your identity", target: "KycVerificationTab" }', "Identity verified", "Notifications.setBadgeCountAsync(unread)", "Notifications.setBadgeCountAsync(0)"],
+    mustNot: ['label: "KYC Verification"', "KYC Verified", "{pen ? pen.status : tx.status}"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

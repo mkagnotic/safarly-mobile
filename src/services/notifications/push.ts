@@ -203,6 +203,8 @@ export async function unregisterPushToken(): Promise<void> {
  * the next start (`retryPendingForget`). Never throws.
  */
 export async function forgetThisDevice(): Promise<void> {
+  // Signed out: the previous account's unread count must not stay on the icon.
+  if (Platform.OS !== "web") void Notifications.setBadgeCountAsync(0).catch(() => undefined);
   try {
     const token = await AsyncStorage.getItem(LAST_TOKEN_KEY);
     await AsyncStorage.removeItem(LAST_TOKEN_KEY);

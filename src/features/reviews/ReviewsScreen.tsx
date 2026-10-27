@@ -99,7 +99,7 @@ function SummaryCard({
       <View style={styles.summaryLeft}>
         <Text style={styles.avgValue}>{averageRating.toFixed(1)}</Text>
         <StarRow rating={roundedAvg} size={14} />
-        <Text style={styles.totalReviewsText}>{total} reviews</Text>
+        <Text style={styles.totalReviewsText}>{total} {total === 1 ? "review" : "reviews"}</Text>
       </View>
       <View style={styles.summaryRight}>
         {stars.map((s) => {
@@ -255,7 +255,7 @@ export function ReviewsScreen() {
                 </Pressable>
               ) : (
                 <Text style={styles.endText}>
-                  {active.total > 0 ? `Showing all ${active.total} reviews` : "End of reviews"}
+                  {active.total > 0 ? `Showing all ${active.total} ${active.total === 1 ? "review" : "reviews"}` : "End of reviews"}
                 </Text>
               )}
             </View>

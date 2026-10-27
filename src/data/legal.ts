@@ -271,11 +271,11 @@ export const privacySections: LegalSection[] = [
     paragraphs: ["We may update this policy periodically."],
   },
   {
-    title: "11. Contact",
+    title: "12. Contact",
     paragraphs: ["For questions or concerns: admin@mysafarly.com"],
   },
   {
-    title: "12. Ownership & Company Information",
+    title: "13. Ownership & Company Information",
     paragraphs: [
       OWNERSHIP_STATEMENT,
       `${COMPANY_NAME} is the data controller responsible for personal information processed through Safarly.`,
