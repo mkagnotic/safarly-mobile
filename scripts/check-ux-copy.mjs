@@ -2182,6 +2182,13 @@ const CHECKS = [
     why: "See delete-account-way-out (web repo). Plus mobile's confirmation said 'personal data have been removed' while delivery and payment records are kept (the warning says so); Preferences labels were Title Case and said 'via email'.",
     must: ['status.blocked_kind === "delivery"', 'label="Open My Bookings"', 'label="Email support"', "Records of completed deliveries and payments are kept,", 'label: "Email notifications",', "reviews by email"],
     mustNot: ["Your Safarly account and personal data have been removed", 'label: "Email Notifications",', "reviews via email"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/_shared/emailTemplates.ts", "supabase/functions/_shared/push.ts", "supabase/functions/user-handler/index.ts", "src/constants/company.ts"],
+    id: "one-support-address",
+    why: "27 Oct 2026: the apps and legal pages said admin@mysafarly.com while every email footer said support@mysafarly.com. The owner confirmed admin@ is the real inbox.",
+    must: ["mailto:admin@mysafarly.com", 'SUPPORT_EMAIL = "admin@mysafarly.com"', "const SUPPORT_EMAIL = 'admin@mysafarly.com';"],
+    mustNot: ["support@mysafarly.com"],
   },
 ];
 
