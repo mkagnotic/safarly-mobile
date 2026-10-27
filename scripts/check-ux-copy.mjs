@@ -1615,7 +1615,7 @@ const CHECKS = [
     file: "src/hooks/useConnectionStatus.ts",
     id: "offline-banner-needs-proof",
     why: "Client 26 Oct 2026: iPhone Safari showed 'You're offline' to a signed-in user on a working network (navigator.onLine was false). An open realtime socket or any server reply overrules the browser flag.",
-    must: ["const reallyOffline = !s.browserOnline && !s.realtimeOpen && s.probeOk !== true;"],
+    must: ["const reallyOffline = !s.browserOnline && (s.probeOk === false || (s.probeOk === null && !s.realtimeOpen));"],
     mustNot: ["if (!browserOnline) return \"offline\";"],
   },
   {
@@ -1961,6 +1961,14 @@ const CHECKS = [
     why: "See sender-can-pay-during-the-grace (web repo): the Pay screen said 'Payment window expired' and blocked paying during the grace.",
     must: ["export function payDeadline(", "const deadline = booking && nowTs > 0 ? payDeadline(booking, nowTs) : null;", "Grace period: "],
     mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "src/hooks/useConnectionStatus.ts",
+    id: "offline-shows-when-the-network-really-drops",
+    why: "27 Oct 2026 regression run (N02b, flaky): a really lost network left the realtime socket claiming 'open' until its heartbeat timed out, and an open socket overruled everything, so 'You're offline' came late or not at all. The server probe decides once the browser says offline; it still overrules iPhone Safari's false offline.",
+    must: ["const reallyOffline = !s.browserOnline && (s.probeOk === false || (s.probeOk === null && !s.realtimeOpen));"],
+    mustNot: ["const reallyOffline = !s.browserOnline && !s.realtimeOpen && s.probeOk !== true;"],
   },
 ];
 
