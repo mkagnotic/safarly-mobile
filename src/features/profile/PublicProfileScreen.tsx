@@ -207,19 +207,19 @@ export function PublicProfileScreen() {
               icon="cube-outline"
               iconColor={colors.safe}
               value={String(profile?.total_deliveries ?? 0)}
-              label="DELIVERIES"
+              label="Deliveries"
             />
             <StatCard
               icon="people-outline"
               iconColor={colors.primary}
               value={String(profile?.total_trips ?? 0)}
-              label="BUDDY TRIPS"
+              label="Buddy trips"
             />
             <StatCard
               icon="calendar-outline"
               iconColor={colors.warning}
               value={memberSince(profile?.created_at)}
-              label="MEMBER SINCE"
+              label="Member since"
             />
           </View>
 
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: { color: colors.text, fontSize: 18, lineHeight: 22, fontWeight: "800" },
-  statLabel: { color: colors.mutedText, fontSize: 9, fontWeight: "700", letterSpacing: 0.4 },
+  statLabel: { color: colors.mutedText, fontSize: 9, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
 
   // About
   sectionTitle: {

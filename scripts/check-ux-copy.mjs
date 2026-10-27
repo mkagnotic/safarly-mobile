@@ -2121,6 +2121,29 @@ const CHECKS = [
     why: "See account-settings-fixes (web repo): plus mobile's Mark all read used only the loaded page, a double tap deleted twice, and the app icon badge never followed reads or logout.",
     must: ['return { label: "Paid out to bank", credit: false, icon: "arrow-up-outline" };', "export function txStatusLabel(", "txStatusLabel(tx.status)", "receiptTitle(tx.type)", "useUnreadNotificationsCount()", "deletingRef.current.has(id)", 'label: "Verify your identity", target: "KycVerificationTab" }', "Identity verified", "Notifications.setBadgeCountAsync(unread)", "Notifications.setBadgeCountAsync(0)"],
     mustNot: ['label: "KYC Verification"', "KYC Verified", "{pen ? pen.status : tx.status}"],
+  },  {
+    repo: "web",
+    file: ["src/lib/canGoBack.ts", "src/features/notifications/pages/CustomerNotifications.tsx", "src/features/notifications/pages/CustomerActivity.tsx", "src/features/messages/pages/CustomerMessages.tsx", "src/features/parcels/pages/CustomerParcelDetail.tsx", "src/features/trips/pages/CustomerTripDetail.tsx", "src/features/profile/pages/CustomerPublicProfile.tsx", "src/features/bookings/pages/CustomerCheckout.tsx", "src/features/disputes/pages/CustomerDisputes.tsx", "src/features/trips/pages/CustomerListTrip.tsx", "src/features/parcels/pages/CustomerSendParcel.tsx", "src/features/bookings/pages/CustomerRateDelivery.tsx", "src/features/buddies/pages/CustomerCreateBuddy.tsx"],
+    id: "back-stays-in-the-app",
+    why: "27 Oct 2026: Back ran history -1 (or tested history.length > 1, which counts the site before Safarly), so a page opened from a push or email link left the app or did nothing. Use canGoBack() and fall back to a page in the app.",
+    must: ['return typeof idx === "number" && idx > 0;', "canGoBack()"],
+    mustNot: ["onClick={() => navigate(-1)}", "globalThis.history.length > 1"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/payments/pages/CustomerTransactions.tsx", "src/features/profile/components/DeleteAccountView.tsx", "src/features/profile/components/AccountSecuritySettings.tsx"],
+    id: "web-profile-small-fixes",
+    why: "27 Oct 2026: the receipt printed the full 36-character booking id; delete-account lagged mobile (no Forgot password, 'We'll email a code' after it was sent, 'Send a new code', Enter/Escape did nothing).",
+    must: ['value: `#${tx.booking_id.slice(0, 8)}`', "Forgot your password?", "Enter the 6-digit code we sent to", '"Resend code"', 'e.key === "Escape" && !deleting', 'onForgotPassword={() => { setForgotFrom("deleteAccount");', "goToView(forgotFrom);"],
+    mustNot: ['"Send a new code"', '{ label: "Booking", value: tx.booking_id }'],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/tabs/ProfileScreen.tsx", "src/features/profile/SettingsScreen.tsx", "src/features/profile/PublicProfileScreen.tsx", "src/features/wallet/TransactionsScreen.tsx", "src/features/tabs/NotificationsScreen.tsx"],
+    id: "mobile-profile-small-fixes",
+    why: "27 Oct 2026: headings were typed in capitals ('ACCOUNT', 'TRIPS') - a screen reader spells them out, so write words normally and capitalise in the style; a failed pull-to-refresh or Load more on Payments said nothing; tapping a notification waited for the server before opening it.",
+    must: ['title: "Account",', 'label="Trips"', 'title: "Security",', 'label="Member since"', "Couldn't refresh your payments", "Couldn't load more payments", "markAsRead(n.id).catch("],
+    mustNot: ['title: "ACCOUNT",', 'label="TRIPS"', 'title: "SECURITY",', 'label="MEMBER SINCE"', "await markAsRead(n.id);"],
   },
 ];
 

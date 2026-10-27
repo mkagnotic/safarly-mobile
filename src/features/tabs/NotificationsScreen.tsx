@@ -97,18 +97,17 @@ export function NotificationsScreen() {
   }, [navigation]);
 
   const handleNotificationPress = useCallback(
-    async (n: Notification) => {
-      // Optimistic — UI flips before the PUT lands.
+    (n: Notification) => {
+      // Mark read in the background and open at once (web parity): awaiting the
+      // PUT held every tap for a server round trip before anything happened.
       if (!n.read) {
-        try {
-          await markAsRead(n.id);
-        } catch (err) {
+        markAsRead(n.id).catch((err) => {
           showToast({
             title: "Couldn't mark as read",
             message: getErrorMessage(err),
             variant: "error",
           });
-        }
+        });
       }
       // Navigate off `data.link` when we recognise it, else fall back to a
       // per-type landing screen — shared with the OS push-tap handler via
@@ -250,7 +249,7 @@ export function NotificationsScreen() {
     ({ item }: ListRenderItemInfo<Notification>) => (
       <NotificationRow
         item={item}
-        onPress={() => void handleNotificationPress(item)}
+        onPress={() => handleNotificationPress(item)}
         onDelete={() => void handleDelete(item.id)}
       />
     ),

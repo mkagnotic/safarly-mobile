@@ -34,7 +34,7 @@ export function SettingsScreen() {
     () => [
       {
         id: "security",
-        title: "SECURITY",
+        title: "Security",
         rows: [
           { id: "change-password", icon: "lock-closed-outline", title: "Change Password" },
           { id: "change-email", icon: "mail-outline", title: "Change Email" },
@@ -42,7 +42,7 @@ export function SettingsScreen() {
       },
       {
         id: "preferences",
-        title: "PREFERENCES",
+        title: "Preferences",
         rows: [
           {
             id: "language",
@@ -54,7 +54,7 @@ export function SettingsScreen() {
       },
       {
         id: "general",
-        title: "GENERAL",
+        title: "General",
         rows: [
           {
             id: "push-notifications",
@@ -177,6 +177,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: "700",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
     marginBottom: 12,
   },
   card: {

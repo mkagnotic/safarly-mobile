@@ -63,6 +63,8 @@ export function TransactionsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const hadItemsRef = useRef(false);
+  hadItemsRef.current = items.length > 0;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -94,7 +96,11 @@ export function TransactionsScreen() {
       }
       if (earnRes.status === "fulfilled") setEarnings(earnRes.value.data ?? null);
     } catch (err) {
-      if (mountedRef.current) setError(getErrorMessage(err));
+      if (!mountedRef.current) return;
+      setError(getErrorMessage(err));
+      // With a list already on screen the error panel is not shown, so a failed
+      // pull-to-refresh used to look like "nothing new" (27 Oct 2026). Say so.
+      if (hadItemsRef.current) showToast({ title: "Couldn't refresh your payments", message: getErrorMessage(err), variant: "error" });
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -116,8 +122,9 @@ export function TransactionsScreen() {
         return [...prev, ...rows.filter((r) => !seen.has(r.id))];
       });
       setPage(next);
-    } catch {
-      // Keep what we have; the user can retry by scrolling/pressing again.
+    } catch (err) {
+      // Keep what we have; the button stays so the user can press it again.
+      showToast({ title: "Couldn't load more payments", message: getErrorMessage(err), variant: "error" });
     } finally {
       if (mountedRef.current) setLoadingMore(false);
     }
