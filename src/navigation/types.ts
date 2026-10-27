@@ -73,6 +73,8 @@ export type MainTabParamList = {
   PreferencesTab: undefined;
   ChangePasswordTab: undefined;
   ChangeEmailTab: undefined;
+  /** Security → Blocked users (web BlockedUsersSection parity). */
+  BlockedUsersTab: undefined;
   DeleteAccountTab: undefined;
   /** Same screen as the root stack's `ForgotPassword`, reached from Change Password. */
   ForgotPasswordTab: { email?: string } | undefined;

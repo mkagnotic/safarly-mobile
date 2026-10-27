@@ -8,6 +8,7 @@ import { bumpRealtimeTopic } from "@/store/realtimeBus";
 
 /** A screen mounting after this long re-reads the lists; sooner reuses them. */
 const STALE_MS = 60_000;
+const EMPTY_IDS: readonly string[] = [];
 
 interface BlockedUsersState {
   /** Whose lists these are. A different signed-in user resets them. */
@@ -17,6 +18,8 @@ interface BlockedUsersState {
   fetchedAt: number;
   /** Bumped per request so a stale response can't overwrite a newer one. */
   requestSeq: number;
+  /** The last read failed. Only the Blocked users list shows it; hiding still fails open. */
+  loadFailed: boolean;
 }
 
 /**
@@ -32,6 +35,7 @@ const useBlockedUsersStore = create<BlockedUsersState>(() => ({
   blockedMe: [],
   fetchedAt: 0,
   requestSeq: 0,
+  loadFailed: false,
 }));
 
 /** The read already under way, so screens mounting together share one request. */
@@ -63,8 +67,11 @@ async function readBlocks(ownerId: string, seq: number): Promise<void> {
       blockedByMe: res.data?.blocked_user_ids ?? [],
       blockedMe: res.data?.blocked_by_user_ids ?? [],
       fetchedAt: Date.now(),
+      loadFailed: false,
     });
   } catch {
+    const now = useBlockedUsersStore.getState();
+    if (now.ownerId === ownerId && now.requestSeq === seq) useBlockedUsersStore.setState({ loadFailed: true });
     // Fail open: keep what we had (nothing, on a first load). Showing a blocked
     // person's listing for a while is recoverable; a list that errors is not.
   } finally {
@@ -81,6 +88,12 @@ export interface UseBlockedUsersResult {
   /** Optimistic; throws (after reverting) when the server refuses. */
   unblock: (userId: string) => Promise<void>;
   refetch: () => Promise<void>;
+  /** People I blocked, for the Blocked users list (Security). */
+  blockedByMeIds: readonly string[];
+  /** The lists have arrived at least once for this account. */
+  isLoaded: boolean;
+  /** The last read failed. */
+  loadFailed: boolean;
 }
 
 /**
@@ -95,6 +108,8 @@ export function useBlockedUsers(): UseBlockedUsersResult {
   const ownerId = useBlockedUsersStore((s) => s.ownerId);
   const blockedByMe = useBlockedUsersStore((s) => s.blockedByMe);
   const blockedMe = useBlockedUsersStore((s) => s.blockedMe);
+  const fetchedAt = useBlockedUsersStore((s) => s.fetchedAt);
+  const loadFailed = useBlockedUsersStore((s) => s.loadFailed);
 
   // Account switch (or sign-out) drops the previous person's lists before the
   // new ones load; otherwise a re-mount only re-reads when the copy is stale.
@@ -106,6 +121,7 @@ export function useBlockedUsers(): UseBlockedUsersResult {
         blockedByMe: [],
         blockedMe: [],
         fetchedAt: 0,
+        loadFailed: false,
       });
     } else if (Date.now() - state.fetchedAt < STALE_MS) {
       return;
@@ -173,5 +189,14 @@ export function useBlockedUsers(): UseBlockedUsersResult {
     [current, blockedByMe],
   );
 
-  return { hiddenUserIds, isBlockedByMe, block, unblock, refetch };
+  return {
+    hiddenUserIds,
+    isBlockedByMe,
+    block,
+    unblock,
+    refetch,
+    blockedByMeIds: current ? blockedByMe : EMPTY_IDS,
+    isLoaded: current && fetchedAt > 0,
+    loadFailed: current && loadFailed,
+  };
 }

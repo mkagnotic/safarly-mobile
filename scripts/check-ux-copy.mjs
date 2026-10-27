@@ -1436,10 +1436,10 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: ["supabase/functions/auth-handler/index.ts", "src/features/profile/components/AccountSecuritySettings.tsx"],
+    file: ["supabase/functions/auth-handler/index.ts", "supabase/functions/_shared/passwordCheck.ts", "src/features/profile/components/AccountSecuritySettings.tsx"],
     id: "wrong-current-password-is-not-session-expired",
     why: "Plan U5: a wrong current password answered 401, read by both apps as 'session expired' (and a possible sign-out).",
-    must: ["errorResponse('VALIDATION_ERROR', 'Current password is incorrect.')", "That's not your current password."],
+    must: ["'Current password is incorrect.'", "errorResponse('VALIDATION_ERROR', wrongPasswordMessage(user.identities))", "That's not your current password."],
     mustNot: ["errorResponse('UNAUTHENTICATED', 'Wrong current password')"],
   },
   {
@@ -2068,10 +2068,10 @@ const CHECKS = [
   },
   {
     repo: "web",
-    file: ["supabase/functions/auth-handler/index.ts", "supabase/functions/_shared/validation.ts"],
+    file: ["supabase/functions/auth-handler/index.ts", "supabase/functions/_shared/validation.ts", "supabase/functions/_shared/passwordCheck.ts"],
     id: "email-change-is-verified-and-one-password-rule",
     why: "27 Oct 2026 account-setup flow test: change-email set the new address instantly with no email (a typo locked the user out) while saying 'Verification email sent', checked 'taken' against one page of users, and answered a wrong password with 401 (apps sign out on 401). Change/reset also demanded upper+lower case while sign-up and Supabase ('Letters and digits') do not.",
-    must: ["const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user${redirect}`, {", "if (signInError) return errorResponse('VALIDATION_ERROR', 'Your current password is incorrect.');", "return 'Password must contain both letters and numbers';"],
+    must: ["const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user${redirect}`, {", "const refused = await checkCurrentPassword(supabase, { id: authResult.user.id, email: currentEmail,", "if (error) return errorResponse('VALIDATION_ERROR', wrongPasswordMessage(user.identities));", "return 'Password must contain both letters and numbers';"],
     mustNot: ["await supabase.auth.admin.updateUserById(authResult.user.id, { email: new_email as string });", "if (signInError) return errorResponse('UNAUTHENTICATED', 'Wrong password');", "Password must contain at least one uppercase letter"],
   },
   {
@@ -2139,11 +2139,34 @@ const CHECKS = [
   },
   {
     repo: "mobile",
-    file: ["src/features/tabs/ProfileScreen.tsx", "src/features/profile/SettingsScreen.tsx", "src/features/profile/PublicProfileScreen.tsx", "src/features/wallet/TransactionsScreen.tsx", "src/features/tabs/NotificationsScreen.tsx"],
+    file: ["src/features/tabs/ProfileScreen.tsx", "src/features/profile/PublicProfileScreen.tsx", "src/features/wallet/TransactionsScreen.tsx", "src/features/tabs/NotificationsScreen.tsx"],
     id: "mobile-profile-small-fixes",
     why: "27 Oct 2026: headings were typed in capitals ('ACCOUNT', 'TRIPS') - a screen reader spells them out, so write words normally and capitalise in the style; a failed pull-to-refresh or Load more on Payments said nothing; tapping a notification waited for the server before opening it.",
-    must: ['title: "Account",', 'label="Trips"', 'title: "Security",', 'label="Member since"', "Couldn't refresh your payments", "Couldn't load more payments", "markAsRead(n.id).catch("],
-    mustNot: ['title: "ACCOUNT",', 'label="TRIPS"', 'title: "SECURITY",', 'label="MEMBER SINCE"', "await markAsRead(n.id);"],
+    must: ['title: "Account",', 'label="Trips"', 'label="Member since"', "Couldn't refresh your payments", "Couldn't load more payments", "markAsRead(n.id).catch("],
+    mustNot: ['title: "ACCOUNT",', 'label="TRIPS"', 'label="MEMBER SINCE"', "await markAsRead(n.id);"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/_shared/passwordCheck.ts", "supabase/functions/auth-handler/index.ts"],
+    id: "security-password-checks",
+    why: "27 Oct 2026 security flow: (1) the admin password update ended EVERY session, this device's too - it could not renew its login and was signed out within the hour; change it as the user (PUT /auth/v1/user), which keeps this device and signs out the others; (2) the update's error was ignored, so a refused password said 'changed'; (3) no cap on current-password guesses - 10 per 15 min per ACCOUNT; (4) every check left a session behind; (5) Google/Apple accounts were only told 'incorrect'.",
+    must: ["pw-check:${user.id}", "await supabase.auth.admin.signOut(token, 'local');", "use \"Forgot password\" to set one", "body: JSON.stringify({ password: new_password }),", "signed_out_others: true", "code === 'reauthentication_needed'", "signed_out_here: true", "const refused = await checkCurrentPassword(supabase,"],
+    mustNot: ["return successResponse({ message: 'Password changed' });", "'Your current password is incorrect.'"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/profile/components/AccountSecuritySettings.tsx", "src/services/i18n/translations.ts", "src/features/moderation/components/BlockedUsersSection.tsx", "src/hooks/api/useBlockedUsers.ts"],
+    id: "web-security-screen",
+    why: "27 Oct 2026 security flow: say other devices were signed out; keep the server's Google/Apple hint on the field; sign in again when the server had to sign this device out; sentence case like mobile, and the change page asks for the CURRENT password too; a failed Blocked users load said 'You haven't blocked anyone'.",
+    must: ["Password changed. Your other devices have been signed out.", "/Google or Apple/.test(msg) ? msg", "done?.signed_out_here", '"auth.changePasscode": "Change password",', '"auth.resetPasscodeDesc": "Enter your current password, then choose a new one.",', "Couldn't load your blocked users.", "isError: query.isError && !query.data,"],
+    mustNot: ['"auth.changePasscode": "Change Password",', '"auth.resetPasscodeDesc": "Enter your new password below.",', 'toast.success("Password changed successfully")', ">Email Address<"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/profile/BlockedUsersScreen.tsx", "src/features/profile/SecurityScreen.tsx", "src/navigation/RootNavigator.tsx", "src/hooks/api/useBlockedUsers.ts", "src/features/profile/ChangePasswordScreen.tsx"],
+    id: "mobile-security-screen",
+    why: "See web-security-screen and security-password-checks. Plus: mobile had NO Blocked users list - a blocked person is hidden everywhere and their chat closes, so nobody could ever be unblocked; the old Settings screen (only reachable by the 'settings' link) had four rows that did nothing and a 'Payment Methods' feature that doesn't exist; 'Manage your account credentials' was jargon.",
+    must: ['navigation.navigate("BlockedUsersTab")', '<Tabs.Screen name="BlockedUsersTab" component={BlockedUsersScreen}', '<Tabs.Screen name="SettingsTab" component={SecurityScreen}', "Couldn't load your blocked users.", "loadFailed: true", "res.data?.signed_out_here", "Your other devices have been signed out.", "Your email, password, blocked users and account."],
+    mustNot: ["component={SettingsScreen}", "Manage your account credentials.", "/current password|wrong|incorrect|invalid/i"],
   },
 ];
 

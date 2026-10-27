@@ -12,7 +12,7 @@ import { colors } from "@/theme/colors";
 type Nav = BottomTabNavigationProp<MainTabParamList, "SecurityTab">;
 
 type Row = {
-  id: "email" | "change-password";
+  id: "email" | "change-password" | "blocked-users";
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
@@ -48,6 +48,14 @@ export function SecurityScreen() {
       subtitle: "Update the password you use to sign in",
       onPress: () => navigation.navigate("ChangePasswordTab"),
     },
+    {
+      // Without this list there was no way to unblock anyone (27 Oct 2026).
+      id: "blocked-users",
+      icon: "ban-outline",
+      title: "Blocked users",
+      subtitle: "See and unblock people you've blocked",
+      onPress: () => navigation.navigate("BlockedUsersTab"),
+    },
   ];
 
   return (
@@ -64,7 +72,7 @@ export function SecurityScreen() {
         <Text style={styles.screenTitle}>Security</Text>
       </View>
 
-      <Text style={styles.intro}>Manage your account credentials.</Text>
+      <Text style={styles.intro}>Your email, password, blocked users and account.</Text>
 
       <View style={styles.card}>
         {rows.map((row, index) => (

@@ -54,11 +54,11 @@ import { PayoutSetupScreen } from "@/features/wallet/PayoutSetupScreen";
 import { TransactionsScreen } from "@/features/wallet/TransactionsScreen";
 import { ReviewsScreen } from "@/features/reviews/ReviewsScreen";
 import { KycVerificationScreen } from "@/features/profile/KycVerificationScreen";
-import { SettingsScreen } from "@/features/profile/SettingsScreen";
 import { SecurityScreen } from "@/features/profile/SecurityScreen";
 import { PreferencesScreen } from "@/features/profile/PreferencesScreen";
 import { ChangePasswordScreen } from "@/features/profile/ChangePasswordScreen";
 import { ChangeEmailScreen } from "@/features/profile/ChangeEmailScreen";
+import { BlockedUsersScreen } from "@/features/profile/BlockedUsersScreen";
 // New screens
 import { OpportunitiesScreen } from "@/features/opportunities/OpportunitiesScreen";
 import { BookingsScreen } from "@/features/bookings/BookingsScreen";
@@ -137,6 +137,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   PreferencesTab: "options-outline",
   ChangePasswordTab: "lock-closed-outline",
   ChangeEmailTab: "mail-open-outline",
+  BlockedUsersTab: "ban-outline",
   DeleteAccountTab: "trash-outline",
   ForgotPasswordTab: "mail-outline",
   SendParcelTab: "cube-outline",
@@ -318,11 +319,14 @@ function MainTabs() {
       <Tabs.Screen name="KycVerificationTab" component={KycVerificationScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="EditProfileTab" component={EditProfileScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ReviewsTab" component={ReviewsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="SettingsTab" component={SettingsScreen} options={HIDDEN_TAB} />
+      {/* The old Settings screen had four rows that did nothing (and a "Payment Methods"
+          feature that doesn't exist); its only way in, the "settings" link, opens Security. */}
+      <Tabs.Screen name="SettingsTab" component={SecurityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SecurityTab" component={SecurityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PreferencesTab" component={PreferencesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangePasswordTab" component={ChangePasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangeEmailTab" component={ChangeEmailScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="BlockedUsersTab" component={BlockedUsersScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DeleteAccountTab" component={DeleteAccountScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ForgotPasswordTab" component={ForgotPasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SendParcelTab" component={SendParcelScreen} options={HIDDEN_TAB} />
