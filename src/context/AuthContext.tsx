@@ -12,7 +12,7 @@ import { usersApi } from "@/services/api/users";
 import { checkOnboarding } from "./onboardingCheck";
 import {
   syncPushRegistrationOnLogin,
-  clearCachedPushToken,
+  forgetThisDevice,
   unregisterPushToken,
 } from "@/services/notifications/push";
 import { performAppleOAuth } from "@/services/auth/appleOAuth";
@@ -120,7 +120,9 @@ const loadOnboardingStatus = () =>
  * would only fail against a dead token.
  */
 async function signOutLocally(): Promise<void> {
-  await clearCachedPushToken();
+  // The server refused this session, so the normal DELETE would 401: unlink the
+  // phone with the session-free call, or it keeps getting the pushes.
+  await forgetThisDevice();
   await clearGoogleSession();
   await supabase.auth.signOut({ scope: "local" });
 }
@@ -247,6 +249,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
       refreshSession: () => supabase.auth.refreshSession(),
       hasStoredSession,
       onRevoked: async () => {
+        await forgetThisDevice();
         await signOutThisDevice(supabase.auth, () => sessionStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY));
       },
     });

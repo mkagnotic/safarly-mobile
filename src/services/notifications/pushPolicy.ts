@@ -19,3 +19,17 @@ export function loginPushAction(status: string | undefined): LoginPushAction {
   if (status === "undetermined") return "ask";
   return "skip";
 }
+
+/**
+ * How a push that arrives while the app is open is presented (27 Oct 2026).
+ * Signed out: never shown. For the chat on screen: no banner/sound/list entry
+ * (the message is already in front of the user), like every chat app.
+ */
+export function foregroundPresentation(s: {
+  signedIn: boolean;
+  conversationId?: string | null;
+  activeConversationId: string | null;
+}): { show: boolean; badge: boolean } {
+  const forOpenChat = !!s.conversationId && s.conversationId === s.activeConversationId;
+  return { show: s.signedIn && !forOpenChat, badge: s.signedIn };
+}

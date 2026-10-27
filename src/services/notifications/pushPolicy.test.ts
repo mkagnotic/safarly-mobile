@@ -23,3 +23,11 @@ test("the sign-in sync uses the policy and asks the OS only for 'ask'", () => {
   assert.match(fn, /loginPushAction\(status\)/);
   assert.match(fn, /if \(action === "ask"\) \{\s*status = \(await Notifications\.requestPermissionsAsync\(\)\)\.status;/);
 });
+
+test("foregroundPresentation: signed out shows nothing; the open chat shows no banner; anything else shows", async () => {
+  const { foregroundPresentation } = await import("./pushPolicy.ts");
+  assert.deepEqual(foregroundPresentation({ signedIn: false, conversationId: "c1", activeConversationId: null }), { show: false, badge: false });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: "c1", activeConversationId: "c1" }), { show: false, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: "c2", activeConversationId: "c1" }), { show: true, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: undefined, activeConversationId: "c1" }), { show: true, badge: true });
+});

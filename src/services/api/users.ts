@@ -80,6 +80,14 @@ export const usersApi = {
   registerPushToken: (token: string, platform: "ios" | "android" | "web") =>
     api.post<{ registered: boolean }>("/user-handler/me/push-token", { token, platform }),
 
+  /**
+   * Unlink this phone without a session (27 Oct 2026): used on every sign-out,
+   * including the ones where the session is already dead and the normal DELETE
+   * would 401. The server removes only this exact token.
+   */
+  forgetPushToken: (token: string) =>
+    api.post<{ forgotten: boolean }>("/user-handler/push-token/forget", { token }),
+
   removePushToken: (token: string) =>
     api.delete<{ removed: boolean }>(
       `/user-handler/me/push-token?token=${encodeURIComponent(token)}`,

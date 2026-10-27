@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useModalHandoff } from "@/hooks/useModalHandoff";
@@ -20,6 +20,7 @@ import { labelDeals, selectableDeals } from "@/utils/dealLabel";
 import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount } from "@/utils/buddyEntry";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { dismissChatNotifications, setActiveChat } from "@/services/notifications/push";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
@@ -75,6 +76,16 @@ export function OfferChatScreen() {
     useChatKeyboardLayout(insets);
 
   const conversationId = route.params?.conversationId ?? null;
+  // While this chat is on screen its pushes show no banner, and opening it clears
+  // its notifications from the tray - how every chat app behaves (27 Oct 2026).
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversationId) return undefined;
+      setActiveChat(conversationId);
+      void dismissChatNotifications(conversationId);
+      return () => setActiveChat(null);
+    }, [conversationId]),
+  );
   const fallbackName = route.params?.name ?? "Conversation";
   const source = route.params?.source ?? "messages";
   // Opened from a Travel Buddy card while the chat stays a parcel thread: open on

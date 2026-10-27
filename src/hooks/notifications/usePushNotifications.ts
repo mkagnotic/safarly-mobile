@@ -5,6 +5,7 @@ import * as Notifications from "expo-notifications";
 import {
   configureNotifications,
   flushPendingNotificationTarget,
+  retryPendingForget,
   handleNotificationResponse,
   watchPushTokenRefresh,
 } from "@/services/notifications/push";
@@ -38,6 +39,8 @@ export function usePushNotifications(): void {
     if (Platform.OS === "web") return;
 
     configureNotifications();
+    // A sign-out made offline left this phone linked; unlink it now.
+    void retryPendingForget();
 
     const sub = Notifications.addNotificationResponseReceivedListener(
       handleNotificationResponse,

@@ -12,10 +12,21 @@ import {
   resolveNotificationRoute,
   type NotificationTarget,
 } from "./notificationRoute";
-import { loginPushAction } from "./pushPolicy";
+import { foregroundPresentation, loginPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
 const LAST_TOKEN_KEY = "safarly.pushToken";
+/** A token a sign-out could not unlink (offline); retried on the next start. */
+const PENDING_FORGET_KEY = "safarly.pushTokenToForget";
+
+/**
+ * The chat on screen right now. A push for it shows no banner (the message is
+ * already in front of the user) - every chat app works this way (27 Oct 2026).
+ */
+let activeConversationId: string | null = null;
+export function setActiveChat(conversationId: string | null): void {
+  activeConversationId = conversationId;
+}
 /** Android needs an explicit channel for heads-up notifications + sound. */
 const ANDROID_CHANNEL_ID = "default";
 
@@ -39,12 +50,17 @@ export function configureNotifications(): void {
   if (handlerConfigured) return;
   handlerConfigured = true;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const data = notification.request.content.data as { conversation_id?: string } | undefined;
+      // Signed out: nothing for this device should show, even if a push slips
+      // through before the server unlinks it.
+      const { show, badge } = foregroundPresentation({
+        signedIn: useAppStore.getState().authenticated,
+        conversationId: data?.conversation_id,
+        activeConversationId,
+      });
+      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: badge };
+    },
   });
 }
 
@@ -175,14 +191,58 @@ export async function syncPushRegistrationOnLogin(): Promise<void> {
  * would 401. Best-effort; never throws.
  */
 export async function unregisterPushToken(): Promise<void> {
+  await forgetThisDevice();
+}
+
+/**
+ * Unlink this phone from the account on EVERY sign-out (27 Oct 2026): the normal
+ * sign-out's DELETE never worked (it sent the token where the server didn't read
+ * it), and the forced sign-outs (refused / revoked session) only forgot it
+ * locally - so a signed-out phone kept getting the account's notifications.
+ * Needs no session. If the phone is offline, the token is kept and retried on
+ * the next start (`retryPendingForget`). Never throws.
+ */
+export async function forgetThisDevice(): Promise<void> {
   try {
     const token = await AsyncStorage.getItem(LAST_TOKEN_KEY);
-    if (!token) return;
-    await usersApi.removePushToken(token);
     await AsyncStorage.removeItem(LAST_TOKEN_KEY);
+    if (!token) return;
+    try {
+      await usersApi.forgetPushToken(token);
+      await AsyncStorage.removeItem(PENDING_FORGET_KEY);
+    } catch {
+      await AsyncStorage.setItem(PENDING_FORGET_KEY, token);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("[push] unregisterPushToken failed", err);
+    console.warn("[push] forgetThisDevice failed", err);
+  }
+}
+
+/** A sign-out that happened offline: unlink that token now (only while signed out). */
+export async function retryPendingForget(): Promise<void> {
+  try {
+    const token = await AsyncStorage.getItem(PENDING_FORGET_KEY);
+    if (!token || useAppStore.getState().authenticated) return;
+    await usersApi.forgetPushToken(token);
+    await AsyncStorage.removeItem(PENDING_FORGET_KEY);
+  } catch {
+    // still offline: try again next start
+  }
+}
+
+/** Opening a chat clears its notifications from the tray, like any chat app. */
+export async function dismissChatNotifications(conversationId: string): Promise<void> {
+  if (Platform.OS === "web") return;
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      shown
+        .filter((n) => (n.request.content.data as { conversation_id?: string } | undefined)?.conversation_id === conversationId)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
+    );
+  } catch {
+    // nothing to clear / not supported
   }
 }
 

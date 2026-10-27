@@ -2018,6 +2018,30 @@ const CHECKS = [
     must: ['navigation.navigate("VerifyEmail", { email: normalizedEmail });', "enter the verification code we emailed you."],
     mustNot: ["check your inbox for the verification link"],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/user-handler/index.ts", "supabase/functions/_shared/push.ts", "supabase/functions/message-handler/routes/messages.ts"],
+    id: "signed-out-devices-get-no-push",
+    why: "Client 27 Oct 2026 ('when logged off it must not show'): the app's logout sent the token in the query string and the server read only the body, so no phone was ever unlinked; a phone two people used stayed linked to both; forced sign-outs had no way to unlink. Also: chat pushes are titled with the sender's name and carry the unread badge.",
+    must: ["const token = body?.token || url.searchParams.get('token') || '';", "await supabase.from('push_tokens').delete().eq('token', token).neq('user_id', authResult.user.id);", "if (method === 'POST' && path === 'push-token/forget') {", "...(typeof badge === 'number' && badge >= 0 ? { badge } : {}),", "        senderName,"],
+    mustNot: ["`New message from ${senderName}`,"],
+  },
+  {
+    repo: "web",
+    file: "src/services/auth/AuthContext.tsx",
+    id: "web-every-sign-out-stops-push",
+    why: "Client 27 Oct 2026: only the Log out button turned web push off; an expired/revoked session or a sign-out in another tab left the browser subscribed and the account's notifications kept appearing on a signed-out computer.",
+    must: ["        void turnOffWebPush();\n        trackedSignIns.clear();", "    void turnOffWebPush();\n    queryClient.cancelQueries();"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/services/notifications/push.ts", "src/services/notifications/pushPolicy.ts", "src/context/AuthContext.tsx", "src/features/messages/OfferChatScreen.tsx", "src/services/api/users.ts"],
+    id: "mobile-signed-out-gets-no-push-and-open-chat-is-quiet",
+    why: "Client 27 Oct 2026: every sign-out (including refused/revoked sessions) unlinks the phone with a session-free call and retries offline ones; a signed-out phone shows nothing; the chat on screen shows no banner and opening a chat clears its notifications - like WhatsApp.",
+    must: ["export async function forgetThisDevice(", "export async function retryPendingForget(", "export function foregroundPresentation(", "setActiveChat(conversationId);", "void dismissChatNotifications(conversationId);", '"/user-handler/push-token/forget"', "await forgetThisDevice();\n        await signOutThisDevice("],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
