@@ -19,6 +19,7 @@ import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
 import { labelDeals, selectableDeals } from "@/utils/dealLabel";
 import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount } from "@/utils/buddyEntry";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
@@ -88,7 +89,7 @@ export function OfferChatScreen() {
   // ───────── Server-owned workflow (pinned action bar) ─────────
   const {
     activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
-    buddy, buddySelected,
+    buddy, buddySelected, switchingDeal,
   } = useActiveDeal(conversationId, buddyListingId);
 
   // Header badge, match banner and match-action subject — see `useChatMatchStatus`.
@@ -430,7 +431,18 @@ export function OfferChatScreen() {
 
         {/* An edit made the deal stop fitting (route, dates, weight): warn, never
             auto-cancel — same words as web (23 Oct 2026). */}
-        {!buddySelected && activeDeal?.fit_warnings?.length ? (
+        {/* Another deal was tapped: a loader in the step's place, never the old deal's step. */}
+        {!buddySelected && switchingDeal ? (
+          <View style={styles.dealSwitching} accessibilityRole="progressbar" accessibilityLabel="Loading this delivery" testID="deal-switching">
+            <View style={styles.dealSwitchingText}>
+              <SkeletonBlock style={styles.dealSwitchingLine} />
+              <SkeletonBlock style={[styles.dealSwitchingLine, styles.dealSwitchingLineShort]} />
+            </View>
+            <SkeletonBlock style={styles.dealSwitchingButton} />
+          </View>
+        ) : null}
+
+        {!buddySelected && !switchingDeal && activeDeal?.fit_warnings?.length ? (
           <View style={styles.fitWarning} accessibilityRole="alert" testID="deal-fit-warning">
             {activeDeal.fit_warnings.map((w) => (
               <View key={w} style={styles.fitWarningRow}>
@@ -442,7 +454,7 @@ export function OfferChatScreen() {
         ) : null}
 
         {/* ───────── Workflow pin (server FSM) ───────── */}
-        {!buddySelected && showWorkflowPin && workflow ? (
+        {!buddySelected && !switchingDeal && showWorkflowPin && workflow ? (
           <ChatWorkflowPin
             workflow={workflow}
             activeDeal={activeDeal}
@@ -451,7 +463,7 @@ export function OfferChatScreen() {
         ) : null}
 
         {/* ───────── Offer bar ───────── */}
-        {!buddySelected && supportsOffers && liveOffer ? (
+        {!buddySelected && !switchingDeal && supportsOffers && liveOffer ? (
           <OfferBar
             liveOffer={liveOffer}
             participantName={participantName}
@@ -627,6 +639,11 @@ const screenStyles = StyleSheet.create({
   fitWarning: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#FDE68A", backgroundColor: "#FFFBEB", paddingHorizontal: 14, paddingVertical: 8, gap: 4 },
   fitWarningRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   fitWarningText: { flex: 1, fontSize: 12, lineHeight: 16, color: "#78350F" },
+  dealSwitching: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 14, paddingVertical: 12 },
+  dealSwitchingText: { flex: 1, gap: 8 },
+  dealSwitchingLine: { height: 12, width: "80%" },
+  dealSwitchingLineShort: { width: "50%" },
+  dealSwitchingButton: { height: 40, width: 96, borderRadius: 12 },
 });
 
 const styles = { ...chatStyles, ...screenStyles };
