@@ -1803,6 +1803,22 @@ const CHECKS = [
     mustNot: [],
   },
   {
+    repo: "web",
+    file: ["supabase/migrations/20261027120100_penalty_owed_from_payout.sql", "supabase/functions/booking-handler/routes/delivery.ts", "src/features/payments/pages/CustomerTransactions.tsx"],
+    id: "carrier-penalty-is-owed-not-a-refund",
+    why: "Client 27 Oct 2026: the carrier's cancellation penalty showed on their Payments screen as '+$0.99 Refund' and was never collected. It is a 'penalty' row (owed), Safarly keeps it, and it comes out of the carrier's next payout.",
+    must: ["v_booking.carrier_id, p_booking_id, 'penalty', 'pending', v_penalty_cash,", "settlePenalties(grossPayout, payoutCurrency", "case \"penalty\": return { label: \"Cancellation penalty\""],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: "src/features/wallet/transactionDisplay.ts",
+    id: "mobile-carrier-penalty-is-owed-not-a-refund",
+    why: "See carrier-penalty-is-owed-not-a-refund (web repo).",
+    must: ["return { label: \"Cancellation penalty\", credit: false", "export function penaltyView("],
+    mustNot: [],
+  },
+  {
     repo: "mobile",
     file: "src/features/bookings/ParcelReturnCard.tsx",
     id: "mobile-refund-wording-follows-the-money",

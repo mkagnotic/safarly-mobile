@@ -4,7 +4,7 @@ import * as Sharing from "expo-sharing";
 
 import { safarlyMarkXml } from "@/assets/brand/safarlyMark";
 import type { Transaction } from "@/services/api";
-import { formatTxDate, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { formatTxDate, penaltyView, txTypeMeta } from "@/features/wallet/transactionDisplay";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -54,7 +54,7 @@ function receiptHtml(tx: Transaction): string {
     tx.net_amount ?? (platformFee != null ? Math.max(0, Number(tx.amount) - Number(platformFee)) : null);
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: "Type", value: txTypeMeta(tx.type).label },
+    { label: "Type", value: penaltyView(tx)?.label ?? txTypeMeta(tx.type).label },
     ...(tx.route_from || tx.route_to
       ? [{ label: "Route", value: `${tx.route_from ?? "—"} → ${tx.route_to ?? "—"}` }]
       : []),
@@ -118,14 +118,16 @@ function receiptHtml(tx: Transaction): string {
     <div class="rule"></div>
     <div class="meta">
       <div><div class="lbl">Issued</div><div class="val">${esc(formatTxDate(tx.created_at) || "—")}</div></div>
-      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(tx.status || "—")}</div></div>
+      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(penaltyView(tx)?.status ?? (tx.status || "—"))}</div></div>
     </div>
     <h2>Transaction details</h2>
     <table>${rowsHtml}</table>
     <div class="totals">
-      <div class="line"><span>Amount</span><span>${money(tx.amount, currency)}</span></div>
+      ${penaltyView(tx)
+        ? `<div class="line net"><span class="lbl">${esc(penaltyView(tx)!.label)}</span><span>${penaltyView(tx)!.credit ? "+" : "−"}${money(Math.abs(Number(tx.amount)), currency)}</span></div>`
+        : `<div class="line"><span>Amount</span><span>${money(tx.amount, currency)}</span></div>
       <div class="line"><span>Platform fee</span><span>${platformFee != null ? money(platformFee, currency) : "—"}</span></div>
-      <div class="line net"><span class="lbl">Net amount</span><span>${netAmount != null ? money(netAmount, currency) : "—"}</span></div>
+      <div class="line net"><span class="lbl">Net amount</span><span>${netAmount != null ? money(netAmount, currency) : "—"}</span></div>`}
     </div>
     <div class="foot">This is a system-generated receipt from Safarly. For questions, contact support@safarly.com.</div>
   </div>

@@ -29,9 +29,24 @@ export function txTypeMeta(type: string): TxTypeMeta {
       return { label: "Wallet top-up", credit: false, icon: "arrow-up-outline" };
     case "wallet_withdrawal":
       return { label: "Withdrawal", credit: true, icon: "arrow-down-outline" };
+    // A carrier's cancellation penalty: Safarly's, taken from the next payout (27 Oct 2026).
+    case "penalty":
+      return { label: "Cancellation penalty", credit: false, icon: "remove-circle-outline" };
     default:
       return { label: type.replace(/_/g, " "), credit: false, icon: "swap-horizontal-outline" };
   }
+}
+
+/**
+ * A penalty row as the carrier should read it (web parity): a negative amount is a
+ * waiver credited back on the next payout. null for every other type.
+ */
+export function penaltyView(tx: { type: string; status: string; amount: number }) {
+  if (tx.type !== "penalty") return null;
+  const credit = Number(tx.amount) < 0;
+  const status = credit ? (tx.status === "completed" ? "Credited" : "To be credited")
+    : tx.status === "completed" ? "Deducted" : tx.status === "refunded" ? "Waived" : "Owed";
+  return { label: credit ? "Penalty waived" : "Cancellation penalty", credit, status };
 }
 
 /** Status pill colours, mirroring web's `statusClass`. */

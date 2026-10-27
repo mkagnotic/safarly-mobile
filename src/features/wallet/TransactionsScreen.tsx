@@ -25,6 +25,7 @@ import {
   formatTxDate,
   txStatusTone,
   txTypeMeta,
+  penaltyView,
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
 import { formatMoney, formatMoneyByCurrency } from "@/utils/money";
@@ -277,9 +278,10 @@ function TxRow({
   downloading,
   onDownload,
 }: Readonly<{ tx: Transaction; isLast?: boolean; downloading?: boolean; onDownload: () => void }>) {
-  const meta = txTypeMeta(tx.type);
+  const pen = penaltyView(tx);
+  const meta = pen ? { ...txTypeMeta(tx.type), label: pen.label, credit: pen.credit } : txTypeMeta(tx.type);
   const tone = txStatusTone(tx.status);
-  const showReceipt = canDownloadReceipt(tx.status);
+  const showReceipt = canDownloadReceipt(tx.status) || !!pen;
   return (
     <View style={[styles.txRow, !isLast && styles.txDivider]}>
       <View style={[styles.txIcon, { backgroundColor: meta.credit ? "rgba(34,195,93,0.10)" : "rgba(255,122,38,0.10)" }]}>
@@ -298,7 +300,7 @@ function TxRow({
           {formatTxAmount(tx.amount, meta.credit, tx.currency)}
         </Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{tx.status}</Text>
+          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{pen ? pen.status : tx.status}</Text>
         </View>
       </View>
       {showReceipt ? (
