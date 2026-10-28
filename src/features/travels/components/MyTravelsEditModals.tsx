@@ -64,6 +64,7 @@ export function MyTravelsEditModals({
                 : "",
             luggage_capacity_kg: `${editingTrip.luggage_capacity_kg ?? ""}`,
             notes: editingTrip.notes ?? "",
+            open_to_buddy: !!editingTrip.open_to_buddy,
           }}
           pending={editPending}
           onCancel={handleEditTripCancel}

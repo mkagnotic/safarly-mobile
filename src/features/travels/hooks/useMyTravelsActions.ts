@@ -7,6 +7,7 @@ import type { RateBuddyValues } from "@/features/buddies/RateBuddyModal";
 import type { EditParcelFormValues } from "@/features/parcels/EditParcelModal";
 import type { MatchesSource } from "@/features/travels/MatchesModal";
 import type { EditTripFormValues } from "@/features/trips/EditTripModal";
+import { editTripBuddyMessage } from "@/features/trips/model/openBuddy";
 import {
   buddiesApi,
   getErrorMessage,
@@ -353,6 +354,10 @@ export function useMyTravelsActions({
       if (values.notes !== (editingTrip.notes ?? "")) {
         data.notes = values.notes;
       }
+      // Sent only when changed (27 Oct 2026): off retires the buddy listing, on creates one.
+      if (values.open_to_buddy !== !!editingTrip.open_to_buddy) {
+        data.open_to_buddy = values.open_to_buddy;
+      }
 
       if (Object.keys(data).length === 0) {
         setEditingTrip(null);
@@ -361,16 +366,19 @@ export function useMyTravelsActions({
 
       setEditPending(true);
       try {
-        await tripsApi.update(editingTrip.id, data);
-        await flights.refetch();
+        const res = await tripsApi.update(editingTrip.id, data);
+        const buddyMsg = editTripBuddyMessage(data.open_to_buddy, res?.data?.buddy_listing);
+        // A buddy listing was added or removed: Travel Partners must show it.
+        await Promise.all([flights.refetch(), ...(buddyMsg ? [partners.refetch()] : [])]);
         setEditingTrip(null);
+        if (buddyMsg) showToast({ title: buddyMsg.text, variant: buddyMsg.variant });
       } catch (err) {
         setFormError(`Couldn't update trip. ${getErrorMessage(err)}`);
       } finally {
         setEditPending(false);
       }
     },
-    [editingTrip, flights],
+    [editingTrip, flights, partners],
   );
 
   const handleRateDelivery = useCallback(

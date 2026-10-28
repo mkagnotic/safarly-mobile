@@ -2280,6 +2280,21 @@ const CHECKS = [
     why: "See buddy-wording-same-everywhere (web repo). Plus mobile said 'send connection requests', showed parcel words ('Looking for Carrier') on buddy listings, had no connections error state, no journey-confirm toasts, an uncapped review and typed capitals.",
     must: ["find you and start a chat.", "Remove this buddy listing?", "No buddy listings yet", "Buddy request declined", "Journey confirmed — you can now leave a review", "maxLength={500}", "export function labelForBuddyStatus(", "Share your travel plans and meet fellow travelers on your route."],
     mustNot: ["send connection requests", "Couldn't reject request.", "Yes, delete listing", "TRAVEL BUDDY REQUEST", "Partner details"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/_shared/companionBuddy.ts", "supabase/functions/trip-handler/index.ts", "src/features/trips/pages/CustomerListTrip.tsx", "src/features/trips/components/EditTripDialog.tsx", "src/hooks/api/useTrips.ts"],
+    id: "open-to-buddy-option",
+    why: "27 Oct 2026 open-to-buddy flow: the companion buddy listing's extra fields went in unchecked, a failed insert was ignored and a reused (duplicate) listing was announced as 'created'; switching the option ON in Edit Trip only flipped a flag (never in buddy search); web and mobile worded it differently ('connect', Title Case, emoji).",
+    must: ["export function validateCompanionExtras(", "Promise<'created' | 'existing' | 'failed'>", "buddy_listing: buddyListing", "I'm also open to being a travel buddy on this trip", "We'll also create a buddy listing in Travel Partners, so travelers on this route can find you and start a chat.", "Age must be between 18 and 120.", "You already had a buddy listing for this route", "Your buddy listing is live in Travel Partners."],
+    mustNot: ["A Travel Buddy listing was also created — fellow travelers can now find you!", "so other travelers can connect with you for companionship", "✨ Travel Companion Details"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/trips/model/openBuddy.ts", "src/features/trips/ListTripScreen.tsx", "src/features/trips/EditTripModal.tsx"],
+    id: "mobile-open-to-buddy-option",
+    why: "See open-to-buddy-option (web repo). Mobile also said 'You'll only see parcel-carrying matches.', checked age only on submit, and had no toggle in Edit Trip.",
+    must: ["I'm also open to being a travel buddy on this trip", "We'll also create a buddy listing in Travel Partners, so travelers on this route can find you and start a chat.", "Age must be between 18 and 120.", "You already had a buddy listing for this route", "Your buddy listing is live in Travel Partners.", "e.g. Dubai — 4h layover"],
+    mustNot: ["You'll only see parcel-carrying matches.", "Connect with travelers on the same route for companionship.", "A Travel Buddy listing was also created"],
   },
 ];
 

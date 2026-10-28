@@ -77,6 +77,11 @@ export interface TripParcelMatch {
   sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
+/** trip-handler create/update report on the buddy listing (27 Oct 2026):
+ *  null/absent when the buddy option wasn't switched on. */
+export type TripBuddyListingResult = "created" | "existing" | "failed" | null;
+export type TripWithBuddyListing = Trip & { buddy_listing?: TripBuddyListingResult };
+
 export interface TripListParams {
   filter?: string;
   from?: string;
@@ -106,7 +111,7 @@ export const tripsApi = {
     buddy_layover?: string;
   }) => {
     const { luggage_capacity_kg, ...rest } = data;
-    return api.post<Trip>("/trip-handler/", { ...rest, luggage_capacity: luggage_capacity_kg });
+    return api.post<TripWithBuddyListing>("/trip-handler/", { ...rest, luggage_capacity: luggage_capacity_kg });
   },
 
   list: async (params?: TripListParams) => {
@@ -142,12 +147,14 @@ export const tripsApi = {
       any_to?: boolean;
       airline?: string;
       status?: string;
+      /** Send only when the user changed it: off retires the buddy listing, on creates one. */
+      open_to_buddy?: boolean;
     },
   ) => {
     const { luggage_capacity_kg, ...rest } = data;
     const payload: Record<string, unknown> = { ...rest };
     if (luggage_capacity_kg !== undefined) payload.luggage_capacity = luggage_capacity_kg;
-    return api.put<Trip>(`/trip-handler/${id}`, payload);
+    return api.put<TripWithBuddyListing>(`/trip-handler/${id}`, payload);
   },
 
   /** Close the trip to new matches. Reversible; existing deliveries continue. */

@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -21,6 +22,7 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import { MAX_WEIGHT_KG, isSameRoute } from "@/features/travels/routeValidation";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { OPEN_BUDDY_HELPER, OPEN_BUDDY_LABEL, OPEN_BUDDY_OFF_HELPER } from "./model/openBuddy";
 
 type Country = "IN" | "US";
 
@@ -104,6 +106,8 @@ export interface EditTripFormValues {
   travel_date_to: string;
   luggage_capacity_kg: string;
   notes: string;
+  /** "Open to being a travel buddy" (27 Oct 2026). Callers send it only when changed. */
+  open_to_buddy: boolean;
 }
 
 interface EditTripModalProps {
@@ -424,6 +428,25 @@ export function EditTripModal({
                 editable={!pending}
               />
             </View>
+
+            {/* Same toggle as List Trip (27 Oct 2026): off retires the buddy listing, on creates one. */}
+            <View style={styles.field}>
+              <View style={styles.buddyToggleRow}>
+                <Text style={[styles.fieldLabel, styles.buddyToggleLabel]}>{OPEN_BUDDY_LABEL}</Text>
+                <Switch
+                  value={form.open_to_buddy}
+                  onValueChange={(v) => setForm((prev) => ({ ...prev, open_to_buddy: v }))}
+                  disabled={pending}
+                  trackColor={{ false: colors.border, true: colors.wordmark }}
+                  thumbColor={colors.white}
+                  ios_backgroundColor={colors.border}
+                  accessibilityLabel={OPEN_BUDDY_LABEL}
+                />
+              </View>
+              <Text style={styles.helperText}>
+                {!form.open_to_buddy && initial.open_to_buddy ? OPEN_BUDDY_OFF_HELPER : OPEN_BUDDY_HELPER}
+              </Text>
+            </View>
             </ScrollView>
 
             {listingId ? (
@@ -575,6 +598,9 @@ const styles = StyleSheet.create({
   dateField: { flex: 1 },
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
   fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
+  buddyToggleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  buddyToggleLabel: { flex: 1, minWidth: 0 },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
 
   input: {
     backgroundColor: colors.input,

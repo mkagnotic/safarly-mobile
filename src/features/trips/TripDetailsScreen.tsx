@@ -26,6 +26,7 @@ import { colors } from "@/theme/colors";
 import { formatTravelDateRange } from "@/utils/travelDate";
 import { EditTripModal, type EditTripFormValues } from "./EditTripModal";
 import { viewerHasBookingOnTrip } from "./model/tripBookingAccess";
+import { editTripBuddyMessage } from "./model/openBuddy";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -205,6 +206,10 @@ export function TripDetailsScreen() {
       if (values.notes !== (trip.notes ?? "")) {
         data.notes = values.notes;
       }
+      // Sent only when changed (27 Oct 2026): off retires the buddy listing, on creates one.
+      if (values.open_to_buddy !== !!trip.open_to_buddy) {
+        data.open_to_buddy = values.open_to_buddy;
+      }
 
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
@@ -213,10 +218,15 @@ export function TripDetailsScreen() {
 
       setEditPending(true);
       try {
-        await tripsApi.update(tripId, data);
+        const res = await tripsApi.update(tripId, data);
         await refetch();
         setEditOpen(false);
-        setNotice({ variant: "success", title: "Trip updated", message: "Your changes are saved." });
+        const buddyMsg = editTripBuddyMessage(data.open_to_buddy, res?.data?.buddy_listing);
+        setNotice(
+          buddyMsg
+            ? { variant: buddyMsg.variant, title: "Trip updated", message: buddyMsg.text }
+            : { variant: "success", title: "Trip updated", message: "Your changes are saved." },
+        );
       } catch (err) {
         const message =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
@@ -279,6 +289,7 @@ export function TripDetailsScreen() {
     travel_date_to: editTo && editTo !== editFrom ? editTo : "",
     luggage_capacity_kg: `${trip.luggage_capacity_kg ?? ""}`,
     notes: trip.notes ?? "",
+    open_to_buddy: !!trip.open_to_buddy,
   };
 
   // A trip past its travel date reads as "expired" even while its DB status is
