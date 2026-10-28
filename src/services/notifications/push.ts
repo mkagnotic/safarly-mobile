@@ -298,7 +298,12 @@ export function watchPushTokenRefresh(): () => void {
 let pendingTarget: NotificationTarget | null = null;
 
 function canNavigate(): boolean {
-  return navigationRef.isReady() && useAppStore.getState().authenticated;
+  // MainTabs exists only once profile setup is done: navigating to it from the
+  // onboarding stack was silently dropped, so "Verify my identity" on the last
+  // onboarding step landed on Home instead of the identity check (28 Oct 2026,
+  // emulator). Until then the target waits and is replayed.
+  const st = useAppStore.getState();
+  return navigationRef.isReady() && st.authenticated && st.profileSetupDone;
 }
 
 function doNavigate(target: NotificationTarget): void {

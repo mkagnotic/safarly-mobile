@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   timelineEvent: { color: colors.text, fontSize: 12, lineHeight: 16 },
-  timelineEventName: { color: colors.text, fontWeight: "700", textTransform: "capitalize" },
+  timelineEventName: { color: colors.text, fontWeight: "700" },
   timelineEventDesc: { color: colors.mutedText },
   timelineDate: { color: colors.subtleText, fontSize: 11, marginTop: 2 },
 });

@@ -73,8 +73,8 @@ export function MessagesScreen() {
   const [showArchived, setShowArchived] = useState(false);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
 
-  // The Buddies tab is `freezeOnBlur: true`, so the initial useEffect refetch
-  // only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
+  // The Buddies tab stays mounted (tabs never unmount), so the initial
+  // useEffect refetch only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
   // counts the user just cleared by reading messages reflect immediately —
   // belt-and-suspenders for the realtime path. Pull the archived list too so a
   // chat archived from inside the conversation shows up here right away.

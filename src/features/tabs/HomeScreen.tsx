@@ -110,7 +110,7 @@ export function HomeScreen() {
   // `loading` after the first paint — otherwise the skeleton would flash back
   // every time the hook revalidates.
   const showGreetingSkeleton = profileLoading && !profile;
-  const greetingName = profile?.name ?? "there";
+  const greetingName = profile?.name ?? "";
 
   const handleRefresh = useCallback(() => {
     void refetchProfile();

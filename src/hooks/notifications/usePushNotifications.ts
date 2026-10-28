@@ -30,6 +30,7 @@ import { useAppStore } from "@/store/useAppStore";
  */
 export function usePushNotifications(): void {
   const authenticated = useAppStore((s) => s.authenticated);
+  const profileSetupDone = useAppStore((s) => s.profileSetupDone);
 
   useEffect(() => {
     // expo-notifications' native methods (getLastNotificationResponseAsync,
@@ -63,9 +64,10 @@ export function usePushNotifications(): void {
 
   // Once authenticated (and MainTabs has had a beat to mount), replay any tap
   // captured before we could navigate.
+  // Also when onboarding finishes: that is when MainTabs first mounts.
   useEffect(() => {
-    if (!authenticated) return;
+    if (!authenticated || !profileSetupDone) return;
     const id = setTimeout(() => flushPendingNotificationTarget(), 350);
     return () => clearTimeout(id);
-  }, [authenticated]);
+  }, [authenticated, profileSetupDone]);
 }

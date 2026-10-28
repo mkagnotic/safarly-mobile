@@ -684,7 +684,7 @@ export function ListTripScreen() {
       >
         <SectionCard>
         <View style={styles.labelToggleRow}>
-          <Text style={styles.fieldLabel}>Max Parcel Size</Text>
+          <Text style={styles.fieldLabel}>Max parcel size</Text>
           <View style={styles.optionalPill}>
             <Text style={styles.optionalPillText}>Optional</Text>
           </View>
@@ -726,7 +726,7 @@ export function ListTripScreen() {
         </Text>
 
         <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>
-          <Text style={styles.fieldLabel}>Max Weight You Can Carry</Text>
+          <Text style={styles.fieldLabel}>Max weight you can carry</Text>
           <View style={styles.flexSpacer} />
           <UnitToggle<WeightUnit>
             options={[

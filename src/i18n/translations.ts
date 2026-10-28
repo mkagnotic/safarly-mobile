@@ -61,7 +61,7 @@ type Dict = Record<TranslationKey, string>;
 
 const enUS: Dict = {
   "tabs.home": "Home",
-  "tabs.parcels": "My travels",
+  "tabs.parcels": "My Travels",
   "tabs.trips": "Search",
   "tabs.buddies": "Inbox",
   "tabs.profile": "Profile",
@@ -96,7 +96,7 @@ const enUS: Dict = {
   "profile.kycVerified": "Identity verified",
   "profile.wallet": "Wallet",
   "profile.walletSubtitle": "Balance & payments",
-  "profile.editProfile": "Edit Profile",
+  "profile.editProfile": "Edit profile",
   "profile.kycVerification": "Verify your identity",
   "profile.messages": "Messages",
   "profile.reviews": "Reviews",

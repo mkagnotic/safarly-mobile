@@ -241,7 +241,12 @@ function MainTabs() {
         // double up by cross-blending scenes mid-transition (visible ghosting).
         animation: "none" as const,
         unmountOnBlur: false,
-        freezeOnBlur: true,
+        // 28 Oct 2026: OFF. Freeze hides a blurred tab inside a Suspense
+        // boundary and reveals it on return. Android hardware back reaches
+        // goBack() at default (concurrent) priority, not the sync priority of
+        // a press, and that reveal left Profile blank for good. Tabs stay
+        // mounted and detached natively; they just aren't frozen.
+        freezeOnBlur: false,
         // Transparent so the navigator-level HeroBackground shows through.
         // Flattening elevation/shadow stops react-native-screens from painting
         // a trailing edge between scenes.
