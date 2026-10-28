@@ -44,6 +44,23 @@ const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
   sender_has_parcel: "I already have the parcel",
 };
 
+// One sentence per choice (27 Oct 2026): "Post it back to me" told the carrier the
+// sender was "arranging collection", and the sender read "You asked them to i'll
+// arrange collection from the carrier" (a label lower-cased into a sentence).
+const CARRIER_NEXT: Record<ReturnResolution, string> = {
+  return_to_seller: "Post the parcel to the seller's return address below, then confirm it here.",
+  return_to_sender: "Post the parcel to the sender's address below, then confirm it here.",
+  sender_collects: "The sender is arranging collection. Once you've handed the parcel over, confirm it here.",
+  sender_has_parcel: "The sender says they already have the parcel. Confirm it here once that's right.",
+};
+const SENDER_ASKED: Record<ReturnResolution, string> = {
+  return_to_seller: "You asked them to send it back to the seller.",
+  return_to_sender: "You asked them to post it back to you.",
+  sender_collects: "You said you'll arrange collection from them.",
+  sender_has_parcel: "You said you already have the parcel.",
+};
+
+
 const RESOLUTION_ICON: Record<ReturnResolution, keyof typeof Ionicons.glyphMap> = {
   return_to_seller: "storefront-outline",
   return_to_sender: "mail-outline",
@@ -426,9 +443,7 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(RESOLUTION_LABEL[resolution])}
         <Text style={styles.body}>
-          {resolution === "return_to_seller"
-            ? "Post the parcel to the seller's return address below, then confirm it here."
-            : "The sender is arranging collection. Once you have handed the parcel over, confirm it here."}
+          {CARRIER_NEXT[resolution]}
         </Text>
         {resolution === "return_to_seller" ? addressBlock : null}
         {resolution === "return_to_sender" ? destinationBlock : null}
@@ -469,8 +484,8 @@ export function ParcelReturnCard({
     <View style={styles.card}>
       {header(`Waiting for ${carrierName} to send the parcel back`)}
       <Text style={styles.body}>
-        You asked them to {RESOLUTION_LABEL[resolution].toLowerCase()}. They have been
-        notified and will confirm here once it is done.
+        {SENDER_ASKED[resolution]} They've been
+        notified and will confirm here once it's done.
       </Text>
       {resolution === "return_to_seller" ? addressBlock : null}
       {resolution === "return_to_sender" ? destinationBlock : null}

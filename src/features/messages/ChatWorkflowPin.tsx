@@ -69,13 +69,13 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   accept_handoff: { icon: "home-outline", tone: "primary", blurb: `${P("handoff")}inspect the parcel - contents, nothing restricted, fits your baggage - then accept or decline. No code at this step.` },
   await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}get the parcel to your carrier - courier it to their local address or hand it over. They inspect it, then accept.` },
   in_transit: { icon: "car-outline", tone: "neutral", blurb: `${P("inTransit")}the carrier is travelling. The delivery code is entered at the destination in ${R("delivery")}. If the delivery stops progressing we open a case automatically and the payment stays held.` },
-  share_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}give the code to the person receiving the parcel - never to the carrier.` },
-  generate_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}generate the code for the person receiving the parcel.` },
-  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: `${P("delivery")}at the destination, ask the receiver for their 6-digit code and enter it to release your payout.` },
+  share_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}give the carrier the 6-digit code once the parcel is in your hands and looks right — never send it to them ahead of time.` },
+  generate_otp: { icon: "key-outline", tone: "primary", blurb: `${P("delivery")}agree a place and time in chat. Once you have the parcel and it looks right, generate the 6-digit delivery code and give it to the carrier.` },
+  verify_otp: { icon: "keypad-outline", tone: "primary", blurb: `${P("delivery")}when you hand the parcel over, ask the receiver for the 6-digit delivery code and enter it. That completes the delivery and pays you.` },
   // Parcel hand-back: the deal is cancelled and refunded, but a real parcel is
   // still with the carrier. Deliberately actionable, not a terminal notice.
-  set_return_resolution: { icon: "arrow-undo-outline", tone: "warn", blurb: "The parcel is still with your carrier. Choose whether it goes back to the seller or you arrange collection." },
-  await_return_resolution: { icon: "hourglass-outline", tone: "warn", blurb: "You still have the parcel. The sender is choosing whether it goes back to the seller or they collect it - keep it safe." },
+  set_return_resolution: { icon: "arrow-undo-outline", tone: "warn", blurb: "The parcel is still with your carrier. Choose where it goes: back to the seller, posted to you, or collected by you." },
+  await_return_resolution: { icon: "hourglass-outline", tone: "warn", blurb: "You still have the parcel. The sender is choosing where it goes — back to the seller, posted to them, or collected. Keep it safe until then." },
   confirm_return_sent: { icon: "arrow-undo-outline", tone: "warn", blurb: "Send the parcel back as the sender asked, then confirm it here to close this off." },
   await_return_sent: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for the carrier to confirm the parcel is on its way back." },
   // Terminal

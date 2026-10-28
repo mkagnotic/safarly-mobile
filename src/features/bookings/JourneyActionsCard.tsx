@@ -152,8 +152,7 @@ export function JourneyActionsCard({
           <Text style={styles.title}>You're on your way</Text>
           <Text style={styles.body}>
             Mark that you've landed when you arrive
-            {booking.parcel?.to_city ? ` in ${booking.parcel.to_city}` : ""} - that's the receiver's
-            cue to coordinate pickup and get their delivery code.
+            {booking.parcel?.to_city ? ` in ${booking.parcel.to_city}` : ""}. We'll tell your receiver so you can agree the drop-off in chat; they give you the delivery code once they have the parcel.
           </Text>
           <Pressable
             style={[styles.primaryButton, busy && styles.disabled]}

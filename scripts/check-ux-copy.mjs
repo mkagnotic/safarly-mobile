@@ -2208,8 +2208,8 @@ const CHECKS = [
     repo: "web",
     file: ["src/features/bookings/lib/bookingEventLabel.ts", "src/features/bookings/pages/CustomerBookings.tsx", "src/features/messages/components/DeliveryHistoryDialog.tsx", "src/hooks/api/useBookings.ts", "src/features/bookings/components/HandoffActions.tsx", "src/features/payments/components/PayoutRequiredDialog.tsx", "src/features/my-trips/components/TripCard.tsx", "src/features/bookings/components/CancelPostPossessionDialog.tsx"],
     id: "carrier-flow-wording",
-    why: "27 Oct 2026 carrier flow: raw codes on the timeline and status pills ('otp generated'); accepting the parcel said 'you're in transit' while the booking waits for payment; 'Decline and refund the sender' for a sender who hasn't been charged; 'Chat with your receiver' (the chat is with the sender; the receiver has no account); 'releases your payout from escrow'; the payout dialog said Stripe to Razorpay carriers; the trip cancel dialog said 'pending carrier requests' on the carrier's own trip.",
-    must: ["export function bookingEventLabel(", "{bookingEventLabel(event.event)}", "bookingStatusLabel(booking.status)}", "{bookingStatusLabel(d.status)}", 'status === "in_transit"', "The sender has been asked to pay", "Decline parcel", "Agree the meetup point or address with the sender in chat.", "Handled securely by our payment partner", "any pending requests from senders will be declined", "Cancel this delivery?"],
+    why: "27 Oct 2026 carrier flow: raw codes on the timeline and status pills ('otp generated'); accepting the parcel said 'you're in transit' while the booking waits for payment; 'Decline and refund the sender' for a sender who hasn't been charged; 'Chat with your receiver' (now: agree the meetup point with your receiver in chat, then ask them for the code); 'releases your payout from escrow'; the payout dialog said Stripe to Razorpay carriers; the trip cancel dialog said 'pending carrier requests' on the carrier's own trip.",
+    must: ["export function bookingEventLabel(", "{bookingEventLabel(event.event)}", "bookingStatusLabel(booking.status)}", "{bookingStatusLabel(d.status)}", 'status === "in_transit"', "The sender has been asked to pay", "Decline parcel", "Agree the meetup point or address with your receiver in chat.", "Handled securely by our payment partner", "any pending requests from senders will be declined", "Cancel this delivery?"],
     mustNot: ['{event.event.replace(/_/g, " ")}', '{d.status.replace(/_/g, " ")}', "Handoff complete — you're in transit.", "Decline and refund the sender", "Chat with your receiver", "releases your payout from escrow", "Any pending carrier requests will be withdrawn", "Cancel trip & report issue"],
   },
   {
@@ -2217,7 +2217,7 @@ const CHECKS = [
     file: ["src/features/bookings/lib/bookingEventLabel.ts", "src/features/bookings/components/CancelPostPossessionModal.tsx", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/hooks/useExpandedBooking.ts", "src/features/bookings/components/BookingRowSummary.tsx", "src/features/bookings/components/BookingTimeline.tsx", "src/components/chat/DeliveryHistoryModal.tsx", "src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/components/ConfirmDeliveryStep.tsx", "src/features/travels/TravelCard.tsx", "src/features/bookings/components/AwaitingPaymentNotice.tsx"],
     id: "mobile-carrier-flow-wording",
     why: "See carrier-flow-wording (web repo). Plus mobile asked 'Will the merchant refund the sender?' and stored it as will_return (whether YOU return the parcel), took the penalty 'from your wallet' (there is none; it comes from the next payout), showed a raw 'Tier: x', titled every failure 'Action failed', and typed labels in capitals.",
-    must: ['{ key: "will_return", label: "Will you return the parcel to the sender?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with the sender in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
+    must: ['{ key: "will_return", label: "Will you return the parcel to the sender?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with your receiver in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
     mustNot: ["seller_will_refund", "deducted from your wallet", "`Tier: ${data.tier}.", 'title: "Action failed"', "Handoff complete — you're in transit.", ".toUpperCase()}", '{e.event.replace(/_/g, " ")}', "Chat with your receiver", '"TRIP LISTING"', ">AWAITING PAYMENT</Text>"],
   },  {
     repo: "web",
@@ -2234,6 +2234,29 @@ const CHECKS = [
     why: "See carry-request-same-everywhere (web repo).",
     must: ['"Request to carry"', ">Send match request</Text>", "Starting price ({currencySymbol(parcel.fee_currency)}) — optional", "Match request sent — continue in Messages.", "offer_amount?: number;"],
     mustNot: ["Make Offer", "Submit Offer", "Offer submitted", "Offer amount must be greater than 0.", "Your offer has been submitted!"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/booking-handler/lib/deliveryCode.ts", "supabase/functions/booking-handler/routes/list.ts"],
+    id: "delivery-code-never-reaches-the-carrier",
+    why: "27 Oct 2026 receiver flow (SECURITY): the booking detail stripped the code hash only for the sender, and the row also reaches participants via RLS and realtime - a plain SHA-256 of a 6-digit code lets the carrier compute the code and 'deliver' without the receiver. Keyed HMAC + strip for everyone.",
+    must: ["{ name: 'HMAC', hash: 'SHA-256' }", "`delivery-code:${bookingId}:${code}`", "if (stored.startsWith('h1:'))"],
+    mustNot: ["if (data.sender_id === authResult.user.id && data.carrier_id !== authResult.user.id) {\n      delete (bookingData as any).delivery_otp_hash;"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/bookings/pages/CustomerBookings.tsx", "src/features/bookings/components/JourneyActions.tsx", "src/features/messages/components/ChatHandoffPrompt.tsx", "src/features/bookings/components/ParcelReturnCard.tsx", "src/features/bookings/pages/CustomerRateDelivery.tsx", "supabase/functions/_shared/emailTemplates.ts", "supabase/functions/booking-handler/routes/journey.ts", "supabase/functions/_shared/fsm.ts"],
+    id: "receiver-end-wording",
+    why: "27 Oct 2026 receiver flow: screens contradicted the client-approved step 5 (step5-delivery-copy: the sender receives and inspects, then gives the carrier the code) by saying 'give it to whoever is receiving, never to the carrier'; 'coordinate pickup' for a drop-off; the receiver (no account) was told to coordinate; return card told the carrier 'the sender is arranging collection' for 'Post it back to me' and built 'You asked them to i'll arrange...'; emails said the sender confirms with an 'OTP' and money is 'in escrow'. One rule everywhere (the client's): once the parcel is in your hands and looks right, give the carrier the code in person; never send it ahead.",
+    must: ["When the parcel is in your hands and looks right, give this 6-digit code to the carrier.", "If you get a new code, the old one stops working.", "Get a new code", "We'll tell your receiver so you can agree the drop-off in chat", "You've landed — arrange the drop-off", "CARRIER_NEXT[resolution]", "SENDER_ASKED[resolution]", "never send it to them ahead of time", "'Arrange the drop-off 📍'", "Arrange the drop-off with the receiver", "Rate delivery"],
+    mustNot: ["release escrow", "that's the receiver's cue", "You've landed — coordinate pickup", "{RESOLUTION_LABEL[resolution].toLowerCase()}", "confirm delivery with the OTP code", "'Coordinate pickup 📍'", "Thank You!", "Submit Review"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/BookingsScreen.tsx", "src/features/bookings/components/DeliveryCodePanel.tsx", "src/features/bookings/JourneyActionsCard.tsx", "src/features/bookings/ParcelReturnCard.tsx", "src/features/bookings/DeliveryReviewScreen.tsx", "src/features/messages/ChatWorkflowPin.tsx"],
+    id: "mobile-receiver-end-wording",
+    why: "See receiver-end-wording (web repo). Plus mobile had no 'already reviewed' state (the form failed on submit), 'Resend' for a button that makes a NEW code (the old one stops working), and a pin saying 'never to the carrier'.",
+    must: ["When the parcel is in your hands and looks right, give this 6-digit code to the carrier.", "If you get a new code, the old one stops working.", ">Get a new code</Text>", "We'll tell your receiver so you can agree the drop-off in chat", "CARRIER_NEXT[resolution]", "SENDER_ASKED[resolution]", "You already reviewed this delivery", "never send it to them ahead of time"],
+    mustNot: [">Resend</Text>", "that's the receiver's", "{RESOLUTION_LABEL[resolution].toLowerCase()}", "- never to the carrier.", "Couldn't load booking"],
   },
 ];
 

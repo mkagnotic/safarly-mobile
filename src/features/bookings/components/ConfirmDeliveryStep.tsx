@@ -33,8 +33,8 @@ export function ConfirmDeliveryStep({
       </View>
       <Text style={sharedStyles.stepCardTitle}>Parcel is ready to be delivered</Text>
       <Text style={sharedStyles.stepCardBody}>
-        Agree the meetup point or address with the sender in chat. When you hand
-        the parcel over, ask the receiver for the 6-digit delivery code. Entering it
+        Agree the meetup point or address with your receiver in chat. When you hand
+        the parcel over, ask them for the 6-digit delivery code. Entering it
         completes the delivery and sends your earnings to your bank.
       </Text>
       <Text style={styles.stepCardFieldLabel}>Delivery code from the receiver</Text>
@@ -71,7 +71,7 @@ export function ConfirmDeliveryStep({
       </View>
       <Text style={sharedStyles.stepCardFootnote}>
         Not at the destination yet? Nothing to do — come back to this booking when
-        you hand the parcel over.
+        you hand the parcel over. Can't meet up? Message the receiver in chat.
       </Text>
     </View>
   );

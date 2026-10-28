@@ -25,7 +25,7 @@ const SCORE_LABELS: Record<number, string> = {
   1: "Poor",
   2: "Fair",
   3: "Good",
-  4: "Very Good",
+  4: "Very good",
   5: "Excellent",
 };
 
@@ -104,11 +104,30 @@ export function DeliveryReviewScreen() {
         <ReviewHeader onBack={goBack} />
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={48} color={colors.mutedText} />
-          <Text style={styles.errorTitle}>Couldn't load booking</Text>
+          <Text style={styles.errorTitle}>Couldn't load this delivery</Text>
           {error ? <Text style={styles.errorBody}>{getErrorMessage(error)}</Text> : null}
           <Pressable style={styles.retryButton} onPress={() => void refetch()} accessibilityRole="button">
             <Text style={styles.retryButtonText}>Try again</Text>
           </Pressable>
+        </View>
+      </Screen>
+    );
+  }
+
+  // ───────── Already reviewed (web parity, 27 Oct 2026) ─────────
+  // Mobile let you fill the form in and only failed on submit.
+  if (!submitted && booking?.viewer_has_rated) {
+    return (
+      <Screen>
+        <View style={styles.successWrap}>
+          <View style={styles.successIcon}>
+            <Ionicons name="star" size={40} color={colors.safe} />
+          </View>
+          <Text style={styles.successTitle}>You already reviewed this delivery</Text>
+          <Text style={styles.successSubtitle}>
+            Your review for {ratedUserName} is saved. Each delivery can be reviewed once.
+          </Text>
+          <AppButton label="See my reviews" onPress={() => navigation.navigate("ReviewsTab")} style={styles.cta} />
         </View>
       </Screen>
     );
@@ -127,7 +146,7 @@ export function DeliveryReviewScreen() {
             Your review for {ratedUserName} has been submitted.
           </Text>
           <AppButton
-            label="Back to Bookings"
+            label="Back to bookings"
             onPress={() => navigation.navigate("BookingsTab")}
             style={styles.cta}
           />
@@ -184,7 +203,7 @@ export function DeliveryReviewScreen() {
       />
 
       <AppButton
-        label={submitting ? "Submitting…" : "Submit Review"}
+        label={submitting ? "Submitting…" : "Submit review"}
         onPress={() => void handleSubmit()}
         disabled={score === 0 || submitting}
         style={styles.cta}

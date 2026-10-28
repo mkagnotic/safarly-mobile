@@ -228,7 +228,7 @@ export function createBookingActions({
   const handleCopyOtp = async () => {
     if (!generatedOtp) return;
     await Clipboard.setStringAsync(generatedOtp);
-    showBanner({ variant: "success", title: "Code copied to clipboard" }, 2400);
+    showBanner({ variant: "success", title: "Code copied" }, 2400);
     // The delivery code is the proof of handoff; don't leave it on the
     // clipboard, where other apps and clipboard sync can read it. Cleared after
     // a minute, and only if it is still what's there, so anything the user has
