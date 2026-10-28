@@ -11,7 +11,6 @@ import { ApiClientError, isTimeoutError } from "@/services/api/client";
 import { usersApi } from "@/services/api/users";
 import { checkOnboarding } from "./onboardingCheck";
 import {
-  syncPushRegistrationOnLogin,
   forgetThisDevice,
   unregisterPushToken,
 } from "@/services/notifications/push";
@@ -194,9 +193,8 @@ export function AuthProvider({ children }: Readonly<Props>) {
 
       if (next && !store.authenticated) {
         store.login();
-        // Silently re-register this device's push token if the user already
-        // granted permission (never prompts here — opt-in lives on Preferences).
-        void syncPushRegistrationOnLogin();
+        // Push registration moved to the profile load (useMyProfile): it needs the
+        // account's push_enabled and must also run on app start (28 Oct 2026).
       } else if (!next && store.authenticated) {
         store.logout();
       }

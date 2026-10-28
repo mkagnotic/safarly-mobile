@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
 import { useAuth } from "@/context/AuthContext";
 import { ApiClientError, usersApi, type UserProfile as ApiUserProfile } from "@/services/api";
 import { useAppStore } from "@/store/useAppStore";
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
+import { syncPushForAccount } from "@/services/notifications/push";
+import { accountPushOn } from "@/services/notifications/pushPolicy";
 
 export interface UseMyProfileResult {
   profile: ApiUserProfile | null;
@@ -45,6 +48,11 @@ export function useMyProfile(): UseMyProfileResult {
         const next = res.data?.profile ?? null;
         setProfile(next);
         if (next) setUserProfileFromApi(next, user?.email ?? "");
+        // Push is one account setting: register / ask once on this phone when it
+        // is on (once per account per app run; 28 Oct 2026).
+        if (next && Platform.OS !== "web") {
+          void syncPushForAccount(user?.id ?? next.id, accountPushOn(res.data?.preferences));
+        }
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -52,7 +60,7 @@ export function useMyProfile(): UseMyProfileResult {
         if (mountedRef.current) setLoading(false);
       }
     });
-  }, [user?.email, setUserProfileFromApi]);
+  }, [user?.email, user?.id, setUserProfileFromApi]);
 
   useEffect(() => {
     mountedRef.current = true;

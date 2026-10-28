@@ -12,12 +12,14 @@ import {
   resolveNotificationRoute,
   type NotificationTarget,
 } from "./notificationRoute";
-import { foregroundPresentation, loginPushAction } from "./pushPolicy";
+import { foregroundPresentation, startupPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
 const LAST_TOKEN_KEY = "safarly.pushToken";
 /** A token a sign-out could not unlink (offline); retried on the next start. */
 const PENDING_FORGET_KEY = "safarly.pushTokenToForget";
+/** This phone has shown the OS permission dialog once already: never nag (28 Oct 2026). */
+const ASKED_ONCE_KEY = "safarly.pushAskedOnce";
 
 /**
  * The chat on screen right now. A push for it shows no banner (the message is
@@ -146,6 +148,7 @@ export async function requestAndRegisterPushToken(): Promise<PushRegisterResult>
 
     let { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") {
+      await AsyncStorage.setItem(ASKED_ONCE_KEY, "1").catch(() => undefined);
       status = (await Notifications.requestPermissionsAsync()).status;
     }
     if (status !== "granted") return { ok: false, reason: "denied" };
@@ -159,29 +162,40 @@ export async function requestAndRegisterPushToken(): Promise<PushRegisterResult>
   }
 }
 
+/** Who this phone last synced push for in this app run; cleared on sign-out. */
+let syncedFor: string | null = null;
+
 /**
- * On sign-in: register this device for push. Already allowed -> register
- * silently. Never asked (every new iPhone) -> ask ONCE, so the OS shows its
- * dialog; a user who already answered is never asked again. See
- * ./pushPolicy.ts for why: iOS had 0 registered devices because the only
- * prompt lived behind the Preferences toggle. Best-effort; swallows all errors.
+ * Push is one account setting for every device (28 Oct 2026). Called when the
+ * profile (which carries the preferences) loads - i.e. on sign-in AND on app
+ * start - once per account per app run. Account ON and this phone allowed ->
+ * register silently; never asked here -> ask ONCE (see `startupPushAction`).
+ * Best-effort; swallows all errors.
  */
-export async function syncPushRegistrationOnLogin(): Promise<void> {
+export async function syncPushForAccount(accountKey: string, accountOn: boolean): Promise<void> {
+  if (syncedFor === accountKey) return;
+  syncedFor = accountKey;
   try {
     if (!pushSupported()) return;
     const projectId = getProjectId();
     if (!projectId) return;
-    let { status } = await Notifications.getPermissionsAsync();
-    const action = loginPushAction(status);
-    if (action === "skip") return;
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    const askedBefore = (await AsyncStorage.getItem(ASKED_ONCE_KEY)) === "1";
+    const action = startupPushAction({
+      accountOn,
+      granted: status === "granted",
+      canAskAgain: canAskAgain !== false,
+      askedBefore,
+    });
+    if (action === "none") return;
     if (action === "ask") {
-      status = (await Notifications.requestPermissionsAsync()).status;
-      if (status !== "granted") return;
+      await AsyncStorage.setItem(ASKED_ONCE_KEY, "1");
+      if ((await Notifications.requestPermissionsAsync()).status !== "granted") return;
     }
     await acquireAndRegister(projectId);
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("[push] syncPushRegistrationOnLogin failed", err);
+    console.warn("[push] syncPushForAccount failed", err);
   }
 }
 
@@ -203,6 +217,7 @@ export async function unregisterPushToken(): Promise<void> {
  * the next start (`retryPendingForget`). Never throws.
  */
 export async function forgetThisDevice(): Promise<void> {
+  syncedFor = null; // the next sign-in syncs again
   // Signed out: the previous account's unread count must not stay on the icon.
   if (Platform.OS !== "web") void Notifications.setBadgeCountAsync(0).catch(() => undefined);
   try {

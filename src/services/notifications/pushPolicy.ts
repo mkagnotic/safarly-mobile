@@ -1,23 +1,52 @@
 /**
- * What to do about push on sign-in. Pure, so it is tested without React Native.
+ * Push is ONE account setting (`push_enabled`) shared by every device; each
+ * device still needs its own OS permission + token. Pure, so it is tested
+ * without React Native (28 Oct 2026).
  *
- * Why it exists: production had 6 Android push tokens and 0 iOS. iOS starts
- * every app at "undetermined" and only shows its permission dialog when asked;
- * the app asked only from Preferences -> push toggle, which iPhone users never
- * had a reason to open (push is on by default). Android below 13 grants
- * notifications without asking, so it registered silently and hid the gap.
- *
- *   granted       -> register the token silently (as before)
- *   undetermined  -> ask ONCE - the OS shows its dialog; never again after
- *   denied        -> do nothing; the user decided (Preferences explains how to
- *                    re-enable in Settings)
+ * Before: each device showed the switch as `push_enabled && this phone's
+ * permission`, so a second phone read OFF and never registered until the user
+ * flipped the switch there too.
  */
-export type LoginPushAction = "register" | "ask" | "skip";
+export interface DevicePush {
+  /** The account setting. A missing preferences row means ON (server default). */
+  accountOn: boolean;
+  granted: boolean;
+  canAskAgain: boolean;
+}
 
-export function loginPushAction(status: string | undefined): LoginPushAction {
-  if (status === "granted") return "register";
-  if (status === "undetermined") return "ask";
-  return "skip";
+/**
+ * What this phone shows under the switch.
+ *   off      - the account setting is off
+ *   ready    - allowed here; this phone is (or gets) registered
+ *   allow    - not allowed yet, but the OS can still ask
+ *   blocked  - the OS won't ask again; only Settings can turn it on
+ */
+export type DevicePushState = "off" | "ready" | "allow" | "blocked";
+
+export function devicePushState(d: DevicePush): DevicePushState {
+  if (!d.accountOn) return "off";
+  if (d.granted) return "ready";
+  return d.canAskAgain ? "allow" : "blocked";
+}
+
+/**
+ * On sign-in / app start: register silently when allowed; ask ONCE per phone
+ * when the account is on and the OS can still ask (iOS starts every app at
+ * "undetermined" - production had 0 iOS tokens because the only prompt lived
+ * behind the toggle); otherwise do nothing - Preferences explains why.
+ */
+export type StartupPushAction = "register" | "ask" | "none";
+
+export function startupPushAction(d: DevicePush & { askedBefore: boolean }): StartupPushAction {
+  const state = devicePushState(d);
+  if (state === "ready") return "register";
+  if (state === "allow" && !d.askedBefore) return "ask";
+  return "none";
+}
+
+/** The account setting from a preferences payload; no row means ON (28 Oct 2026). */
+export function accountPushOn(prefs: { push_enabled?: boolean | null } | null | undefined): boolean {
+  return prefs?.push_enabled !== false;
 }
 
 /**
