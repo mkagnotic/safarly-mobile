@@ -47,7 +47,7 @@ export function AcceptHandoffStep({
       </Text>
       <Text style={sharedStyles.stepCardBody}>
         You are receiving the parcel at this step, before you travel. Accepting it
-        asks your sender to pay within 48 hours; their money is then held in escrow
+        asks your sender to pay within 48 hours; their payment is then held securely
         until you deliver it.
       </Text>
 

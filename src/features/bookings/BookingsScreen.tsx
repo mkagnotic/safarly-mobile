@@ -271,10 +271,10 @@ function ExpandedBody({
             onPress={() => setCancelOpen(true)}
             disabled={actionPending !== null}
             accessibilityRole="button"
-            accessibilityLabel="Cancel Booking"
+            accessibilityLabel="Cancel booking"
           >
             <Ionicons name="ban" size={14} color={colors.danger} />
-            <Text style={sharedStyles.actionDangerText}>Cancel Booking</Text>
+            <Text style={sharedStyles.actionDangerText}>Cancel booking</Text>
           </Pressable>
         ) : null}
 
@@ -321,10 +321,10 @@ function ExpandedBody({
             onPress={() => setCancelPostPossessionOpen(true)}
             disabled={actionPending !== null}
             accessibilityRole="button"
-            accessibilityLabel="Cancel mid-trip"
+            accessibilityLabel="I can't complete this delivery"
           >
             <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
-            <Text style={sharedStyles.actionDangerText}>Cancel mid-trip</Text>
+            <Text style={sharedStyles.actionDangerText}>I can't complete this delivery</Text>
           </Pressable>
         ) : null}
 
@@ -333,10 +333,10 @@ function ExpandedBody({
             style={[sharedStyles.actionButton, styles.actionWarning]}
             onPress={() => onNavigateRate(booking.id)}
             accessibilityRole="button"
-            accessibilityLabel="Rate Delivery"
+            accessibilityLabel="Rate delivery"
           >
             <Ionicons name="star" size={14} color={colors.warning} />
-            <Text style={styles.actionWarningText}>Rate Delivery</Text>
+            <Text style={styles.actionWarningText}>Rate delivery</Text>
           </Pressable>
         ) : null}
 

@@ -12,7 +12,7 @@ export function ParcelDetailsSection({ booking }: Readonly<{ booking: Booking }>
   if (!booking.parcel) return null;
   return (
     <View style={sharedStyles.expandedSection}>
-      <Text style={sharedStyles.expandedLabel}>Parcel Details</Text>
+      <Text style={sharedStyles.expandedLabel}>Parcel details</Text>
       <View style={styles.parcelGrid}>
         <View style={styles.parcelCell}>
           <Text style={styles.parcelCellKey}>Category: </Text>

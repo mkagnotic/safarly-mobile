@@ -416,7 +416,7 @@ function failedLabelFor(status: string | null): string {
     case "unpaid_return":
       return "Unpaid — parcel returned";
     case "handoff_rejected":
-      return "Declined at handoff";
+      return "Declined at handover";
     default:
       return "Booking ended";
   }

@@ -135,7 +135,7 @@ export function DeliveryDetailsScreen() {
 
       <Card style={styles.card}>
         <View style={styles.tag}>
-          <Text style={styles.tagText}>DELIVERED</Text>
+          <Text style={styles.tagText}>Delivered</Text>
         </View>
         <View style={styles.routeRow}>
           <Text style={styles.routeText} numberOfLines={2}>
@@ -262,6 +262,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tagText: {
+    textTransform: "uppercase",
     color: colors.safe,
     fontSize: 10,
     lineHeight: 14,

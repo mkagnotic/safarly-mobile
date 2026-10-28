@@ -15,6 +15,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { useDeliveryHistory } from "@/hooks/api/useDeliveryHistory";
 import { type DeliveryHistoryItem } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
+import { bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
 
 interface DeliveryHistoryModalProps {
   open: boolean;
@@ -51,7 +52,7 @@ function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
 }
 
 function prettyStatus(status: string): string {
-  return status.replace(/_/g, " ");
+  return bookingStatusLabel(status);
 }
 
 /**

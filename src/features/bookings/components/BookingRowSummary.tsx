@@ -17,6 +17,7 @@ import {
   STATUS_LABELS,
   STATUS_TONES,
 } from "@/features/bookings/lib/bookingDisplay";
+import { bookingEventLabel, bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
 
 interface BookingRowSummaryProps {
   booking: Booking;
@@ -119,7 +120,7 @@ export function BookingRowSummary({
             minimumFontScale={0.75}
             maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
           >
-            {(STATUS_LABELS[booking.status] ?? booking.status.replace(/_/g, " ")).toUpperCase()}
+            {bookingStatusLabel(booking.status)}
           </Text>
         </View>
         {booking.parcel ? (
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-  statusBadgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
+  statusBadgeText: { textTransform: "uppercase", fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
   feeText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
 
   // Card pills (payment countdown + agreed travel date)

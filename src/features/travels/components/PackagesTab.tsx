@@ -86,7 +86,7 @@ export function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="PACKAGE DELIVERY"
+              tag="Package delivery"
               item={p}
               onPress={() => onOpen(p.id)}
               onEdit={() => onEdit(p)}
@@ -129,7 +129,7 @@ export function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="PARCEL REQUEST"
+              tag="Parcel request"
               item={p}
               onPress={() => onOpen(p.id)}
               onEdit={() => onEdit(p)}

@@ -96,7 +96,7 @@ export const TravelCard = memo(function TravelCard({
   // A matched/accepted listing's badge opens the list of matching counterparts.
   const matchClickable =
     showStatusPill && !!onViewMatches && (status === "matched" || status === "accepted");
-  const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
+  const tagLabel = tag ?? (type === "flight" ? "Trip listing" : "Parcel");
   const hasActions = canModify && !!(onEdit || onDelete);
 
   /**
@@ -124,7 +124,7 @@ export const TravelCard = memo(function TravelCard({
   const statusNode = expired ? (
     <View style={styles.expiredPill}>
       <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
-      <Text style={styles.expiredPillText}>EXPIRED</Text>
+      <Text style={styles.expiredPillText}>Expired</Text>
     </View>
   ) : matchClickable ? (
     <Pressable
@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tagText: {
+    textTransform: "uppercase",
     color: colors.ctaAccent,
     fontSize: 10,
     lineHeight: 14,
@@ -388,6 +389,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   expiredPillText: {
+    textTransform: "uppercase",
     color: colors.mutedText,
     fontSize: 10,
     lineHeight: 14,

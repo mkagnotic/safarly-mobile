@@ -115,7 +115,7 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
           {expired ? (
             <View style={styles.expiredPill}>
               <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
-              <Text style={styles.expiredPillText}>EXPIRED</Text>
+              <Text style={styles.expiredPillText}>Expired</Text>
             </View>
           ) : (
             <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
@@ -241,6 +241,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   expiredPillText: {
+    textTransform: "uppercase",
     color: colors.mutedText,
     fontSize: 10,
     lineHeight: 14,

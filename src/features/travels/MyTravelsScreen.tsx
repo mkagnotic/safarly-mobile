@@ -175,13 +175,13 @@ export function MyTravelsScreen() {
             primary/secondary button pair across the app. */}
         <View style={styles.actionsRow}>
           <AppButton
-            label="Carry a Parcel"
+            label="Carry a parcel"
             variant="secondary"
             onPress={goListTrip}
             style={styles.actionButtonFlex}
           />
           <AppButton
-            label="Send a Parcel"
+            label="Send a parcel"
             onPress={goSendParcel}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.actionButtonFlex}

@@ -74,14 +74,14 @@ export function DeliveryCodePanel({
       onPress={handleGenerateOtp}
       disabled={actionPending !== null}
       accessibilityRole="button"
-      accessibilityLabel="Generate Delivery Code"
+      accessibilityLabel="Generate delivery code"
     >
       {actionPending === "generate-otp" ? (
         <ActivityIndicator size="small" color={colors.safe} />
       ) : (
         <>
           <Ionicons name="key-outline" size={14} color={colors.safe} />
-          <Text style={styles.actionSafeText}>Generate Delivery Code</Text>
+          <Text style={styles.actionSafeText}>Generate delivery code</Text>
         </>
       )}
     </Pressable>

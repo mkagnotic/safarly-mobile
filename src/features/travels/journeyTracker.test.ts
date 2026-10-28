@@ -278,7 +278,7 @@ test("handoff_rejected: the parcel reached the carrier, then was refused", () =>
   assert.equal(r.outcome, "cancelled");
   assert.equal(map.parcel_received, "done");
   assert.equal(map.payment_secured, "failed");
-  assert.equal(r.outcomeLabel, "Declined at handoff");
+  assert.equal(r.outcomeLabel, "Declined at handover");
 });
 
 test("cancelled_post_possession: traveled, fails after Traveling (mid-trip)", () => {

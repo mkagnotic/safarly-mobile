@@ -199,7 +199,7 @@ function ReviewHeader({ onBack }: Readonly<{ onBack: () => void }>) {
       <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
-      <Text style={styles.title}>Rate Delivery</Text>
+      <Text style={styles.title}>Rate delivery</Text>
     </View>
   );
 }

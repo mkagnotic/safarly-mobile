@@ -56,7 +56,7 @@ export function FlightsTab({
         <TravelCard
           key={t.id}
           type="flight"
-          tag="TRIP LISTING"
+          tag="Trip listing"
           item={t}
           onPress={() => onOpen(t.id)}
           onEdit={() => onEdit(t)}

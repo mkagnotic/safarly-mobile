@@ -43,7 +43,7 @@ export function ArchiveBookingCard({
       accessibilityLabel={`Delivery details: ${route}`}
     >
       <View style={styles.archiveTag}>
-        <Text style={styles.archiveTagText}>DELIVERED</Text>
+        <Text style={styles.archiveTagText}>Delivered</Text>
       </View>
       <Text style={styles.archiveRoute} numberOfLines={2}>
         {route}
@@ -138,6 +138,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   archiveTagText: {
+    textTransform: "uppercase",
     color: colors.safe,
     fontSize: 10,
     lineHeight: 14,

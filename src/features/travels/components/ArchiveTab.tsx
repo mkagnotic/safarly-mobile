@@ -154,7 +154,7 @@ export function ArchiveTab({
               type="flight"
               // Neutral tag: these are closed records, so the accent orange read
               // as an active listing. The status pill carries the real outcome.
-              tag="ARCHIVED TRIP"
+              tag="Archived trip"
               tagTone="muted"
               item={t}
               onPress={() => onOpen(t.id)}
@@ -174,7 +174,7 @@ export function ArchiveTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="PAST PACKAGE"
+              tag="Past package"
               tagTone="muted"
               item={p}
               onPress={() => onOpenParcel(p.id)}

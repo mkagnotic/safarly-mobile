@@ -93,7 +93,7 @@ function TripPickerModal({
       <View style={styles.modalCenter} pointerEvents="box-none">
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Trip</Text>
+            <Text style={styles.modalTitle}>Select a trip</Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
@@ -187,7 +187,7 @@ function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onLis
     <View style={styles.bidForm}>
       {/* Trip select */}
       <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Select Trip *</Text>
+        <Text style={styles.fieldLabel}>Select a trip *</Text>
         <Pressable
           onPress={() => setPickerOpen(true)}
           style={styles.tripDropdown}
@@ -618,9 +618,9 @@ export function OpportunitiesScreen() {
               onPress={handleListTrip}
               style={styles.emptyCta}
               accessibilityRole="button"
-              accessibilityLabel="List a Trip"
+              accessibilityLabel="List a trip"
             >
-              <Text style={styles.emptyCtaText}>List a Trip</Text>
+              <Text style={styles.emptyCtaText}>List a trip</Text>
             </Pressable>
           ) : null}
         </Card>

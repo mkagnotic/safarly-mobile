@@ -44,7 +44,7 @@ export function CancelBookingModal({
     <Modal statusBarTranslucent navigationBarTranslucent visible={open} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardModalCard onBackdropPress={handleClose}>
         <View style={sharedStyles.modalHeader}>
-          <Text style={sharedStyles.modalTitle}>Cancel Booking?</Text>
+          <Text style={sharedStyles.modalTitle}>Cancel this booking?</Text>
           <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
@@ -72,9 +72,9 @@ export function CancelBookingModal({
             disabled={pending}
             style={[sharedStyles.modalButton, sharedStyles.modalButtonSecondary]}
             accessibilityRole="button"
-            accessibilityLabel="Keep Booking"
+            accessibilityLabel="Keep booking"
           >
-            <Text style={sharedStyles.modalButtonSecondaryText}>Keep Booking</Text>
+            <Text style={sharedStyles.modalButtonSecondaryText}>Keep booking</Text>
           </Pressable>
           <Pressable
             onPress={handleConfirm}
@@ -85,12 +85,12 @@ export function CancelBookingModal({
               (pending || !reason.trim()) && sharedStyles.modalButtonDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Confirm Cancellation"
+            accessibilityLabel="Cancel booking"
           >
             {pending ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={sharedStyles.modalButtonDangerText}>Confirm Cancel</Text>
+              <Text style={sharedStyles.modalButtonDangerText}>Cancel booking</Text>
             )}
           </Pressable>
         </View>

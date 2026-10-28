@@ -33,10 +33,9 @@ export function ConfirmDeliveryStep({
       </View>
       <Text style={sharedStyles.stepCardTitle}>Parcel is ready to be delivered</Text>
       <Text style={sharedStyles.stepCardBody}>
-        Chat with your receiver and agree on the meetup point or the address in
-        chat. Once you deliver to the person, request the 6-digit code from your
-        receiver. Entering it completes the delivery and releases your payout from
-        escrow.
+        Agree the meetup point or address with the sender in chat. When you hand
+        the parcel over, ask the receiver for the 6-digit delivery code. Entering it
+        completes the delivery and sends your earnings to your bank.
       </Text>
       <Text style={styles.stepCardFieldLabel}>Delivery code from the receiver</Text>
       <View style={styles.otpRow}>

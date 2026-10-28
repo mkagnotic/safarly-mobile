@@ -37,7 +37,7 @@ const SYSTEM_EVENT_LABELS: Record<string, string> = {
   payment_received: "Payment received",
   payment_pending: "Payment pending",
   handoff_accepted: "Parcel picked up",
-  handoff_rejected: "Declined at handoff",
+  handoff_rejected: "Declined at handover",
   parcel_return_opened: "Parcel return opened",
   return_resolution_set: "Return decision made",
   return_completed: "Parcel sent back",

@@ -194,12 +194,12 @@ export function RejectHandoffModal({
               (pending || !reasonOk) && sharedStyles.modalButtonDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Decline and refund the sender"
+            accessibilityLabel="Decline parcel"
           >
             {pending ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={sharedStyles.modalButtonDangerText}>Decline and refund</Text>
+              <Text style={sharedStyles.modalButtonDangerText}>Decline parcel</Text>
             )}
           </Pressable>
         </View>
