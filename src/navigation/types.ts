@@ -57,7 +57,15 @@ export type MainTabParamList = {
    *  Package Delivery Matches (web parity: `&tab=receiver`).
    *  `forId` is the recipient's OWN trip / parcel / buddy listing the match is
    *  for (`&for=`): a summary of several matches scrolls to that listing's group. */
-  Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy"; forId?: string } | undefined;
+  Trips:
+    | {
+        highlightId?: string;
+        tab?: "package" | "receiver" | "buddy";
+        forId?: string;
+        /** Open `tab` for browsing (My Bookings' empty state), not as a match deep link. */
+        browse?: boolean;
+      }
+    | undefined;
   Buddies: undefined;
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
   CreateBuddyTab: undefined;

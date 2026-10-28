@@ -20,7 +20,7 @@ export function BookingTimeline({
             <Text style={styles.timelineEvent}>
               <Text style={styles.timelineEventName}>{bookingEventLabel(e.event)}</Text>
               {e.description ? (
-                <Text style={styles.timelineEventDesc}> - {e.description}</Text>
+                <Text style={styles.timelineEventDesc}> — {e.description}</Text>
               ) : null}
             </Text>
             <Text style={styles.timelineDate}>{formatDateTime(e.created_at)}</Text>

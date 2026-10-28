@@ -173,7 +173,7 @@ export interface Booking {
   return_destination_address?: HandoffAddress | null;
   /**
    * Travel date the pair agreed on. Returned by `booking-handler`'s list select
-   * and used by the journey tracker for the "Travel Tomorrow" / "Traveling"
+   * and used by the journey tracker for the "Ready to travel" / "In transit"
    * stages. `normalizeBooking` spreads the raw row, so this already arrived at
    * runtime before it was declared here.
    */
@@ -215,7 +215,7 @@ export interface Booking {
   };
   sender?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
   carrier?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
-  /** Deal-level travel-document verification — drives the tracker's "Flight Verified". */
+  /** Deal-level travel-document verification — drives the tracker's "Flight verified". */
   carrier_request?: {
     travel_doc_status?: "none" | "pending" | "approved" | "rejected";
     parcel_review_status?: "none" | "pending" | "approved" | "rejected";

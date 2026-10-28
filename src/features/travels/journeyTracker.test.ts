@@ -327,3 +327,66 @@ test("legacy escrow-first row with possession reads as received", () => {
   assert.equal(r.outcome, "active");
   assert.equal(map.parcel_received, "done");
 });
+
+// Bookings canon #25: sentence-case stage names, and the two date-sounding ones
+// renamed ("Travel Tomorrow" showed on trips a week out).
+test("stage labels are sentence case and match the booking's own words", () => {
+  const r = computeJourney(parcel("matched"), booking({ status: "pending_payment" }), NOW);
+  assert.deepEqual(
+    r.stages.map((s) => s.label),
+    [
+      "Carrier matched",
+      "Flight verified",
+      "Parcel approved",
+      "Parcel received",
+      "Payment secured",
+      "Ready to travel",
+      "In transit",
+      "Ready for delivery",
+      "Delivery code",
+      "Payment released",
+      "Review",
+    ],
+  );
+});
+
+// Bookings canon #5: the tracker said "returned" while the parcel was still on
+// its way home; it now uses the chip's words.
+test("unpaid_return label follows the return: returning, then returned", () => {
+  const returning = computeJourney(
+    parcel("matched"),
+    booking({ status: "unpaid_return", handoff_accepted_at: "2026-07-15T09:00:00Z" }),
+    NOW,
+  );
+  assert.equal(returning.outcomeLabel, "Unpaid - parcel returning");
+  const home = computeJourney(
+    parcel("matched"),
+    booking({
+      status: "unpaid_return",
+      handoff_accepted_at: "2026-07-15T09:00:00Z",
+      return_received_at: "2026-07-18T09:00:00Z",
+    }),
+    NOW,
+  );
+  assert.equal(home.outcomeLabel, "Returned - cancelled");
+});
+
+// Bookings canon #26: a dispute does not un-pay a booking. The money is held, so
+// "Payment secured" stays done and the review frontier moves past it.
+test("disputed + paid, not yet travelling: Payment secured stays done", () => {
+  const { map } = states(
+    parcel("disputed"),
+    booking({ status: "disputed", handoff_accepted_at: "2026-07-15T09:00:00Z", payment_made: true }),
+  );
+  assert.equal(map.parcel_received, "done");
+  assert.equal(map.payment_secured, "done");
+  assert.equal(map.traveling, "disputed");
+});
+
+test("disputed + unpaid: the review frontier sits on Payment secured", () => {
+  const { map } = states(
+    parcel("disputed"),
+    booking({ status: "disputed", handoff_accepted_at: "2026-07-15T09:00:00Z", payment_made: false }),
+  );
+  assert.equal(map.payment_secured, "disputed");
+});

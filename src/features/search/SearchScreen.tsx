@@ -113,7 +113,10 @@ export function SearchScreen() {
    * set the notification was computed from — unpaginated, so the highlight effect
    * can page to the card and scroll it into view.
    */
-  const isMatchDeepLink = !!(highlightId || requestedTab || forId);
+  // `browse` (My Bookings' "Browse parcels" / "Browse trips") only picks the tab:
+  // someone with no bookings yet wants every listing, not route matches.
+  const browseOnly = route.params?.browse === true;
+  const isMatchDeepLink = !!(highlightId || forId || (requestedTab && !browseOnly));
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // null `appliedFilters` = auto-match mode; per-list pages re-fire it for free.
@@ -580,6 +583,10 @@ export function SearchScreen() {
   useEffect(() => {
     if (seenParamsRef.current === route.params) return;
     seenParamsRef.current = route.params;
+    if (browseOnly && !highlightId && !forId) {
+      if (requestedTab) setActiveTab(requestedTab);
+      return;
+    }
     if (!highlightId && !requestedTab && !forId) return;
     highlightHandledRef.current = null;
     forHandledRef.current = null;
@@ -587,7 +594,7 @@ export function SearchScreen() {
     setFlashId(null);
     if (requestedTab) setActiveTab(requestedTab);
     applyMode(true);
-  }, [route.params, highlightId, requestedTab, forId, applyMode]);
+  }, [route.params, highlightId, requestedTab, forId, browseOnly, applyMode]);
 
   const handleClear = useCallback(() => {
     setFromCity("");

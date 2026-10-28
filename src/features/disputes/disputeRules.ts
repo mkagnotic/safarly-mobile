@@ -150,6 +150,9 @@ const IN_PROGRESS_STATUSES: ReadonlySet<string> = new Set([
   "awaiting_handoff",
   "payment_secured",
   "in_transit",
+  // A dismissed dispute on a parcel going home: the return still has to finish
+  // (web disputeLabels lists it too, bookings canon #7).
+  "unpaid_return",
 ]);
 
 export const DISPUTE_RESOLVED_CONTINUES_TEXT = "Dispute resolved — the delivery continues.";

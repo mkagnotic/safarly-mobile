@@ -5,7 +5,12 @@ import type { Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatLocalDate } from "@/utils/travelDate";
 
-const ENDED = new Set(["completed", "cancelled", "cancelled_post_possession", "expired_unpaid", "unpaid_return", "refunded"]);
+/**
+ * A delay only matters while the journey is still ahead: paid and not yet
+ * delivered (web rule, bookings canon #17). The old "ended" list named statuses
+ * a booking never has and missed delivered, so a delivered parcel still read "Your carrier reported a delay".
+ */
+export const DELAY_NOTICE_STATUSES: ReadonlySet<string> = new Set(["payment_secured", "in_transit"]);
 
 /**
  * The carrier's delay, told to the SENDER. The carrier's card said "You
@@ -13,7 +18,7 @@ const ENDED = new Set(["completed", "cancelled", "cancelled_post_possession", "e
  * canon #50). Date formatted, never the raw ISO string.
  */
 export function SenderDelayNotice({ booking }: Readonly<{ booking: Booking }>) {
-  if (!booking.delay_reason || ENDED.has(booking.status)) return null;
+  if (!booking.delay_reason || !DELAY_NOTICE_STATUSES.has(booking.status)) return null;
   return (
     <View style={styles.notice} testID="sender-delay-notice">
       <Ionicons name="warning-outline" size={13} color={colors.warning} />

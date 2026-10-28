@@ -202,3 +202,78 @@ test("user-facing hyphen dashes are em dashes in the money/handoff flow", () => 
     assert.deepEqual(quoted, [], `${f} still has " - " in a string`);
   }
 });
+
+// ── Bookings canon (28 Oct 2026): My Bookings + Delivery details ──────────────
+
+test("bookings: progress bar hidden on a parcel going home (unpaid_return)", () => {
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes('"expired_unpaid", "disputed", "unpaid_return"].includes('));
+});
+
+test("bookings: a failed background refetch keeps the rows and says so", () => {
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes('showToast({ title: "Couldn\'t refresh your bookings"'));
+  assert.ok(s.includes("if (!error || !hasRowsRef.current) return;"));
+  // The full-screen error stays for the nothing-loaded case only.
+  assert.ok(s.includes("if (error && bookings.length === 0) {"));
+});
+
+test("bookings: pull-to-refresh also refetches the open card; deep link re-opens per tap", () => {
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes("onRefresh={handleRefresh}"));
+  assert.ok(s.includes("setRefreshKey((k) => k + 1);"));
+  assert.ok(s.includes("if (expandedFor.current !== linkParams) {"));
+});
+
+test("bookings: search placeholder, (you) marker and the other party's rating", () => {
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes('placeholder="Search by city or booking ID…"'));
+  assert.ok(!s.includes("Search by city, booking ID..."));
+  assert.ok(s.includes('{role === "sender" ? " (you)" : ""}'));
+  assert.ok(s.includes('{role === "carrier" ? " (you)" : ""}'));
+  assert.ok(s.includes('role === "carrier" && ratingText(booking.sender.rating)'));
+  assert.ok(s.includes('role === "sender" && ratingText(booking.carrier.rating)'));
+});
+
+test("bookings: empty state names the tab and both CTAs open Search", () => {
+  const s = src("src/features/bookings/components/BookingsEmptyCard.tsx");
+  for (const t of ["No bookings yet", "No active bookings", "No completed bookings", "No cancelled bookings"]) {
+    assert.ok(s.includes(`"${t}"`), t);
+  }
+  assert.ok(s.includes('navigation.navigate("Trips", { tab: "receiver", browse: true })'));
+  assert.ok(s.includes('navigation.navigate("Trips", { tab: "package", browse: true })'));
+  assert.ok(s.includes(">Browse parcels</Text>") && s.includes(">Browse trips</Text>"));
+  assert.ok(!s.includes('navigate("Parcels"'), "never the user's own listings");
+  assert.ok(s.includes("{filterIdx === 0 ? ("), "CTAs only on All");
+  const search = src("src/features/search/SearchScreen.tsx");
+  assert.ok(search.includes("const isMatchDeepLink = !!(highlightId || forId || (requestedTab && !browseOnly));"));
+});
+
+test("bookings: delay notice only while the journey is ahead", () => {
+  const s = src("src/features/bookings/components/SenderDelayNotice.tsx");
+  assert.ok(s.includes('new Set(["payment_secured", "in_transit"])'));
+  assert.ok(s.includes("!DELAY_NOTICE_STATUSES.has(booking.status)"));
+  assert.ok(s.includes('` "${booking.delay_note}"`'));
+  assert.ok(!s.includes('"completed"') && !s.includes('"refunded"'));
+});
+
+test("bookings: card details read Agreed price, a formatted category and an em dash", () => {
+  const p = src("src/features/bookings/components/ParcelDetailsSection.tsx");
+  assert.ok(p.includes(">Agreed price: </Text>") && !p.includes(">Fee: </Text>"));
+  assert.ok(p.includes("{formatCategory(booking.parcel.category)}"));
+  const t = src("src/features/bookings/components/BookingTimeline.tsx");
+  assert.ok(t.includes("> — {e.description}</Text>") && !t.includes("> - {e.description}"));
+});
+
+test("delivery details: Receiver, real status tag, auth id, no raw error text", () => {
+  const s = src("src/features/travels/DeliveryDetailsScreen.tsx");
+  assert.ok(s.includes('const roleLabel = isSender ? "Carrier" : "Receiver";'));
+  assert.ok(!s.includes('"Sender"'));
+  assert.ok(s.includes("label={`Rate ${roleLabel.toLowerCase()}`}"));
+  assert.ok(s.includes('booking.return_received_at ? "Returned - cancelled" : bookingStatusLabel(booking.status)'));
+  assert.ok(!s.includes(">Delivered</Text>"));
+  assert.ok(s.includes("const isSender = !!user?.id && booking.sender_id === user.id;"));
+  assert.ok(!s.includes("useMyProfile"));
+  assert.ok(s.includes('<ErrorState error={error} subject="this delivery" onRetry={() => void refetch()} />'));
+  assert.ok(!s.includes("? getErrorMessage(error)"));
+});

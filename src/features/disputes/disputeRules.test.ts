@@ -186,6 +186,10 @@ test("a dispute never keeps a booking reading Disputed once resolved", () => {
   assert.deepEqual(bookingDisputeView({ status: "in_transit", dispute_status: "resolved" }), {
     disputedChip: false, note: "Dispute resolved — the delivery continues.", link: "View dispute",
   });
+  // Dismissed on a parcel going home: the return still has to finish (canon #7).
+  assert.deepEqual(bookingDisputeView({ status: "unpaid_return", dispute_status: "resolved" }), {
+    disputedChip: false, note: "Dispute resolved — the delivery continues.", link: "View dispute",
+  });
   // Refund / release: finished state + a resolved link.
   for (const status of ["cancelled", "delivered"]) {
     assert.deepEqual(bookingDisputeView({ status, dispute_status: "resolved" }), {

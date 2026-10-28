@@ -18,7 +18,8 @@ import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
 import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
 import { JourneyProgress } from "@/features/bookings/JourneyProgress";
 import { useBookings } from "@/hooks/api/useBookings";
-import { bookingsApi, type Booking } from "@/services/api";
+import { bookingsApi, getErrorMessage, type Booking } from "@/services/api";
+import { showToast } from "@/feedback/appFeedback";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { styles } from "@/features/bookings/BookingsScreen.styles";
@@ -53,6 +54,13 @@ interface ExpandedBodyProps {
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
   onNavigateDispute: () => void;
+  /** Bumped by pull-to-refresh: the open card refetches with the list. */
+  refreshKey: number;
+}
+
+/** "★ 4.8" for a party with a rating; nothing when they have none yet. */
+function ratingText(rating: number | null | undefined): string | null {
+  return typeof rating === "number" && rating > 0 ? `★ ${rating.toFixed(1)}` : null;
 }
 
 function ExpandedBody({
@@ -61,6 +69,7 @@ function ExpandedBody({
   onNavigateRate,
   onNavigatePay,
   onNavigateDispute,
+  refreshKey,
 }: Readonly<ExpandedBodyProps>) {
   const {
     booking, timeline, error, refetch, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
@@ -68,6 +77,15 @@ function ExpandedBody({
     setCancelPostPossessionOpen, modalError, setModalError, otpCode, setOtpCode, generatedOtp,
     setGeneratedOtp, otpEmailed, setOtpEmailed, otpExpiresInSec, setOtpExpiresInSec, actionBanner, dismissBanner, showBanner, runAction,
   } = useExpandedBooking(bookingId);
+
+  // Pull-to-refresh reloaded only the list, so an open card kept showing the
+  // old stage. The first render is the initial load, owned by the hook.
+  const seenRefreshKey = useRef(refreshKey);
+  useEffect(() => {
+    if (seenRefreshKey.current === refreshKey) return;
+    seenRefreshKey.current = refreshKey;
+    void refetch();
+  }, [refreshKey, refetch]);
 
   if (!booking && !error) {
     return (
@@ -136,7 +154,11 @@ function ExpandedBody({
                 <Text style={styles.partyKey}>Receiver</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
                   {booking.sender.name}
+                  {role === "sender" ? " (you)" : ""}
                 </Text>
+                {role === "carrier" && ratingText(booking.sender.rating) ? (
+                  <Text style={styles.partyRating}>{ratingText(booking.sender.rating)}</Text>
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -147,7 +169,11 @@ function ExpandedBody({
                 <Text style={styles.partyKey}>Carrier</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
                   {booking.carrier.name}
+                  {role === "carrier" ? " (you)" : ""}
                 </Text>
+                {role === "sender" && ratingText(booking.carrier.rating) ? (
+                  <Text style={styles.partyRating}>{ratingText(booking.carrier.rating)}</Text>
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -160,8 +186,10 @@ function ExpandedBody({
       {/* One authoritative position for the whole booking. The action cards below
           can appear out of order (the delivery card is available during transit on
           purpose), so without this the user saw two cards each claiming to be the
-          current step. Hidden once the deal is dead - there is no journey left. */}
-      {!["cancelled", "cancelled_post_possession", "handoff_rejected", "expired_unpaid", "disputed"].includes(
+          current step. Hidden once the deal is dead - there is no journey left.
+          unpaid_return too: it read "Step 2 · Payment" on a parcel going home;
+          the return card is the journey now (bookings canon #4). */}
+      {!["cancelled", "cancelled_post_possession", "handoff_rejected", "expired_unpaid", "disputed", "unpaid_return"].includes(
         booking.status,
       ) ? (
         <JourneyProgress booking={booking} />
@@ -423,6 +451,7 @@ interface BookingRowProps {
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
   onNavigateDispute: () => void;
+  refreshKey: number;
 }
 
 function BookingRow({
@@ -433,6 +462,7 @@ function BookingRow({
   onNavigateRate,
   onNavigatePay,
   onNavigateDispute,
+  refreshKey,
 }: Readonly<BookingRowProps>) {
   return (
     <Card style={styles.bookingCard}>
@@ -446,6 +476,7 @@ function BookingRow({
             onNavigateRate={onNavigateRate}
             onNavigatePay={onNavigatePay}
             onNavigateDispute={onNavigateDispute}
+            refreshKey={refreshKey}
           />
         </View>
       ) : null}
@@ -486,11 +517,14 @@ export function BookingsScreen() {
   const expandId = route.params?.expandId;
   const [fetchedTarget, setFetchedTarget] = useState<Booking | null>(null);
   // Opened once per link: a refetch must not re-open a booking the user closed.
-  const expandedFor = useRef<string | null>(null);
+  // Keyed on the params OBJECT, not the id: tapping the same notification again
+  // sets new params and must open the booking again (bookings canon #14).
+  const linkParams = route.params;
+  const expandedFor = useRef<typeof linkParams | null>(null);
   useEffect(() => {
     if (!expandId) return;
-    if (expandedFor.current !== expandId) {
-      expandedFor.current = expandId;
+    if (expandedFor.current !== linkParams) {
+      expandedFor.current = linkParams;
       setExpandedId(expandId);
     }
     if (bookings.some((b) => b.id === expandId)) return;
@@ -499,7 +533,7 @@ export function BookingsScreen() {
       .then((res) => { if (!cancelled && res.data?.booking) setFetchedTarget(res.data.booking as Booking); })
       .catch(() => { /* not yours or gone: the list stays as it is */ });
     return () => { cancelled = true; };
-  }, [expandId, bookings]);
+  }, [expandId, linkParams, bookings]);
   const target = expandId
     ? bookings.find((b) => b.id === expandId) ?? (fetchedTarget?.id === expandId ? fetchedTarget : null)
     : null;
@@ -516,6 +550,21 @@ export function BookingsScreen() {
         b.parcel?.to_city?.toLowerCase().includes(q),
     );
   }, [bookings, debouncedSearch, target]);
+
+  // A failed background refetch (pull, realtime, filter tap) keeps the rows on
+  // screen, and it used to say nothing at all (bookings canon #6). Say so.
+  const hasRowsRef = useRef(false);
+  hasRowsRef.current = bookings.length > 0;
+  useEffect(() => {
+    if (!error || !hasRowsRef.current) return;
+    showToast({ title: "Couldn't refresh your bookings", message: getErrorMessage(error), variant: "error" });
+  }, [error]);
+
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    void refetch();
+  }, [refetch]);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -551,9 +600,10 @@ export function BookingsScreen() {
         onNavigateRate={handleNavigateRate}
         onNavigatePay={handleNavigatePay}
         onNavigateDispute={handleNavigateDispute}
+        refreshKey={refreshKey}
       />
     ),
-    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay, handleNavigateDispute],
+    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay, handleNavigateDispute, refreshKey],
   );
 
   // Loading / error / empty all render through ListEmptyComponent so the fixed
@@ -597,7 +647,7 @@ export function BookingsScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search by city, booking ID..."
+            placeholder="Search by city or booking ID…"
             placeholderTextColor={colors.subtleText}
             style={styles.searchInput}
             accessibilityLabel="Search bookings"
@@ -661,7 +711,7 @@ export function BookingsScreen() {
           refreshControl={
             <RefreshControl
               refreshing={loading && bookings.length > 0}
-              onRefresh={refetch}
+              onRefresh={handleRefresh}
               tintColor={colors.primary}
               colors={[colors.primary]}
             />

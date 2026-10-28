@@ -126,7 +126,9 @@ describe("a match notification shows the match it promised", () => {
     const src = readFileSync("src/features/search/SearchScreen.tsx", "utf8");
     // Browse mode returns every open listing, server-paged, so the card the
     // notification promised is usually not on the first page.
-    assert.match(src, /const isMatchDeepLink = !!\(highlightId \|\| requestedTab \|\| forId\)/);
+    // A notification's tab still forces it; only My Bookings' browse CTAs
+    // (`browse: true`) open a tab without route-matching.
+    assert.match(src, /const isMatchDeepLink = !!\(highlightId \|\| forId \|\| \(requestedTab && !browseOnly\)\)/);
     assert.match(src, /useState\(isMatchDeepLink\)/);
     assert.match(src, /isMatchDeepLink \? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY/);
     // And the async restore must not drag the user back off it.

@@ -88,6 +88,7 @@ export const styles = StyleSheet.create({
   },
   partyKey: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
   partyValue: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  partyRating: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginTop: 1 },
 
   // Actions
   actionsWrap: { gap: 8, flexDirection: "row", flexWrap: "wrap" },

@@ -14,12 +14,15 @@ import { AppButton } from "@/components/ui/AppButton";
 import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
-import { useMyProfile } from "@/hooks/api/useMyProfile";
+import { useAuth } from "@/context/AuthContext";
+import { STATUS_TONES } from "@/features/bookings/lib/bookingDisplay";
+import { bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -61,7 +64,9 @@ export function DeliveryDetailsScreen() {
   const bookingId = route.params?.bookingId;
 
   const { booking, timeline, loading, error, refetch } = useBookingDetail(bookingId);
-  const myProfile = useMyProfile();
+  // The signed-in id is known at once; the profile fetch is not, and while it
+  // loaded the sender saw THEMSELVES as the other party (bookings canon #16).
+  const { user } = useAuth();
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -95,6 +100,16 @@ export function DeliveryDetailsScreen() {
     );
   }
 
+  if (!booking && error) {
+    // Never the raw error text: ErrorState names the failure and offers a retry.
+    return (
+      <Screen onRefresh={refetch}>
+        <DetailsHeader onBack={handleBack} />
+        <ErrorState error={error} subject="this delivery" onRetry={() => void refetch()} />
+      </Screen>
+    );
+  }
+
   if (!booking) {
     return (
       <Screen onRefresh={refetch}>
@@ -103,9 +118,7 @@ export function DeliveryDetailsScreen() {
           <Ionicons name="cube-outline" size={28} color={colors.mutedText} />
           <Text style={styles.emptyTitle}>Delivery not found</Text>
           <Text style={styles.emptyBody}>
-            {error
-              ? getErrorMessage(error)
-              : "This delivery may have been removed or is no longer available."}
+            This delivery may have been removed or is no longer available.
           </Text>
           <AppButton
             label="Back to My Travels"
@@ -118,9 +131,15 @@ export function DeliveryDetailsScreen() {
     );
   }
 
-  const isSender = !!myProfile.profile?.id && booking.sender_id === myProfile.profile.id;
+  const isSender = !!user?.id && booking.sender_id === user.id;
   const counterpart = isSender ? booking.carrier : booking.sender;
-  const roleLabel = isSender ? "Carrier" : "Sender";
+  // The parcel owner is the "Receiver" everywhere (client rule
+  // party-label-receiver), so the button reads "Rate receiver".
+  const roleLabel = isSender ? "Carrier" : "Receiver";
+  // Archive holds ended deals too, so the tag says what happened, never a
+  // blanket "Delivered" (same chip words as My Bookings).
+  const statusText = booking.return_received_at ? "Returned - cancelled" : bookingStatusLabel(booking.status);
+  const tone = STATUS_TONES[booking.status] ?? STATUS_TONES.delivered;
   const deliveredOn = formatDate(booking.delivered_at);
   const parcel = booking.parcel;
 
@@ -130,13 +149,13 @@ export function DeliveryDetailsScreen() {
 
       {error ? (
         <View style={styles.bannerSlot}>
-          <FormBanner message={getErrorMessage(error)} />
+          <FormBanner title="Couldn't refresh this delivery" message={getErrorMessage(error)} />
         </View>
       ) : null}
 
       <Card style={styles.card}>
-        <View style={styles.tag}>
-          <Text style={styles.tagText}>Delivered</Text>
+        <View style={[styles.tag, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.tagText, { color: tone.fg }]}>{statusText}</Text>
         </View>
         <View style={styles.routeRow}>
           <Text style={styles.routeText} numberOfLines={2}>
