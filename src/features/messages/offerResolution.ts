@@ -110,3 +110,29 @@ export function offerComposerMode(
   if (live?.mine) return "revise";
   return live?.carrierRequestId ? "counter" : "seed";
 }
+
+/**
+ * The one short line under an offer's amount: which currency, and why it can't be
+ * switched there (bug bash 28 Oct 2026: "edit by currency - nothing happens").
+ * Offers take the parcel's currency; answering an open offer means it is locked.
+ * Same words on web (`lib/offerCurrency.ts`).
+ */
+export function offerCurrencyCode(currency?: string | null): "USD" | "INR" {
+  return String(currency ?? "").toUpperCase() === "INR" ? "INR" : "USD";
+}
+
+export function offerCurrencyNote(mode: "seed" | "accept" | "counter" | "revise", currency?: string | null): string {
+  const code = offerCurrencyCode(currency);
+  return mode === "counter" || mode === "revise"
+    ? `In ${code}. Currency is locked once offers have been made.`
+    : `In ${code}, the parcel's currency.`;
+}
+
+/**
+ * The line beside YOUR open offer. A carrier whose payouts are not set up was told
+ * "Waiting for <the sender> to set up payouts" - the wrong person (28 Oct 2026).
+ */
+export function ownOfferWaitKind(waitingOnPayouts: boolean, viewerIsCarrier: boolean): "setup" | "payouts" | "plain" {
+  if (!waitingOnPayouts) return "plain";
+  return viewerIsCarrier ? "setup" : "payouts";
+}

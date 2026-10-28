@@ -14,6 +14,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { offerCurrencyNote } from "@/features/messages/offerResolution";
 
 /** Server ceiling on an offer (web `NewOfferDialog.tsx` parity). */
 const MAX_OFFER_AMOUNT = 1_000_000;
@@ -79,6 +80,8 @@ export function OfferComposerModal({
   const tooSmall = amount.trim() !== "" && Number.isFinite(parsed) && parsed > 0
     ? minAmountProblem(parsed, currencySymbol === "₹" ? "INR" : "USD")
     : undefined;
+  const currencyCode = currencySymbol === "₹" ? "INR" : "USD";
+  const currencyNote = offerCurrencyNote(mode, currencyCode);
   const valid = Number.isFinite(parsed) && parsed > 0 && !tooHigh && !tooSmall;
 
   const title = mode === "seed" ? "Make an offer" : mode === "revise" ? "Change your offer" : "Counter offer";
@@ -130,7 +133,17 @@ export function OfferComposerModal({
             </View>
 
             <View style={styles.amountRow}>
-              <Text style={styles.currency}>{currencySymbol}</Text>
+              {/* Shown as a control, disabled, with the reason below: offers take the
+                  parcel's currency and it is locked once offers exist. Tapping it
+                  used to do nothing, with no word why (bug bash 28 Oct 2026). */}
+              <View
+                accessible
+                accessibilityRole="button"
+                accessibilityState={{ disabled: true }}
+                accessibilityLabel={`Currency: ${currencyCode}. ${currencyNote}`}
+              >
+                <Text style={styles.currency}>{currencySymbol}</Text>
+              </View>
               <TextInput
                 value={amount}
                 // Up to 7 whole + 2 decimal digits — the shape the server stores.
@@ -143,6 +156,7 @@ export function OfferComposerModal({
                 autoFocus
               />
             </View>
+            <Text style={styles.currencyNote}>{currencyNote}</Text>
             {tooHigh ? <Text style={styles.errorText}>Amount is too high</Text> : null}
             {tooSmall ? <Text style={styles.errorText}>{tooSmall}</Text> : null}
 
@@ -237,6 +251,7 @@ const styles = StyleSheet.create({
   },
   currency: { color: colors.text, fontSize: 22, fontWeight: "800" },
   amountInput: { flex: 1, color: colors.text, fontSize: 22, fontWeight: "800", padding: 0 },
+  currencyNote: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginTop: -6 },
   errorText: { color: colors.danger, fontSize: 12, fontWeight: "600", marginTop: -6 },
   noteInput: {
     minHeight: 60,

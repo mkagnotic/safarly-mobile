@@ -483,6 +483,8 @@ export function OfferChatScreen() {
             handleDeclineOffer={handleDeclineOffer}
             handleOpenOfferComposer={handleOpenOfferComposer}
             waitingOnPayouts={activeDeal?.carrier_payout_ready === false}
+            viewerIsCarrier={activeDeal?.viewer_role === "carrier"}
+            onSetUpPayouts={() => navigation.navigate("PayoutSetupTab")}
           />
         ) : null}
 

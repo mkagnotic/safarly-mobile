@@ -2342,6 +2342,23 @@ const CHECKS = [
     must: ["Apply filters", "Couldn't load results", "This is usually temporary. Try again.", "export function browsePageQuery<", "export function startupPushAction(", "Allow on this device", "This one setting covers all your devices."],
     mustNot: ["Apply Filters & Search", "Receive Request", "must be YYYY-MM-DD", "auto-see"],
   },
+  // ------------------------------------------------- negotiation (bug bash 28 Oct 2026)
+  {
+    repo: "web",
+    file: ["src/features/messages/components/ChatOfferPrompt.tsx", "supabase/functions/parcel-handler/index.ts"],
+    id: "carrier-can-change-offer-while-payouts-pending",
+    why: "Client: after offer, change, counter, counter, User One could not change their offer. For a carrier without payouts the bar REPLACED Change with 'Set up payouts' once the payout check loaded. Set up payouts is an extra prompt, never instead of Change. And a currency switch under an open offer is refused with the lock, not 'minimum ₹500'.",
+    must: ["Set up payouts </Button> { } {changeOwnOffer}", "const refusal = await priceEditRefusal("],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/chat/components/OfferBar.tsx", "src/components/chat/OfferComposerModal.tsx"],
+    id: "mobile-carrier-can-change-offer-while-payouts-pending",
+    why: "See carrier-can-change-offer-while-payouts-pending (web repo). The carrier is told to set up payouts (not to wait for the sender), Change stays; the composer shows the currency locked with its reason.",
+    must: ['waitKind === "setup"', "offerCurrencyNote(mode, currencyCode)"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
