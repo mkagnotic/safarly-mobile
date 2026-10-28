@@ -2189,6 +2189,36 @@ const CHECKS = [
     why: "27 Oct 2026: the apps and legal pages said admin@mysafarly.com while every email footer said support@mysafarly.com. The owner confirmed admin@ is the real inbox.",
     must: ["mailto:admin@mysafarly.com", 'SUPPORT_EMAIL = "admin@mysafarly.com"', "const SUPPORT_EMAIL = 'admin@mysafarly.com';"],
     mustNot: ["support@mysafarly.com"],
+  },  {
+    repo: "web",
+    file: ["supabase/functions/booking-handler/routes/delivery.ts", "supabase/functions/booking-handler/lib/deliveryCode.ts"],
+    id: "delivery-code-at-the-door",
+    why: "27 Oct 2026 carrier flow: a wrong or expired delivery code answered 401, which both apps meet by refreshing the login and sending again - one typo used two of the three tries; the try count was read-then-written, so parallel guesses beat the lock; the code came from Math.random; messages said 'receiver' (only the sender can make a code) and 'OTP'. The carrier's payout notice opened the retired wallet page (Payments) when it said 'finish Payout Setup', and said 'sent to your account' for money the bank pays 2-7 business days later.",
+    must: ["crypto.getRandomValues(buf);", ".eq('delivery_otp_attempts', seen)", "reserveDeliveryCodeAttempt(supabase, bookingId, seen)", "errorResponse('VALIDATION_ERROR', 'This code has expired. Ask the sender for a new one.')", "That code isn't right.", "Ask the sender for a new code.", "'/customer/profile/payout-setup'", "It usually arrives in 2–7 business days."],
+    mustNot: ["Math.floor(100000 + Math.random() * 900000)", "errorResponse('UNAUTHENTICATED', left > 0", "'OTP code required'", "receiver to have a new", "{ link: '/customer/profile/wallet' }", "has been sent to your account."],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/lib/bookingActions.ts"],
+    id: "mobile-delivery-code-message",
+    why: "See delivery-code-at-the-door (web repo): mobile swapped the server's message by error code, and every wrong code came back as UNAUTHENTICATED, so a typo was shown as 'That delivery code has expired'. Show the server's words, as web does.",
+    must: ['() => bookingsApi.confirmOtp(booking.id, trimmed),'],
+    mustNot: ["That delivery code has expired. Ask the sender to resend a new one.", "Too many wrong codes. Ask the sender to tap Resend for a fresh code."],
+  },  {
+    repo: "web",
+    file: ["src/features/bookings/lib/bookingEventLabel.ts", "src/features/bookings/pages/CustomerBookings.tsx", "src/features/messages/components/DeliveryHistoryDialog.tsx", "src/hooks/api/useBookings.ts", "src/features/bookings/components/HandoffActions.tsx", "src/features/payments/components/PayoutRequiredDialog.tsx", "src/features/my-trips/components/TripCard.tsx", "src/features/bookings/components/CancelPostPossessionDialog.tsx"],
+    id: "carrier-flow-wording",
+    why: "27 Oct 2026 carrier flow: raw codes on the timeline and status pills ('otp generated'); accepting the parcel said 'you're in transit' while the booking waits for payment; 'Decline and refund the sender' for a sender who hasn't been charged; 'Chat with your receiver' (the chat is with the sender; the receiver has no account); 'releases your payout from escrow'; the payout dialog said Stripe to Razorpay carriers; the trip cancel dialog said 'pending carrier requests' on the carrier's own trip.",
+    must: ["export function bookingEventLabel(", "{bookingEventLabel(event.event)}", "bookingStatusLabel(booking.status)}", "{bookingStatusLabel(d.status)}", 'status === "in_transit"', "The sender has been asked to pay", "Decline parcel", "Agree the meetup point or address with the sender in chat.", "Handled securely by our payment partner", "any pending requests from senders will be declined", "Cancel this delivery?"],
+    mustNot: ['{event.event.replace(/_/g, " ")}', '{d.status.replace(/_/g, " ")}', "Handoff complete — you're in transit.", "Decline and refund the sender", "Chat with your receiver", "releases your payout from escrow", "Any pending carrier requests will be withdrawn", "Cancel trip & report issue"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/lib/bookingEventLabel.ts", "src/features/bookings/components/CancelPostPossessionModal.tsx", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/hooks/useExpandedBooking.ts", "src/features/bookings/components/BookingRowSummary.tsx", "src/features/bookings/components/BookingTimeline.tsx", "src/components/chat/DeliveryHistoryModal.tsx", "src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/components/ConfirmDeliveryStep.tsx", "src/features/travels/TravelCard.tsx", "src/features/bookings/components/AwaitingPaymentNotice.tsx"],
+    id: "mobile-carrier-flow-wording",
+    why: "See carrier-flow-wording (web repo). Plus mobile asked 'Will the merchant refund the sender?' and stored it as will_return (whether YOU return the parcel), took the penalty 'from your wallet' (there is none; it comes from the next payout), showed a raw 'Tier: x', titled every failure 'Action failed', and typed labels in capitals.",
+    must: ['{ key: "will_return", label: "Will you return the parcel to the sender?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with the sender in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
+    mustNot: ["seller_will_refund", "deducted from your wallet", "`Tier: ${data.tier}.", 'title: "Action failed"', "Handoff complete — you're in transit.", ".toUpperCase()}", '{e.event.replace(/_/g, " ")}', "Chat with your receiver", '"TRIP LISTING"', ">AWAITING PAYMENT</Text>"],
   },
 ];
 

@@ -110,7 +110,7 @@ export function createBookingActions({
 
   const handleMarkLanded = () =>
     runAction("mark-landed", () => bookingsApi.markLanded(bookingId),
-      "Your receiver has been asked to coordinate pickup");
+      "The sender knows you've landed — agree the drop-off in chat.");
 
   // Deliberately separate from cancelling: a delayed flight reschedules the trip
   // and the parcel stays exactly where it is.
@@ -126,9 +126,13 @@ export function createBookingActions({
     await runAction(
       "accept-handoff",
       () => bookingsApi.acceptHandoff(booking.id),
-      // Names the next phase so the delivery-code field that now appears doesn't
-      // read as "a code is required right now".
-      "Handoff complete — you're in transit. Enter the receiver's code at the destination.",
+      // Handoff-first: accepting normally leaves the booking WAITING FOR PAYMENT,
+      // not in transit - this said "you're in transit" while the card said "don't
+      // travel with it until then" (27 Oct 2026). Same words as web.
+      (res) =>
+        (res as { data?: { status?: string } } | null)?.data?.status === "in_transit"
+          ? "Parcel accepted — you're on your way. Ask the receiver for the delivery code at the destination."
+          : "Parcel accepted. The sender has been asked to pay — don't travel with it until the payment lands.",
     );
     setAcceptHandoffOpen(false);
   };
@@ -201,7 +205,7 @@ export function createBookingActions({
         {
           variant: "warning",
           title: `Penalty applied: ${formatMoney(data.penalty_amount, (data as { currency?: string }).currency)}`,
-          message: `Tier: ${data.tier}. ${Number((data as { refund_amount?: number }).refund_amount ?? 0) > 0 ? "The sender has been refunded in full." : "The sender hadn't paid yet, so they weren't charged."}`,
+          message: `${Number((data as { refund_amount?: number }).refund_amount ?? 0) > 0 ? "The sender has been refunded in full." : "The sender hadn't paid yet, so they weren't charged."}`,
         },
         7000,
       );
@@ -243,16 +247,11 @@ export function createBookingActions({
     const result = await runAction(
       "confirm-otp",
       () => bookingsApi.confirmOtp(booking.id, trimmed),
+      // The server's words, as on web (27 Oct 2026): this used to swap them by error
+      // code, and every WRONG code came back as UNAUTHENTICATED, so a typo was shown
+      // as "That delivery code has expired". The server now says exactly what
+      // happened (tries left, expired, locked, no code yet).
       "Delivery confirmed",
-      (code, base) => {
-        if (code === "RATE_LIMITED")
-          return "Too many wrong codes. Ask the sender to tap Resend for a fresh code.";
-        if (code === "UNAUTHENTICATED")
-          return "That delivery code has expired. Ask the sender to resend a new one.";
-        if (code === "CONFLICT")
-          return "No delivery code has been generated yet. Ask the sender to generate one.";
-        return base;
-      },
     );
     if (result) setOtpCode("");
   };
