@@ -208,7 +208,7 @@ export function HomeScreen() {
         <View style={styles.heroFee} testID="home-fee-note">
           <Ionicons name="receipt-outline" size={14} color={colors.primary} />
           <Text style={styles.heroFeeText}>
-            Safarly's fee is 10%, including Stripe payment processing.
+            Safarly's fee is 10%, including payment processing.
           </Text>
         </View>
         {/* Same artwork as the web home hero (public/assets/image/right-image.webp),
