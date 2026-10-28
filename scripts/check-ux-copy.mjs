@@ -1468,6 +1468,14 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: "supabase/migrations/20261028150000_buddy_complete_partner_listing.sql",
+    id: "buddy-journey-closes-both-listings",
+    why: "Client 28 Oct 2026: after a buddy journey was confirmed, the buddy's OWN listing for the same route and date stayed under My buddy listings. Confirming a journey closes both people's listings for that trip.",
+    must: ["p.user_id IN (NEW.user_1, NEW.user_2)", "AND c.completed_at IS NULL"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
     file: "supabase/functions/parcel-handler/index.ts",
     id: "parcel-list-carries-the-agreed-price",
     why: "Plan AN12: My Travels showed the listing's asking price after a different amount was agreed. The list returns agreed_amount from the live booking (read in parallel, no extra round trip). 28 Oct 2026: a carrier sees only THEIR OWN booking's price and name, never a competing carrier's (parcelDealView).",
