@@ -15,6 +15,13 @@ import {
   type ReportReason,
   type ReportTarget,
 } from "@/services/api";
+import {
+  BLOCK_CONFIRM_BODY,
+  isReportRateLimit,
+  REPORT_SUBTITLE,
+  reportResultToast,
+  UNBLOCK_CONFIRM_BODY,
+} from "@/features/messages/chat/lib/chatModerationRules";
 import { colors } from "@/theme/colors";
 
 interface ModerationMenuProps {
@@ -81,21 +88,13 @@ export function ModerationMenu({
           details,
         });
         setReportOpen(false);
-        showToast(
-          res.data?.duplicate
-            ? {
-                title: "Already reported",
-                message: "You've already reported this — we're on it.",
-                variant: "info",
-              }
-            : {
-                title: "Report sent",
-                message: "Our team reviews reports within 24 hours.",
-                variant: "success",
-              },
-        );
+        showToast(reportResultToast(res.data?.duplicate));
       } catch (err) {
-        setReportError(`Couldn't send report. ${getErrorMessage(err)}`);
+        // Reports are rate-limited (5 an hour): the server's own sentence is shown
+        // as sent, and the sheet stays open with the typed text.
+        setReportError(
+          isReportRateLimit(err) ? err.message.trim() : `Couldn't send report. ${getErrorMessage(err)}`,
+        );
       } finally {
         setReportPending(false);
       }
@@ -198,7 +197,7 @@ export function ModerationMenu({
         open={reportOpen}
         pending={reportPending}
         title={reportTitle ?? reportLabel}
-        subtitle="Help us keep Safarly safe. Our team reviews every report within 24 hours."
+        subtitle={REPORT_SUBTITLE}
         error={reportError}
         onCancel={() => {
           if (reportPending) return;
@@ -214,8 +213,8 @@ export function ModerationMenu({
           title={confirm === "unblock" ? `Unblock ${blockUser.name}?` : `Block ${blockUser.name}?`}
           body={
             confirm === "unblock"
-              ? "You'll see each other's listings again and be able to message each other."
-              : "You won't see each other's listings or be able to message each other. You can unblock them later from their profile."
+              ? UNBLOCK_CONFIRM_BODY
+              : BLOCK_CONFIRM_BODY
           }
           confirmLabel={confirm === "unblock" ? "Unblock" : "Block"}
           tone={confirm === "unblock" ? "primary" : "destructive"}

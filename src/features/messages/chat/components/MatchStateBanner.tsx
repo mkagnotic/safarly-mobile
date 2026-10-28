@@ -4,6 +4,14 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
 
+import {
+  blockedBannerBody,
+  MATCH_DECLINED_BODY,
+  MATCH_UNMATCHED_BODY,
+  matchRequestBody,
+  matchWaitingBody,
+} from "../lib/chatModerationRules";
+
 interface MatchStateBannerProps {
   participantName: string;
   matchedByOther: boolean;
@@ -11,6 +19,10 @@ interface MatchStateBannerProps {
   isDeclined: boolean;
   wasUnmatched: boolean;
   isBlocked: boolean;
+  /** Only the person who blocked is told how to undo it (blocked_by). */
+  canUnblock: boolean;
+  /** A travel-buddy match reads "for this trip". */
+  isBuddy?: boolean;
   matchBusy: boolean;
   matchPending: boolean;
   decliningPending: boolean;
@@ -26,6 +38,8 @@ export function MatchStateBanner({
   isDeclined,
   wasUnmatched,
   isBlocked,
+  canUnblock,
+  isBuddy = false,
   matchBusy,
   matchPending,
   decliningPending,
@@ -36,11 +50,9 @@ export function MatchStateBanner({
     <View style={[styles.banner, styles.bannerWarning]}>
       <View style={styles.bannerTextWrap}>
         <Text style={styles.bannerTitle}>Match request</Text>
-        <Text style={styles.bannerBody}>
-          {participantName} wants to match. Accept to start chatting freely.
-        </Text>
+        <Text style={styles.bannerBody}>{matchRequestBody(participantName, isBuddy)}</Text>
       </View>
-      {/* Accept and Close are two answers to ONE question, so they share
+      {/* Accept and Decline are two answers to ONE question, so they share
           a single busy flag: once either is being sent the other must be
           dead, or the thread gets a match and a decline for the same
           request. */}
@@ -62,11 +74,14 @@ export function MatchStateBanner({
           disabled={matchBusy}
           style={[styles.bannerButton, styles.bannerButtonOutline, matchBusy && styles.bannerButtonDisabled]}
           accessibilityRole="button"
+          accessibilityLabel="Decline match"
         >
+          {/* "Decline", as on web: one word for one action - the dialog's button
+              says Decline and the toast "Match declined" (flow-18 bug 18). */}
           {decliningPending ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <Text style={styles.bannerButtonOutlineText}>Close</Text>
+            <Text style={styles.bannerButtonOutlineText}>Decline</Text>
           )}
         </Pressable>
       </View>
@@ -78,20 +93,17 @@ export function MatchStateBanner({
     <View style={[styles.banner, styles.bannerWaiting]}>
       <Ionicons name="hourglass" size={16} color={colors.warning} />
       <View style={styles.bannerTextWrap}>
-        <Text style={styles.bannerTitle}>Match request sent</Text>
-        {/* The viewer SENT the request — they have not accepted anything yet. */}
-        <Text style={styles.bannerBody}>
-          Waiting for {participantName.split(" ")[0]} to accept.
-        </Text>
+        {/* The viewer SENT the request — they have not accepted anything yet.
+            One line, = web: "Match request sent. Waiting for {first} to accept." */}
+        <Text style={styles.bannerLine}>{matchWaitingBody(participantName)}</Text>
       </View>
     </View>
   ) : isDeclined || wasUnmatched ? (
     <View style={[styles.banner, styles.bannerMuted]}>
       <View style={styles.bannerTextWrap}>
-        <Text style={styles.bannerTitle}>
-          {isDeclined ? "Match declined" : "Conversation closed"}
-        </Text>
-        <Text style={styles.bannerBody}>Send a new match request to reopen.</Text>
+        {/* After an unmatch the chat is open and the composer live, so it is not
+            "closed" (flow-18 bug 19). Same words as web ChatMatchPrompt. */}
+        <Text style={styles.bannerLine}>{isDeclined ? MATCH_DECLINED_BODY : MATCH_UNMATCHED_BODY}</Text>
       </View>
       <View style={styles.bannerActions}>
         <Pressable
@@ -114,9 +126,9 @@ export function MatchStateBanner({
         <Text style={[styles.bannerTitle, { color: colors.danger }]}>
           Conversation blocked
         </Text>
-        <Text style={styles.bannerBody}>
-          You blocked this user. Open the actions menu to unblock.
-        </Text>
+        {/* The person who was blocked can't unblock, so they get a neutral line
+            (flow-18 bug 3). */}
+        <Text style={styles.bannerBody}>{blockedBannerBody(canUnblock, participantName)}</Text>
       </View>
     </View>
   ) : null;
@@ -148,6 +160,8 @@ const styles = StyleSheet.create({
   bannerTextWrap: { flex: 1 },
   bannerTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
   bannerBody: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
+  // A one-sentence banner (no title), as web's ChatMatchPrompt.
+  bannerLine: { color: colors.text, fontSize: 13, fontWeight: "600" },
   bannerActions: { flexDirection: "row", gap: 6 },
   bannerButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   // Orange CTA, not green: `safe` is the app's STATUS colour ("Matched",

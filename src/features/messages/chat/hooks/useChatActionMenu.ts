@@ -2,16 +2,20 @@ import { useCallback, useState } from "react";
 
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { type UseActiveDealResult } from "@/hooks/api/useActiveDeal";
+import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { type UseMyConversationsResult } from "@/hooks/api/useMyConversations";
 import { useModalHandoff } from "@/hooks/useModalHandoff";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import { ApiClientError, getErrorMessage, messagesApi, type Conversation } from "@/services/api";
 
 import { type ChatNav, type SetChatModalError } from "../chatTypes";
+import { reportErrorText, reportResultToast } from "../lib/chatModerationRules";
 
 interface UseChatActionMenuInput {
   conversationId: string | null;
   conversation: Conversation | null;
+  /** Shown in the block / unblock toasts ("{name} blocked"). */
+  participantName: string;
   activeDeal: UseActiveDealResult["activeDeal"];
   matchableDeal: UseActiveDealResult["activeDeal"];
   navigation: ChatNav;
@@ -28,6 +32,7 @@ interface UseChatActionMenuInput {
 export function useChatActionMenu({
   conversationId,
   conversation,
+  participantName,
   activeDeal,
   matchableDeal,
   navigation,
@@ -47,15 +52,20 @@ export function useChatActionMenu({
   const [reportUserPending, setReportUserPending] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [unblockPending, setUnblockPending] = useState(false);
-  // Two destructive-confirm states reuse one ConfirmActionModal — `null` when
-  // closed, "block" or "unmatch" when open. Mirrors web's `confirmAction`
-  // pattern in `ChatActionDropdown.tsx:46`.
-  const [confirmAction, setConfirmAction] = useState<"block" | "unmatch" | null>(null);
+  // The confirm states reuse one ConfirmActionModal — `null` when closed,
+  // "block", "unblock" or "unmatch" when open. Mirrors web's `confirmAction`
+  // pattern in `ChatActionDropdown.tsx`. Unblock is confirmed too, as on web and
+  // on the profile menu (flow-18 bug 7).
+  const [confirmAction, setConfirmAction] = useState<"block" | "unblock" | "unmatch" | null>(null);
+  // A chat block is the same app-wide block as the profile one: search and the
+  // listings must hide (or show again) the person at once, not when the cached
+  // list goes stale (flow-18 bug 6).
+  const { refetch: refetchBlocks } = useBlockedUsers();
   const [confirmPending, setConfirmPending] = useState(false);
 
   // Both block and unmatch open the same shared ConfirmActionModal — the
   // `confirmAction` slot decides title/body/icon. Web does the same with one
-  // Dialog + a "block" | "unmatch" enum (ChatActionDropdown.tsx:46-72).
+  // Dialog + a "block" | "unblock" | "unmatch" enum (ChatActionDropdown.tsx).
   const handleUnmatch = useCallback(() => {
     if (!conversationId) return;
     afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("unmatch"));
@@ -70,10 +80,19 @@ export function useChatActionMenu({
     if (!conversationId || !confirmAction) return;
     setConfirmPending(true);
     setModalError(null);
+    if (confirmAction === "unblock") setUnblockPending(true);
     try {
       if (confirmAction === "block") {
         await messagesApi.blockUser(conversationId);
-        showToast({ title: "Blocked", variant: "info" });
+        showToast({ title: `${participantName} blocked`, variant: "info" });
+        void refetchBlocks();
+      } else if (confirmAction === "unblock") {
+        // The block really is gone, so say so. When the other person still blocks,
+        // the server answers still_blocked and the refetch below keeps the chat
+        // closed. No reason is given: the server deliberately announces nothing.
+        await messagesApi.unblockUser(conversationId);
+        showToast({ title: `${participantName} unblocked`, variant: "info" });
+        void refetchBlocks();
       } else {
         // End the delivery on screen, not whichever one the server would have picked.
         // ⚠️ activeDeal, NOT matchableDeal: Unmatch is only offered once the deal is
@@ -127,34 +146,26 @@ export function useChatActionMenu({
         return;
       }
 
-      setModalError({ modal: "confirm", message: getErrorMessage(err) });
-    } finally {
-      setConfirmPending(false);
-    }
-  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal,
-      setModalError, activeDeal?.carrier_request_id, matchableDeal?.carrier_request_id]);
-
-  // The sheet stays open on a spinner until the call answers: it used to close at
-  // once and the chat sat blocked with no sign anything was happening (27 Oct 2026).
-  const handleUnblock = useCallback(async () => {
-    if (!conversationId || unblockPending) return;
-    setUnblockPending(true);
-    try {
-      await messagesApi.unblockUser(conversationId);
-      setActionMenuOpen(false);
-      showToast({ title: "Unblocked", variant: "info" });
-      await refetchConversations();
-    } catch (err) {
-      void refetchConversations();
-      showToast({
-        title: "Couldn't unblock",
-        message: getErrorMessage(err),
-        variant: "error",
+      setModalError({
+        modal: "confirm",
+        message: confirmAction === "unblock" ? `Couldn't unblock. ${getErrorMessage(err)}` : getErrorMessage(err),
       });
     } finally {
+      setConfirmPending(false);
       setUnblockPending(false);
     }
-  }, [conversationId, refetchConversations, unblockPending]);
+  }, [conversationId, confirmAction, refetchConversations, refetchActiveDeal, navigation, afterChildModal,
+      setModalError, activeDeal?.carrier_request_id, matchableDeal?.carrier_request_id, participantName,
+      refetchBlocks]);
+
+  // Unblock asks first (same words as the profile menu and web). The confirm
+  // button stays on a spinner until the call answers and the chat has the new
+  // state - it used to close at once and the chat sat blocked with no sign
+  // anything was happening (27 Oct 2026).
+  const handleUnblock = useCallback(() => {
+    if (!conversationId || unblockPending) return;
+    afterActionMenu(() => setActionMenuOpen(false), () => setConfirmAction("unblock"));
+  }, [conversationId, unblockPending, afterActionMenu]);
 
   // ───────── Header action-menu handlers (web parity) ─────────
   const isArchived = conversation?.archived === true;
@@ -174,7 +185,11 @@ export function useChatActionMenu({
       setActionMenuOpen(false);
       void refetchConversations();
     } catch (err) {
-      showToast({ title: "Couldn't update", message: getErrorMessage(err), variant: "error" });
+      showToast({
+        title: isArchived ? "Couldn't unarchive" : "Couldn't archive",
+        message: getErrorMessage(err),
+        variant: "error",
+      });
     } finally {
       setArchivePending(false);
     }
@@ -197,15 +212,13 @@ export function useChatActionMenu({
       setReportUserPending(true);
       setModalError(null);
       try {
-        await messagesApi.reportMessage(conversationId, reason, details);
+        const res = await messagesApi.reportMessage(conversationId, reason, details);
         setReportUserOpen(false);
-        showToast({
-          title: "Reported",
-          message: "Thank you for keeping the community safe.",
-          variant: "success",
-        });
+        // A repeat report is not a new one (flow-18 bug 1): same words as the profile menu.
+        showToast(reportResultToast(res.data?.duplicate));
       } catch (err) {
-        setModalError({ modal: "reportUser", message: getErrorMessage(err) });
+        // The sheet stays open with the typed text; a rate limit shows the server's sentence.
+        setModalError({ modal: "reportUser", message: reportErrorText(err, (e) => getErrorMessage(e)) });
       } finally {
         setReportUserPending(false);
       }

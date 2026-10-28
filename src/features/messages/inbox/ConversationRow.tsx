@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
@@ -60,7 +60,7 @@ export const ConversationRow = memo(function ConversationRow({
         : styles.ringDefault;
 
   // The row is a plain View with a full-bleed press target BEHIND its content,
-  // so the tail actions (Accept / Close / Match again / Unarchive) are siblings
+  // so the tail actions (Accept / Decline / Match again / Unarchive) are siblings
   // rather than children of it.
   //
   // They used to be nested. On react-native-web an accessibilityRole="button"
@@ -132,64 +132,76 @@ export const ConversationRow = memo(function ConversationRow({
         </View>
         {/*
          * Tail action precedence (web parity):
-         *   1. Awaiting-mine → Accept (green) + Close (outline)
-         *   2. Declined or Unmatched → "Match again" (green)
-         *   3. Has unread → numeric badge (capped at "9+")
-         *   4. Otherwise → time only (already rendered above)
+         *   1. Archived view → Unarchive
+         *   2. Awaiting-mine → Accept (orange) + Decline (outline)
+         *   3. Declined or Unmatched → "Match again"
+         * The unread pill (capped at "9+") ALWAYS shows when the chat has unread
+         * messages - beside the action, never in its place. Hiding it on archived,
+         * declined, unmatched and awaiting rows left the badge counting messages no
+         * row showed (flow-18 bug 11; the server sends archived rows' counts on purpose).
          */}
-        {onUnarchive ? (
-          <Pressable
-            onPress={() => onUnarchive(conversation)}
-            disabled={unarchiving}
-            style={[styles.actionButton, styles.unarchiveButton]}
-            accessibilityRole="button"
-            accessibilityLabel="Unarchive chat"
-            hitSlop={4}
-          >
-            <Ionicons name="arrow-undo-outline" size={12} color={colors.primary} />
-            <Text style={styles.unarchiveButtonText}>{unarchiving ? "…" : "Unarchive"}</Text>
-          </Pressable>
-        ) : flags.awaitingMine ? (
-          <View style={styles.actionsRow}>
+        <View style={styles.actionsRow} pointerEvents="box-none">
+          {onUnarchive ? (
             <Pressable
-              onPress={() => onAccept(conversation)}
+              onPress={() => onUnarchive(conversation)}
+              disabled={unarchiving}
+              style={[styles.actionButton, styles.unarchiveButton, unarchiving && styles.actionBusy]}
+              accessibilityRole="button"
+              accessibilityLabel="Unarchive chat"
+              accessibilityState={{ busy: !!unarchiving, disabled: !!unarchiving }}
+              hitSlop={4}
+            >
+              {unarchiving ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="arrow-undo-outline" size={12} color={colors.primary} />
+              )}
+              <Text style={styles.unarchiveButtonText}>Unarchive</Text>
+            </Pressable>
+          ) : flags.awaitingMine ? (
+            <>
+              <Pressable
+                onPress={() => onAccept(conversation)}
+                disabled={mutating}
+                style={[styles.actionButton, styles.acceptButton]}
+                accessibilityRole="button"
+                accessibilityLabel="Accept match request"
+                hitSlop={4}
+              >
+                <Text style={styles.acceptButtonText}>Accept</Text>
+              </Pressable>
+              {/* "Decline", as on web and in the dialog it opens (flow-18 bug 18). */}
+              <Pressable
+                onPress={() => onDecline(conversation)}
+                disabled={mutating}
+                style={[styles.actionButton, styles.declineButton]}
+                accessibilityRole="button"
+                accessibilityLabel="Decline match"
+                hitSlop={4}
+              >
+                <Text style={styles.declineButtonText}>Decline</Text>
+              </Pressable>
+            </>
+          ) : flags.isDeclined || flags.wasUnmatched ? (
+            <Pressable
+              onPress={() => onMatchAgain(conversation)}
               disabled={mutating}
               style={[styles.actionButton, styles.acceptButton]}
               accessibilityRole="button"
-              accessibilityLabel="Accept match request"
+              accessibilityLabel="Match again"
               hitSlop={4}
             >
-              <Text style={styles.acceptButtonText}>Accept</Text>
+              <Text style={styles.acceptButtonText}>Match again</Text>
             </Pressable>
-            <Pressable
-              onPress={() => onDecline(conversation)}
-              disabled={mutating}
-              style={[styles.actionButton, styles.declineButton]}
-              accessibilityRole="button"
-              accessibilityLabel="Close match request"
-              hitSlop={4}
-            >
-              <Text style={styles.declineButtonText}>Close</Text>
-            </Pressable>
-          </View>
-        ) : flags.isDeclined || flags.wasUnmatched ? (
-          <Pressable
-            onPress={() => onMatchAgain(conversation)}
-            disabled={mutating}
-            style={[styles.actionButton, styles.acceptButton]}
-            accessibilityRole="button"
-            accessibilityLabel="Match again"
-            hitSlop={4}
-          >
-            <Text style={styles.acceptButtonText}>Match again</Text>
-          </Pressable>
-        ) : flags.hasUnread ? (
-          <View style={styles.unreadCountBadge} pointerEvents="none">
-            <Text style={styles.unreadCountText}>
-              {conversation.unread_count > 9 ? "9+" : conversation.unread_count}
-            </Text>
-          </View>
-        ) : null}
+          ) : null}
+          {flags.hasUnread ? (
+            <View style={styles.unreadCountBadge} pointerEvents="none">
+              <Text style={styles.unreadCountText}>
+                {conversation.unread_count > 9 ? "9+" : conversation.unread_count}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -267,7 +279,8 @@ const styles = StyleSheet.create({
   tail: { alignItems: "flex-end", gap: 6 },
   timeText: { color: colors.mutedText, fontSize: 11, fontWeight: "500" },
   timeUnread: { color: colors.primary, fontWeight: "800" },
-  actionsRow: { flexDirection: "row", gap: 6 },
+  actionsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionBusy: { opacity: 0.6 },
   actionButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   // Orange CTA (web parity: the inbox row's accept dot and the pinned match
   // prompt both use it). `safe` stays the STATUS colour — the "Matched" pill
@@ -291,7 +304,7 @@ const styles = StyleSheet.create({
   },
   unarchiveButtonText: { color: colors.primary, fontSize: 11, fontWeight: "800" },
 
-  // Tail-side unread count badge (shown when there's no other action button).
+  // Tail-side unread count badge (beside any action button).
   unreadCountBadge: {
     minWidth: 22,
     height: 22,

@@ -28,6 +28,8 @@ export interface Conversation {
   declined_at: string | null;
   declined_by: string | null;
   decline_reason: string | null;
+  /** Who blocked the thread (null on legacy blocks). Only they may unblock. */
+  blocked_by?: string | null;
   /** Whether the current user has archived this conversation (per-user). */
   archived?: boolean;
   participant?: {
@@ -510,7 +512,7 @@ export const messagesApi = {
     api.post<{ ok: boolean; unread_count: number }>(`/message-handler/conversations/${conversationId}/mark-read`),
 
   reportMessage: (messageId: string, reason: string, details?: string) =>
-    api.post<{ report_id: string }>(`/message-handler/${messageId}/report`, { reason, details }),
+    api.post<{ report_id: string; duplicate?: boolean }>(`/message-handler/${messageId}/report`, { reason, details }),
 
   /** Request or confirm a match for ONE delivery. Naming the listings is what keeps a
    *  pair with several deliveries in common unambiguous; omit them and the server
@@ -531,7 +533,7 @@ export const messagesApi = {
     api.post<{ blocked: boolean }>(`/message-handler/conversations/${conversationId}/block`),
 
   unblockUser: (conversationId: string) =>
-    api.delete<{ unblocked: boolean }>(`/message-handler/conversations/${conversationId}/block`),
+    api.delete<{ unblocked: boolean; already?: boolean; still_blocked?: boolean }>(`/message-handler/conversations/${conversationId}/block`),
 
   /** End ONE deal (revert matched -> pending). Name it when the thread has more than
    *  one, or the server refuses rather than ending the wrong delivery. */

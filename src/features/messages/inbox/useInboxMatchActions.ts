@@ -5,6 +5,7 @@ import { showToast } from "@/feedback/appFeedback";
 import { type UseMyConversationsResult } from "@/hooks/api/useMyConversations";
 import { getErrorMessage, type Conversation } from "@/services/api";
 
+import { matchResultToast } from "../chat/lib/chatModerationRules";
 import { getRoleForConversation } from "./inboxHelpers";
 
 /** Accept / decline a match request straight from an inbox row. */
@@ -40,9 +41,9 @@ export function useInboxMatchActions({
       const theyAskedFirst = !!acceptTarget.matched_by && acceptTarget.matched_by !== user?.id;
       await acceptMatch(acceptTarget.id);
       setAcceptTarget(null);
+      // Web's words: "Match confirmed!" / "Match request sent — waiting for them to accept."
       showToast({
-        title: theyAskedFirst ? "Matched" : "Match request sent",
-        message: theyAskedFirst ? undefined : "Waiting for them to accept.",
+        ...matchResultToast(theyAskedFirst, acceptTarget.context_type === "buddy"),
         variant: "success",
         duration: 1800,
       });

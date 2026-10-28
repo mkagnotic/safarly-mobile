@@ -59,7 +59,7 @@ export function ArchivedEmpty() {
         <Ionicons name="archive-outline" size={26} color={colors.primary} />
       </View>
       <Text style={styles.emptyTitle}>No archived chats</Text>
-      <Text style={styles.emptySubtitle}>Chats you archive will appear here.</Text>
+      <Text style={styles.emptySubtitle}>Chats you archive will show up here.</Text>
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
@@ -73,6 +73,8 @@ export function MessagesScreen() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+  // Drops a second tap that lands before the re-render disables the button.
+  const unarchiveInFlight = useRef(false);
 
   // The Buddies tab stays mounted (tabs never unmount), so the initial
   // useEffect refetch only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
@@ -91,6 +93,8 @@ export function MessagesScreen() {
 
   const handleUnarchive = useCallback(
     async (c: Conversation) => {
+      if (unarchiveInFlight.current) return;
+      unarchiveInFlight.current = true;
       setUnarchivingId(c.id);
       try {
         await messagesApi.unarchiveConversation(c.id);
@@ -100,6 +104,7 @@ export function MessagesScreen() {
       } catch (err) {
         showToast({ title: "Couldn't unarchive", message: getErrorMessage(err), variant: "error" });
       } finally {
+        unarchiveInFlight.current = false;
         setUnarchivingId(null);
       }
     },

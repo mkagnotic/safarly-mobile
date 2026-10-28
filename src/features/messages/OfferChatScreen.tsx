@@ -35,6 +35,8 @@ import { currencySymbol } from "@/utils/money";
 import { getBackTarget } from "./chat/chatHelpers";
 import { chatStyles } from "./chat/chatStyles";
 import { type ChatNav, type ChatRoute } from "./chat/chatTypes";
+import { appendWithinCap, canUnblockConversation } from "./chat/lib/chatModerationRules";
+import { MESSAGE_MAX_LENGTH } from "./chat/lib/chatSendRules";
 import { AttachSheet } from "./chat/components/AttachSheet";
 import { BubbleMenuSheet } from "./chat/components/BubbleMenuSheet";
 import { BuddyPin } from "./chat/components/BuddyPin";
@@ -114,6 +116,9 @@ export function OfferChatScreen() {
     matchStatus, matchableDeal, isBlocked, matchedByOther, matchedByMe, wasUnmatched, isDeclined,
     canSend, userRole, isMatched, matchBannerVisible,
   } = useChatMatchStatus({ conversation, conversationId, activeDeal, workflow, user });
+  // Only the person who blocked sees Unblock and "You blocked {name}" (flow-18 bug 3):
+  // the other side got the server's FORBIDDEN. Same rule as web matchState.ts.
+  const canUnblock = canUnblockConversation(isBlocked, conversation?.blocked_by, user?.id);
 
   const {
     messages, loading, loadingOlder, hasMore, error, uploading, refetch, loadOlder, send, retry,
@@ -233,7 +238,7 @@ export function OfferChatScreen() {
   const { emojiOpen, setEmojiOpen, setDraft } = composer;
   // Header kebab: conversation actions and the dialogs they open.
   const actionMenu = useChatActionMenu({
-    conversationId, conversation, activeDeal, matchableDeal, navigation, refetchConversations,
+    conversationId, conversation, participantName, activeDeal, matchableDeal, navigation, refetchConversations,
     refetchActiveDeal, afterChildModal, setModalError,
   });
   const { setActionMenuOpen, reportUserOpen, confirmAction } = actionMenu;
@@ -393,6 +398,7 @@ export function OfferChatScreen() {
           isDeclined={isDeclined}
           wasUnmatched={wasUnmatched}
           isBlocked={isBlocked}
+          canUnblock={canUnblock}
           matchBusy={matchBusy}
           matchPending={matchPending}
           decliningPending={decliningPending}
@@ -527,7 +533,9 @@ export function OfferChatScreen() {
         sheetInset={sheetInset}
         matchStatus={matchStatus}
         matchedByOther={matchedByOther}
+        matchedByMe={matchedByMe}
         isBlocked={isBlocked}
+        canUnblock={canUnblock}
         setMatchModalOpen={setMatchModalOpen}
         setDeclineOpen={setDeclineOpen}
       />
@@ -641,7 +649,9 @@ export function OfferChatScreen() {
       <EmojiPicker
         open={emojiOpen}
         onClose={() => setEmojiOpen(false)}
-        onEmojiSelected={(e) => setDraft((prev) => prev + e.emoji)}
+        // The emoji counts toward the 2,000 cap like any character: it goes in only
+        // if the whole emoji fits (flow-18 bug 15); the composer counter shows the cap.
+        onEmojiSelected={(e) => setDraft((prev) => appendWithinCap(prev, e.emoji, MESSAGE_MAX_LENGTH))}
       />
     </Screen>
   );

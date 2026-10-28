@@ -10,6 +10,7 @@ import { getErrorMessage, type RNUploadFile } from "@/services/api";
 import { notifyPermissionDenied } from "@/utils/permissionBanner";
 
 import { attachmentProblem, DOCUMENT_PICKER_TYPES, resolveAttachmentType } from "../lib/chatAttachments";
+import { capAtCodePoint } from "../lib/chatModerationRules";
 import { ChatSendError, MESSAGE_MAX_LENGTH, sendFailurePlan } from "../lib/chatSendRules";
 
 interface UseChatComposerInput {
@@ -182,8 +183,9 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
 
   const handleDraftChange = useCallback(
     (next: string) => {
-      // The input's maxLength stops typing; this also caps a paste / emoji insert.
-      setDraft(next.length > MESSAGE_MAX_LENGTH ? next.slice(0, MESSAGE_MAX_LENGTH) : next);
+      // The input's maxLength stops typing; this also caps a paste, at a code-point
+      // boundary so an emoji is never cut in half.
+      setDraft(capAtCodePoint(next, MESSAGE_MAX_LENGTH));
       if (next.length > 0) notifyTyping();
       else stopTyping();
     },

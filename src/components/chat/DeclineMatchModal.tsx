@@ -12,6 +12,7 @@ import {
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { KeyboardLift } from "@/components/ui/KeyboardLift";
+import { declineDialogCopy } from "@/features/messages/chat/lib/chatModerationRules";
 import { colors } from "@/theme/colors";
 
 interface DeclineMatchModalProps {
@@ -19,9 +20,8 @@ interface DeclineMatchModalProps {
   participantName: string;
   pending: boolean;
   /**
-   * `true` when the OTHER side requested the match — web phrases this case as
-   * "Close Match Request" since you're closing their request, not declining
-   * one you sent. Defaults to `false` (regular "Decline match" wording).
+   * `true` when the OTHER side requested the match ("Decline match request" /
+   * "Decline {name}'s match request?"). Defaults to `false` ("Decline match").
    */
   matchRequestFromOther?: boolean;
   /**
@@ -34,7 +34,10 @@ interface DeclineMatchModalProps {
 }
 
 /**
- * Mirrors web's `Decline Match` dialog (`ChatActionDropdown.tsx:248-279`):
+ * The one Decline dialog, = web `MatchAndDeclineModals.tsx`. One word for one
+ * action: the button that opens it says "Decline", so does its confirm, and the
+ * toast says "Match declined" (flow-18 bug 18). It stays open with the typed
+ * reason when the server refuses. Mirrors web:
  * a small confirmation surface with an optional reason that flows into
  * `messagesApi.declineConversation(id, reason)`.
  */
@@ -48,13 +51,8 @@ export function DeclineMatchModal({
   onConfirm,
 }: Readonly<DeclineMatchModalProps>) {
   const [reason, setReason] = useState("");
-  const title = matchRequestFromOther
-    ? `Close ${participantName}'s match request?`
-    : `Decline match with ${participantName}?`;
-  const body = matchRequestFromOther
-    ? "They'll see the request was closed. You can re-open later from the inbox."
-    : "You can optionally tell them why — or leave it blank.";
-  const confirmLabel = matchRequestFromOther ? "Close" : "Decline";
+  const { title, body } = declineDialogCopy(participantName, matchRequestFromOther);
+  const confirmLabel = "Decline";
 
   // Reset the input when the modal closes so reopening doesn't carry text over.
   useEffect(() => {

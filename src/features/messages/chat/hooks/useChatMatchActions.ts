@@ -13,6 +13,7 @@ import {
 } from "@/services/api";
 
 import { type ChatUser, type SetChatModalError } from "../chatTypes";
+import { matchResultToast } from "../lib/chatModerationRules";
 
 interface UseChatMatchActionsInput {
   conversationId: string | null;
@@ -74,9 +75,9 @@ export function useChatMatchActions({
         // press.
         await refetchActiveDeal();
         setMatchModalOpen(false);
+        // Web's words: "Match confirmed!" / "Match request sent — waiting for them to accept."
         showToast({
-          title: theyAskedFirst ? "Matched" : "Match request sent",
-          message: theyAskedFirst ? undefined : "Waiting for them to accept.",
+          ...matchResultToast(theyAskedFirst, conversation?.context_type === "buddy"),
           variant: "success",
           duration: 1800,
         });
@@ -105,7 +106,8 @@ export function useChatMatchActions({
     // busy state), so it is deliberately not a dependency.
 
   }, [conversationId, acceptMatch, refetchActiveDeal, conversation?.matched_by, user?.id,
-      matchableDeal?.parcel_id, matchableDeal?.trip_id, afterChildModal, matchModalOpen, setModalError]);
+      matchableDeal?.parcel_id, matchableDeal?.trip_id, afterChildModal, matchModalOpen, setModalError,
+      conversation?.context_type]);
 
   /** Retry the match naming the delivery the user picked. */
   const handlePickDeal = useCallback(async (candidate: MatchCandidate) => {
@@ -118,11 +120,17 @@ export function useChatMatchActions({
       });
       await refetchActiveDeal();
       setMatchCandidates(null);
-      showToast({ title: "Match sent", variant: "success", duration: 1800 });
+      // Picking the delivery is the same press as Accept, so the same phase-aware words.
+      showToast({
+        ...matchResultToast(!!conversation?.matched_by && conversation.matched_by !== user?.id, conversation?.context_type === "buddy"),
+        variant: "success",
+        duration: 1800,
+      });
     } catch (err) {
       setModalError({ modal: "dealPicker", message: getErrorMessage(err) });
     }
-  }, [conversationId, acceptMatch, refetchActiveDeal, setModalError]);
+  }, [conversationId, acceptMatch, refetchActiveDeal, setModalError, conversation?.matched_by,
+      conversation?.context_type, user?.id]);
 
   const handleDeclineConfirm = useCallback(
     async (reason: string) => {

@@ -7,6 +7,7 @@ import { useModalHandoff } from "@/hooks/useModalHandoff";
 import { getErrorMessage, messagesApi } from "@/services/api";
 
 import { type SetChatModalError } from "../chatTypes";
+import { reportErrorText, reportResultToast } from "../lib/chatModerationRules";
 
 // ───────── Bubble long-press: copy / report ─────────
 
@@ -61,15 +62,13 @@ export function useChatBubbleMenu({ setModalError }: { setModalError: SetChatMod
       setReportPending(true);
       setModalError(null);
       try {
-        await messagesApi.reportMessage(target.id, reason, details);
+        const res = await messagesApi.reportMessage(target.id, reason, details);
         setReportTarget(null);
-        showToast({
-          title: "Reported",
-          message: "Thank you for keeping the community safe.",
-          variant: "success",
-        });
+        // The server dedupes per person: a repeat says so (flow-18 bug 1).
+        showToast(reportResultToast(res.data?.duplicate));
       } catch (err) {
-        setModalError({ modal: "reportMessage", message: getErrorMessage(err) });
+        // A rate limit shows the server's sentence; the sheet keeps the typed text.
+        setModalError({ modal: "reportMessage", message: reportErrorText(err, (e) => getErrorMessage(e)) });
       } finally {
         setReportPending(false);
       }
