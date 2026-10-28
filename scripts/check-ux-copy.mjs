@@ -1470,8 +1470,8 @@ const CHECKS = [
     repo: "web",
     file: "supabase/functions/parcel-handler/index.ts",
     id: "parcel-list-carries-the-agreed-price",
-    why: "Plan AN12: My Travels showed the listing's asking price after a different amount was agreed. The list returns agreed_amount from the live booking (read in parallel, no extra round trip).",
-    must: ["agreed_amount: agreedByParcel.get(p.id) ?? null"],
+    why: "Plan AN12: My Travels showed the listing's asking price after a different amount was agreed. The list returns agreed_amount from the live booking (read in parallel, no extra round trip). 28 Oct 2026: a carrier sees only THEIR OWN booking's price and name, never a competing carrier's (parcelDealView).",
+    must: ["agreed_amount: deal.agreed_amount", "parcelDealView("],
     mustNot: [],
   },
   {
