@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { ANY_CITY } from "@/features/search/CityPicker";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
@@ -28,11 +27,13 @@ import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
 import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { useAuth } from "@/context/AuthContext";
+import { showToast } from "@/feedback/appFeedback";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
-import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
+import { EditParcelModal, type EditParcelFormValues, type EditParcelSubmitOptions } from "./EditParcelModal";
+import { parcelEditInitial, parcelEditPayload } from "./model/editParcelPayload";
 import { returnFormChanges, returnFormFromParcel } from "@/utils/addressOptions";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
@@ -261,80 +262,15 @@ export function ParcelDetailsScreen() {
   }, [editPending]);
 
   const handleEditSubmit = useCallback(
-    async (values: EditParcelFormValues) => {
+    async (values: EditParcelFormValues, options: EditParcelSubmitOptions) => {
       if (!parcelId || !parcel) return;
-      const data: Parameters<typeof parcelsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setNotice({ variant: "error", title: "Origin city required", message: "Select an origin city." });
-        return;
-      }
-      if (!values.to_city) {
-        setNotice({ variant: "error", title: "Destination city required", message: "Select a destination city." });
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = parcel.any_from ? "Any" : parcel.from_city;
-      const curToCity = parcel.any_to ? "Any" : parcel.to_city;
-      const curFromCountry = (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const weightNum = Number(values.weight_kg);
-      if (
-        values.weight_kg !== "" &&
-        Number.isFinite(weightNum) &&
-        weightNum !== parcel.weight_kg
-      ) {
-        data.weight_kg = weightNum;
-      }
-      if (values.description !== (parcel.description ?? "")) {
-        data.description = values.description;
-      }
-      if (values.category && values.category !== parcel.category) {
-        data.category = values.category;
-      }
-      const feeNum = Number(values.fee_offered);
-      if (
-        values.fee_offered !== "" &&
-        Number.isFinite(feeNum) &&
-        feeNum !== parcel.fee_offered
-      ) {
-        data.fee_offered = feeNum;
-      }
-      if (values.fee_currency !== parcel.fee_currency) {
-        data.fee_currency = values.fee_currency;
-      }
-
-      // Dates travel as a set. The handler's collapse logic keys off
-      // delivery_date_mode and does NOT default it on PUT, so sending a changed
-      // date without the mode can leave mode="single" with from != to.
-      const curFrom = parcel.delivery_by_from ?? parcel.delivery_by ?? "";
-      const curTo = parcel.delivery_by_to ?? parcel.delivery_by ?? "";
-      const curMode = parcel.delivery_date_mode === "range" ? "range" : "single";
-      if (
-        values.delivery_by_from !== curFrom ||
-        values.delivery_by_to !== curTo ||
-        values.delivery_date_mode !== curMode
-      ) {
-        data.delivery_date_mode = values.delivery_date_mode;
-        data.delivery_by_from = values.delivery_by_from;
-        data.delivery_by_to = values.delivery_by_to;
-        data.delivery_by = values.delivery_by_to;
-      }
-
-      // Online order / return block: only what changed (27 Oct 2026).
-      Object.assign(data, returnFormChanges(values.returnForm, parcel));
+      // Only what changed; the modal has validated (editParcelPayload.ts, shared with My Travels).
+      // This screen reads the owner's detail, so the return address is always loaded.
+      const data = parcelEditPayload(
+        values,
+        parcel,
+        options.includeReturn ? returnFormChanges(values.returnForm, parcel) : {},
+      );
 
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
@@ -347,16 +283,10 @@ export function ParcelDetailsScreen() {
         await parcelsApi.update(parcelId, data);
         await refetch();
         setEditOpen(false);
-        setNotice({
-          variant: "success",
-          title: "Parcel updated",
-          message: "Your changes are saved.",
-        });
+        // Same toast as My Travels (28 Oct 2026).
+        showToast({ title: "Parcel updated", variant: "success" });
       } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setEditError(message);
-        setNotice({ variant: "error", title: "Couldn't update parcel", message });
+        setEditError(err instanceof ApiClientError ? err.message : getErrorMessage(err as Error));
       } finally {
         setEditPending(false);
       }
@@ -434,23 +364,7 @@ export function ParcelDetailsScreen() {
     );
   }
 
-  const editInitial: EditParcelFormValues = {
-    from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
-    from_country: (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    to_city: parcel.any_to ? ANY_CITY : (parcel.to_city ?? ""),
-    to_country: (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    weight_kg: `${parcel.weight_kg ?? ""}`,
-    description: parcel.description ?? "",
-    category: (parcel.category as EditParcelFormValues["category"]) ?? "personal",
-    fee_offered: `${parcel.fee_offered ?? ""}`,
-    fee_currency: parcel.fee_currency === "INR" ? "INR" : "USD",
-    // Trust the persisted mode rather than re-deriving it from whether the two
-    // dates differ — that inference is exactly what delivery_date_mode replaced.
-    delivery_by_from: parcel.delivery_by_from ?? parcel.delivery_by ?? "",
-    delivery_by_to: parcel.delivery_by_to ?? parcel.delivery_by ?? "",
-    delivery_date_mode: parcel.delivery_date_mode === "range" ? "range" : "single",
-    returnForm: returnFormFromParcel(parcel),
-  };
+  const editInitial: EditParcelFormValues = parcelEditInitial(parcel, returnFormFromParcel(parcel));
 
   return (
     <Screen onRefresh={refetch}>

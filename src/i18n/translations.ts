@@ -107,7 +107,7 @@ const enUS: Dict = {
   "profile.fieldEmail": "Email",
   "profile.fieldPhone": "Phone",
   "profile.fieldBio": "Bio",
-  "profile.saveChanges": "Save Changes",
+  "profile.saveChanges": "Save changes",
   "profile.changePhoto": "Change profile photo",
   "kyc.verifiedTitle": "Verified",
   "kyc.verifiedBody": "Your identity has been verified. You can send and carry parcels.",

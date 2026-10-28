@@ -33,8 +33,6 @@ interface CalendarCell {
   inMonth: boolean;
 }
 
-type CalendarTarget = "from" | "to";
-
 function formatYmd(d: Date): string {
   const y = d.getFullYear();
   const m = `${d.getMonth() + 1}`.padStart(2, "0");
@@ -93,6 +91,8 @@ type FieldKey = "fromCity" | "toCity" | "departDate" | "capacity";
 
 /** Web parity (`CustomerListTrip.tsx` sameRouteMsg). */
 const SAME_ROUTE_MSG = "Arrival city must be different from departure";
+/** Same words as Edit parcel's weight (28 Oct 2026 edit canon). */
+const CAPACITY_OVER_MAX_MSG = `Exceeds the airline limit of ${MAX_WEIGHT_KG} kg per item.`;
 
 export interface EditTripFormValues {
   /** `ANY_CITY` sentinel ⇒ "Any city" (any_from). */
@@ -100,12 +100,14 @@ export interface EditTripFormValues {
   from_country: Country;
   to_city: string;
   to_country: Country;
-  /** Departure date (= travel_date_from). `YYYY-MM-DD`. */
+  /**
+   * Travel date (= travel_date_from). `YYYY-MM-DD`. Single date only, as List
+   * trip and web (28 Oct 2026); callers send travel_date_to = the same day.
+   * No Notes either: List trip has no notes field (it writes notes itself), and
+   * an edit that doesn't send notes keeps them.
+   */
   travel_date_from: string;
-  /** Return date (= travel_date_to). Empty string ⇒ single date (same day). */
-  travel_date_to: string;
   luggage_capacity_kg: string;
-  notes: string;
   /** "Open to being a travel buddy" (27 Oct 2026). Callers send it only when changed. */
   open_to_buddy: boolean;
 }
@@ -118,6 +120,8 @@ interface EditTripModalProps {
   onSubmit: (values: EditTripFormValues) => void;
   /** The listing being edited: its optional owner files are managed here (26 Oct 2026). */
   listingId?: string;
+  /** The server's refusal of the last save (e.g. a booked trip), shown in the modal. */
+  serverError?: string | null;
 }
 
 export function EditTripModal({
@@ -127,10 +131,11 @@ export function EditTripModal({
   pending,
   onCancel,
   onSubmit,
+  serverError = null,
 }: Readonly<EditTripModalProps>) {
   const [form, setForm] = useState<EditTripFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
-  const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const initialDate = parseYmd(initial.travel_date_from) ?? new Date();
     return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
@@ -160,31 +165,17 @@ export function EditTripModal({
   }, [today]);
 
   const selectedFrom = useMemo(() => parseYmd(form.travel_date_from), [form.travel_date_from]);
-  const selectedTo = useMemo(() => parseYmd(form.travel_date_to), [form.travel_date_to]);
 
-  const openCalendar = (target: CalendarTarget) => {
-    const seed =
-      target === "from"
-        ? parseYmd(form.travel_date_from) ?? new Date()
-        : parseYmd(form.travel_date_to) ?? parseYmd(form.travel_date_from) ?? new Date();
+  const openCalendar = () => {
+    const seed = parseYmd(form.travel_date_from) ?? new Date();
     setVisibleMonth(new Date(seed.getFullYear(), seed.getMonth(), 1));
-    setCalendarTarget(target);
+    setCalendarOpen(true);
   };
 
   const handleSelectDate = (d: Date) => {
-    if (!calendarTarget) return;
-    const ymd = formatYmd(d);
-    setForm((prev) => {
-      if (calendarTarget === "from") {
-        // A "to" earlier than the new "from" no longer makes sense — clear it.
-        const next = { ...prev, travel_date_from: ymd };
-        const prevTo = parseYmd(prev.travel_date_to);
-        if (prevTo && prevTo < d) next.travel_date_to = "";
-        return next;
-      }
-      return { ...prev, travel_date_to: ymd };
-    });
-    setCalendarTarget(null);
+    setForm((prev) => ({ ...prev, travel_date_from: formatYmd(d) }));
+    clearError("departDate");
+    setCalendarOpen(false);
   };
 
   /**
@@ -203,13 +194,13 @@ export function EditTripModal({
     }
     // Presence only, matching web: an already-persisted past date must stay
     // saveable, and the calendar already refuses to pick a new one.
-    if (!form.travel_date_from) next.departDate = "Pick a travel date";
+    if (!form.travel_date_from) next.departDate = "Pick your travel date";
 
     const capacity = Number(form.luggage_capacity_kg);
     if (form.luggage_capacity_kg.trim() === "" || !Number.isFinite(capacity) || capacity <= 0) {
       next.capacity = "Enter the capacity you can carry";
     } else if (capacity > MAX_WEIGHT_KG) {
-      next.capacity = `Must be ${MAX_WEIGHT_KG} kg or less`;
+      next.capacity = CAPACITY_OVER_MAX_MSG;
     }
 
     setErrors(next);
@@ -233,6 +224,10 @@ export function EditTripModal({
     form.to_city,
   );
   const toCityError = liveSameRoute ? SAME_ROUTE_MSG : errors.toCity;
+  /** Live over-max capacity, like the weight on Edit parcel. */
+  const liveCapacity = Number(form.luggage_capacity_kg);
+  const capacityError =
+    Number.isFinite(liveCapacity) && liveCapacity > MAX_WEIGHT_KG ? CAPACITY_OVER_MAX_MSG : errors.capacity;
 
   const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
   const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
@@ -254,10 +249,8 @@ export function EditTripModal({
       to_city: "",
     }));
 
-  const fromLabel = selectedFrom ? formatDateLabel(selectedFrom) : "Select date";
-  const toLabel = selectedTo ? formatDateLabel(selectedTo) : selectedFrom ? "Same day" : "Select date";
+  const fromLabel = selectedFrom ? formatDateLabel(selectedFrom) : "Pick a date";
   const calendarCells = buildCalendar(visibleMonth);
-  const calendarMin = calendarTarget === "to" && selectedFrom ? selectedFrom : today;
 
   return (
     <Modal
@@ -349,49 +342,27 @@ export function EditTripModal({
               {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
             </View>
 
-            <View style={styles.dateRow}>
-              <View style={[styles.field, styles.dateField]}>
-                <Text style={styles.fieldLabel}>Depart</Text>
-                <Pressable
-                  onPress={() => openCalendar("from")}
-                  style={styles.input}
-                  accessibilityRole="button"
-                  accessibilityLabel="Pick depart date"
-                  disabled={pending}
+            {/* Single travel date, as List trip and web (28 Oct 2026: "Return" removed). */}
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Travel date</Text>
+              <Pressable
+                onPress={openCalendar}
+                style={[styles.input, !!errors.departDate && styles.inputError]}
+                accessibilityRole="button"
+                accessibilityLabel="Pick travel date"
+                disabled={pending}
+              >
+                <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
+                <Text
+                  style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
+                  numberOfLines={1}
                 >
-                  <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-                  <Text
-                    style={[styles.inputText, !selectedFrom && styles.inputPlaceholder]}
-                    numberOfLines={1}
-                  >
-                    {fromLabel}
-                  </Text>
-                </Pressable>
-                {errors.departDate ? (
-                  <Text style={styles.inlineError}>{errors.departDate}</Text>
-                ) : null}
-              </View>
-
-              <View style={[styles.field, styles.dateField]}>
-                <Text style={styles.fieldLabel}>
-                  Return <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  {fromLabel}
                 </Text>
-                <Pressable
-                  onPress={() => openCalendar("to")}
-                  style={styles.input}
-                  accessibilityRole="button"
-                  accessibilityLabel="Pick return date"
-                  disabled={pending}
-                >
-                  <Ionicons name="calendar-outline" size={16} color={colors.wordmark} />
-                  <Text
-                    style={[styles.inputText, !selectedTo && styles.inputPlaceholder]}
-                    numberOfLines={1}
-                  >
-                    {toLabel}
-                  </Text>
-                </Pressable>
-              </View>
+              </Pressable>
+              {errors.departDate ? (
+                <Text style={styles.inlineError}>{errors.departDate}</Text>
+              ) : null}
             </View>
 
             <View style={styles.field}>
@@ -406,27 +377,10 @@ export function EditTripModal({
                 keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor={colors.placeholderText}
-                style={[styles.textInput, !!errors.capacity && styles.inputError]}
+                style={[styles.textInput, !!capacityError && styles.inputError]}
                 editable={!pending}
               />
-              {errors.capacity ? <Text style={styles.inlineError}>{errors.capacity}</Text> : null}
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                Notes <Text style={styles.fieldLabelMuted}>(Optional)</Text>
-              </Text>
-              <TextInput
-                value={form.notes}
-                onChangeText={(t) => setForm((prev) => ({ ...prev, notes: t }))}
-                placeholder="Any notes for carriers…"
-                placeholderTextColor={colors.subtleText}
-                style={[styles.textInput, styles.multiline]}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-                editable={!pending}
-              />
+              {capacityError ? <Text style={styles.inlineError}>{capacityError}</Text> : null}
             </View>
 
             {/* Same toggle as List Trip (27 Oct 2026): off retires the buddy listing, on creates one. */}
@@ -447,10 +401,20 @@ export function EditTripModal({
                 {!form.open_to_buddy && initial.open_to_buddy ? OPEN_BUDDY_OFF_HELPER : OPEN_BUDDY_HELPER}
               </Text>
             </View>
-            </ScrollView>
 
+            {/* Last field inside the scroll, as web (28 Oct 2026): pinned outside it ate the
+                form's room on small phones. */}
             {listingId ? (
               <ListingFilesField kind="trip" listingId={listingId} label="Travel document" hint="ticket, boarding pass or ID page (PDF or photos)" />
+            ) : null}
+            </ScrollView>
+
+            {/* The server's refusal (e.g. a booked trip's locked route), in the modal itself:
+                the screen behind can't be seen while it is open (28 Oct 2026). */}
+            {serverError ? (
+              <Text style={styles.formError} accessibilityLiveRegion="polite">
+                {serverError}
+              </Text>
             ) : null}
 
             <View style={styles.footer}>
@@ -476,14 +440,14 @@ export function EditTripModal({
         </View>
       </KeyboardLift>
 
-      {/* Calendar sub-modal — shared between Depart + Return */}
+      {/* Calendar sub-modal for the travel date */}
       <Modal
-        visible={calendarTarget !== null}
+        visible={calendarOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setCalendarTarget(null)}
+        onRequestClose={() => setCalendarOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setCalendarTarget(null)} />
+        <Pressable style={styles.backdrop} onPress={() => setCalendarOpen(false)} />
         <View style={styles.calendarCenter} pointerEvents="box-none">
           <View style={styles.calendarSheet}>
             <View style={styles.calendarHeaderRow}>
@@ -522,13 +486,10 @@ export function EditTripModal({
             </View>
             <View style={styles.grid}>
               {calendarCells.map((cell, i) => {
-                const isPast = cell.date < calendarMin;
+                const isPast = cell.date < today;
                 const isFuture = cell.date > maxDate;
                 const disabled = isPast || isFuture;
-                const isSelected =
-                  calendarTarget === "from"
-                    ? sameDate(selectedFrom, cell.date)
-                    : sameDate(selectedTo, cell.date);
+                const isSelected = sameDate(selectedFrom, cell.date);
                 return (
                   <Pressable
                     key={i}
@@ -594,10 +555,7 @@ const styles = StyleSheet.create({
   scrollContent: { gap: 16 },
 
   field: { gap: 8 },
-  dateRow: { flexDirection: "row", gap: 12 },
-  dateField: { flex: 1 },
   fieldLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  fieldLabelMuted: { color: colors.subtleText, fontWeight: "500" },
   buddyToggleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   buddyToggleLabel: { flex: 1, minWidth: 0 },
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
@@ -625,7 +583,6 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "ios" ? 12 : 10,
     fontSize: 15,
   },
-  multiline: { minHeight: 88, paddingTop: 12, textAlignVertical: "top" },
   inputError: { borderColor: colors.danger, backgroundColor: "rgba(220, 40, 40, 0.06)" },
   inlineError: {
     color: colors.danger,
@@ -633,6 +590,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: "600",
   },
+  formError: { color: colors.danger, fontSize: 13, lineHeight: 18, fontWeight: "600" },
 
   footer: {
     flexDirection: "row",

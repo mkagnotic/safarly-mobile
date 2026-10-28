@@ -1,14 +1,17 @@
 import { useCallback, useState } from "react";
 
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
-import { ANY_CITY } from "@/features/search/CityPicker";
+import { buddyEditPayload } from "@/features/buddies/editBuddyPayload";
 import type { EditBuddyListingFormValues } from "@/features/buddies/EditBuddyListingModal";
 import type { RateBuddyValues } from "@/features/buddies/RateBuddyModal";
-import type { EditParcelFormValues } from "@/features/parcels/EditParcelModal";
+import type { EditParcelFormValues, EditParcelSubmitOptions } from "@/features/parcels/EditParcelModal";
+import { parcelEditPayload } from "@/features/parcels/model/editParcelPayload";
 import { returnFormChanges } from "@/utils/addressOptions";
 import type { MatchesSource } from "@/features/travels/MatchesModal";
 import type { EditTripFormValues } from "@/features/trips/EditTripModal";
+import { tripEditPayload } from "@/features/trips/model/editTripPayload";
 import { editTripBuddyMessage } from "@/features/trips/model/openBuddy";
+import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import {
   buddiesApi,
   getErrorMessage,
@@ -64,12 +67,15 @@ export function useMyTravelsActions({
   const [formError, setFormError] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [editPending, setEditPending] = useState(false);
+  // Edit refusals show inside the open modal, not behind it (28 Oct 2026).
+  const [editTripError, setEditTripError] = useState<string | null>(null);
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
   const [editParcelPending, setEditParcelPending] = useState(false);
   // The server's refusal of an edit, shown inside the modal (27 Oct 2026).
   const [editParcelError, setEditParcelError] = useState<string | null>(null);
   const [editingBuddy, setEditingBuddy] = useState<BuddyListing | null>(null);
   const [editBuddyPending, setEditBuddyPending] = useState(false);
+  const [editBuddyError, setEditBuddyError] = useState<string | null>(null);
   const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
   const [ratePending, setRatePending] = useState(false);
   const [matchSource, setMatchSource] = useState<MatchesSource | null>(null);
@@ -156,6 +162,7 @@ export function useMyTravelsActions({
   );
   const handleEditBuddy = useCallback((listing: BuddyListing) => {
     setFormError(null);
+    setEditBuddyError(null);
     setEditingBuddy(listing);
   }, []);
   const handleEditBuddyCancel = useCallback(() => {
@@ -170,34 +177,18 @@ export function useMyTravelsActions({
     async (values: EditBuddyListingFormValues) => {
       if (!editingBuddy) return;
 
-      // The modal validates before calling this, so every field is present and
-      // in range by now. buddy-handler PUT is still a full upsert — anything
-      // omitted here gets nulled — so the payload must stay exhaustive.
-      const ymd = values.travel_date.trim();
-      const payload = {
-        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
-        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        // Single-date listing: buddy_listings has no date-mode column, so the
-        // "single" case is expressed as from === to.
-        travel_date: ymd,
-        travel_date_from: ymd,
-        travel_date_to: ymd,
-        airline: values.airline.trim(),
-        bio: values.bio.trim(),
-        age: values.age ? Number.parseInt(values.age, 10) : undefined,
-        languages: values.languages,
-        interests: values.interests.trim(),
-        layover: values.layover.trim(),
-      };
+      // Full upsert body, countries included (editBuddyPayload.ts).
+      const payload = buddyEditPayload(values);
 
       setEditBuddyPending(true);
+      setEditBuddyError(null);
       try {
         await buddiesApi.update(editingBuddy.id, payload);
         await partners.refetch();
         setEditingBuddy(null);
         showToast({ title: "Buddy listing updated", variant: "success" });
       } catch (err) {
-        setFormError(`Couldn't update listing. ${getErrorMessage(err)}`);
+        setEditBuddyError(getErrorMessage(err));
       } finally {
         setEditBuddyPending(false);
       }
@@ -214,81 +205,22 @@ export function useMyTravelsActions({
     if (!editParcelPending) setEditingParcel(null);
   }, [editParcelPending]);
 
+  // List rows carry neither currency_locked nor the private return address
+  // (street, postal code, order number): both come only on the owner's detail
+  // read, so Edit loads it, as web's EditParcelDialog does (28 Oct 2026).
+  const parcelDetail = useParcelDetail(editingParcel?.id);
+  const editParcelDetail =
+    editingParcel && parcelDetail.parcel?.id === editingParcel.id ? parcelDetail.parcel : null;
+
   const handleEditParcelSubmit = useCallback(
-    async (values: EditParcelFormValues) => {
+    async (values: EditParcelFormValues, options: EditParcelSubmitOptions) => {
       if (!editingParcel) return;
-      const data: Parameters<typeof parcelsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setFormError("Select an origin city to update this parcel.");
-        return;
-      }
-      if (!values.to_city) {
-        setFormError("Select a destination city to update this parcel.");
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = editingParcel.any_from ? "Any" : editingParcel.from_city;
-      const curToCity = editingParcel.any_to ? "Any" : editingParcel.to_city;
-      const curFromCountry = (editingParcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (editingParcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const weightNum = Number(values.weight_kg);
-      if (
-        values.weight_kg !== "" &&
-        Number.isFinite(weightNum) &&
-        weightNum !== editingParcel.weight_kg
-      ) {
-        data.weight_kg = weightNum;
-      }
-      if (values.description !== (editingParcel.description ?? "")) {
-        data.description = values.description;
-      }
-      if (values.category && values.category !== editingParcel.category) {
-        data.category = values.category;
-      }
-      const feeNum = Number(values.fee_offered);
-      if (
-        values.fee_offered !== "" &&
-        Number.isFinite(feeNum) &&
-        feeNum !== editingParcel.fee_offered
-      ) {
-        data.fee_offered = feeNum;
-      }
-      if (values.fee_currency !== editingParcel.fee_currency) {
-        data.fee_currency = values.fee_currency;
-      }
-
-      // Dates travel as a set — see ParcelDetailsScreen: the PUT handler does
-      // not default delivery_date_mode, so a date change without it can leave
-      // mode="single" with from != to.
-      const curFrom = editingParcel.delivery_by_from ?? editingParcel.delivery_by ?? "";
-      const curTo = editingParcel.delivery_by_to ?? editingParcel.delivery_by ?? "";
-      const curMode = editingParcel.delivery_date_mode === "range" ? "range" : "single";
-      if (
-        values.delivery_by_from !== curFrom ||
-        values.delivery_by_to !== curTo ||
-        values.delivery_date_mode !== curMode
-      ) {
-        data.delivery_date_mode = values.delivery_date_mode;
-        data.delivery_by_from = values.delivery_by_from;
-        data.delivery_by_to = values.delivery_by_to;
-        data.delivery_by = values.delivery_by_to;
-      }
-
-      // Online order / return block: only what changed (27 Oct 2026).
-      Object.assign(data, returnFormChanges(values.returnForm, editingParcel));
+      const stored = editParcelDetail ?? editingParcel;
+      const data = parcelEditPayload(
+        values,
+        stored,
+        options.includeReturn ? returnFormChanges(values.returnForm, stored) : {},
+      );
 
       if (Object.keys(data).length === 0) {
         setEditingParcel(null);
@@ -305,16 +237,16 @@ export function useMyTravelsActions({
         showToast({ title: "Parcel updated", variant: "success" });
       } catch (err) {
         setEditParcelError(getErrorMessage(err));
-        setFormError(`Couldn't update parcel. ${getErrorMessage(err)}`);
       } finally {
         setEditParcelPending(false);
       }
     },
-    [editingParcel, sendParcels, receiveParcels],
+    [editingParcel, editParcelDetail, sendParcels, receiveParcels],
   );
 
   const handleEditTrip = useCallback((trip: Trip) => {
     setFormError(null);
+    setEditTripError(null);
     setEditingTrip(trip);
   }, []);
 
@@ -325,60 +257,8 @@ export function useMyTravelsActions({
   const handleEditTripSubmit = useCallback(
     async (values: EditTripFormValues) => {
       if (!editingTrip) return;
-      const data: Parameters<typeof tripsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setFormError("Select a departure city to update this trip.");
-        return;
-      }
-      if (!values.to_city) {
-        setFormError("Select an arrival city to update this trip.");
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = editingTrip.any_from ? "Any" : editingTrip.from_city;
-      const curToCity = editingTrip.any_to ? "Any" : editingTrip.to_city;
-      const curFromCountry = (editingTrip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (editingTrip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const from = values.travel_date_from;
-      const to = values.travel_date_to || from; // empty Return ⇒ single date
-      if (
-        from &&
-        (from !== editingTrip.travel_date_from ||
-          to !== editingTrip.travel_date_to ||
-          from !== editingTrip.travel_date)
-      ) {
-        data.travel_date = from;
-        data.travel_date_from = from;
-        data.travel_date_to = to;
-      }
-      const capacityNum = Number(values.luggage_capacity_kg);
-      if (
-        values.luggage_capacity_kg !== "" &&
-        Number.isFinite(capacityNum) &&
-        capacityNum !== editingTrip.luggage_capacity_kg
-      ) {
-        data.luggage_capacity_kg = capacityNum;
-      }
-      if (values.notes !== (editingTrip.notes ?? "")) {
-        data.notes = values.notes;
-      }
-      // Sent only when changed (27 Oct 2026): off retires the buddy listing, on creates one.
-      if (values.open_to_buddy !== !!editingTrip.open_to_buddy) {
-        data.open_to_buddy = values.open_to_buddy;
-      }
+      // Only what changed; the modal has validated (editTripPayload.ts).
+      const data = tripEditPayload(values, editingTrip);
 
       if (Object.keys(data).length === 0) {
         setEditingTrip(null);
@@ -386,6 +266,7 @@ export function useMyTravelsActions({
       }
 
       setEditPending(true);
+      setEditTripError(null);
       try {
         const res = await tripsApi.update(editingTrip.id, data);
         const buddyMsg = editTripBuddyMessage(data.open_to_buddy, res?.data?.buddy_listing);
@@ -395,7 +276,7 @@ export function useMyTravelsActions({
         // The buddy note, when there is one, already says the trip saved.
         showToast(buddyMsg ? { title: buddyMsg.text, variant: buddyMsg.variant } : { title: "Trip updated", variant: "success" });
       } catch (err) {
-        setFormError(`Couldn't update trip. ${getErrorMessage(err)}`);
+        setEditTripError(getErrorMessage(err));
       } finally {
         setEditPending(false);
       }
@@ -587,11 +468,14 @@ export function useMyTravelsActions({
     setFormError,
     editingTrip,
     editPending,
+    editTripError,
     editingParcel,
     editParcelPending,
     editParcelError,
+    editParcelDetail,
     editingBuddy,
     editBuddyPending,
+    editBuddyError,
     ratingConn,
     ratePending,
     matchSource,

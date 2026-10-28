@@ -60,7 +60,7 @@ export const MAX_AGE = 120;
 
 /** Web parity (`CustomerCreateBuddy.tsx` sameRouteMsg). */
 export const SAME_ROUTE_MESSAGE = "Destination must be different from departure";
-export const AGE_RANGE_MESSAGE = `Age must be between ${MIN_AGE} and ${MAX_AGE}`;
+export const AGE_RANGE_MESSAGE = `Age must be between ${MIN_AGE} and ${MAX_AGE}.`;
 
 /** Re-exported so buddy callers keep a single import; the rule is shared. */
 export { isSameRoute };

@@ -16,6 +16,9 @@ export interface BuddyListing {
   user_id: string;
   from_city: string;
   to_city: string;
+  /** "IN" / "US" (20260909120000). The only country an "Any" city has. */
+  from_country?: string | null;
+  to_country?: string | null;
   travel_date: string;
   travel_date_from?: string | null;
   travel_date_to?: string | null;
@@ -81,6 +84,9 @@ export interface BuddyMatch {
 export interface BuddyListingInput {
   from_city: string;
   to_city: string;
+  /** Sent on edit (28 Oct 2026): the server otherwise infers it from the city. */
+  from_country?: string;
+  to_country?: string;
   travel_date: string;
   travel_date_from?: string;
   travel_date_to?: string;

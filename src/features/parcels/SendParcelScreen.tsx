@@ -740,8 +740,8 @@ export function SendParcelScreen() {
           <SectionCard>
             <DateModeToggle<DateMode>
               options={[
-                { value: "single", label: "Single Date" },
-                { value: "range", label: "Date Range" },
+                { value: "single", label: "Single date" },
+                { value: "range", label: "Date range" },
               ]}
               value={dateMode}
               onChange={(next) => {

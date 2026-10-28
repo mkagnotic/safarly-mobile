@@ -243,15 +243,28 @@ export interface StoredReturnFields {
   return_reference?: string | null;
 }
 
+/**
+ * Older rows may hold a state's name rather than its code; map it back so the
+ * picker shows it and validation passes. Same as web's EditParcelDialog
+ * stateCodeOf (28 Oct 2026).
+ */
+export function stateCodeOf(country: string, value?: string | null): string {
+  const v = (value ?? "").trim();
+  if (!v) return "";
+  const hit = statesFor(country).find((s) => s.value === v || s.label.toLowerCase() === v.toLowerCase());
+  return hit?.value ?? v;
+}
+
 export function returnFormFromParcel(p: StoredReturnFields): ReturnFormValues {
+  const country = countryCode(p.return_country);
   return {
     isOnlineOrder: !!p.is_online_order,
     returnEligible: !!p.is_online_order && !!p.return_eligible,
     line1: p.return_address_line1 ?? "",
     city: p.return_city ?? "",
-    state: p.return_state ?? "",
+    state: stateCodeOf(country, p.return_state),
     postal: p.return_postal_code ?? "",
-    country: countryCode(p.return_country),
+    country,
     reference: p.return_reference ?? "",
   };
 }

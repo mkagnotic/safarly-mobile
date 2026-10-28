@@ -12,8 +12,9 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { ANY_CITY } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
+import { showToast } from "@/feedback/appFeedback";
+import { buddyEditInitial, buddyEditPayload } from "./editBuddyPayload";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
@@ -198,6 +199,8 @@ export function PartnerDetailsScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editPending, setEditPending] = useState(false);
+  // The server's refusal, shown inside the modal (the banner sits behind it).
+  const [editError, setEditError] = useState<string | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -206,7 +209,10 @@ export function PartnerDetailsScreen() {
     else navigation.navigate("Parcels", { tab: "partners" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
-  const handleEditOpen = useCallback(() => setEditOpen(true), []);
+  const handleEditOpen = useCallback(() => {
+    setEditError(null);
+    setEditOpen(true);
+  }, []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
@@ -215,40 +221,19 @@ export function PartnerDetailsScreen() {
     async (values: EditBuddyListingFormValues) => {
       if (!listingId || !listing) return;
 
-      // The modal validates before calling this, so every field is present and
-      // in range by now. The buddy-handler PUT is still a full upsert — it nulls
-      // any field omitted from the payload — so this must stay exhaustive.
-      const ymd = values.travel_date.trim();
-      const payload = {
-        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
-        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        // Single-date listing: buddy_listings has no date-mode column, so the
-        // "single" case is expressed as from === to.
-        travel_date: ymd,
-        travel_date_from: ymd,
-        travel_date_to: ymd,
-        airline: values.airline.trim(),
-        bio: values.bio.trim(),
-        age: values.age ? Number.parseInt(values.age, 10) : undefined,
-        languages: values.languages,
-        interests: values.interests.trim(),
-        layover: values.layover.trim(),
-      };
+      // Full upsert body, countries included (editBuddyPayload.ts, shared with My Travels).
+      const payload = buddyEditPayload(values);
 
       setEditPending(true);
+      setEditError(null);
       try {
         await buddiesApi.update(listingId, payload);
         await refetch();
         setEditOpen(false);
-        setNotice({
-          variant: "success",
-          title: "Listing updated",
-          message: "Your changes are saved.",
-        });
+        // Same toast as My Travels (28 Oct 2026).
+        showToast({ title: "Buddy listing updated", variant: "success" });
       } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setNotice({ variant: "error", title: "Couldn't update listing", message });
+        setEditError(err instanceof ApiClientError ? err.message : getErrorMessage(err as Error));
       } finally {
         setEditPending(false);
       }
@@ -314,19 +299,10 @@ export function PartnerDetailsScreen() {
     );
   }
 
-  const editInitial: EditBuddyListingFormValues = {
-    from_city: listing.from_city === "Any" ? ANY_CITY : listing.from_city,
-    from_country: USA_CITIES.includes(listing.from_city) ? "US" : "IN",
-    to_city: listing.to_city === "Any" ? ANY_CITY : listing.to_city,
-    to_country: INDIA_CITIES.includes(listing.to_city) ? "IN" : "US",
-    travel_date: listing.travel_date_from ?? listing.travel_date ?? "",
-    airline: listing.airline ?? "",
-    age: listing.age != null ? String(listing.age) : "",
-    languages: listing.languages ?? [],
-    interests: listing.interests ?? "",
-    layover: listing.layover ?? "",
-    bio: listing.bio ?? "",
-  };
+  const editInitial: EditBuddyListingFormValues = buddyEditInitial(listing, {
+    india: INDIA_CITIES,
+    usa: USA_CITIES,
+  });
 
   return (
     <Screen onRefresh={refetch}>
@@ -385,6 +361,7 @@ export function PartnerDetailsScreen() {
         pending={editPending}
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
+        serverError={editError}
       />
 
       <ConfirmActionModal
