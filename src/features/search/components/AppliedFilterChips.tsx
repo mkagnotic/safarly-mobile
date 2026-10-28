@@ -2,27 +2,17 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { SearchFilters } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
-import { capitalize } from "@/features/search/lib/searchConfig";
+import { filterChipLabels } from "@/features/search/lib/searchFilterLabels";
 
 /** Chip summary of the active manual-search filters (mirrors web). */
 export function AppliedFilterChips({ filters }: Readonly<{ filters: SearchFilters }>) {
-  const chips: string[] = [];
-  if (filters.from_city) {
-    chips.push(`From: ${filters.from_city === "ANY" ? "Any City" : filters.from_city}`);
-  }
-  if (filters.to_city) {
-    chips.push(`To: ${filters.to_city === "ANY" ? "Any City" : filters.to_city}`);
-  }
-  if (filters.date_from) chips.push(`From: ${filters.date_from}`);
-  if (filters.date_to) chips.push(`To: ${filters.date_to}`);
-  for (const l of filters.looking_for?.split(",").filter(Boolean) ?? []) {
-    chips.push(capitalize(l.replace(/_/g, " ")));
-  }
+  // 28 Oct 2026: chips from a label map, never raw codes ("Receive_request").
+  const chips = filterChipLabels(filters);
   if (chips.length === 0) chips.push("All results (no filters)");
 
   return (
     <View style={styles.filterChipsRow}>
-      <Text style={styles.filterChipsLabel}>FILTERS:</Text>
+      <Text style={styles.filterChipsLabel}>Filters:</Text>
       {chips.map((c) => (
         <View key={c} style={styles.filterChip}>
           <Text style={styles.filterChipText}>{c}</Text>
@@ -47,6 +37,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   filterChip: {
     paddingHorizontal: 10,

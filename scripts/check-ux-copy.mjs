@@ -2169,10 +2169,10 @@ const CHECKS = [
     mustNot: ["component={SettingsScreen}", "Manage your account credentials.", "/current password|wrong|incorrect|invalid/i"],
   },  {
     repo: "web",
-    file: ["supabase/functions/user-handler/index.ts", "src/features/profile/components/DeleteAccountView.tsx", "src/features/profile/pages/CustomerPreferences.tsx"],
+    file: ["supabase/functions/user-handler/index.ts", "src/features/profile/components/DeleteAccountView.tsx", "src/features/profile/pages/CustomerPreferences.tsx", "src/lib/pushDevice.ts"],
     id: "delete-account-way-out",
     why: "27 Oct 2026 preferences/delete flow: money held blocked deletion with 'Withdraw it' - the apps have no wallet or withdraw screen, so the account could never be deleted (App Store 5.1.1(v)); support settles it now. A blocked account was only offered 'Back' - now My Bookings or Email support (blocked_kind). Password guesses on Delete account had no cap (codes did). Web Preferences showed push OFF with no reason when this browser hadn't allowed notifications.",
-    must: ["Safarly is still holding money for you. Email ${SUPPORT_EMAIL} and we'll pay it out", "blocked_kind: blocker?.kind ?? null,", "rateLimit(`pw-check:${uid}`, PASSWORD_CHECK_LIMIT, PASSWORD_CHECK_WINDOW_MS)", 'status.blocked_kind === "delivery"', "Open My Bookings", "Email support", "Notifications are off in this browser"],
+    must: ["Safarly is still holding money for you. Email ${SUPPORT_EMAIL} and we'll pay it out", "blocked_kind: blocker?.kind ?? null,", "rateLimit(`pw-check:${uid}`, PASSWORD_CHECK_LIMIT, PASSWORD_CHECK_WINDOW_MS)", 'status.blocked_kind === "delivery"', "Open My Bookings", "Email support", "Notifications are on for your account. Allow them in this browser to get them here too."],
     mustNot: ["Withdraw it before deleting your account."],
   },
   {
@@ -2318,6 +2318,29 @@ const CHECKS = [
     why: "See online-order-wording (web repo). Plus mobile's city check took symbols (the server then refused it in a banner), unticking kept the old address/order number, and the decline dialog said the parcel re-opens for other carriers (it is relisted only after it is back).",
     must: ["A shop purchase rather than a personal item. Optional.", "It can be returned to the seller", "Seller's return address", "You didn't add a return address when you listed this parcel, so pick another option.", "The booking is closed, but the parcel is still with you.", "City can only contain letters, spaces, hyphens and apostrophes."],
     mustNot: ["add one in the note", "refunded out of it", "Eligible for return to the seller within their return window", "the parcel re-opens for other carriers"],
+  },  {
+    repo: "web",
+    file: ["supabase/migrations/20261028100000_search_hardening.sql", "supabase/functions/search-handler/index.ts", "supabase/functions/search-handler/highlight.ts", "supabase/functions/search-handler/quota.ts", "supabase/functions/_shared/matchSource.ts"],
+    id: "search-hardening",
+    why: "28 Oct 2026 search flow (SECURITY + logic): a blocked user could read your open parcels/trips/buddy posts straight from the tables (RLS ignored blocks), suspended/deleted owners stayed in search and matches, 'Any city' matching ignored the country and the parcel's window start, trip matches showed rupee fees as dollars, matches endpoints took any id for anyone's listing, reversed dates weren't refused. Filtering stays FREE (product decision) - the server never rations it.",
+    must: ["fn_listing_owner_visible", "search_trip_serves_parcel", "The end date can't be before the start date.", "Promise.resolve(null as { status?: string } | null)", "You can only see matches for your own listings."],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["src/features/search/pages/CustomerSearch.tsx", "src/features/search/components/SearchFilterPanel.tsx", "src/features/search/components/SearchErrorAlert.tsx", "src/features/search/lib/constants.ts", "src/lib/pushDevice.ts", "src/features/profile/pages/CustomerPreferences.tsx"],
+    id: "search-and-push-same-everywhere",
+    why: "28 Oct 2026: search worded/behaved differently from mobile (Title Case tabs, 'Receive Request', raw filter chips, the mode switch did nothing with filters applied, no Buddies loader, no deleted-listing toast); push showed OFF on a second device although the account setting was ON, so every device had to be switched on again.",
+    must: ["Package delivery matches", "Apply filters", "Couldn&apos;t load results", "This is usually temporary. Try again.", "Choose at least one filter (a city, a date or what you're looking for) before searching.", "Allow on this device", "This one setting covers all your devices."],
+    mustNot: ["Apply Filters & Search", "Receive Request", "Search could not be completed.", "auto-see"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/search/SearchScreen.tsx", "src/features/search/components/SearchFilterFields.tsx", "src/features/search/components/SearchStates.tsx", "src/features/search/lib/searchFilterLabels.ts", "src/services/notifications/pushPolicy.ts", "src/features/profile/PreferencesScreen.tsx"],
+    id: "mobile-search-and-push-same-everywhere",
+    why: "See search-and-push-same-everywhere (web repo). Plus mobile paging in 'All listings' did nothing (page 2 showed page 1), the auto-match banner showed in browse mode, raw server errors were shown, a 'YYYY-MM-DD' check, and push never synced on app start for a restored session.",
+    must: ["Apply filters", "Couldn't load results", "This is usually temporary. Try again.", "export function browsePageQuery<", "export function startupPushAction(", "Allow on this device", "This one setting covers all your devices."],
+    mustNot: ["Apply Filters & Search", "Receive Request", "must be YYYY-MM-DD", "auto-see"],
   },
 ];
 

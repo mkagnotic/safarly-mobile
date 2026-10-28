@@ -12,7 +12,7 @@ interface Props {
   kind: "trip" | "parcel";
   /** Date band, e.g. "Apr 18, 2026 – Apr 18, 2026". */
   dateLabel: string;
-  /** Optional second metric tile (e.g. AIRLINE / CATEGORY). */
+  /** Optional second metric tile (e.g. Airline / Category). */
   secondary?: { label: string; value: string };
   /** Nested matches (or empty-state message) rendered below the divider. */
   children: ReactNode;
@@ -35,7 +35,7 @@ export function RouteListingCard({
     <Card style={styles.card}>
       <RouteHeader fromCity={fromCity} toCity={toCity} kind={kind} />
       <MetricRow>
-        <MetricTile label="DATE" value={dateLabel} />
+        <MetricTile label="Date" value={dateLabel} />
         {secondary ? (
           <MetricTile label={secondary.label} value={secondary.value} highlight />
         ) : null}

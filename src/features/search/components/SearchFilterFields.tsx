@@ -7,10 +7,11 @@ import { CityPicker } from "@/features/search/CityPicker";
 import { DatePicker } from "@/features/search/DatePicker";
 import type { LookingForType, SearchCountry } from "@/features/search/searchPersistence";
 import { colors } from "@/theme/colors";
-import { COUNTRY_FLAG, ISO_DATE, LOOKING_FOR_OPTIONS } from "@/features/search/lib/searchConfig";
+import { COUNTRY_FLAG, LOOKING_FOR_OPTIONS } from "@/features/search/lib/searchConfig";
 
 interface SearchFilterFieldsProps {
-  loading: boolean;
+  /** A search the user started with Apply is running: the button reads "Searching…". */
+  applyRunning: boolean;
   fromCountry: SearchCountry;
   toCountry: SearchCountry;
   fromCountryLabel: string;
@@ -41,7 +42,7 @@ interface SearchFilterFieldsProps {
  * card. The browse / match-my-routes toggle beneath them stays in SearchScreen.
  */
 export function SearchFilterFields({
-  loading,
+  applyRunning,
   fromCountry,
   toCountry,
   fromCountryLabel,
@@ -68,7 +69,9 @@ export function SearchFilterFields({
 }: Readonly<SearchFilterFieldsProps>) {
   return (
     <>
-      <Text style={styles.fieldLabel}>ROUTE</Text>
+      {/* 28 Oct 2026: the fields stay editable while results load (web); only
+          Apply waits. Labels are words, shown in capitals by the style. */}
+      <Text style={styles.fieldLabel}>Route</Text>
       {/* Each side owns its country, so a domestic route (IN -> IN) is
           reachable. No swap control: with both sides independently
           switchable it would be a redundant third way to do the same thing,
@@ -78,7 +81,6 @@ export function SearchFilterFields({
           <Pressable
             style={styles.countryChip}
             onPress={toggleFromCountry}
-            disabled={loading}
             accessibilityRole="button"
             accessibilityLabel={`Departure country: ${fromCountryLabel}. Tap to switch.`}
           >
@@ -92,7 +94,6 @@ export function SearchFilterFields({
             onChange={setFromCity}
             cities={fromCities}
             placeholder="From city"
-            disabled={loading}
           />
         </View>
 
@@ -100,7 +101,6 @@ export function SearchFilterFields({
           <Pressable
             style={styles.countryChip}
             onPress={toggleToCountry}
-            disabled={loading}
             accessibilityRole="button"
             accessibilityLabel={`Arrival country: ${toCountryLabel}. Tap to switch.`}
           >
@@ -114,20 +114,18 @@ export function SearchFilterFields({
             onChange={setToCity}
             cities={toCities}
             placeholder="To city"
-            disabled={loading}
           />
         </View>
       </View>
 
       {/* Date Range — tappable fields that open a calendar sheet. Bounded to
           today … +12 months (web parity); "To" can't precede "From". */}
-      <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>DATE RANGE</Text>
+      <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>Date range</Text>
       <View style={styles.dateRow}>
         <DatePicker
           value={dateFrom}
           onChange={setDateFrom}
           placeholder="From date"
-          disabled={loading}
           minDate={dateBounds.todayIso}
           maxDate={dateBounds.maxIso}
         />
@@ -135,14 +133,15 @@ export function SearchFilterFields({
           value={dateTo}
           onChange={setDateTo}
           placeholder="To date"
-          disabled={loading}
-          minDate={dateFrom && ISO_DATE.test(dateFrom) ? dateFrom : dateBounds.todayIso}
+          // As web's range picker: pick the start first.
+          disabled={!dateFrom}
+          minDate={dateFrom || dateBounds.todayIso}
           maxDate={dateBounds.maxIso}
         />
       </View>
 
       {/* Looking For */}
-      <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>LOOKING FOR</Text>
+      <Text style={[styles.fieldLabel, styles.fieldLabelTopGap]}>Looking for</Text>
       <View style={styles.lookingForCol}>
         {LOOKING_FOR_OPTIONS.map((opt) => {
           const checked = lookingFor.includes(opt.value);
@@ -151,7 +150,6 @@ export function SearchFilterFields({
               key={opt.value}
               onPress={() => toggleLookingFor(opt.value)}
               style={styles.checkboxRow}
-              disabled={loading}
               accessibilityRole="checkbox"
               accessibilityState={{ checked }}
             >
@@ -162,7 +160,7 @@ export function SearchFilterFields({
               </View>
               {/* The row stretches and the label fills it (flex: 1): a shrink-wrapped row
                   let Android under-measure the bold label and draw only "Travel" of
-                  "Travel Buddy" (23 Oct 2026). */}
+                  "Travel buddy" (23 Oct 2026). */}
               <Text style={styles.checkboxLabel} textBreakStrategy="simple">{opt.label}</Text>
             </Pressable>
           );
@@ -175,12 +173,11 @@ export function SearchFilterFields({
             label="Clear"
             variant="secondary"
             onPress={handleClear}
-            disabled={searchBusy}
             style={styles.applyButtonFlex}
           />
         ) : null}
         <AppButton
-          label={loading ? "Searching…" : "Apply Filters & Search"}
+          label={applyRunning ? "Searching…" : "Apply filters"}
           onPress={() => void handleApply()}
           disabled={searchBusy}
           gradientColors={[colors.ctaAccent, colors.ctaAccent]}
@@ -198,6 +195,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   fieldLabelTopGap: { marginTop: 6 },
   routeRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },

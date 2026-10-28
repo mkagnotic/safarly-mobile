@@ -82,7 +82,7 @@ export function PackageMatchCard({
       const res = await messagesApi.createConversation(person.id, "booking");
       navigation.navigate("OfferChatTab", {
         conversationId: res.data.id,
-        name: person.name || "Conversation",
+        name: person.name || "Unknown user",
         source: "messages",
       });
     } catch (err) {
@@ -94,14 +94,14 @@ export function PackageMatchCard({
 
   const secondary = isTrip
     ? {
-        label: "CAPACITY",
+        label: "Capacity",
         value:
           match.luggage_capacity_kg != null
             ? `${match.luggage_capacity_kg} kg`
             : "—",
       }
     : {
-        label: "FEE",
+        label: "Fee",
         value:
           match.fee_offered != null ? formatMoneyShort(match.fee_offered, match.fee_currency) : "—",
       };
@@ -142,7 +142,7 @@ export function PackageMatchCard({
 
   const metricsBlock = (
     <MetricRow>
-      <MetricTile label="DATE" value={dateLabel} compact />
+      <MetricTile label="Date" value={dateLabel} compact />
       <MetricTile label={secondary.label} value={secondary.value} highlight compact />
     </MetricRow>
   );

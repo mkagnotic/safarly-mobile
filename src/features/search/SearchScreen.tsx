@@ -57,13 +57,13 @@ import {
   BROWSE_QUERY,
   COUNTRY_LABEL,
   formatDateLabel,
-  ISO_DATE,
   MANUAL_PER_PAGE,
   MATCH_MY_ROUTES_QUERY,
   type Notice,
   searchDateBounds,
 } from "@/features/search/lib/searchConfig";
 import { sharedStyles } from "@/features/search/searchStyles";
+import { browsePageQuery } from "@/features/search/lib/searchFilterLabels";
 import {
   BUDDY_HIGHLIGHT_MS,
   buddyRingId,
@@ -135,7 +135,7 @@ export function SearchScreen() {
    * `CustomerSearch.tsx`.
    */
   const [matchMyRoutes, setMatchMyRoutes] = useState(isMatchDeepLink);
-  const { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch } =
+  const { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch } =
     useSearchMatches({ initialFilters: isMatchDeepLink ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY, highlight: highlightId });
 
   // Manual search + page changes re-fire here; pagination is free (the unit was
@@ -149,6 +149,26 @@ export function SearchScreen() {
       buddy_page: buddyPage,
     });
   }, [appliedFilters, pkgPage, rcvPage, buddyPage, search]);
+
+  // 28 Oct 2026: browse ("All listings") pages too - it never re-ran the search,
+  // so Next showed page 1 again. The mount fetch is page 1; a restored or tapped
+  // page re-runs the browse query with every list's page (web sends the same).
+  const browseKeyRef = useRef("1|1|1");
+  useEffect(() => {
+    if (appliedFilters || matchMyRoutes) return;
+    const key = `${pkgPage}|${rcvPage}|${buddyPage}`;
+    if (browseKeyRef.current === key) return;
+    browseKeyRef.current = key;
+    void setBaseQuery(browsePageQuery(BROWSE_QUERY, { carrier: pkgPage, receive: rcvPage, buddy: buddyPage }));
+  }, [appliedFilters, matchMyRoutes, pkgPage, rcvPage, buddyPage, setBaseQuery]);
+
+  // "Searching…" only while a search the user started with Apply runs (28 Oct 2026).
+  const [applyRunning, setApplyRunning] = useState(false);
+  const prevLoadingRef = useRef(loading);
+  useEffect(() => {
+    if (prevLoadingRef.current && !loading) setApplyRunning(false);
+    prevLoadingRef.current = loading;
+  }, [loading]);
 
   // ── Restore-on-return (web parity: web persists to sessionStorage) ──
   // Gates the persist effect below until the async load resolves, so we never
@@ -432,20 +452,12 @@ export function SearchScreen() {
       lookingFor.length > 0;
     if (!hasAtLeastOne) {
       setNotice({
-        title: "Choose at least one filter",
-        message: "Pick a city, date, or category before searching.",
+        message: "Choose at least one filter (a city, a date or what you're looking for) before searching.",
         variant: "warning",
       });
       return;
     }
-    if (dateFrom && !ISO_DATE.test(dateFrom)) {
-      setNotice({ title: "Invalid date", message: "From date must be YYYY-MM-DD.", variant: "error" });
-      return;
-    }
-    if (dateTo && !ISO_DATE.test(dateTo)) {
-      setNotice({ title: "Invalid date", message: "To date must be YYYY-MM-DD.", variant: "error" });
-      return;
-    }
+    // No date-format check: the picker only ever gives a valid day (28 Oct 2026).
     // A same-city route (Any excepted) can never match anything — block it, as
     // the create/edit forms do.
     if (isSameRoute(fromCountry, fromCity, toCountry, toCity)) {
@@ -461,7 +473,7 @@ export function SearchScreen() {
     if (fromCity) filters.from_city = fromCity;
     if (toCity) filters.to_city = toCity;
     // The country the cities were picked from. This is what bounds a listing that
-    // ticked "Any City" - without it, such a listing answers every city filter.
+    // ticked "Any city" - without it, such a listing answers every city filter.
     filters.from_country = fromCountry;
     filters.to_country = toCountry;
     if (dateFrom) filters.date_from = dateFrom;
@@ -474,13 +486,22 @@ export function SearchScreen() {
     setPkgPage(1);
     setRcvPage(1);
     setBuddyPage(1);
+    setApplyRunning(true);
     setAppliedFilters(filters);
   }, [fromCity, toCity, fromCountry, toCountry, dateFrom, dateTo, lookingFor]);
 
   /** Switch between browsing everything and matching against my own routes. */
+  // 28 Oct 2026 (both platforms): a mode switch starts clean - filters AND the
+  // filter fields cleared (so Clear hides), every page back to 1.
   const applyMode = useCallback(
     (next: boolean) => {
       setMatchMyRoutes(next);
+      setFromCity("");
+      setToCity("");
+      setDateFrom("");
+      setDateTo("");
+      setLookingFor([]);
+      setNotice(null);
       setAppliedFilters(null);
       setPkgPage(1);
       setRcvPage(1);
@@ -488,6 +509,7 @@ export function SearchScreen() {
       setAutoPkgPage(1);
       setAutoRcvPage(1);
       setAutoBuddyPage(1);
+      browseKeyRef.current = "1|1|1";
       void setBaseQuery(next ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY);
     },
     [setBaseQuery],
@@ -582,8 +604,16 @@ export function SearchScreen() {
     setAutoBuddyPage(1);
     setNotice(null);
     void clearPersistedSearch();
-    void resetToAutoMatch();
-  }, [resetToAutoMatch]);
+    // Back to page 1 of the current mode's base query.
+    browseKeyRef.current = "1|1|1";
+    void setBaseQuery(matchMyRoutes ? MATCH_MY_ROUTES_QUERY : BROWSE_QUERY);
+  }, [matchMyRoutes, setBaseQuery]);
+
+  /** A new start day after the end day drops the end; no start, no end. */
+  const onDateFromChange = useCallback((value: string) => {
+    setDateFrom(value);
+    setDateTo((to) => (!value || (to && to < value) ? "" : to));
+  }, []);
 
   // Pull-to-refresh: re-run the current query + the owned listings. Free.
   const refetchMyTrips = myTripsState.refetch;
@@ -641,7 +671,7 @@ export function SearchScreen() {
 
         <Card style={styles.filtersCard}>
           <SearchFilterFields
-            loading={loading}
+            applyRunning={applyRunning && loading}
             fromCountry={fromCountry}
             toCountry={toCountry}
             fromCountryLabel={fromCountryLabel}
@@ -655,7 +685,7 @@ export function SearchScreen() {
             fromCities={fromCities}
             toCities={toCities}
             dateFrom={dateFrom}
-            setDateFrom={setDateFrom}
+            setDateFrom={onDateFromChange}
             dateTo={dateTo}
             setDateTo={setDateTo}
             dateBounds={dateBounds}
@@ -701,7 +731,7 @@ export function SearchScreen() {
         ) : null}
 
         <SearchModeBanner
-          hasAppliedFilters={hasAppliedFilters}
+          isAutoMatch={isAutoMatch}
           activeTab={activeTab}
           myParcelsCount={results?.my_parcels_count ?? 0}
           myTripsCount={results?.my_trips_count ?? 0}
@@ -735,13 +765,11 @@ export function SearchScreen() {
           pointerEvents={loading && !!results && !error ? "none" : "auto"}
         >
           {error ? (
-            <ErrorBlock
-              message={getErrorMessage(error)}
-              onRetry={() => void refetch()}
-            />
+            <ErrorBlock onRetry={() => void refetch()} />
           ) : activeTab === "package" ? (
             <PackageTabResults
               loading={loading}
+              hasAppliedFilters={hasAppliedFilters}
               isAutoMatch={isAutoMatch}
               myParcels={displayedMyParcels}
               myParcelsLoading={myParcelsState.loading}
@@ -759,6 +787,7 @@ export function SearchScreen() {
           ) : activeTab === "buddy" ? (
             <BuddyTabResults
               loading={loading}
+              hasAppliedFilters={hasAppliedFilters}
               matches={displayedBuddyMatches}
               othersById={buddyOthers}
               navigation={navigation}
@@ -773,6 +802,7 @@ export function SearchScreen() {
           ) : (
             <ReceiverTabResults
               loading={loading}
+              hasAppliedFilters={hasAppliedFilters}
               isAutoMatch={isAutoMatch}
               myTrips={displayedMyTrips}
               myTripsLoading={myTripsState.loading}
@@ -818,6 +848,35 @@ export function SearchScreen() {
                     ? buddyPages
                     : receiverPages
             }
+            totalItems={
+              isAutoMatch
+                ? activeTab === "package"
+                  ? sortedMyParcels.length
+                  : activeTab === "buddy"
+                    ? dedupedBuddyMatches.length
+                    : sortedMyTrips.length
+                : activeTab === "package"
+                  ? packageTabCount
+                  : activeTab === "buddy"
+                    ? buddyTabCount
+                    : receiverTabCount
+            }
+            perPage={
+              !isAutoMatch ? MANUAL_PER_PAGE : activeTab === "buddy" ? AUTO_BUDDY_PER_PAGE : AUTO_PER_PAGE
+            }
+            itemLabel={
+              isAutoMatch
+                ? activeTab === "package"
+                  ? "parcel requests"
+                  : activeTab === "buddy"
+                    ? "buddies"
+                    : "trips"
+                : activeTab === "package"
+                  ? "carrier trips"
+                  : activeTab === "buddy"
+                    ? "buddies"
+                    : "receiver requests"
+            }
             loading={searchBusy}
             onChange={(next) => {
               if (isAutoMatch) {
@@ -845,6 +904,7 @@ export function SearchScreen() {
 
 function PackageTabResults({
   loading,
+  hasAppliedFilters,
   isAutoMatch,
   myParcels,
   myParcelsLoading,
@@ -860,6 +920,8 @@ function PackageTabResults({
   onFocusCardLayout,
 }: Readonly<{
   loading: boolean;
+  /** Filters are applied: the flat empty state suggests widening them. */
+  hasAppliedFilters: boolean;
   isAutoMatch: boolean;
   myParcels: Parcel[];
   myParcelsLoading: boolean;
@@ -889,7 +951,7 @@ function PackageTabResults({
         </View>
       );
     if (myParcelsError && myParcels.length === 0)
-      return <ErrorBlock message={getErrorMessage(myParcelsError)} onRetry={onRetryMyParcels} />;
+      return <ErrorBlock title="Couldn't load your parcel requests" onRetry={onRetryMyParcels} />;
     if (myParcels.length === 0)
       return (
         <EmptyResults
@@ -918,7 +980,7 @@ function PackageTabResults({
                 dateLabel={formatDeliveryWindow(parcel, { year: true })}
                 secondary={
                   parcel.category
-                    ? { label: "CATEGORY", value: parcel.category }
+                    ? { label: "Category", value: parcel.category }
                     : undefined
                 }
               >
@@ -931,7 +993,7 @@ function PackageTabResults({
                 ) : (
                   <View>
                     <Text style={sharedStyles.nestedHeading}>
-                      CARRIER TRIPS
+                      Carrier trips
                     </Text>
                     {matched.map(({ primary: m, others }, i) => (
                       <View
@@ -966,7 +1028,11 @@ function PackageTabResults({
       <EmptyResults
         icon="cube-outline"
         title="No matching carrier trips"
-        body="Try widening your filters or date range."
+        body={
+          hasAppliedFilters
+            ? "Try widening your filters or date range."
+            : "Nothing posted on this route yet. Check back soon."
+        }
       />
     );
   return (
@@ -995,6 +1061,7 @@ function PackageTabResults({
 
 function BuddyTabResults({
   loading,
+  hasAppliedFilters,
   matches,
   othersById,
   navigation,
@@ -1004,6 +1071,7 @@ function BuddyTabResults({
   noBuddyRoutes,
 }: Readonly<{
   loading: boolean;
+  hasAppliedFilters: boolean;
   matches: BuddySearchMatch[];
   /** Each card's other buddy listings from the same person ("+N more"). */
   othersById: Map<string, BuddySearchMatch[]>;
@@ -1024,8 +1092,10 @@ function BuddyTabResults({
         title="No travel buddy matches"
         body={
           noBuddyRoutes
-            ? "Create a buddy listing or enable Travel Buddy on a trip to find companions"
-            : "Try adjusting your filters."
+            ? "Create a buddy listing or turn on Travel buddy for a trip to find companions."
+            : hasAppliedFilters
+              ? "Try adjusting your filters."
+              : "Nothing posted on this route yet. Check back soon."
         }
       />
     );
@@ -1181,7 +1251,7 @@ function useStartBuddyChat(match: BuddySearchMatch, navigation: Nav) {
       const res = await messagesApi.createConversation(match.user.id, "buddy", match.id);
       navigation.navigate("OfferChatTab", {
         conversationId: res.data.id,
-        name: match.user.name || "Travel buddy",
+        name: match.user.name || "Unknown user",
         source: "buddies",
         // The chat stays a parcel thread (the pair have deliveries together):
         // open it on the travel-buddy entry for this trip.

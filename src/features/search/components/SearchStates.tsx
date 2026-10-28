@@ -6,14 +6,19 @@ import { colors } from "@/theme/colors";
 
 // ───────────────────────── Reusable bits ─────────────────────────
 
+/**
+ * 28 Oct 2026 (one text with web): never the raw server message. The title
+ * names what failed ("Couldn't load your trips"); the body is the same calm line.
+ */
 export function ErrorBlock({
-  message,
+  title = "Couldn't load results",
+  message = "This is usually temporary. Try again.",
   onRetry,
-}: Readonly<{ message: string; onRetry?: () => void }>) {
+}: Readonly<{ title?: string; message?: string; onRetry?: () => void }>) {
   return (
     <View style={styles.centered}>
       <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-      <Text style={styles.errorTitle}>Couldn't load results</Text>
+      <Text style={styles.errorTitle}>{title}</Text>
       <Text style={styles.errorBody}>{message}</Text>
       {onRetry ? (
         <AppButton

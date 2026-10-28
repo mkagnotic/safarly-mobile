@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 
 import { RouteListingCard } from "@/features/search/RouteListingCard";
-import { getErrorMessage, type PackageMatch, type Trip } from "@/services/api";
+import type { PackageMatch, Trip } from "@/services/api";
 import { formatTravelDateRange } from "@/utils/travelDate";
 import { PackageMatchCard } from "@/features/search/components/PackageMatchCard";
 import {
@@ -16,6 +16,7 @@ import type { PersonGroup } from "@/features/search/lib/matchDedupe";
 
 export function ReceiverTabResults({
   loading,
+  hasAppliedFilters,
   isAutoMatch,
   myTrips,
   myTripsLoading,
@@ -31,6 +32,8 @@ export function ReceiverTabResults({
   onFocusCardLayout,
 }: Readonly<{
   loading: boolean;
+  /** Filters are applied: the flat empty state suggests widening them. */
+  hasAppliedFilters: boolean;
   isAutoMatch: boolean;
   myTrips: Trip[];
   myTripsLoading: boolean;
@@ -60,7 +63,7 @@ export function ReceiverTabResults({
         </View>
       );
     if (myTripsError && myTrips.length === 0)
-      return <ErrorBlock message={getErrorMessage(myTripsError)} onRetry={onRetryMyTrips} />;
+      return <ErrorBlock title="Couldn't load your trips" onRetry={onRetryMyTrips} />;
     if (myTrips.length === 0)
       return (
         <EmptyResults
@@ -88,7 +91,7 @@ export function ReceiverTabResults({
               kind="trip"
               dateLabel={formatTravelDateRange(trip, { year: true })}
               secondary={
-                trip.airline ? { label: "AIRLINE", value: trip.airline } : undefined
+                trip.airline ? { label: "Airline", value: trip.airline } : undefined
               }
             >
               {loading ? (
@@ -99,7 +102,7 @@ export function ReceiverTabResults({
                 </Text>
               ) : (
                 <View>
-                  <Text style={sharedStyles.nestedHeading}>RECEIVER REQUESTS</Text>
+                  <Text style={sharedStyles.nestedHeading}>Receiver requests</Text>
                   {matched.map(({ primary: m, others }, i) => (
                     <View
                       key={`${m.type}-${m.id}`}
@@ -131,7 +134,11 @@ export function ReceiverTabResults({
       <EmptyResults
         icon="mail-outline"
         title="No receiver requests"
-        body="Try widening your filters or date range."
+        body={
+          hasAppliedFilters
+            ? "Try widening your filters or date range."
+            : "Nothing posted on this route yet. Check back soon."
+        }
       />
     );
   return (
