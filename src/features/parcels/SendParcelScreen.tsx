@@ -23,8 +23,6 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { AppInput } from "@/components/ui/AppInput";
-import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { DateField, DateModeToggle, LocationCard, SectionCard } from "@/components/ui/FormSection";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -36,7 +34,8 @@ import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
-import { RETURN_COUNTRIES, statesFor, postalHint, sanitisePostal, validateReturnAddress } from "@/utils/addressOptions";
+import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
+import { ReturnAddressFields } from "./ReturnAddressFields";
 import { currencySymbol } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
@@ -55,6 +54,15 @@ type FieldKey =
   | "fromCity" | "toCity" | "weight" | "deliveryBy" | "deliveryTo" | "feeOffered"
   // Return address - only ever set while the parcel is a returnable online order.
   | "returnLine1" | "returnCity" | "returnState" | "returnPostal" | "returnCountry";
+
+/** Address-block key -> this screen's field key. */
+const RETURN_ERROR_KEY: Record<keyof ReturnAddressErrors, FieldKey> = {
+  line1: "returnLine1",
+  city: "returnCity",
+  state: "returnState",
+  postal: "returnPostal",
+  country: "returnCountry",
+};
 
 /** Form sections, named by content so reordering can't invalidate them. */
 type SectionKey = "route" | "dates" | "details" | "fee";
@@ -275,15 +283,31 @@ export function SendParcelScreen() {
     });
   }, []);
 
-  // CountryPicker takes {code,name}; addressOptions speaks {value,label}.
-  const returnCountryOptions = useMemo(
-    () => RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label })),
-    [],
+  // The shared block speaks one object; this screen keeps one state per field.
+  const returnForm = useMemo<ReturnFormValues>(
+    () => ({
+      isOnlineOrder, returnEligible, line1: returnLine1, city: returnCity,
+      state: returnRegion, postal: returnPostal, country: returnCountry, reference: returnReference,
+    }),
+    [isOnlineOrder, returnEligible, returnLine1, returnCity, returnRegion, returnPostal, returnCountry, returnReference],
   );
-  const returnStateOptions = useMemo(
-    () => statesFor(returnCountry).map((s) => ({ code: s.value, name: s.label })),
-    [returnCountry],
-  );
+  const patchReturnForm = useCallback((patch: Partial<ReturnFormValues>) => {
+    if (patch.isOnlineOrder !== undefined) setIsOnlineOrder(patch.isOnlineOrder);
+    if (patch.returnEligible !== undefined) setReturnEligible(patch.returnEligible);
+    if (patch.line1 !== undefined) setReturnLine1(patch.line1);
+    if (patch.city !== undefined) setReturnCity(patch.city);
+    if (patch.state !== undefined) setReturnRegion(patch.state);
+    if (patch.postal !== undefined) setReturnPostal(patch.postal);
+    if (patch.country !== undefined) setReturnCountry(patch.country);
+    if (patch.reference !== undefined) setReturnReference(patch.reference);
+  }, []);
+  const returnErrors: ReturnAddressErrors = {
+    line1: fieldErrors.returnLine1,
+    city: fieldErrors.returnCity,
+    state: fieldErrors.returnState,
+    postal: fieldErrors.returnPostal,
+    country: fieldErrors.returnCountry,
+  };
 
   // Pre-fill the return country from the parcel's ORIGIN: a returnable online
   // order almost always goes back to a seller in the country it shipped from.
@@ -384,10 +408,7 @@ export function SendParcelScreen() {
     // posted to. This block used to accept anything, including nothing at all -
     // and it is read exactly when a carrier has cancelled holding the parcel.
     if (isOnlineOrder && returnEligible) {
-      const ra = validateReturnAddress({
-        line1: returnLine1, city: returnCity, state: returnRegion,
-        postal: returnPostal, country: returnCountry,
-      });
+      const ra = validateReturnForm(returnForm);
       if (ra.line1) errors.returnLine1 = ra.line1;
       if (ra.city) errors.returnCity = ra.city;
       if (ra.state) errors.returnState = ra.state;
@@ -523,7 +544,9 @@ export function SendParcelScreen() {
     returnRegion,
     returnCity,
     returnPostal,
+    returnCountry,
     returnReference,
+    returnForm,
     maxLimits,
     scrollToField,
     ownerFiles,
@@ -555,6 +578,7 @@ export function SendParcelScreen() {
     setReturnRegion("");
     setReturnPostal("");
     setReturnCountry("");
+    setReturnReference("");
     setSubmitting(false);
     setSubmitted(false);
     setFormError(null);
@@ -907,140 +931,13 @@ export function SendParcelScreen() {
           </SectionCard>
         </View>
 
-        {/* Online-order pre-declare — optional. When on, the sender flags the
-            parcel as an online order, which unlocks the carrier's return-eligibility
-            waiver path if they cancel mid-trip. */}
-        <View style={styles.onlineOrderCard}>
-          <Pressable
-            onPress={() => setIsOnlineOrder((v) => !v)}
-            style={styles.onlineOrderHeader}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: isOnlineOrder }}
-            accessibilityLabel="This is an online order"
-          >
-            <View style={styles.onlineOrderHeaderText}>
-              <Text style={styles.onlineOrderTitle}>This is an online order</Text>
-              <Text style={styles.onlineOrderSubtitle}>
-                If a carrier cancels mid-trip and the seller will accept the parcel back,
-                you can waive their penalty later. Optional.
-              </Text>
-            </View>
-            <View style={[styles.toggleTrack, isOnlineOrder && styles.toggleTrackOn]}>
-              <View style={[styles.toggleThumb, isOnlineOrder && styles.toggleThumbOn]} />
-            </View>
-          </Pressable>
-
-          {isOnlineOrder ? (
-            <View style={styles.onlineOrderBody}>
-              <Pressable
-                onPress={() => setReturnEligible((v) => !v)}
-                style={styles.checkRow}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: returnEligible }}
-                accessibilityLabel="Eligible for return to seller"
-              >
-                <View
-                  style={[
-                    styles.checkBox,
-                    returnEligible && styles.checkBoxOn,
-                  ]}
-                >
-                  {returnEligible ? (
-                    <Ionicons name="checkmark" size={14} color={colors.white} />
-                  ) : null}
-                </View>
-                <Text style={styles.checkLabel}>
-                  Eligible for return to the seller within their return window
-                </Text>
-              </Pressable>
-
-              {returnEligible ? (
-                <View style={styles.returnAddressBlock}>
-                  <Text style={styles.fieldLabel}>Return address</Text>
-                  <AppInput
-                    value={returnLine1}
-                    onChangeText={(v) => { setReturnLine1(v); clearFieldError("returnLine1"); }}
-                    placeholder="Street address *"
-                    autoCapitalize="words"
-                    error={fieldErrors.returnLine1}
-                  />
-
-                  {/* Country first: it decides which states are offered and how
-                      the postal code is validated. */}
-                  <CountryPicker
-                    value={returnCountry}
-                    onChange={(v) => {
-                      setReturnCountry(v);
-                      // A state from the previous country would no longer be
-                      // valid, so drop it rather than submit a mismatch.
-                      setReturnRegion("");
-                      clearFieldError("returnCountry");
-                      clearFieldError("returnState");
-                    }}
-                    placeholder="Country *"
-                    options={returnCountryOptions}
-                    invalid={!!fieldErrors.returnCountry}
-                  />
-                  {fieldErrors.returnCountry ? (
-                    <Text style={styles.inlineError}>{fieldErrors.returnCountry}</Text>
-                  ) : null}
-
-                  <CountryPicker
-                    value={returnRegion}
-                    onChange={(v) => { setReturnRegion(v); clearFieldError("returnState"); }}
-                    placeholder={returnCountry ? "State / region *" : "Select a country first"}
-                    disabled={!returnCountry}
-                    options={returnStateOptions}
-                    invalid={!!fieldErrors.returnState}
-                  />
-                  {fieldErrors.returnState ? (
-                    <Text style={styles.inlineError}>{fieldErrors.returnState}</Text>
-                  ) : null}
-
-                  <AppInput
-                    value={returnCity}
-                    // Digits are stripped as you type - a city is never a
-                    // number, and blocking it here beats an error on submit.
-                    onChangeText={(v) => {
-                      setReturnCity(v.replace(/[0-9]/g, ""));
-                      clearFieldError("returnCity");
-                    }}
-                    placeholder="City *"
-                    autoCapitalize="words"
-                    error={fieldErrors.returnCity}
-                  />
-                  <AppInput
-                    value={returnPostal}
-                    // Letters can never be part of a postal code, so they are
-                    // dropped as you type rather than rejected on submit.
-                    onChangeText={(v) => { setReturnPostal(sanitisePostal(v)); clearFieldError("returnPostal"); }}
-                    placeholder={returnCountry === "IN" ? "PIN code *" : "Postal code *"}
-                    keyboardType="number-pad"
-                    maxLength={10}
-                    error={fieldErrors.returnPostal}
-                  />
-                  {!fieldErrors.returnPostal && postalHint(returnCountry) ? (
-                    <Text style={styles.helperText}>{postalHint(returnCountry)}</Text>
-                  ) : null}
-
-                  <AppInput
-                    value={returnReference}
-                    onChangeText={setReturnReference}
-                    placeholder="Order or RMA number (optional)"
-                    maxLength={120}
-                    autoCapitalize="characters"
-                  />
-                  <Text style={styles.helperText}>
-                    Shown only if the parcel has to go back - after the carrier declines it
-                    at handoff, or cancels mid-trip. The order number lets them file the
-                    return against the right purchase.
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-
+        {/* Online order / returnable - optional. Shared with the edit modal. */}
+        <ReturnAddressFields
+          value={returnForm}
+          onChange={patchReturnForm}
+          errors={returnErrors}
+          onFieldEdited={(k) => clearFieldError(RETURN_ERROR_KEY[k])}
+        />
         {/* Restricted items notice — non-field disclosure shown right before submit. */}
         <View style={styles.warningBox}>
           <Ionicons
@@ -1426,73 +1323,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   costInput: { paddingLeft: 28 },
-
-  onlineOrderCard: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    marginBottom: 14,
-    gap: 12,
-  },
-  onlineOrderHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  onlineOrderHeaderText: { flex: 1, gap: 2 },
-  onlineOrderTitle: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: "800" },
-  onlineOrderSubtitle: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "500",
-  },
-  onlineOrderBody: { gap: 12, marginTop: 4 },
-  toggleTrack: {
-    width: 44,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.surfaceMuted,
-    padding: 2,
-  },
-  toggleTrackOn: { backgroundColor: colors.wordmark },
-  toggleThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 1.5,
-    elevation: 2,
-  },
-  toggleThumbOn: { transform: [{ translateX: 18 }] },
-  checkRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  checkBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.controlOutline,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-  },
-  checkBoxOn: { backgroundColor: colors.wordmark, borderColor: colors.wordmark },
-  checkLabel: {
-    color: colors.text,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "600",
-    flex: 1,
-  },
-  returnAddressBlock: { gap: 8 },
-  returnAddressRow: { flexDirection: "row", gap: 8 },
-  returnAddressCell: { flex: 1 },
 
   warningBox: {
     flexDirection: "row",

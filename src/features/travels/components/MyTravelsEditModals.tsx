@@ -4,6 +4,7 @@ import { EditBuddyListingModal } from "@/features/buddies/EditBuddyListingModal"
 import { RateBuddyModal } from "@/features/buddies/RateBuddyModal";
 import { EditParcelModal, type EditParcelFormValues } from "@/features/parcels/EditParcelModal";
 import { EditTripModal } from "@/features/trips/EditTripModal";
+import { returnFormFromParcel } from "@/utils/addressOptions";
 import type { MyTravelsActions } from "@/features/travels/hooks/useMyTravelsActions";
 
 type MyTravelsEditModalsProps = Pick<
@@ -18,6 +19,7 @@ type MyTravelsEditModalsProps = Pick<
   | "handleRateSubmit"
   | "editingParcel"
   | "editParcelPending"
+  | "editParcelError"
   | "handleEditParcelCancel"
   | "handleEditParcelSubmit"
   | "editingBuddy"
@@ -38,6 +40,7 @@ export function MyTravelsEditModals({
   handleRateSubmit,
   editingParcel,
   editParcelPending,
+  editParcelError,
   handleEditParcelCancel,
   handleEditParcelSubmit,
   editingBuddy,
@@ -105,8 +108,10 @@ export function MyTravelsEditModals({
             delivery_by_to: editingParcel.delivery_by_to ?? editingParcel.delivery_by ?? "",
             delivery_date_mode:
               editingParcel.delivery_date_mode === "range" ? "range" : "single",
+            returnForm: returnFormFromParcel(editingParcel),
           }}
           pending={editParcelPending}
+          serverError={editParcelError}
           onCancel={handleEditParcelCancel}
           onSubmit={handleEditParcelSubmit}
         />

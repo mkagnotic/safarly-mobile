@@ -33,6 +33,7 @@ import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/serv
 import { colors } from "@/theme/colors";
 import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
 import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
+import { returnFormChanges, returnFormFromParcel } from "@/utils/addressOptions";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
 
@@ -235,6 +236,8 @@ export function ParcelDetailsScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editPending, setEditPending] = useState(false);
+  // The server's refusal, shown inside the modal (the banner sits behind it).
+  const [editError, setEditError] = useState<string | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -249,7 +252,10 @@ export function ParcelDetailsScreen() {
     navigation.navigate("Buddies");
   }, [navigation]);
 
-  const handleEditOpen = useCallback(() => setEditOpen(true), []);
+  const handleEditOpen = useCallback(() => {
+    setEditError(null);
+    setEditOpen(true);
+  }, []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
@@ -327,12 +333,16 @@ export function ParcelDetailsScreen() {
         data.delivery_by = values.delivery_by_to;
       }
 
+      // Online order / return block: only what changed (27 Oct 2026).
+      Object.assign(data, returnFormChanges(values.returnForm, parcel));
+
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
         return;
       }
 
       setEditPending(true);
+      setEditError(null);
       try {
         await parcelsApi.update(parcelId, data);
         await refetch();
@@ -345,6 +355,7 @@ export function ParcelDetailsScreen() {
       } catch (err) {
         const message =
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
+        setEditError(message);
         setNotice({ variant: "error", title: "Couldn't update parcel", message });
       } finally {
         setEditPending(false);
@@ -438,6 +449,7 @@ export function ParcelDetailsScreen() {
     delivery_by_from: parcel.delivery_by_from ?? parcel.delivery_by ?? "",
     delivery_by_to: parcel.delivery_by_to ?? parcel.delivery_by ?? "",
     delivery_date_mode: parcel.delivery_date_mode === "range" ? "range" : "single",
+    returnForm: returnFormFromParcel(parcel),
   };
 
   return (
@@ -514,6 +526,7 @@ export function ParcelDetailsScreen() {
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
         currencyLocked={!!parcel?.currency_locked}
+        serverError={editError}
       />
 
       <ConfirmActionModal

@@ -8,11 +8,31 @@ import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, ReturnResolution } from "@/services/api";
-import { RETURN_COUNTRIES } from "@/utils/addressOptions";
+import { RETURN_COUNTRIES, countryCode, labelForCountry, labelForState } from "@/utils/addressOptions";
 import { colors } from "@/theme/colors";
 
 // CountryPicker takes {code,name}; addressOptions speaks {value,label}.
 const RETURN_COUNTRY_OPTIONS = RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label }));
+
+type AddressParts = {
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+};
+
+/** One line, with full state and country names rather than codes (27 Oct 2026). */
+function formatAddress(a: AddressParts | null | undefined): string {
+  if (!a) return "";
+  const code = countryCode(a.country);
+  const state = (code && a.state && labelForState(code, a.state)) || a.state;
+  const country = (code && labelForCountry(code)) || a.country;
+  return [a.line1, a.line2, a.city, state, a.postal_code, country]
+    .filter((part) => !!part && String(part).trim().length > 0)
+    .join(", ");
+}
 
 /**
  * The parcel hand-back, after a carrier declines it at handoff or cancels
@@ -125,11 +145,7 @@ export function ParcelReturnCard({
   const receivedAt = booking.return_received_at ?? null;
 
   const address = plan?.return_address ?? null;
-  const addressText = address
-    ? [address.line1, address.line2, address.city, address.state, address.postal_code, address.country]
-        .filter((part) => !!part && String(part).trim().length > 0)
-        .join(", ")
-    : "";
+  const addressText = formatAddress(address);
   const canReturnToSeller = !!addressText;
 
   // Default-from-props must be derived, not frozen: a `useState` initialiser only
@@ -208,11 +224,7 @@ export function ParcelReturnCard({
   ) : null;
 
   const dest = booking.return_destination_address ?? null;
-  const destText = dest
-    ? [dest.line1, dest.line2, dest.city, dest.state, dest.postal_code, dest.country]
-        .filter((part) => !!part && String(part).trim().length > 0)
-        .join(", ")
-    : "";
+  const destText = formatAddress(dest);
   const destinationBlock = destText ? (
     <View style={styles.addressBlock}>
       <View style={styles.headerRow}>
@@ -337,7 +349,7 @@ export function ParcelReturnCard({
                       {value === "return_to_seller"
                         ? canReturnToSeller
                           ? "The carrier posts it to the return address you gave when listing the parcel."
-                          : "You did not declare a return address - pick another option, or add one in the note."
+                          : "You didn't add a return address when you listed this parcel, so pick another option."
                         : value === "return_to_sender"
                           ? "The carrier posts it to an address you give below - the usual choice for a personal item."
                           : value === "sender_collects"
@@ -428,9 +440,9 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(`You still have the parcel - ${senderName} is deciding where it goes`)}
         <Text style={styles.body}>
-          You have been refunded out of it and the booking is closed, but the parcel is
-          physically with you. {senderName} has been asked whether it goes back to the
-          seller or they arrange collection. Keep it safe until then.
+          The booking is closed, but the parcel is still with you. {booking.sender?.name || "The sender"} is choosing
+          whether it goes back to the seller or they arrange collection. You'll get a
+          notification when they choose — keep it safe until then.
         </Text>
         {addressBlock}
       </View>

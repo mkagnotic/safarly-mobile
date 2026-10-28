@@ -146,6 +146,7 @@ export const parcelsApi = {
     return_state?: string;
     return_postal_code?: string;
     return_country?: string;
+    return_reference?: string;
   }) => {
     const { weight_kg, ...rest } = data;
     return api.post<Parcel>("/parcel-handler/", { ...rest, weight: weight_kg });
@@ -190,6 +191,18 @@ export const parcelsApi = {
       any_from?: boolean;
       any_to?: boolean;
       status?: string;
+      /**
+       * Online order / return block, editable from the edit modal (27 Oct 2026).
+       * Unticking sends the flag false; the server refuses once the parcel is booked.
+       */
+      is_online_order?: boolean;
+      return_eligible?: boolean;
+      return_address_line1?: string;
+      return_city?: string;
+      return_state?: string;
+      return_postal_code?: string;
+      return_country?: string;
+      return_reference?: string;
     },
   ) => {
     const { weight_kg, ...rest } = data;

@@ -135,6 +135,12 @@ export function CancelPostPossessionModal({
         </Text>
         ) : null}
         {parcelIsReturnEligible ? (
+        <Text style={sharedStyles.modalHelper}>
+          The sender flagged this parcel as a returnable online order. If you answer "yes" to
+          all three, your cash penalty may be waived (the strike still applies):
+        </Text>
+        ) : null}
+        {parcelIsReturnEligible ? (
         <View style={styles.waiverList}>
           {WAIVER_QUESTIONS.map((q) => {
             const current = answers[q.key];
@@ -195,7 +201,7 @@ export function CancelPostPossessionModal({
               ]}
             >
               {allYes
-                ? "The sender can waive the cash penalty after reviewing — strike still applies."
+                ? "A waiver request will be opened. The sender will be asked to confirm before the cash penalty is refunded."
                 : "A cash penalty will be taken from your next payout."}
             </Text>
           </View>

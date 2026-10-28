@@ -5,6 +5,7 @@ import { ANY_CITY } from "@/features/search/CityPicker";
 import type { EditBuddyListingFormValues } from "@/features/buddies/EditBuddyListingModal";
 import type { RateBuddyValues } from "@/features/buddies/RateBuddyModal";
 import type { EditParcelFormValues } from "@/features/parcels/EditParcelModal";
+import { returnFormChanges } from "@/utils/addressOptions";
 import type { MatchesSource } from "@/features/travels/MatchesModal";
 import type { EditTripFormValues } from "@/features/trips/EditTripModal";
 import { editTripBuddyMessage } from "@/features/trips/model/openBuddy";
@@ -59,6 +60,8 @@ export function useMyTravelsActions({
   const [editPending, setEditPending] = useState(false);
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
   const [editParcelPending, setEditParcelPending] = useState(false);
+  // The server's refusal of an edit, shown inside the modal (27 Oct 2026).
+  const [editParcelError, setEditParcelError] = useState<string | null>(null);
   const [editingBuddy, setEditingBuddy] = useState<BuddyListing | null>(null);
   const [editBuddyPending, setEditBuddyPending] = useState(false);
   const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
@@ -193,6 +196,7 @@ export function useMyTravelsActions({
 
   const handleEditParcel = useCallback((parcel: Parcel) => {
     setFormError(null);
+    setEditParcelError(null);
     setEditingParcel(parcel);
   }, []);
   const handleEditParcelCancel = useCallback(() => {
@@ -272,18 +276,23 @@ export function useMyTravelsActions({
         data.delivery_by = values.delivery_by_to;
       }
 
+      // Online order / return block: only what changed (27 Oct 2026).
+      Object.assign(data, returnFormChanges(values.returnForm, editingParcel));
+
       if (Object.keys(data).length === 0) {
         setEditingParcel(null);
         return;
       }
 
       setEditParcelPending(true);
+      setEditParcelError(null);
       try {
         await parcelsApi.update(editingParcel.id, data);
         // The parcel lives in either Send or Receive — refresh both.
         await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
         setEditingParcel(null);
       } catch (err) {
+        setEditParcelError(getErrorMessage(err));
         setFormError(`Couldn't update parcel. ${getErrorMessage(err)}`);
       } finally {
         setEditParcelPending(false);
@@ -565,6 +574,7 @@ export function useMyTravelsActions({
     editPending,
     editingParcel,
     editParcelPending,
+    editParcelError,
     editingBuddy,
     editBuddyPending,
     ratingConn,

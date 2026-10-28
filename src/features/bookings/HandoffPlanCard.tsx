@@ -266,7 +266,7 @@ export function HandoffPlanCard({
             <Text style={styles.modeTitle}>Courier it to me</Text>
             <Text style={styles.modeHint}>
               {isOnlineOrder
-                ? "The seller ships straight to your address."
+                ? "The seller ships straight to your address — usual for an online order."
                 : "The sender posts it to your local address."}
             </Text>
           </Pressable>

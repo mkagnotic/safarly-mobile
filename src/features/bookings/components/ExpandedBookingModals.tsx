@@ -79,6 +79,7 @@ export function ExpandedBookingModals({
         parcelLikelyWithCarrier={
           booking.handoff_mode === "shipped" && !!booking.handoff_dispatched_at
         }
+        returnEligible={returnEligible}
         error={modalError}
         onCancel={() => {
           setModalError(null);

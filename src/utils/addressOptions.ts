@@ -75,6 +75,19 @@ export function postalHint(country: string): string | null {
   return POSTAL_RULES[country]?.hint ?? null;
 }
 
+/**
+ * Letters (incl. accented), spaces, hyphens, apostrophes and periods - the
+ * characters real place names use. No digits. Same as web's CITY_PATTERN
+ * (27 Oct 2026).
+ */
+export const CITY_PATTERN = /^[\p{L}][\p{L}\s.'-]*$/u;
+
+export const CITY_MESSAGE = "City can only contain letters, spaces, hyphens and apostrophes.";
+
+/** Input caps, same on web (27 Oct 2026). */
+export const RETURN_STREET_MAX = 200;
+export const RETURN_REFERENCE_MAX = 120;
+
 export interface ReturnAddressInput {
   line1: string;
   city: string;
@@ -97,7 +110,11 @@ export function validateReturnAddress(input: ReturnAddressInput): ReturnAddressE
   const postal = input.postal.trim();
 
   if (line1.length < 4) errors.line1 = "Enter the street address.";
-  if (city.length < 2) errors.city = "Enter the city.";
+  if (city.length < 2) {
+    errors.city = "Enter the city.";
+  } else if (!CITY_PATTERN.test(city)) {
+    errors.city = CITY_MESSAGE;
+  }
   if (!input.country) errors.country = "Select a country.";
 
   if (!input.state) {
@@ -180,4 +197,98 @@ export function validateCourierAddress(input: CourierAddressInput): CourierAddre
   }
 
   return errors;
+}
+
+/**
+ * The "online order / can be returned to the seller" block, shared by the send
+ * form and the edit modal (27 Oct 2026).
+ */
+export interface ReturnFormValues {
+  isOnlineOrder: boolean;
+  returnEligible: boolean;
+  line1: string;
+  city: string;
+  state: string;
+  postal: string;
+  country: string;
+  reference: string;
+}
+
+export const EMPTY_RETURN_FORM: ReturnFormValues = {
+  isOnlineOrder: false,
+  returnEligible: false,
+  line1: "",
+  city: "",
+  state: "",
+  postal: "",
+  country: "",
+  reference: "",
+};
+
+/** Address errors, only when the parcel is a returnable online order. */
+export function validateReturnForm(v: ReturnFormValues): ReturnAddressErrors {
+  if (!v.isOnlineOrder || !v.returnEligible) return {};
+  return validateReturnAddress(v);
+}
+
+/** The parcel's stored columns, as the owner reads them back. */
+export interface StoredReturnFields {
+  is_online_order?: boolean | null;
+  return_eligible?: boolean | null;
+  return_address_line1?: string | null;
+  return_city?: string | null;
+  return_state?: string | null;
+  return_postal_code?: string | null;
+  return_country?: string | null;
+  return_reference?: string | null;
+}
+
+export function returnFormFromParcel(p: StoredReturnFields): ReturnFormValues {
+  return {
+    isOnlineOrder: !!p.is_online_order,
+    returnEligible: !!p.is_online_order && !!p.return_eligible,
+    line1: p.return_address_line1 ?? "",
+    city: p.return_city ?? "",
+    state: p.return_state ?? "",
+    postal: p.return_postal_code ?? "",
+    country: countryCode(p.return_country),
+    reference: p.return_reference ?? "",
+  };
+}
+
+export interface ReturnFieldsUpdate {
+  is_online_order?: boolean;
+  return_eligible?: boolean;
+  return_address_line1?: string;
+  return_city?: string;
+  return_state?: string;
+  return_postal_code?: string;
+  return_country?: string;
+  return_reference?: string;
+}
+
+/**
+ * Only what changed. Unticking either option sends just the flag(s) as false;
+ * the address is sent only while the parcel stays returnable.
+ */
+export function returnFormChanges(next: ReturnFormValues, stored: StoredReturnFields): ReturnFieldsUpdate {
+  const cur = returnFormFromParcel(stored);
+  const out: ReturnFieldsUpdate = {};
+  const online = next.isOnlineOrder;
+  const eligible = online && next.returnEligible;
+  if (online !== cur.isOnlineOrder) out.is_online_order = online;
+  if (eligible !== cur.returnEligible) out.return_eligible = eligible;
+  if (!eligible) return out;
+  const pairs: [keyof ReturnFieldsUpdate, string, string][] = [
+    ["return_address_line1", next.line1.trim(), cur.line1],
+    ["return_city", next.city.trim(), cur.city],
+    ["return_state", next.state, cur.state],
+    ["return_postal_code", next.postal.trim(), cur.postal],
+    ["return_country", next.country, cur.country],
+    ["return_reference", next.reference.trim(), cur.reference],
+  ];
+  for (const [key, value, before] of pairs) {
+    if (value !== before) (out as Record<string, string>)[key] = value;
+  }
+  return out;
 }

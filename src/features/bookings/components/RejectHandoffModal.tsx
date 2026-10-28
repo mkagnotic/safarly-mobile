@@ -24,6 +24,8 @@ interface RejectHandoffModalProps {
   pending: boolean;
   /** Default for "do you have it?", derived from the handoff record. */
   parcelLikelyWithCarrier: boolean;
+  /** The sender flagged it returnable to the seller - picks the follow-up line, as on web. */
+  returnEligible?: boolean;
   /** Why the last attempt failed — shown inline; the modal stays open to retry. */
   error?: string | null;
   onCancel: () => void;
@@ -34,6 +36,7 @@ export function RejectHandoffModal({
   open,
   pending,
   parcelLikelyWithCarrier,
+  returnEligible = false,
   error,
   onCancel,
   onConfirm,
@@ -104,9 +107,12 @@ export function RejectHandoffModal({
         </View>
         <Text style={sharedStyles.modalBody}>
           Use this when the parcel has reached you but you can't carry it — unsafe,
-          oversized, or not what the listing described. There's no penalty to you, your
-          sender won't be charged, and the parcel re-opens for other carriers. Tell us
-          what's wrong so we can keep records.
+          oversized, or not what the listing described. There's no penalty to you and your
+          sender won't be charged.{" "}
+          {returnEligible
+            ? "Because this is a returnable order, the sender can send it back to the seller."
+            : "The sender then arranges collection of the parcel from you."}{" "}
+          Tell us what's wrong so we can keep records.
         </Text>
         <TextInput
           value={reason}

@@ -1383,7 +1383,7 @@ const CHECKS = [
     file: "supabase/functions/booking-handler/routes/returns.ts",
     id: "parcel-relisted-only-after-return-received",
     why: "Plan Y6: the parcel goes back on the marketplace only once the sender confirms it came back.",
-    must: ["parcelHasOtherLiveDeal(supabase, booking.parcel_id, booking.carrier_request_id)"],
+    must: ["parcelHasOtherLiveDeal(supabase, booking.parcel_id, booking.carrier_request_id ?? null)"],
     mustNot: [],
   },
   {
@@ -1855,7 +1855,7 @@ const CHECKS = [
     file: ["supabase/functions/dispute-handler/index.ts", "supabase/functions/dispute-handler/resolution.ts"],
     id: "dispute-refund-opens-a-return",
     why: "27 Oct 2026 dispute audit: 'Refund sender' while the carrier held the parcel cancelled the booking and the parcel with no return, leaving the carrier holding a parcel nobody would collect. It now opens the normal return flow and keeps the parcel locked until it is back.",
-    must: ["const returning = needsReturnAfterDispute(next,", "return_plan: buildReturnPlan(booking, true), return_opened_at: nowIso,", "if (returning) return null;"],
+    must: ["const returning = needsReturnAfterDispute(next,", "return_plan: buildReturnPlan(booking, true, privateReturn), return_opened_at: nowIso,", "if (returning) return null;"],
     mustNot: [],
   },
   {
@@ -2295,6 +2295,29 @@ const CHECKS = [
     why: "See open-to-buddy-option (web repo). Mobile also said 'You'll only see parcel-carrying matches.', checked age only on submit, and had no toggle in Edit Trip.",
     must: ["I'm also open to being a travel buddy on this trip", "We'll also create a buddy listing in Travel Partners, so travelers on this route can find you and start a chat.", "Age must be between 18 and 120.", "You already had a buddy listing for this route", "Your buddy listing is live in Travel Partners.", "e.g. Dubai — 4h layover"],
     mustNot: ["You'll only see parcel-carrying matches.", "Connect with travelers on the same route for companionship.", "A Travel Buddy listing was also created"],
+  },  {
+    repo: "web",
+    file: ["supabase/migrations/20261027180000_parcel_return_address_private.sql", "supabase/functions/_shared/parcelReturn.ts", "supabase/functions/parcel-handler/index.ts", "supabase/functions/booking-handler/routes/possession.ts", "supabase/functions/scheduled-workflow-timeouts/index.ts", "supabase/functions/booking-handler/routes/returns.ts", "supabase/functions/booking-handler/routes/cancel.ts", "supabase/functions/_shared/escrow.ts"],
+    id: "online-order-return-hardening",
+    why: "27 Oct 2026 online-order flow (SECURITY + logic): any signed-in user could read every open parcel's seller street, postal code and order number straight from parcel_requests (RLS 'view open parcels', and discovery realtime) - moved to the service-role-only parcel_return_addresses; 'returnable' was stored without 'online order'; an edit could blank a required field; the owner could set the parcel status (relist it while the carrier held it); return_to_seller was allowed without an address; cancel-vs-payment and resolution-vs-sent races; every return plan must load the private address.",
+    must: ["CREATE TABLE IF NOT EXISTS public.parcel_return_addresses", "REVOKE ALL ON public.parcel_return_addresses FROM anon, authenticated;", "fn_parcel_requests_strip_private_return", "export async function loadReturnAddress(", "buildReturnPlan(booking, withCarrier, await loadReturnAddress(supabase, booking.parcel_id))", "buildReturnPlan(bk, true, await loadReturnAddress(supabase, bk.parcel_id))", "This booking just changed — refresh and try again.", "The carrier has already sent the parcel back."],
+    mustNot: ["buildReturnPlan(booking, withCarrier);", "return_plan: buildReturnPlan(bk, true),"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/parcels/components/ReturnOrderFields.tsx", "src/features/bookings/components/ParcelReturnCard.tsx"],
+    id: "online-order-wording",
+    why: "27 Oct 2026 online-order flow: web and mobile explained the options differently (mobile promised a waiver the server only opens on three yes answers; web said the carrier sends it back), the return card told the carrier they'd been 'refunded out of it' and to 'add one in the note' (impossible), addresses showed raw codes; Edit Parcel couldn't change any of it.",
+    must: ["A shop purchase rather than a personal item. Optional.", "It can be returned to the seller", "If the carrier declines it at handoff or cancels after collecting it, you can have it sent back to the seller.", "Seller's return address", "Where should the parcel go if the delivery falls through?", "You didn't add a return address when you listed this parcel, so pick another option.", "The booking is closed, but the parcel is still with you.", "Copy address"],
+    mustNot: ["add one in the note", "refunded out of it", "A retail purchase being forwarded"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/parcels/ReturnAddressFields.tsx", "src/features/bookings/ParcelReturnCard.tsx", "src/features/bookings/components/RejectHandoffModal.tsx", "src/utils/addressOptions.ts"],
+    id: "mobile-online-order-wording",
+    why: "See online-order-wording (web repo). Plus mobile's city check took symbols (the server then refused it in a banner), unticking kept the old address/order number, and the decline dialog said the parcel re-opens for other carriers (it is relisted only after it is back).",
+    must: ["A shop purchase rather than a personal item. Optional.", "It can be returned to the seller", "Seller's return address", "You didn't add a return address when you listed this parcel, so pick another option.", "The booking is closed, but the parcel is still with you.", "City can only contain letters, spaces, hyphens and apostrophes."],
+    mustNot: ["add one in the note", "refunded out of it", "Eligible for return to the seller within their return window", "the parcel re-opens for other carriers"],
   },
 ];
 

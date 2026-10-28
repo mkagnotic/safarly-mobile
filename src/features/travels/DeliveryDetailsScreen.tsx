@@ -150,8 +150,10 @@ export function DeliveryDetailsScreen() {
 
         <View style={styles.factGrid}>
           {parcel?.category ? <Fact label="Category" value={parcel.category} /> : null}
-          {parcel?.weight_kg != null ? (
-            <Fact label="Weight" value={`${parcel.weight_kg} kg`} />
+          {/* The booking's parcel carries `weight` (weight_kg is the parcel API's name),
+              so the weight never showed here (27 Oct 2026). */}
+          {(parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight) != null ? (
+            <Fact label="Weight" value={`${parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight} kg`} />
           ) : null}
           {parcel?.fee_offered != null ? (
             <Fact label="Fee" value={formatMoneyShort(parcel.fee_offered, parcel.fee_currency)} />

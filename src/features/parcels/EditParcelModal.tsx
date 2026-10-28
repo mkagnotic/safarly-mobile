@@ -23,6 +23,8 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import type { DeliveryDateMode } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
+import { ReturnAddressFields } from "./ReturnAddressFields";
 import { currencySymbol } from "@/utils/money";
 
 type Country = "IN" | "US";
@@ -92,6 +94,8 @@ export interface EditParcelFormValues {
   delivery_by_from: string;
   delivery_by_to: string;
   delivery_date_mode: DeliveryDateMode;
+  /** Online order / return block, same fields as the send form (27 Oct 2026). */
+  returnForm: ReturnFormValues;
 }
 
 interface EditParcelModalProps {
@@ -104,6 +108,8 @@ interface EditParcelModalProps {
   listingId?: string;
   /** The parcel already has offers: the server refuses a currency change (409). */
   currencyLocked?: boolean;
+  /** The server's refusal of the last save (e.g. booked parcel), shown in the modal. */
+  serverError?: string | null;
 }
 
 export function EditParcelModal({
@@ -114,9 +120,11 @@ export function EditParcelModal({
   onCancel,
   onSubmit,
   currencyLocked = false,
+  serverError = null,
 }: Readonly<EditParcelModalProps>) {
   const [form, setForm] = useState<EditParcelFormValues>(initial);
   const [error, setError] = useState<string | null>(null);
+  const [returnErrors, setReturnErrors] = useState<ReturnAddressErrors>({});
   const [calendarTarget, setCalendarTarget] = useState<"from" | "to" | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const d = parseYmd(initial.delivery_by_from) ?? new Date();
@@ -129,6 +137,7 @@ export function EditParcelModal({
     if (open && !wasOpenRef.current) {
       setForm(initial);
       setError(null);
+      setReturnErrors({});
       const d = parseYmd(initial.delivery_by_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
@@ -198,6 +207,9 @@ export function EditParcelModal({
     // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
     const tooSmall = minAmountProblem(fee, form.fee_currency);
     if (tooSmall) return setError(tooSmall);
+    const ra = validateReturnForm(form.returnForm);
+    setReturnErrors(ra);
+    if (Object.keys(ra).length > 0) return setError("Check the seller's return address.");
     setError(null);
     // In single mode both dates collapse to the deadline, matching what the
     // handler would do anyway — sending them aligned keeps client and server
@@ -454,7 +466,24 @@ export function EditParcelModal({
                 editable={!pending}
               />
             </View>
-            {error ? <Text style={styles.formError}>{error}</Text> : null}
+
+            <ReturnAddressFields
+              value={form.returnForm}
+              onChange={(patch) =>
+                setForm((prev) => ({ ...prev, returnForm: { ...prev.returnForm, ...patch } }))
+              }
+              errors={returnErrors}
+              onFieldEdited={(k) =>
+                setReturnErrors((prev) => {
+                  if (!prev[k]) return prev;
+                  const next = { ...prev };
+                  delete next[k];
+                  return next;
+                })
+              }
+              disabled={pending}
+            />
+            {error || serverError ? <Text style={styles.formError}>{error ?? serverError}</Text> : null}
             </ScrollView>
 
             {listingId ? (
