@@ -31,6 +31,7 @@ import { BookingsEmptyCard } from "@/features/bookings/components/BookingsEmptyC
 import { ConfirmDeliveryStep } from "@/features/bookings/components/ConfirmDeliveryStep";
 import { DeliveryCodePanel } from "@/features/bookings/components/DeliveryCodePanel";
 import { ExpandedBookingModals } from "@/features/bookings/components/ExpandedBookingModals";
+import { SenderDelayNotice } from "@/features/bookings/components/SenderDelayNotice";
 import { ParcelDetailsSection } from "@/features/bookings/components/ParcelDetailsSection";
 import { useExpandedBooking } from "@/features/bookings/hooks/useExpandedBooking";
 import { createBookingActions } from "@/features/bookings/lib/bookingActions";
@@ -65,7 +66,7 @@ function ExpandedBody({
     booking, timeline, error, refetch, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
     setAcceptHandoffOpen, rejectHandoffOpen, setRejectHandoffOpen, cancelPostPossessionOpen,
     setCancelPostPossessionOpen, modalError, setModalError, otpCode, setOtpCode, generatedOtp,
-    setGeneratedOtp, otpEmailed, setOtpEmailed, actionBanner, dismissBanner, showBanner, runAction,
+    setGeneratedOtp, otpEmailed, setOtpEmailed, otpExpiresInSec, setOtpExpiresInSec, actionBanner, dismissBanner, showBanner, runAction,
   } = useExpandedBooking(bookingId);
 
   if (!booking && !error) {
@@ -95,7 +96,7 @@ function ExpandedBody({
     handleCancelPostPossessionConfirm, handleGenerateOtp, handleCopyOtp, handleConfirmOtp,
   } = createBookingActions({
     booking, bookingId, runAction, showBanner, otpCode, generatedOtp, setOtpCode,
-    setGeneratedOtp, setOtpEmailed, setModalError, setAcceptHandoffOpen, setRejectHandoffOpen,
+    setGeneratedOtp, setOtpEmailed, setOtpExpiresInSec, setModalError, setAcceptHandoffOpen, setRejectHandoffOpen,
     setCancelOpen, setCancelPostPossessionOpen,
   });
 
@@ -165,6 +166,8 @@ function ExpandedBody({
       ) ? (
         <JourneyProgress booking={booking} />
       ) : null}
+
+      {role === "sender" ? <SenderDelayNotice booking={booking} /> : null}
 
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
@@ -254,7 +257,7 @@ function ExpandedBody({
             onConfirmReady={() => void handleConfirmReady()}
             onStartJourney={() => void handleStartJourney()}
             onMarkLanded={() => void handleMarkLanded()}
-            onReportDelay={(args) => void handleReportDelay(args)}
+            onReportDelay={(args) => handleReportDelay(args)}
           />
         ) : null}
 
@@ -326,6 +329,7 @@ function ExpandedBody({
             <DeliveryCodePanel
               generatedOtp={generatedOtp}
               otpEmailed={otpEmailed}
+              otpExpiresInSec={otpExpiresInSec}
               handleCopyOtp={handleCopyOtp}
               handleGenerateOtp={handleGenerateOtp}
               actionPending={actionPending}
@@ -357,6 +361,12 @@ function ExpandedBody({
             <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
             <Text style={sharedStyles.actionDangerText}>I can't complete this delivery</Text>
           </Pressable>
+        ) : null}
+        {canCancelPostPossession ? (
+          <Text style={sharedStyles.stepCardFootnote}>
+            Only if the trip is off entirely — you still have the parcel, so you'll arrange its return
+            and a cash penalty (5–25%) applies. If it's just running late, report a delay instead.
+          </Text>
         ) : null}
 
         {canRate ? (
@@ -397,6 +407,7 @@ function ExpandedBody({
         setCancelPostPossessionOpen={setCancelPostPossessionOpen}
         handleCancelPostPossessionConfirm={handleCancelPostPossessionConfirm}
         returnEligible={returnEligible}
+        isSender={role === "sender"}
       />
     </View>
   );

@@ -81,19 +81,6 @@ export type MainTabParamList = {
   /** Same screen as the root stack's `ForgotPassword`, reached from Change Password. */
   ForgotPasswordTab: { email?: string } | undefined;
   SendParcelTab: undefined;
-  ReviewPayTab: {
-    draft: {
-      from: string;
-      to: string;
-      weight: string;
-      fee: string;
-      category: string;
-    };
-  };
-  PaymentSuccessTab: {
-    amount: string;
-  };
-  PaymentFailureTab: undefined;
   ListTripTab: { source?: "home" | "trips" } | undefined;
   ListTripSuccessTab: undefined;
   TripDetailsTab: { tripId: string };

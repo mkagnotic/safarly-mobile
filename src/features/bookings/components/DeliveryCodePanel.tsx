@@ -10,6 +10,8 @@ import type { BookingActions } from "@/features/bookings/lib/bookingActions";
 interface DeliveryCodePanelProps {
   generatedOtp: string | null;
   otpEmailed: boolean;
+  /** The server's `expires_in` for this code, in seconds. */
+  otpExpiresInSec: number;
   handleCopyOtp: BookingActions["handleCopyOtp"];
   handleGenerateOtp: BookingActions["handleGenerateOtp"];
   actionPending: ExpandedBookingState["actionPending"];
@@ -19,6 +21,7 @@ interface DeliveryCodePanelProps {
 export function DeliveryCodePanel({
   generatedOtp,
   otpEmailed,
+  otpExpiresInSec,
   handleCopyOtp,
   handleGenerateOtp,
   actionPending,
@@ -33,7 +36,7 @@ export function DeliveryCodePanel({
         {generatedOtp}
       </Text>
       <Text style={styles.otpDisplayHint}>
-        When the parcel is in your hands and looks right, give this 6-digit code to the carrier. Entering it completes the delivery. It expires in 30 minutes. If you get a new code, the old one stops working.
+        When the parcel is in your hands and looks right, give this 6-digit code to the carrier. Entering it completes the delivery. It expires in {Math.max(1, Math.floor(otpExpiresInSec / 60))} minutes. If you get a new code, the old one stops working.
       </Text>
       {otpEmailed ? (
         <Text style={styles.otpEmailedNote}>We&apos;ve also emailed this code to you.</Text>

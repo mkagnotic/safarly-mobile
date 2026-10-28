@@ -172,7 +172,7 @@ export const ParcelJourneyTimeline = memo(function ParcelJourneyTimeline({
   return (
     <View style={styles.timelineCard}>
       <View style={styles.timelineHeader}>
-        <Text style={styles.timelineTitle}>Delivery tracking</Text>
+        <Text style={styles.timelineTitle}>Track parcel</Text>
         {!isBad ? (
           <Text style={styles.timelineCount}>
             {Math.max(doneCount, 0)}/{STAGE_ORDER.length}

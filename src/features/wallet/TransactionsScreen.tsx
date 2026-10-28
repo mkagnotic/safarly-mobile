@@ -139,9 +139,16 @@ export function TransactionsScreen() {
     if (downloadingId) return;
     setDownloadingId(tx.id);
     try {
-      await shareTransactionReceipt(tx);
-    } catch (err) {
-      showToast({ title: "Couldn't create receipt", message: getErrorMessage(err), variant: "error" });
+      const outcome = await shareTransactionReceipt(tx);
+      if (outcome === "copied") {
+        showToast({
+          title: "Sharing isn't available on this device",
+          message: "We copied the receipt details to your clipboard instead.",
+          variant: "info",
+        });
+      }
+    } catch {
+      showToast({ title: "Couldn't generate the receipt. Please try again.", variant: "error" });
     } finally {
       if (mountedRef.current) setDownloadingId(null);
     }
@@ -168,6 +175,7 @@ export function TransactionsScreen() {
         </Pressable>
         <Text style={styles.title}>Payments</Text>
       </View>
+      <Text style={styles.subtitle}>Your payment history and receipts</Text>
 
       {loading ? (
         <Card style={styles.centerCard}>
@@ -176,7 +184,7 @@ export function TransactionsScreen() {
       ) : error && items.length === 0 ? (
         <Card style={styles.panel}>
           <Ionicons name="cloud-offline-outline" size={34} color={colors.mutedText} />
-          <Text style={styles.panelTitle}>Couldn't load payments</Text>
+          <Text style={styles.panelTitle}>Couldn't load your payments</Text>
           <Text style={styles.panelBody}>{error}</Text>
           <AppButton label="Try again" onPress={() => void load()} style={styles.panelButton} />
         </Card>
@@ -205,7 +213,7 @@ export function TransactionsScreen() {
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>
-                Earnings pay out automatically to your linked bank 2–7 business days after each delivery.
+                Earnings pay out automatically to your linked bank 2–7 business days after the sender confirms delivery.
               </Text>
               <Text style={styles.payoutNoteLink}>Manage payout details ›</Text>
             </View>
@@ -215,7 +223,7 @@ export function TransactionsScreen() {
             <Card style={styles.panel}>
               <Ionicons name="receipt-outline" size={34} color={colors.mutedText} />
               <Text style={styles.panelTitle}>No payments yet</Text>
-              <Text style={styles.panelBody}>Your payment history and earnings will appear here.</Text>
+              <Text style={styles.panelBody}>Your payments and receipts will appear here.</Text>
             </Card>
           ) : (
             <Card style={styles.listCard}>
@@ -225,6 +233,8 @@ export function TransactionsScreen() {
                   tx={tx}
                   isLast={i === items.length - 1}
                   downloading={downloadingId === tx.id}
+                  // One receipt at a time: every row is locked while one generates.
+                  locked={downloadingId !== null}
                   onDownload={() => void handleDownload(tx)}
                 />
               ))}
@@ -284,8 +294,9 @@ function TxRow({
   tx,
   isLast,
   downloading,
+  locked,
   onDownload,
-}: Readonly<{ tx: Transaction; isLast?: boolean; downloading?: boolean; onDownload: () => void }>) {
+}: Readonly<{ tx: Transaction; isLast?: boolean; downloading?: boolean; locked?: boolean; onDownload: () => void }>) {
   const pen = penaltyView(tx);
   const meta = pen ? { ...txTypeMeta(tx.type), label: pen.label, credit: pen.credit } : txTypeMeta(tx.type);
   const tone = txStatusTone(tx.status);
@@ -314,7 +325,7 @@ function TxRow({
       {showReceipt ? (
         <Pressable
           onPress={onDownload}
-          disabled={downloading}
+          disabled={downloading || locked}
           hitSlop={8}
           style={styles.receiptBtn}
           accessibilityRole="button"
@@ -343,6 +354,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
+  subtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 14 },
 
   centerCard: { borderRadius: 16, alignItems: "center", paddingVertical: 40 },
   panel: { borderRadius: 16, alignItems: "center", paddingVertical: 28, paddingHorizontal: 18, gap: 8 },

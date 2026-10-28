@@ -12,9 +12,6 @@ import { RateDeliverySheet, type RateDeliveryValues } from "./RateDeliverySheet"
 // and profile-setup are already excluded by the mount gate in RootNavigator.
 const SUPPRESSED_ROUTES = new Set<string>([
   "PayBookingTab",
-  "ReviewPayTab",
-  "PaymentSuccessTab",
-  "PaymentFailureTab",
   "DeliveryReviewTab",
   "KycVerification",
   "KycVerificationTab",

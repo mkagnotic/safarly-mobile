@@ -185,7 +185,7 @@ export function HandoffPlanCard({
   const meetError =
     draftMode === "in_person" && instructions.trim().length < 5
       ? instructions.trim()
-        ? "Add a bit more detail - where, and roughly when."
+        ? "Add a bit more detail — where, and roughly when."
         : "Tell them where and when to meet."
       : undefined;
 
@@ -278,7 +278,7 @@ export function HandoffPlanCard({
             accessibilityLabel="Hand it to me in person"
           >
             <Ionicons name="people-outline" size={16} color={colors.primary} />
-            <Text style={styles.modeTitle}>In person</Text>
+            <Text style={styles.modeTitle}>Hand it to me in person</Text>
             <Text style={styles.modeHint}>
               Meet {originCity ? `in ${originCity}` : "in the origin city"} and collect it.
             </Text>
@@ -422,11 +422,16 @@ export function HandoffPlanCard({
     return (
       <View style={styles.card}>
         {header(`Waiting for ${carrierName} to say where to send the parcel`)}
+        {/* Handoff-first: the sender pays AFTER the carrier accepts the parcel,
+            so nothing is "in escrow" yet. Only a legacy paid-first deal says so. */}
         <Text style={styles.body}>
-          Your payment is safe in escrow. The parcel has to reach your carrier
-          {originCity ? ` in ${originCity}` : ""} before they travel, so they will share
-          either a local address to courier it to, or a meetup. You will be notified the
-          moment they do - nudge them in the chat if it is urgent.
+          {booking.payment_made
+            ? "Your payment is held by Safarly until you confirm delivery. "
+            : `You haven't paid anything yet — you pay after ${carrierName} accepts the parcel. `}
+          The parcel has to reach your carrier
+          {originCity ? ` in ${originCity}` : ""} before they travel, so they'll share
+          either a local address to courier it to, or a meetup. You'll get a notification the
+          moment they do — nudge them in the chat if it's urgent.
         </Text>
         <Text style={styles.footnote}>
           No code at handoff. The 6-digit code belongs to {journeyStepRef("delivery")}, and
@@ -486,8 +491,8 @@ export function HandoffPlanCard({
       <View style={styles.card}>
         {header(
           isCarrier
-            ? "The parcel is on its way to you - inspect it when it arrives"
-            : `You marked the parcel as sent - ${carrierName} will inspect it on arrival`,
+            ? "The parcel is on its way to you — inspect it when it arrives"
+            : `You marked the parcel as sent — ${carrierName} will inspect it on arrival`,
         )}
         {planBlock}
         <Text style={styles.planMetaStrong}>Marked sent {formatDateTime(dispatchedAt)}</Text>
@@ -556,7 +561,7 @@ export function HandoffPlanCard({
         </Pressable>
         <Text style={styles.footnote}>
           Marking it sent tells {carrierName} to expect it and to inspect it on arrival.
-          Your payment stays in escrow until they deliver it.
+          {booking.payment_made ? " Your payment is held by Safarly until you confirm delivery." : " You pay once they accept it."}
         </Text>
       </View>
     );

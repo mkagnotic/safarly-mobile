@@ -117,7 +117,7 @@ function liabilityLine(
         : "The sender called the delivery off, so they cover the return postage.";
     case "no_fault":
       return youPay
-        ? "Neither side caused this, so the return postage is yours - it's still your parcel."
+        ? "Neither side caused this, so the return postage is yours — it's still your parcel."
         : "Neither side caused this, so the sender covers the return postage.";
     default:
       return youPay ? "The return postage is yours." : "The other side covers the return postage.";
@@ -260,7 +260,7 @@ export function ParcelReturnCard({
   if (completedAt && !receivedAt && resolution !== "sender_has_parcel") {
     return (
       <View style={styles.card}>
-        {header("On its way back - confirm when it arrives")}
+        {header("On its way back — confirm when it arrives")}
         <Text style={styles.body}>
           {resolution ? RESOLUTION_LABEL[resolution] : "Resolved"} · sent {formatDateTime(completedAt)}
         </Text>
@@ -269,7 +269,7 @@ export function ParcelReturnCard({
         ) : null}
         {isCarrier ? (
           <Text style={styles.meta}>
-            Waiting for the sender to confirm the parcel arrived. The delivery closes then.
+            Waiting for {senderName} to confirm the parcel arrived. The delivery closes then.
           </Text>
         ) : (
           <Pressable
@@ -291,9 +291,9 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(
           resolution === "sender_has_parcel"
-            ? "Closed - the parcel never left the sender"
+            ? "Closed — the parcel never left the sender"
             : receivedAt
-              ? "Returned safely - this delivery is closed"
+              ? "Returned safely — this delivery is closed"
               : "The parcel is on its way back",
         )}
         <Text style={styles.body}>
@@ -351,10 +351,10 @@ export function ParcelReturnCard({
                           ? "The carrier posts it to the return address you gave when listing the parcel."
                           : "You didn't add a return address when you listed this parcel, so pick another option."
                         : value === "return_to_sender"
-                          ? "The carrier posts it to an address you give below - the usual choice for a personal item."
+                          ? "The carrier posts it to an address you give below — the usual choice for a personal item."
                           : value === "sender_collects"
-                            ? "You book a courier or collect it yourself. Agree the details in chat."
-                            : "Nothing to move - close this off."}
+                            ? "You book a courier or collect it from the carrier yourself. Agree the details in chat."
+                            : "Nothing to move — close this off."}
                     </Text>
                   </View>
                 </Pressable>
@@ -438,7 +438,7 @@ export function ParcelReturnCard({
 
     return (
       <View style={styles.card}>
-        {header(`You still have the parcel - ${senderName} is deciding where it goes`)}
+        {header(`You still have the parcel — ${senderName} is deciding where it goes`)}
         <Text style={styles.body}>
           The booking is closed, but the parcel is still with you. {booking.sender?.name || "The sender"} is choosing
           whether it goes back to the seller or they arrange collection. You'll get a

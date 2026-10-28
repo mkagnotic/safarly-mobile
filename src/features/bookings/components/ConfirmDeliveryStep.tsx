@@ -73,6 +73,9 @@ export function ConfirmDeliveryStep({
         Not at the destination yet? Nothing to do — come back to this booking when
         you hand the parcel over. Can't meet up? Message the receiver in chat.
       </Text>
+      <Text style={sharedStyles.stepCardFootnote}>
+        Three wrong tries locks the code — the sender then gets a new one.
+      </Text>
     </View>
   );
 }

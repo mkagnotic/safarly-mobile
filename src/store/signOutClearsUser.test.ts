@@ -59,9 +59,9 @@ describe("every persisted key has a decision attached", () => {
   /**
    * Belongs to the ACCOUNT. Either `logout()` clears it, or it is inert mock
    * state no screen reads. `walletBalance` and the seed collections are the
-   * latter: prototype data left in the store, rendered only by
-   * `ReviewPayScreen`, which nothing navigates to and which cannot pay
-   * (`showLiveData` is false by default, so its balance reads 0).
+   * latter: prototype data left in the store. The mock `ReviewPayScreen` that
+   * rendered them (wallet balance, a fake saved card) was deleted on 28 Oct 2026
+   * — no screen reads them now (no-wallet rule; payments go through checkout).
    */
   const ACCOUNT_SCOPED = new Set([
     "authenticated", "profileSetupDone", "kycWelcomePending", "userProfile",

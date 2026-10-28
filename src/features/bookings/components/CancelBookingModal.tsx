@@ -13,6 +13,8 @@ import { KeyboardModalCard } from "@/features/bookings/components/KeyboardModalC
 interface CancelBookingModalProps {
   open: boolean;
   pending: boolean;
+  /** What happens to the money (and the parcel) if they go ahead. */
+  moneyLine?: string;
   /** Why the last attempt failed — shown inline; the modal stays open to retry. */
   error?: string | null;
   onCancel: () => void;
@@ -22,6 +24,7 @@ interface CancelBookingModalProps {
 export function CancelBookingModal({
   open,
   pending,
+  moneyLine,
   error,
   onCancel,
   onConfirm,
@@ -52,6 +55,7 @@ export function CancelBookingModal({
         <Text style={sharedStyles.modalBody}>
           Tell the other party why you're cancelling. This is shared with them.
         </Text>
+        {moneyLine ? <Text style={sharedStyles.modalBody}>{moneyLine}</Text> : null}
         <TextInput
           value={reason}
           onChangeText={setReason}

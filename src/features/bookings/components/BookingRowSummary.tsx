@@ -126,8 +126,10 @@ export function BookingRowSummary({
             minimumFontScale={0.75}
             maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
           >
-            {/* A booking still reading "disputed" after its dispute resolved never says "Disputed". */}
-            {staleDisputed ? chipStatusLabel(booking, "") : <>{bookingStatusLabel(booking.status)}</>}
+            {/* A finished hand-back is no longer "returning": the parcel is home and the
+                deal is closed (web parity). A booking still reading "disputed" after its
+                dispute resolved never says "Disputed". */}
+            {booking.return_received_at ? "Returned - cancelled" : staleDisputed ? chipStatusLabel(booking, "") : <>{bookingStatusLabel(booking.status)}</>}
           </Text>
         </View>
         {booking.parcel ? (

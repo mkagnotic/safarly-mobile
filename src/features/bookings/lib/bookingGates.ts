@@ -28,7 +28,7 @@ export function getBookingGates(booking: Booking, role: "sender" | "carrier" | "
   const handoffDispatched = !!booking.handoff_dispatched_at;
   const rejectHandoffLabel = handoffDispatched
     ? "Can't accept this parcel"
-    : "Cancel - I can't do this delivery";
+    : "Cancel — I can't do this delivery";
   // Delivery code = proof of DROP-OFF, so it only appears once the parcel is
   // actually in transit (web parity, `CustomerBookings.tsx`). Offering it at
   // awaiting_handoff invited senders to hand the code to the carrier at pickup,

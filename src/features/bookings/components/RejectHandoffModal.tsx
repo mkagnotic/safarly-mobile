@@ -16,6 +16,7 @@ import {
   MAX_EVIDENCE_BYTES,
   REJECT_REASON_MIN, minLengthHint,
 } from "@/features/bookings/lib/modalValidation";
+import { declineCopy } from "@/features/bookings/lib/moneyMessages";
 
 // ─────────────── Reject handoff modal ───────────────
 
@@ -24,6 +25,9 @@ interface RejectHandoffModalProps {
   pending: boolean;
   /** Default for "do you have it?", derived from the handoff record. */
   parcelLikelyWithCarrier: boolean;
+  /** The sender marked it sent. Before that this IS the carrier's cancel, not an
+   *  inspection decline, and the dialog says so (web parity: HandoffActions). */
+  parcelDispatched: boolean;
   /** The sender flagged it returnable to the seller - picks the follow-up line, as on web. */
   returnEligible?: boolean;
   /** Why the last attempt failed — shown inline; the modal stays open to retry. */
@@ -36,6 +40,7 @@ export function RejectHandoffModal({
   open,
   pending,
   parcelLikelyWithCarrier,
+  parcelDispatched,
   returnEligible = false,
   error,
   onCancel,
@@ -87,6 +92,7 @@ export function RejectHandoffModal({
 
   const trimmed = reason.trim();
   const reasonOk = trimmed.length >= REJECT_REASON_MIN;
+  const copy = declineCopy(parcelDispatched);
 
   const handleConfirm = () => {
     if (!reasonOk) return;
@@ -100,15 +106,13 @@ export function RejectHandoffModal({
           <View style={sharedStyles.modalHeaderBubbleDanger}>
             <Ionicons name="close-circle" size={18} color={colors.danger} />
           </View>
-          <Text style={sharedStyles.modalTitle}>Decline this parcel?</Text>
+          <Text style={sharedStyles.modalTitle}>{copy.title}</Text>
           <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
         </View>
         <Text style={sharedStyles.modalBody}>
-          Use this when the parcel has reached you but you can't carry it — unsafe,
-          oversized, or not what the listing described. There's no penalty to you and your
-          sender won't be charged.{" "}
+          {copy.body}{" "}
           {returnEligible
             ? "Because this is a returnable order, the sender can send it back to the seller."
             : "The sender then arranges collection of the parcel from you."}{" "}
@@ -153,13 +157,13 @@ export function RejectHandoffModal({
             accessibilityLabel="The sender has the parcel"
           >
             <Text style={styles.returnWhereTitle}>The sender has it</Text>
-            <Text style={styles.returnWhereHint}>Declined at the meetup - nothing to send back.</Text>
+            <Text style={styles.returnWhereHint}>I declined at the meetup — nothing to send back.</Text>
           </Pressable>
         </View>
         <Text style={sharedStyles.modalHelper}>
           {withCarrier
             ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
-            : "Nothing to return - the booking closes as soon as you submit."}
+            : "Nothing to return — the booking closes as soon as you submit."}
         </Text>
 
         <Pressable

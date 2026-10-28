@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { ApiClientError, getErrorMessage } from "@/services/api";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 
 /**
  * Everything one expanded booking card holds: its detail fetch, the action in
@@ -64,6 +65,9 @@ export function useExpandedBooking(bookingId: string) {
   // The plaintext code is returned ONCE, so the sender needs to know a durable
   // copy went to their inbox rather than assuming the screen is the only copy.
   const [otpEmailed, setOtpEmailed] = useState(false);
+  // How long the code lives, in seconds — the server's `expires_in`, not a
+  // hard-coded "30 minutes" (web parity).
+  const [otpExpiresInSec, setOtpExpiresInSec] = useState(1800);
 
   // Inline action feedback — matches the rest of the app (see SendParcelScreen)
   // by rendering `FormBanner` at the top of the affected card instead of toasts.
@@ -122,8 +126,8 @@ export function useExpandedBooking(bookingId: string) {
         | "mark-landed"
         | "report-delay",
       task: () => Promise<T>,
-      /** A function when the words depend on the server's answer. */
-      successMessage: string | ((result: T) => string),
+      /** A function when the words depend on the server's answer; null = no banner. */
+      successMessage: string | null | ((result: T) => string | null),
       /** Optional per-action mapper for friendlier copy on specific error codes. */
       formatError?: (code: string, message: string) => string,
       /**
@@ -137,7 +141,13 @@ export function useExpandedBooking(bookingId: string) {
       try {
         const result = await task();
         await refetch();
-        showBanner({ variant: "success", title: typeof successMessage === "function" ? successMessage(result) : successMessage });
+        // The opened card is not the only view of this booking: the collapsed
+        // row's status chip, the list filters and the chat's active-deal pin all
+        // read it too, and stayed stale until the next realtime event (money
+        // canon #45). One bump refreshes the list, the detail and the chat pin.
+        bumpRealtimeTopic("bookings");
+        const title = typeof successMessage === "function" ? successMessage(result) : successMessage;
+        if (title) showBanner({ variant: "success", title });
         return result;
       } catch (err) {
         const code = err instanceof ApiClientError ? err.code : "";
@@ -179,6 +189,8 @@ export function useExpandedBooking(bookingId: string) {
     setGeneratedOtp,
     otpEmailed,
     setOtpEmailed,
+    otpExpiresInSec,
+    setOtpExpiresInSec,
     actionBanner,
     dismissBanner,
     showBanner,

@@ -9,8 +9,10 @@ import {
 } from "@/services/api";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import { PAYMENT_RETURN_URL } from "@/services/api/payments";
+import { keyForSession, type SessionKey } from "@/hooks/api/checkoutKey";
 
-export type PayPhase = "idle" | "paying" | "succeeded";
+/** paying = opening the checkout; confirming = back from it, asking the server. */
+export type PayPhase = "idle" | "paying" | "confirming" | "succeeded";
 
 export interface UsePayBookingResult {
   phase: PayPhase;
@@ -48,7 +50,9 @@ export function usePayBooking(bookingId: string | undefined): UsePayBookingResul
   const [phase, setPhase] = useState<PayPhase>("idle");
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   const [cancelled, setCancelled] = useState(false);
-  const idempotencyKeyRef = useRef<string | null>(null);
+  // Keyed per checkout session (see checkoutKey.ts): a key reused across
+  // sessions could confirm a new session with an old session's stored answer.
+  const idempotencyKeyRef = useRef<SessionKey | null>(null);
   // One checkout at a time: a double tap used to open two.
   const inFlightRef = useRef(false);
 
@@ -76,10 +80,11 @@ export function usePayBooking(bookingId: string | undefined): UsePayBookingResul
 
       // 3. Confirm by session. The webhook may already have settled; confirm is
       //    idempotent and re-checks the session is really paid.
-      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = newIdempotencyKey();
+      setPhase("confirming");
+      idempotencyKeyRef.current = keyForSession(idempotencyKeyRef.current, intent.session_id, newIdempotencyKey);
       try {
         const res = (
-          await paymentsApi.confirmCheckout(intent.session_id, idempotencyKeyRef.current)
+          await paymentsApi.confirmCheckout(intent.session_id, idempotencyKeyRef.current.key)
         ).data;
         bumpRealtimeTopic("bookings");
         bumpRealtimeTopic("transactions");

@@ -28,7 +28,9 @@ export interface JourneyActionsCardProps {
   onConfirmReady: () => void;
   onStartJourney: () => void;
   onMarkLanded: () => void;
-  onReportDelay: (args: { reason: JourneyDelayReason; note?: string; new_travel_date?: string }) => void;
+  /** Resolves truthy on success: the form only closes (and clears) then, so a
+   *  failure keeps what the carrier typed (money canon #42). */
+  onReportDelay: (args: { reason: JourneyDelayReason; note?: string; new_travel_date?: string }) => Promise<unknown>;
 }
 
 /** The five reasons a journey slips, in the order the spec lists them. */
@@ -92,7 +94,7 @@ export function JourneyActionsCard({
           <Ionicons name="warning-outline" size={13} color={colors.warning} />
           <Text style={styles.delayNoticeText}>
             You reported a delay
-            {booking.agreed_travel_date ? ` - now travelling ${formatLocalDate(booking.agreed_travel_date)}` : ""}.
+            {booking.agreed_travel_date ? ` — now travelling ${formatLocalDate(booking.agreed_travel_date)}` : ""}.
             {booking.delay_note ? ` "${booking.delay_note}"` : ""}
           </Text>
         </View>
@@ -101,7 +103,7 @@ export function JourneyActionsCard({
       {preFlight ? (
         <>
           <Text style={styles.title}>
-            {isReady ? "You're ready - start the journey when you set off" : "Confirm you're ready to travel"}
+            {isReady ? "You're ready — start the journey when you set off" : "Confirm you're ready to travel"}
           </Text>
           <Text style={styles.body}>
             {isReady
@@ -185,7 +187,7 @@ export function JourneyActionsCard({
           accessibilityLabel="Report a delay"
         >
           <Ionicons name="warning-outline" size={12} color={colors.warning} />
-          <Text style={styles.linkButtonText}>Something's changed - report a delay</Text>
+          <Text style={styles.linkButtonText}>Something's changed — report a delay</Text>
         </Pressable>
       ) : (
         <View style={styles.delayForm}>
@@ -200,8 +202,8 @@ export function JourneyActionsCard({
             </Pressable>
           </View>
           <Text style={styles.delayFormHint}>
-            This reschedules the trip - you keep the parcel and nothing is refunded. To end the
-            delivery instead, use Cancel delivery.
+            This reschedules the trip — you keep the parcel and nothing is refunded. To end the
+            delivery instead, use "I can't complete this delivery".
           </Text>
 
           <View style={styles.optionList}>
@@ -249,13 +251,14 @@ export function JourneyActionsCard({
 
           <Pressable
             style={[styles.primaryButton, styles.delaySubmit, (busy || !dateValid) && styles.disabled]}
-            onPress={() => {
+            onPress={async () => {
               if (!dateValid) return;
-              onReportDelay({
+              const ok = await onReportDelay({
                 reason,
                 note: note.trim() || undefined,
                 new_travel_date: newDate || undefined,
               });
+              if (!ok) return;
               setDelayOpen(false);
               setNote("");
               setNewDate("");
@@ -282,8 +285,8 @@ export function JourneyActionsCard({
           Deliberately does NOT promise an automatic refund - there isn't one.
           A stall opens a dispute and an admin decides. */}
       <Text style={styles.safetyNet}>
-        If this delivery stops progressing - the journey never starts, or you land and the
-        delivery is never completed - we open a support case automatically and your payout
+        If this delivery stops progressing — the journey never starts, or you land and the
+        delivery is never completed — we open a support case automatically and your payout
         stays held until it is resolved. Reporting a delay instead reschedules the trip with
         no penalty.
       </Text>

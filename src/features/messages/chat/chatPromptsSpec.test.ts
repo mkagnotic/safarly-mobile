@@ -52,7 +52,10 @@ test("bug 6: the sender sees 'Under review by our team' once the traveler is out
 test("bug 8: the payout dialog names no processor (Razorpay serves India)", () => {
   assert.doesNotMatch(PAYOUT, /Handled securely by Stripe/);
   assert.match(PAYOUT, /Handled securely by our payment partner — Safarly never stores your bank details\./);
-  assert.match(PAYOUT, /you'll come straight back to finish accepting\./);
+  // Money canon #23: nothing brings the carrier back automatically, so the
+  // dialog no longer promises it does.
+  assert.doesNotMatch(PAYOUT, /come straight back/);
+  assert.match(PAYOUT, /When you're done, come back to this chat to finish accepting\./);
 });
 
 test("bug 9: a failed upload leaves no bubble; Retry re-sends with the file", () => {

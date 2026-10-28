@@ -7,7 +7,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";
 import { KeyboardModalCard } from "@/features/bookings/components/KeyboardModalCard";
-import { REJECT_REASON_MIN, minLengthHint } from "@/features/bookings/lib/modalValidation";
+import { REJECT_REASON_MIN } from "@/features/bookings/lib/modalValidation";
 
 // ─────────────── Cancel post-possession modal (carrier mid-trip) ───────────────
 
@@ -103,18 +103,19 @@ export function CancelPostPossessionModal({
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
         </View>
+        <Text style={sharedStyles.modalBody}>You've already accepted this parcel. Cancelling now:</Text>
         <Text style={sharedStyles.modalBody}>
-          You've already accepted this parcel. Cancelling now refunds the sender in full
-          if they've already paid, takes a cash penalty (5–25%, depending on how close you
-          are to the deadline) from your next payout, and adds a strike to your account. If
-          the parcel is returnable, the sender can waive the cash penalty.
+          {"• Refunds the sender in full, if they have already paid\n" +
+            "• Takes a cash penalty (5–25%, depending on how close you are to the deadline) from your next payout\n" +
+            "• Adds a strike to your account\n" +
+            "• The parcel goes back: the sender chooses where, and you send it"}
         </Text>
 
-        <Text style={sharedStyles.modalFieldLabel}>Why are you cancelling?</Text>
+        <Text style={sharedStyles.modalFieldLabel}>Why are you cancelling? (required)</Text>
         <TextInput
           value={reason}
           onChangeText={setReason}
-          placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+          placeholder="e.g. Came down with food poisoning, can't travel anymore"
           placeholderTextColor={colors.mutedText}
           style={sharedStyles.modalInput}
           maxLength={1000}
@@ -123,11 +124,9 @@ export function CancelPostPossessionModal({
           textAlignVertical="top"
           editable={!pending}
         />
-        {minLengthHint(trimmed.length, REJECT_REASON_MIN) ? (
-          <Text style={sharedStyles.modalHelper}>
-            {minLengthHint(trimmed.length, REJECT_REASON_MIN)}
-          </Text>
-        ) : null}
+        <Text style={sharedStyles.modalHelper}>
+          {`${reason.length}/1000 — at least ${REJECT_REASON_MIN} characters`}
+        </Text>
 
         {parcelIsReturnEligible ? (
         <Text style={[sharedStyles.modalFieldLabel, { marginTop: 12 }]}>
@@ -201,7 +200,7 @@ export function CancelPostPossessionModal({
               ]}
             >
               {allYes
-                ? "A waiver request will be opened. The sender will be asked to confirm before the cash penalty is refunded."
+                ? "A waiver request will be opened. If the sender agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."
                 : "A cash penalty will be taken from your next payout."}
             </Text>
           </View>

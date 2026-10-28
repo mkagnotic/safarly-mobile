@@ -11,7 +11,7 @@ export function AwaitingPaymentNotice() {
         <Ionicons name="time-outline" size={14} color={colors.warning} />
         <Text style={styles.awaitingPayLabel}>Awaiting payment</Text>
       </View>
-      <Text style={styles.awaitingPayTitle}>You have the parcel - keep hold of it</Text>
+      <Text style={styles.awaitingPayTitle}>You have the parcel — keep hold of it</Text>
       <Text style={styles.awaitingPayBody}>
         Your sender has 48 hours to pay and secure the delivery. Please continue holding
         the parcel; we'll let you know as soon as the payment lands. Don't travel with it

@@ -1,12 +1,14 @@
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
 
 import { safarlyMarkXml } from "@/assets/brand/safarlyMark";
 import type { Transaction } from "@/services/api";
 import { formatTxDate, penaltyView, txStatusLabel, txTypeMeta } from "@/features/wallet/transactionDisplay";
 import { SUPPORT_EMAIL } from "@/constants/company";
 import { formatMoney } from "@/utils/money";
+import { receiptReference } from "@/features/wallet/receiptReference";
 
 /**
  * Native equivalent of web's `downloadTransactionReceipt`: render an HTML
@@ -60,7 +62,7 @@ function markSvg(suffix: string): string {
 
 function receiptHtml(tx: Transaction): string {
   const currency = tx.currency;
-  const reference = tx.stripe_payment_intent_id || tx.stripe_refund_id || tx.reference || "—";
+  const reference = receiptReference(tx);
   const platformFee = tx.platform_fee ?? null;
   const netAmount =
     tx.net_amount ?? (platformFee != null ? Math.max(0, Number(tx.amount) - Number(platformFee)) : null);
@@ -71,7 +73,7 @@ function receiptHtml(tx: Transaction): string {
       ? [{ label: "Route", value: `${tx.route_from ?? "—"} → ${tx.route_to ?? "—"}` }]
       : []),
     { label: "Booking", value: tx.booking_id ? `#${tx.booking_id.slice(0, 8)}` : "—" },
-    { label: "Payment reference", value: reference },
+    reference,
     { label: "Currency", value: (currency || "USD").toUpperCase() },
   ];
 
@@ -146,7 +148,29 @@ function receiptHtml(tx: Transaction): string {
 </body></html>`;
 }
 
-export async function shareTransactionReceipt(tx: Transaction): Promise<void> {
+/**
+ * "shared"  — the PDF went to the share sheet (or the web print dialog).
+ * "copied"  — this device has no share sheet: the receipt's details were copied
+ *             to the clipboard instead, and the caller must SAY so. It used to
+ *             do nothing at all, so the button looked broken.
+ */
+export type ReceiptOutcome = "shared" | "copied";
+
+function receiptText(tx: Transaction): string {
+  const ref = receiptReference(tx);
+  return [
+    "Safarly receipt",
+    `Type: ${penaltyView(tx)?.label ?? txTypeMeta(tx.type).label}`,
+    `Amount: ${money(tx.amount, tx.currency)}`,
+    `Date: ${formatTxDate(tx.created_at)}`,
+    tx.booking_id ? `Booking: #${tx.booking_id.slice(0, 8)}` : null,
+    `${ref.label}: ${ref.value}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function shareTransactionReceipt(tx: Transaction): Promise<ReceiptOutcome> {
   const html = receiptHtml(tx);
 
   // On web (Expo Web / react-native-web), expo-print's shim ignores the `html`
@@ -156,17 +180,20 @@ export async function shareTransactionReceipt(tx: Transaction): Promise<void> {
   // document (watermark + logo). Native uses the real HTML→PDF + share sheet.
   if (Platform.OS === "web") {
     printReceiptOnWeb(html);
-    return;
+    return "shared";
   }
 
-  const { uri } = await Print.printToFileAsync({ html });
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, {
-      mimeType: "application/pdf",
-      dialogTitle: "Safarly receipt",
-      UTI: "com.adobe.pdf",
-    });
+  if (!(await Sharing.isAvailableAsync())) {
+    await Clipboard.setStringAsync(receiptText(tx));
+    return "copied";
   }
+  const { uri } = await Print.printToFileAsync({ html });
+  await Sharing.shareAsync(uri, {
+    mimeType: "application/pdf",
+    dialogTitle: "Safarly receipt",
+    UTI: "com.adobe.pdf",
+  });
+  return "shared";
 }
 
 /** Web-only: print the receipt HTML in an isolated iframe (avoids popup blockers

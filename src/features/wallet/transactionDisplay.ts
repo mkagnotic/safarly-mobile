@@ -26,7 +26,7 @@ export function txTypeMeta(type: string): TxTypeMeta {
     case "payout":
       return { label: "Delivery earnings", credit: true, icon: "arrow-down-outline" };
     case "wallet_topup":
-      return { label: "Wallet top-up", credit: false, icon: "arrow-up-outline" };
+      return { label: "Top-up", credit: false, icon: "arrow-up-outline" };
     case "wallet_withdrawal":
       // Money leaving to the bank: an outgoing, not an incoming (it showed as "+").
       return { label: "Paid out to bank", credit: false, icon: "arrow-up-outline" };

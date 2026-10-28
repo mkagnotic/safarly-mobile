@@ -34,9 +34,6 @@ import { ContactScreen } from "@/features/legal/ContactScreen";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import { SendParcelScreen } from "@/features/parcels/SendParcelScreen";
 import { ParcelDetailsScreen } from "@/features/parcels/ParcelDetailsScreen";
-import { ReviewPayScreen } from "@/features/parcels/ReviewPayScreen";
-import { PaymentSuccessScreen } from "@/features/parcels/PaymentSuccessScreen";
-import { PaymentFailureScreen } from "@/features/parcels/PaymentFailureScreen";
 import { ListTripScreen } from "@/features/trips/ListTripScreen";
 import { ListTripSuccessScreen } from "@/features/trips/ListTripSuccessScreen";
 import { TripDetailsScreen } from "@/features/trips/TripDetailsScreen";
@@ -141,9 +138,6 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   DeleteAccountTab: "trash-outline",
   ForgotPasswordTab: "mail-outline",
   SendParcelTab: "cube-outline",
-  ReviewPayTab: "card-outline",
-  PaymentSuccessTab: "checkmark-circle",
-  PaymentFailureTab: "close-circle",
   ListTripTab: "airplane-outline",
   ListTripSuccessTab: "checkmark-circle",
   TripDetailsTab: "document-text-outline",
@@ -335,9 +329,6 @@ function MainTabs() {
       <Tabs.Screen name="DeleteAccountTab" component={DeleteAccountScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ForgotPasswordTab" component={ForgotPasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SendParcelTab" component={SendParcelScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="ReviewPayTab" component={ReviewPayScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="PaymentSuccessTab" component={PaymentSuccessScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="PaymentFailureTab" component={PaymentFailureScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ListTripTab" component={ListTripScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ListTripSuccessTab" component={ListTripSuccessScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TripDetailsTab" component={TripDetailsScreen} options={HIDDEN_TAB} />

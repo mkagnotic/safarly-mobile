@@ -716,7 +716,10 @@ function PayoutStep({
   const connected = !!status?.connected;
   const pending = !connected && !!status?.details_submitted;
   const isHostedSetup = (status?.setup_kind ?? "hosted") === "hosted";
-  const providerLabel = status?.provider_label ?? "Stripe";
+  // Named only from the server and only on the hosted (Stripe) path; India /
+  // bank-details carriers read "our payment partner" (money canon #17).
+  const providerLabel = isHostedSetup && status?.provider_label ? status.provider_label : "our payment partner";
+  const ProviderLabel = providerLabel.charAt(0).toUpperCase() + providerLabel.slice(1);
 
   return (
     <ScrollView
@@ -767,7 +770,7 @@ function PayoutStep({
             {pending ? (
               <>
                 <Text style={styles.payoutNoticeStrong}>Verification in progress.</Text>{" "}
-                {providerLabel} is still reviewing your details — this usually takes a few minutes.
+                {ProviderLabel} is still reviewing your details — this usually takes a few minutes.
               </>
             ) : !kycApproved && kycPending ? (
               <>

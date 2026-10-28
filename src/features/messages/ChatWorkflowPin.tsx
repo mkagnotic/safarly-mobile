@@ -106,7 +106,7 @@ const COUNTDOWN_LABEL: Record<string, string> = {
   travel_verify_escalate: "Goes to our team for review in",
   parcel_review_reminder: "We'll send a reminder in",
   payment_grace: "Payment due in",
-  payment_cancel: "Auto-cancels in",
+  payment_cancel: "Pay within",
   otp_reminder: "We'll send a reminder in",
   archive: "Archives in",
 };

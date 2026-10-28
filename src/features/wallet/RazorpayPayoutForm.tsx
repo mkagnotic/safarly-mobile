@@ -31,7 +31,7 @@ interface RazorpayPayoutFormProps {
   /** True when a fund account already exists — the form then updates it. */
   hasAccount?: boolean;
   /** Re-read the server status after a successful submit. */
-  onSaved: () => void | Promise<void>;
+  onSaved: () => unknown;
 }
 
 export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonly<RazorpayPayoutFormProps>) {
@@ -94,7 +94,7 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
       setVpa("");
       // Say it worked (web parity); it used to only re-read the status, silently.
       const connected = !!(res as { data?: { connected?: boolean } })?.data?.connected;
-      setSaved(connected ? "Payouts connected - you're all set to receive earnings." : "Details saved - Razorpay is verifying your account.");
+      setSaved(connected ? "Payouts connected — you're all set to accept deliveries." : "Details saved — our payment partner is verifying your account.");
       await onSaved();
     } catch (err) {
       setSubmitError(getErrorMessage(err));
@@ -183,14 +183,14 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
       {saved ? <Text style={styles.savedNote} accessibilityRole="alert">{saved}</Text> : null}
 
       <AppButton
-        label={hasAccount ? "Update payout details" : "Set up payouts"}
+        label={busy ? "Saving…" : hasAccount ? "Update payout details" : "Set up payouts"}
         onPress={() => void submit()}
         disabled={busy}
         leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
       />
 
       <Text style={styles.disclaimer}>
-        Your details are sent straight to Razorpay and are never stored by Safarly.
+        Your details are sent straight to our payment partner and are never stored by Safarly.
       </Text>
     </View>
   );
