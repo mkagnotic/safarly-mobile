@@ -113,18 +113,11 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
         parcel.id,
         groupPackageMatchesByPerson(
           carrierTrips
-            .filter((m) =>
-              carrierTripMatchesParcel(
-                {
-                  from_city: m.from_city,
-                  to_city: m.to_city,
-                  any_from: m.any_from,
-                  any_to: m.any_to,
-                  travel_date: m.travel_date,
-                },
-                parcel,
-              ),
-            )
+            // ⚠️ The WHOLE row, as web passes it (28 Oct 2026). A copy of just the
+            // cities + `any_*` + travel_date dropped the countries, and "Any city"
+            // only bounds itself by country: an Any trip then sat under every
+            // parcel of the right dates, whatever its country.
+            .filter((m) => carrierTripMatchesParcel(m, parcel))
             // Flag (don't hide) trips whose capacity is under this parcel's weight.
             .map((m) => ({
               ...m,
@@ -146,18 +139,8 @@ export function useSearchResultLists({ results, loading, highlightId }: SearchRe
         groupPackageMatchesByPerson(
           receiverRequests
             .filter(
-              (m) =>
-                m.delivery_by != null &&
-                parcelMatchesTrip(
-                  {
-                    from_city: m.from_city,
-                    to_city: m.to_city,
-                    any_from: m.any_from,
-                    any_to: m.any_to,
-                    delivery_by: m.delivery_by,
-                  },
-                  trip,
-                ),
+              // The whole row (countries + delivery window), as web passes it.
+              (m) => m.delivery_by != null && parcelMatchesTrip({ ...m, delivery_by: m.delivery_by }, trip),
             )
             // Flag (don't hide) receive requests heavier than this trip's capacity.
             .map((m) => ({

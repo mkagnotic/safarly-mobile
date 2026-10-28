@@ -71,10 +71,11 @@ export type FocusGroup = { id: string; matchIds: readonly string[] };
  *
  * Client, 22 Oct 2026: tapping "1 carrier can deliver your parcel" opened Search
  * and left the user to find the card. Parcel and trip results are grouped under
- * the user's OWN listing, so the target there is that listing's group - the one
- * the link names with `for` (summaries of several matches), else the one holding
- * the `match` card. A flat list (filters applied) targets the card itself. Buddy
- * results are flat: the card, or the top of the results for a summary.
+ * the user's OWN listing, so the target there is that listing's group - the first
+ * one holding the `match` card, else (summaries of several matches, or the match
+ * is gone) the one the link names with `for`. A flat list (filters applied)
+ * targets the card itself. Buddy results are flat: the card, or the top of the
+ * results for a summary.
  */
 export function matchFocusTarget(input: {
   activeTab: string;
@@ -91,7 +92,13 @@ export function matchFocusTarget(input: {
     if (highlightId && flatIds.includes(highlightId)) return highlightId;
     return activeTab === "buddy" && forId && !highlightId && flatIds.length > 0 ? RESULTS_TOP : null;
   }
-  if (forId && groups.some((g) => g.id === forId)) return forId;
+  // ⚠️ A live match outranks `for` (web parity, 28 Oct 2026: web skips its `for`
+  // scroll while the match card exists and pages to the FIRST of your listings
+  // that holds it). `for` names the listing the match fitted WHEN the notice was
+  // sent; a listing posted after it can fit too, and sorts first. Following `for`
+  // dropped User Four on an older Ranchi -> Billings parcel instead of the Any ->
+  // Any one they had just posted.
   if (highlightId) return groups.find((g) => g.matchIds.includes(highlightId))?.id ?? null;
+  if (forId && groups.some((g) => g.id === forId)) return forId;
   return null;
 }
