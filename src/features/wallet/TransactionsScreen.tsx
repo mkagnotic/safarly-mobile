@@ -47,8 +47,8 @@ const PER_PAGE = 15;
 /**
  * Payments history — web parity with `CustomerTransactions`. Lists the user's
  * transactions from `GET /payment-handler/me` with lifetime summary tiles, type
- * labels and status pills. (The web receipt-PDF download is intentionally out of
- * scope for v1 — a native share-sheet receipt can follow.)
+ * labels and status pills; each row's receipt is a PDF via the share sheet
+ * (receiptPdf.ts, same lines as web's).
  */
 export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
@@ -329,7 +329,8 @@ function TxRow({
           hitSlop={8}
           style={styles.receiptBtn}
           accessibilityRole="button"
-          accessibilityLabel="Download receipt"
+          accessibilityLabel={downloading ? "Generating receipt…" : "Download receipt"}
+          accessibilityState={{ busy: !!downloading, disabled: !!(downloading || locked) }}
         >
           {downloading ? (
             <ActivityIndicator size="small" color={colors.primary} />

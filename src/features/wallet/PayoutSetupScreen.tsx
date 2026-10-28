@@ -170,8 +170,15 @@ export function PayoutSetupScreen() {
     try {
       const res = await paymentsApi.stripeConnectDashboardLink();
       const url = res.data?.url;
-      if (url) await WebBrowser.openBrowserAsync(url);
-      else if (mountedRef.current) setError(providerLabel === PAYMENT_PARTNER ? "The payout dashboard isn't available yet." : `The ${providerLabel} dashboard isn't available yet.`);
+      if (url) {
+        // An account with no Express dashboard gets the hosted account page
+        // instead, which returns through /mobile-return to PAYOUT_RETURN_URL.
+        // An auth session catches that and closes; a plain browser left the
+        // user on a "Returning to Safarly..." page with nothing refreshed. Bank
+        // details can change in either page, so re-read the status after.
+        await WebBrowser.openAuthSessionAsync(url, PAYOUT_RETURN_URL, { preferEphemeralSession: true });
+        if (mountedRef.current) await loadStatus();
+      } else if (mountedRef.current) setError(providerLabel === PAYMENT_PARTNER ? "The payout dashboard isn't available yet." : `The ${providerLabel} dashboard isn't available yet.`);
     } catch (err) {
       if (mountedRef.current) setError(getErrorMessage(err));
     } finally {
@@ -180,7 +187,7 @@ export function PayoutSetupScreen() {
         setBusyAction(null);
       }
     }
-  }, [busy, providerLabel]);
+  }, [busy, providerLabel, loadStatus]);
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
