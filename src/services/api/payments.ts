@@ -35,6 +35,9 @@ export interface Transaction {
   /** Parcel route (from -> to), enriched on GET /payment-handler/me for receipts. */
   route_from?: string | null;
   route_to?: string | null;
+  /** The booking's agreed price (carrier's fee), enriched on GET /me: an earnings
+   *  statement shows the penalty taken out of it. */
+  agreed_amount?: number | null;
   payer?: { id: string; name: string };
   payee?: { id: string; name: string };
 }
