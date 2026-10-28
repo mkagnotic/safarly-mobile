@@ -15,6 +15,7 @@ import { Screen } from "@/components/ui/Screen";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
+import { firstName, greetingWord, homeGreeting } from "@/utils/homeGreeting";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
 
@@ -101,7 +102,11 @@ export function HomeScreen() {
   // `loading` after the first paint — otherwise the skeleton would flash back
   // every time the hook revalidates.
   const showGreetingSkeleton = profileLoading && !profile;
-  const greetingName = profile?.name ?? "";
+  // "Welcome, {first name}" on a brand-new account, "Welcome back, {first name}"
+  // after its first 24 h (server created_at; client report 29 Oct 2026). The
+  // word waits for the profile, so a new user never sees "Welcome back" first.
+  const greetingName = firstName(profile?.name);
+  const greeting = greetingWord(profile?.created_at);
 
   const handleRefresh = useCallback(() => {
     void refetchProfile();
@@ -155,8 +160,15 @@ export function HomeScreen() {
     <Screen onRefresh={handleRefresh}>
       {/* ───────── Header ───────── */}
       <View style={styles.headerRow}>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.muted}>Welcome back</Text>
+        <View
+          style={styles.headerTextWrap}
+          accessible={!showGreetingSkeleton}
+          accessibilityRole="header"
+          accessibilityLabel={showGreetingSkeleton ? undefined : homeGreeting(profile)}
+        >
+          {showGreetingSkeleton ? null : (
+            <Text style={styles.muted}>{greetingName ? `${greeting},` : greeting}</Text>
+          )}
           {showGreetingSkeleton ? (
             <View
               style={styles.titleSkeletonRow}

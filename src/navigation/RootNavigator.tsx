@@ -73,6 +73,7 @@ import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { AutoPrompts } from "@/components/reminders/AutoPrompts";
+import { ConnectionBanner } from "@/components/ui/ConnectionBanner";
 import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
@@ -474,6 +475,10 @@ export function RootNavigator() {
           never fetches on splash / auth / profile-setup. */}
       {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
         <AutoPrompts />
+      )}
+      {/* Web ConnectionBanner parity (signed-in app only, like web's CustomerLayout). */}
+      {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
+        <ConnectionBanner />
       )}
       {SHOW_DATA_TOGGLE && (
         <Pressable
