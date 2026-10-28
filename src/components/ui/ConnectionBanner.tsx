@@ -9,7 +9,8 @@ import {
   BACK_ONLINE_MS,
   RECONNECT_GRACE_MS,
   bannerVariant,
-  degradationWasVisible,
+  stepBackOnline,
+  type BackOnlineState,
   type BannerTone,
 } from "@/utils/connectionStatus";
 
@@ -31,7 +32,8 @@ export function ConnectionBanner() {
   const insets = useSafeAreaInsets();
   const [reconnectingVisible, setReconnectingVisible] = useState(false);
   const [showBackOnline, setShowBackOnline] = useState(false);
-  const wasDegradedRef = useRef(false);
+  const backOnlineRef = useRef<BackOnlineState>({ wasDegraded: false });
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1 s grace before "Reconnecting…", so blips and the first connect never flash.
   useEffect(() => {
@@ -43,20 +45,34 @@ export function ConnectionBanner() {
     return () => clearTimeout(t);
   }, [status]);
 
-  // "Back online" only after a degradation the user actually saw.
+  // "Back online" only after a degradation the user actually saw. The hide
+  // timer lives in a ref and is cleared only by a new drop or unmount - a re-run
+  // of this effect (reconnectingVisible flipping false right after status turns
+  // online) must not cancel it, or the pill never clears (emulator, 29 Oct 2026).
   useEffect(() => {
-    if (degradationWasVisible(status, reconnectingVisible)) {
-      wasDegradedRef.current = true;
+    const step = stepBackOnline(backOnlineRef.current, status, reconnectingVisible);
+    backOnlineRef.current = step.next;
+    if (step.hide) {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
       setShowBackOnline(false);
-      return;
     }
-    if (status === "online" && wasDegradedRef.current) {
-      wasDegradedRef.current = false;
+    if (step.show) {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       setShowBackOnline(true);
-      const t = setTimeout(() => setShowBackOnline(false), BACK_ONLINE_MS);
-      return () => clearTimeout(t);
+      hideTimerRef.current = setTimeout(() => {
+        hideTimerRef.current = null;
+        setShowBackOnline(false);
+      }, BACK_ONLINE_MS);
     }
   }, [status, reconnectingVisible]);
+
+  useEffect(
+    () => () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    },
+    [],
+  );
 
   const variant = bannerVariant({ status, reconnectingVisible, showBackOnline });
   if (!variant) return null;

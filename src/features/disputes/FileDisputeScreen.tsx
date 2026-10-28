@@ -21,6 +21,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { showToast } from "@/feedback/appFeedback";
 import { FILE_CATEGORIES } from "@/features/disputes/disputeConfig";
+import { formatCategory } from "@/features/bookings/lib/bookingDisplay";
 import {
   DESCRIPTION_TOO_SHORT,
   MAX_DESCRIPTION,
@@ -281,7 +282,7 @@ export function FileDisputeScreen() {
         <Card style={styles.bookingSummary}>
           <Text style={styles.bookingSummaryRoute}>{bookingRoute(selectedBooking)}</Text>
           {selectedBooking.parcel?.category ? (
-            <Text style={styles.bookingSummaryMeta}>{selectedBooking.parcel.category}</Text>
+            <Text style={styles.bookingSummaryMeta}>{formatCategory(selectedBooking.parcel.category)}</Text>
           ) : null}
         </Card>
       ) : listLoading && disputable.length === 0 ? (
@@ -448,7 +449,7 @@ export function FileDisputeScreen() {
                       </Text>
                       <Text style={styles.sheetRowMeta} numberOfLines={1}>
                         #{item.id.slice(0, 8)}
-                        {item.parcel?.category ? ` · ${item.parcel.category}` : ""}
+                        {item.parcel?.category ? ` · ${formatCategory(item.parcel.category)}` : ""}
                       </Text>
                     </View>
                     {active ? <Ionicons name="checkmark" size={16} color={colors.wordmark} /> : null}

@@ -75,3 +75,40 @@ export function bannerVariant(s: {
 export function degradationWasVisible(status: ConnectionStatus, reconnectingVisible: boolean): boolean {
   return status === "offline" || (status === "reconnecting" && reconnectingVisible);
 }
+
+/** What the "Back online" effect remembers between renders. */
+export interface BackOnlineState {
+  /** A degradation the user saw has not been answered with "Back online" yet. */
+  wasDegraded: boolean;
+}
+
+export interface BackOnlineStep {
+  next: BackOnlineState;
+  /** Show the pill now and start its own 1.5 s hide timer. */
+  show: boolean;
+  /** Hide the pill now and drop any pending hide timer (a new drop was seen). */
+  hide: boolean;
+}
+
+/**
+ * One render of the "Back online" rule. The hide timer is owned by the caller
+ * and is ONLY cleared on `hide` (or unmount) - never because the effect re-ran.
+ *
+ * Emulator bug, 29 Oct 2026: going reconnecting -> online renders once with
+ * status "online" while `reconnectingVisible` is still true, then again when
+ * it flips false. The old effect started the 1.5 s timer on the first render
+ * and its cleanup cancelled it on the second, leaving "Back online" up forever.
+ */
+export function stepBackOnline(
+  prev: BackOnlineState,
+  status: ConnectionStatus,
+  reconnectingVisible: boolean,
+): BackOnlineStep {
+  if (degradationWasVisible(status, reconnectingVisible)) {
+    return { next: { wasDegraded: true }, show: false, hide: true };
+  }
+  if (status === "online" && prev.wasDegraded) {
+    return { next: { wasDegraded: false }, show: true, hide: false };
+  }
+  return { next: prev, show: false, hide: false };
+}

@@ -7,6 +7,9 @@ import {
   bannerVariant,
   degradationWasVisible,
   resolveConnectionStatus,
+  stepBackOnline,
+  type BackOnlineState,
+  type ConnectionStatus,
 } from "./connectionStatus.ts";
 
 // Mobile port of web's connectionStatus.test.ts + ConnectionBanner rules.
@@ -79,5 +82,89 @@ describe("bannerVariant (same words, roles and priority as web)", () => {
   test("timings match web (1 s grace, 1.5 s back-online)", () => {
     assert.equal(RECONNECT_GRACE_MS, 1000);
     assert.equal(BACK_ONLINE_MS, 1500);
+  });
+});
+
+/**
+ * Drives stepBackOnline the way ConnectionBanner does: one call per render, the
+ * hide timer owned outside the step and cleared only on `hide`. A fake clock.
+ */
+function makeBanner() {
+  let state: BackOnlineState = { wasDegraded: false };
+  let showBackOnline = false;
+  let hideAt: number | null = null;
+  let now = 0;
+  return {
+    render(status: ConnectionStatus, reconnectingVisible: boolean) {
+      const step = stepBackOnline(state, status, reconnectingVisible);
+      state = step.next;
+      if (step.hide) {
+        hideAt = null;
+        showBackOnline = false;
+      }
+      if (step.show) {
+        showBackOnline = true;
+        hideAt = now + BACK_ONLINE_MS;
+      }
+      return bannerVariant({ status, reconnectingVisible, showBackOnline })?.label ?? null;
+    },
+    advance(ms: number) {
+      now += ms;
+      if (hideAt !== null && now >= hideAt) {
+        hideAt = null;
+        showBackOnline = false;
+      }
+    },
+    get pill() {
+      return showBackOnline;
+    },
+  };
+}
+
+describe("stepBackOnline - 'Back online' always clears 1.5 s after it appears", () => {
+  test("offline -> reconnecting (visible) -> online, incl. the stale reconnectingVisible render", () => {
+    const b = makeBanner();
+    assert.equal(b.render("online", false), null);
+    assert.equal(b.render("offline", false), "You're offline");
+    assert.equal(b.render("reconnecting", false), null); // inside the 1 s grace
+    b.advance(RECONNECT_GRACE_MS);
+    assert.equal(b.render("reconnecting", true), "Reconnecting…");
+    // Status turns online while reconnectingVisible is still true (same commit) ...
+    assert.equal(b.render("online", true), "Back online");
+    // ... then reconnectingVisible flips false: the timer must survive this re-run.
+    assert.equal(b.render("online", false), "Back online");
+    b.advance(BACK_ONLINE_MS - 1);
+    assert.equal(b.pill, true);
+    b.advance(1);
+    assert.equal(b.pill, false);
+    assert.equal(b.render("online", false), null);
+  });
+
+  test("offline -> online shows the pill once and it hides on time", () => {
+    const b = makeBanner();
+    b.render("offline", false);
+    assert.equal(b.render("online", false), "Back online");
+    b.advance(BACK_ONLINE_MS);
+    assert.equal(b.render("online", false), null);
+  });
+
+  test("a hidden first-connect reconnect never earns 'Back online'", () => {
+    const b = makeBanner();
+    b.render("reconnecting", false);
+    assert.equal(b.render("online", false), null);
+  });
+
+  test("a new drop while 'Back online' is up hides it; recovery restarts the full 1.5 s", () => {
+    const b = makeBanner();
+    b.render("offline", false);
+    b.render("online", false);
+    b.advance(1000);
+    assert.equal(b.render("offline", false), "You're offline");
+    assert.equal(b.pill, false);
+    assert.equal(b.render("online", false), "Back online");
+    b.advance(1000);
+    assert.equal(b.pill, true);
+    b.advance(500);
+    assert.equal(b.pill, false);
   });
 });

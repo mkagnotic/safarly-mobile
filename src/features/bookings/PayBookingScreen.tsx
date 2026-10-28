@@ -26,6 +26,7 @@ import { ApiClientError, getErrorMessage, paymentsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
+import { formatCategory } from "@/features/bookings/lib/bookingDisplay";
 import { ErrorState } from "@/components/ui/ErrorState";
 
 type Nav = CompositeNavigationProp<
@@ -336,7 +337,7 @@ export function PayBookingScreen() {
               label="Route"
               value={`${booking.parcel?.from_city ?? "—"} → ${booking.parcel?.to_city ?? "—"}`}
             />
-            {booking.parcel?.category ? <Row label="Category" value={booking.parcel.category} /> : null}
+            {booking.parcel?.category ? <Row label="Category" value={formatCategory(booking.parcel.category)} /> : null}
           </Card>
 
           {/* Fee breakdown */}
