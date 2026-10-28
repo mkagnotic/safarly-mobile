@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { bookingFee } from "@/features/bookings/paymentMath";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -18,16 +18,15 @@ import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, ratingsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
+import {
+  RATING_COPY,
+  REVIEW_MAX,
+  SCORE_LABELS,
+  canRateBooking,
+  isAlreadyRatedError,
+} from "@/features/bookings/lib/ratingCopy";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "DeliveryReviewTab">;
-
-const SCORE_LABELS: Record<number, string> = {
-  1: "Poor",
-  2: "Fair",
-  3: "Good",
-  4: "Very good",
-  5: "Excellent",
-};
 
 /**
  * Rate a completed delivery — real ratings API (web parity with
@@ -47,6 +46,19 @@ export function DeliveryReviewScreen() {
   const [review, setReview] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // CONFLICT from the server = already rated (another device): the rated state.
+  const [alreadyRated, setAlreadyRated] = useState(false);
+
+  // This is a TAB screen and stays mounted (unmountOnBlur: false), so its state
+  // outlives the booking it was opened for. Without this, rating booking A and
+  // then tapping Rate on booking B showed "Thank you! Your review ... has been
+  // submitted." for B (never rated), or carried A's stars and words over.
+  useEffect(() => {
+    setScore(0);
+    setReview("");
+    setSubmitted(false);
+    setAlreadyRated(false);
+  }, [bookingId]);
 
   // The counterparty: whoever isn't the signed-in user on this booking.
   const { ratedUserId, ratedUserName } = useMemo(() => {
@@ -56,7 +68,7 @@ export function DeliveryReviewScreen() {
       ratedUserId: viewerIsSender ? booking.carrier_id : booking.sender_id,
       ratedUserName: viewerIsSender
         ? booking.carrier?.name ?? "Carrier"
-        : booking.sender?.name ?? "Sender",
+        : booking.sender?.name ?? "Receiver",
     };
   }, [booking, user]);
 
@@ -76,16 +88,24 @@ export function DeliveryReviewScreen() {
         review: review.trim() || undefined,
       });
       setSubmitted(true);
+      showToast({ title: RATING_COPY.successTitle, message: RATING_COPY.successBody, variant: "success" });
+      // viewer_has_rated lives on the booking; refresh so it reads rated.
+      void refetch();
     } catch (err) {
+      if (isAlreadyRatedError(err)) {
+        setAlreadyRated(true);
+        void refetch();
+        return;
+      }
       showToast({
-        title: "Couldn't submit review",
+        title: RATING_COPY.errorTitle,
         message: getErrorMessage(err),
         variant: "error",
       });
     } finally {
       setSubmitting(false);
     }
-  }, [bookingId, ratedUserId, score, review, submitting]);
+  }, [bookingId, ratedUserId, score, review, submitting, refetch]);
 
   // ───────── Loading ─────────
   if (loading && !booking) {
@@ -116,7 +136,7 @@ export function DeliveryReviewScreen() {
 
   // ───────── Already reviewed (web parity, 27 Oct 2026) ─────────
   // Mobile let you fill the form in and only failed on submit.
-  if (!submitted && booking?.viewer_has_rated) {
+  if (!submitted && (booking?.viewer_has_rated || alreadyRated)) {
     return (
       <Screen>
         <View style={styles.successWrap}>
@@ -150,6 +170,22 @@ export function DeliveryReviewScreen() {
             onPress={() => navigation.navigate("BookingsTab")}
             style={styles.cta}
           />
+        </View>
+      </Screen>
+    );
+  }
+
+  // ───────── Not delivered yet ─────────
+  // Ratings open only once the parcel is delivered; the server refuses the
+  // rest, so never offer stars it would refuse after they were filled in.
+  if (!canRateBooking(booking?.status)) {
+    return (
+      <Screen>
+        <ReviewHeader onBack={goBack} />
+        <View style={styles.centered}>
+          <Ionicons name="star-outline" size={48} color={colors.mutedText} />
+          <Text style={styles.errorBody}>{RATING_COPY.notDelivered}</Text>
+          <AppButton label="Back to bookings" onPress={() => navigation.navigate("BookingsTab")} style={styles.cta} />
         </View>
       </Screen>
     );
@@ -192,18 +228,23 @@ export function DeliveryReviewScreen() {
           </Pressable>
         ))}
       </View>
-      <Text style={styles.ratingLabel}>{score === 0 ? "Tap to rate" : SCORE_LABELS[score]}</Text>
+      <Text style={styles.ratingLabel}>{score === 0 ? RATING_COPY.tapHint : SCORE_LABELS[score]}</Text>
 
       <AppInput
-        label="Review (optional)"
+        label={RATING_COPY.reviewLabel}
         value={review}
-        onChangeText={setReview}
-        placeholder="Share your experience…"
+        onChangeText={(t) => setReview(t.slice(0, REVIEW_MAX))}
+        placeholder={RATING_COPY.reviewPlaceholder}
         multiline
+        maxLength={REVIEW_MAX}
+        editable={!submitting}
       />
+      <Text style={styles.counter}>
+        {review.length}/{REVIEW_MAX}
+      </Text>
 
       <AppButton
-        label={submitting ? "Submitting…" : "Submit review"}
+        label={submitting ? RATING_COPY.submitting : RATING_COPY.submit}
         onPress={() => void handleSubmit()}
         disabled={score === 0 || submitting}
         style={styles.cta}
@@ -249,6 +290,7 @@ const styles = StyleSheet.create({
   starsRow: { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 8 },
   ratingLabel: { color: colors.text, fontSize: 14, fontWeight: "700", textAlign: "center", marginBottom: 22 },
   cta: { marginTop: 18 },
+  counter: { color: colors.mutedText, fontSize: 11, textAlign: "right", marginTop: 4 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   centeredText: { color: colors.mutedText, fontSize: 14, fontWeight: "500" },
   errorTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },

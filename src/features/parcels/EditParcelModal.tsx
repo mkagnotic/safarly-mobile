@@ -25,7 +25,7 @@ import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
 import { ReturnAddressFields } from "./ReturnAddressFields";
-import { currencySymbol } from "@/utils/money";
+import { currencySymbol, formatMoneyShort } from "@/utils/money";
 
 type Country = "IN" | "US";
 type Currency = "USD" | "INR";
@@ -525,8 +525,7 @@ export function EditParcelModal({
               ) : null}
               {suggestedFee != null ? (
                 <Text style={styles.hint}>
-                  Suggested {currencySymbol(form.fee_currency)}
-                  {suggestedFee} for {form.weight_kg} kg — adjust to whatever you like.
+                  Suggested for {form.weight_kg} kg: {formatMoneyShort(suggestedFee, form.fee_currency)}. You can offer more or less.
                 </Text>
               ) : null}
             </View>

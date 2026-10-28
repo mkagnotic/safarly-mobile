@@ -13,11 +13,12 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { Avatar } from "@/components/ui/Avatar";
+import { RATING_COPY, REVIEW_MAX, SCORE_LABELS } from "@/features/bookings/lib/ratingCopy";
 import { KeyboardLift } from "@/components/ui/KeyboardLift";
 import { colors } from "@/theme/colors";
 
-const STAR_LABELS = ["Poor", "Fair", "Good", "Very Good", "Excellent"] as const;
-const MAX_REVIEW = 500; // web parity (RateDeliveryDialog)
+const MAX_REVIEW = REVIEW_MAX; // web parity (RateDeliveryDialog)
 
 export interface RateDeliveryValues {
   score: number;
@@ -28,6 +29,11 @@ interface Props {
   open: boolean;
   /** Counterparty being rated (carrier or sender). */
   ratedUserName: string;
+  ratedUserAvatarUrl?: string | null;
+  /** Identity check approved: tick on the avatar (web dialog parity). */
+  ratedUserVerified?: boolean;
+  /** "Carrier" / "Receiver" - who they are to the viewer. */
+  roleLabel?: string | null;
   /** Optional route line, e.g. "Delhi → Mumbai". */
   routeSummary?: string | null;
   /** True while the submit request is in flight. */
@@ -45,6 +51,9 @@ interface Props {
 export function RateDeliverySheet({
   open,
   ratedUserName,
+  ratedUserAvatarUrl,
+  ratedUserVerified,
+  roleLabel,
   routeSummary,
   pending,
   onDismiss,
@@ -103,7 +112,7 @@ export function RateDeliverySheet({
                 <Ionicons name="star" size={20} color={colors.warning} />
               </View>
               <View style={styles.headerText}>
-                <Text style={styles.title}>Rate your delivery</Text>
+                <Text style={styles.title}>{RATING_COPY.title}</Text>
                 <Text style={styles.subtitle} numberOfLines={2}>
                   How was your experience with <Text style={styles.subtitleStrong}>{ratedUserName}</Text>?
                 </Text>
@@ -119,12 +128,18 @@ export function RateDeliverySheet({
               </Pressable>
             </View>
 
-            {routeSummary ? (
-              <View style={styles.routePill}>
-                <Ionicons name="location-outline" size={13} color={colors.mutedText} />
-                <Text style={styles.routeText} numberOfLines={1}>{routeSummary}</Text>
+            {/* Who is being rated, as on web's dialog: avatar + tick, role, route. */}
+            <View style={styles.partyRow}>
+              <Avatar name={ratedUserName} uri={ratedUserAvatarUrl} size={40} verified={ratedUserVerified} />
+              <View style={styles.partyText}>
+                <Text style={styles.partyName} numberOfLines={1}>{ratedUserName}</Text>
+                {roleLabel || routeSummary ? (
+                  <Text style={styles.routeText} numberOfLines={1}>
+                    {[roleLabel, routeSummary].filter(Boolean).join(" - ")}
+                  </Text>
+                ) : null}
               </View>
-            ) : null}
+            </View>
 
             <View style={styles.starsRow}>
               {[1, 2, 3, 4, 5].map((n) => (
@@ -144,15 +159,13 @@ export function RateDeliverySheet({
                 </Pressable>
               ))}
             </View>
-            <Text style={styles.scoreLabel}>{score > 0 ? STAR_LABELS[score - 1] : "Tap to rate"}</Text>
+            <Text style={styles.scoreLabel}>{score > 0 ? SCORE_LABELS[score] : RATING_COPY.tapHint}</Text>
 
-            <Text style={styles.reviewLabel}>
-              Review <Text style={styles.labelMuted}>(optional)</Text>
-            </Text>
+            <Text style={styles.reviewLabel}>{RATING_COPY.reviewLabel}</Text>
             <TextInput
               value={review}
               onChangeText={(t) => setReview(t.slice(0, MAX_REVIEW))}
-              placeholder="Share a few words about your experience…"
+              placeholder={RATING_COPY.reviewPlaceholder}
               placeholderTextColor={colors.subtleText}
               style={[styles.input, styles.textarea]}
               multiline
@@ -161,17 +174,20 @@ export function RateDeliverySheet({
               editable={!pending}
               maxLength={MAX_REVIEW}
             />
+            <Text style={styles.counter}>
+              {review.length}/{MAX_REVIEW}
+            </Text>
 
             <View style={styles.footer}>
               <AppButton
-                label="Later"
+                label={RATING_COPY.later}
                 variant="secondary"
                 onPress={onDismiss}
                 disabled={pending}
                 style={styles.footerButton}
               />
               <AppButton
-                label={pending ? "Submitting…" : "Submit rating"}
+                label={pending ? RATING_COPY.submitting : RATING_COPY.submit}
                 onPress={handleSubmit}
                 disabled={pending || score <= 0}
                 gradientColors={[colors.ctaAccent, colors.ctaAccent]}
@@ -218,17 +234,17 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
   subtitleStrong: { color: colors.text, fontWeight: "700" },
 
-  routePill: {
+  partyRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+    gap: 10,
+    padding: 10,
+    borderRadius: 14,
     backgroundColor: colors.surfaceMuted,
   },
-  routeText: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  partyText: { flex: 1, minWidth: 0, gap: 2 },
+  partyName: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  routeText: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
 
   starsRow: { flexDirection: "row", gap: 10, justifyContent: "center", paddingVertical: 2 },
   scoreLabel: {
@@ -241,7 +257,7 @@ const styles = StyleSheet.create({
   },
 
   reviewLabel: { color: colors.text, fontSize: 13, lineHeight: 18, fontWeight: "700" },
-  labelMuted: { color: colors.subtleText, fontWeight: "500" },
+  counter: { color: colors.mutedText, fontSize: 11, textAlign: "right", marginTop: -6 },
   input: {
     backgroundColor: colors.input,
     borderColor: colors.inputBorder,

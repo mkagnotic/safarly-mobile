@@ -6,6 +6,7 @@ import { useBookings } from "@/hooks/api/useBookings";
 import { navigationRef } from "@/navigation/navigationRef";
 import { getErrorMessage, ratingsApi } from "@/services/api";
 import { RateDeliverySheet, type RateDeliveryValues } from "./RateDeliverySheet";
+import { RATING_COPY, counterpartRoleLabel, isAlreadyRatedError } from "@/features/bookings/lib/ratingCopy";
 
 // Screens where an interrupting popup would get in the way of an active task —
 // mirrors web's SUPPRESSED route list (pay / rate / payment result). Onboarding
@@ -76,9 +77,15 @@ export function RateDeliveryPrompt({
     onActiveChange?.(open);
   }, [open, onActiveChange]);
 
-  const { ratedUserId, ratedUserName, routeSummary } = useMemo(() => {
+  const { ratedUserId, ratedUserName, ratedUser, roleLabel, routeSummary } = useMemo(() => {
     if (!pending || !user) {
-      return { ratedUserId: null as string | null, ratedUserName: "your delivery partner", routeSummary: null as string | null };
+      return {
+        ratedUserId: null as string | null,
+        ratedUserName: "your delivery partner",
+        ratedUser: null,
+        roleLabel: null as string | null,
+        routeSummary: null as string | null,
+      };
     }
     const viewerIsSender = pending.sender_id === user.id;
     const parcel = pending.parcel;
@@ -86,7 +93,9 @@ export function RateDeliveryPrompt({
       ratedUserId: viewerIsSender ? pending.carrier_id : pending.sender_id,
       ratedUserName: viewerIsSender
         ? pending.carrier?.name ?? "Carrier"
-        : pending.sender?.name ?? "Sender",
+        : pending.sender?.name ?? "Receiver",
+      ratedUser: (viewerIsSender ? pending.carrier : pending.sender) ?? null,
+      roleLabel: counterpartRoleLabel(viewerIsSender),
       routeSummary: parcel?.from_city && parcel?.to_city ? `${parcel.from_city} → ${parcel.to_city}` : null,
     };
   }, [pending, user]);
@@ -111,10 +120,18 @@ export function RateDeliveryPrompt({
         // `viewer_has_rated` flips and the next unrated delivery can take its turn.
         setDismissed((prev) => (prev.includes(pending.id) ? prev : [...prev, pending.id]));
         setOpen(false);
-        showToast({ title: "Rating submitted", message: "Thanks for your feedback!", variant: "success" });
+        showToast({ title: RATING_COPY.successTitle, message: RATING_COPY.successBody, variant: "success" });
         await refetch();
       } catch (err) {
-        showToast({ title: "Couldn't submit rating", message: getErrorMessage(err), variant: "error" });
+        // Already rated (another device, a double tap): that IS the rated
+        // state. Close, refresh, and don't call it a failure.
+        if (isAlreadyRatedError(err)) {
+          setDismissed((prev) => (prev.includes(pending.id) ? prev : [...prev, pending.id]));
+          setOpen(false);
+          void refetch();
+          return;
+        }
+        showToast({ title: RATING_COPY.errorTitle, message: getErrorMessage(err), variant: "error" });
       } finally {
         setSubmitting(false);
       }
@@ -128,6 +145,9 @@ export function RateDeliveryPrompt({
     <RateDeliverySheet
       open={open}
       ratedUserName={ratedUserName}
+      ratedUserAvatarUrl={ratedUser?.avatar_url ?? null}
+      ratedUserVerified={ratedUser?.is_verified === true}
+      roleLabel={roleLabel}
       routeSummary={routeSummary}
       pending={submitting}
       onDismiss={handleDismiss}

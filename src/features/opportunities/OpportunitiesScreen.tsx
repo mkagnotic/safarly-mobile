@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { formatRating } from "@/features/bookings/lib/ratingCopy";
 import { minAmountProblem } from "@/utils/minAmount";
 import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -365,11 +366,9 @@ function OpportunityCard({
             <Text style={styles.senderName} numberOfLines={2}>
               {sender.name}
             </Text>
-            {typeof sender.rating === "number" ? (
-              <View style={styles.senderRatingRow}>
-                <Ionicons name="star" size={10} color={colors.warning} />
-                <Text style={styles.senderRatingText}>{sender.rating.toFixed(1)}</Text>
-              </View>
+            {/* "★ 4.8" only for a real rating - never "0.0" for someone unrated. */}
+            {formatRating(sender.rating) ? (
+              <Text style={styles.senderRatingText}>{formatRating(sender.rating)}</Text>
             ) : null}
           </View>
         </View>

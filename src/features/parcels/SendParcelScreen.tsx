@@ -36,7 +36,7 @@ import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
 import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
 import { ReturnAddressFields } from "./ReturnAddressFields";
-import { currencySymbol } from "@/utils/money";
+import { currencySymbol, formatMoneyShort } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "SendParcelTab">,
@@ -924,8 +924,8 @@ export function SendParcelScreen() {
             ) : (
               <Text style={styles.helperText}>
                 {suggestedFee != null
-                  ? `Suggested for ${weight} ${weightUnit}: ${currencySymbol(currency)}${suggestedFee}. You can offer more or less.`
-                  : "The amount you're willing to pay the carrier for delivery."}
+                  ? `Suggested for ${weight} ${weightUnit}: ${formatMoneyShort(suggestedFee, currency)}. You can offer more or less.`
+                  : "Enter the parcel weight above and we'll suggest a fair fee."}
               </Text>
             )}
           </SectionCard>

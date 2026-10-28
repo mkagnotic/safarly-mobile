@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { canRateBooking } from "@/features/bookings/lib/ratingCopy";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
@@ -212,14 +213,17 @@ export function DeliveryDetailsScreen() {
               <Ionicons name="star" size={13} color={colors.safe} />
               <Text style={styles.ratedChipText}>Rated</Text>
             </View>
-          ) : (
+          ) : canRateBooking(booking.status) ? (
+            // Only a delivered booking can be rated (the server refuses the
+            // rest): a cancelled archive deal used to get a Rate button that
+            // failed with "Booking must be delivered".
             <AppButton
               label={`Rate ${roleLabel.toLowerCase()}`}
               onPress={handleRate}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.rateButton}
             />
-          )}
+          ) : null}
         </Card>
       ) : null}
 

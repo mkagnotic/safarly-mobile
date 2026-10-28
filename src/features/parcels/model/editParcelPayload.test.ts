@@ -116,7 +116,9 @@ test("inline errors, live same-route, fee on blur, canon wording", () => {
   assert.match(MODAL, /\{toCityError \? <Text style=\{styles\.inlineError\}>/);
   assert.match(MODAL, /onBlur=\{\(\) => \{\s*const problem = feeProblem\(\);/);
   assert.match(MODAL, /Used to suggest a fair carrier fee\. Airline max: \{MAX_WEIGHT_KG\} kg per item\./);
-  assert.match(MODAL, /for \{form\.weight_kg\} kg — adjust to whatever you like\./);
+  // Same suggested-fee words as the create form, grouped (₹10,250) - kyc/rating/currency canon.
+  assert.match(MODAL, /Suggested for \{form\.weight_kg\} kg: \{formatMoneyShort\(suggestedFee, form\.fee_currency\)\}\. You can offer more or less\./);
+  assert.doesNotMatch(MODAL, /adjust to whatever you like/);
   assert.match(MODAL, /"Single date"/);
   assert.match(MODAL, /"Date range"/);
   assert.match(MODAL, /"Pick a delivery date"/);

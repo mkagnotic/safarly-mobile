@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { formatRating } from "@/features/bookings/lib/ratingCopy";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
@@ -58,10 +59,8 @@ interface ExpandedBodyProps {
   refreshKey: number;
 }
 
-/** "★ 4.8" for a party with a rating; nothing when they have none yet. */
-function ratingText(rating: number | null | undefined): string | null {
-  return typeof rating === "number" && rating > 0 ? `★ ${rating.toFixed(1)}` : null;
-}
+/** "★ 4.8" for a party with a rating; nothing when they have none yet (shared formatter). */
+const ratingText = formatRating;
 
 function ExpandedBody({
   bookingId,
