@@ -21,6 +21,7 @@ import {
   toneForStatus,
 } from "@/features/travels/statusLabels";
 import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { parcelHasOpenDispute } from "@/features/disputes/disputeRules";
 import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useParcelDetail } from "@/hooks/api/useParcelDetail";
@@ -94,7 +95,7 @@ function StatusPill({ status }: Readonly<{ status: string }>) {
   );
 }
 
-function StatusAlert({ status }: Readonly<{ status: string }>) {
+function StatusAlert({ status, disputeOpen }: Readonly<{ status: string; disputeOpen: boolean }>) {
   if (status === "delivered" || status === "completed") {
     return (
       <View style={styles.bannerSlot}>
@@ -102,13 +103,15 @@ function StatusAlert({ status }: Readonly<{ status: string }>) {
       </View>
     );
   }
-  if (status === "disputed") {
+  // Keyed off the booking: the parcel itself never reads "disputed", so this
+  // banner never showed (28 Oct 2026). Web parity.
+  if (disputeOpen) {
     return (
       <View style={styles.bannerSlot}>
         <FormBanner
           variant="error"
           title="Payment under review"
-          message="A dispute is open on this parcel."
+          message="A dispute is open on this delivery."
         />
       </View>
     );
@@ -390,7 +393,7 @@ export function ParcelDetailsScreen() {
 
       <ParcelCard parcel={parcel} />
 
-      <StatusAlert status={parcel.status} />
+      <StatusAlert status={parcel.status} disputeOpen={parcelHasOpenDispute(parcel.id, bookings.bookings)} />
 
       {/* Full delivery timeline. Renders nothing until a carrier is committed —
           the My Travels card carries the one-line summary that leads here. */}

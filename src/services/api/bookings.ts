@@ -112,6 +112,11 @@ export interface Booking {
   cancelled_at: string | null;
   cancellation_reason: string | null;
   delivery_proof_url: string | null;
+  /** The booking's dispute, when it has one (open / investigating / resolved).
+   *  Optional: older backends don't send it. */
+  dispute_status?: string | null;
+  /** The outcome text once resolved. Optional, as above. */
+  dispute_resolution?: string | null;
   // ── Part 4 fulfillment fields ──
   cancellation_phase?: string | null;
   penalty_amount?: number | null;

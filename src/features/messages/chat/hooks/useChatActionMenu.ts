@@ -195,13 +195,13 @@ export function useChatActionMenu({
     }
   }, [conversationId, isArchived, refetchConversations, archivePending]);
 
-  // Raise a dispute: jump to the filing screen pre-scoped to this deal's booking
-  // when one exists, otherwise the disputes list where the user can pick one.
+  // Raise a dispute: always the filing form (the deal is the unit). The form
+  // preselects this deal's booking only when it can be disputed; with no deal,
+  // or one that can't be disputed, it opens with nothing selected (web parity).
+  // Used to open the disputes LIST when the deal had no booking.
   const handleRaiseDispute = useCallback(() => {
     setActionMenuOpen(false);
-    const bookingId = activeDeal?.booking_id ?? null;
-    if (bookingId) navigation.navigate("FileDisputeTab", { bookingId });
-    else navigation.navigate("DisputesTab");
+    navigation.navigate("FileDisputeTab", { bookingId: activeDeal?.booking_id ?? undefined });
   }, [activeDeal?.booking_id, navigation]);
 
   // Conversation-level report reuses the message-report endpoint with the

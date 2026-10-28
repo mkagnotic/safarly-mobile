@@ -36,6 +36,7 @@ import { useExpandedBooking } from "@/features/bookings/hooks/useExpandedBooking
 import { createBookingActions } from "@/features/bookings/lib/bookingActions";
 import { FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
 import { getBookingGates } from "@/features/bookings/lib/bookingGates";
+import { bookingDisputeView } from "@/features/disputes/disputeRules";
 import type { Nav, Route } from "@/features/bookings/lib/navigation";
 
 // ExpandedBody and BookingRow stay in this file on purpose: `npm run check:ux`
@@ -50,6 +51,7 @@ interface ExpandedBodyProps {
   role: "sender" | "carrier" | "unknown";
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
+  onNavigateDispute: () => void;
 }
 
 function ExpandedBody({
@@ -57,6 +59,7 @@ function ExpandedBody({
   role,
   onNavigateRate,
   onNavigatePay,
+  onNavigateDispute,
 }: Readonly<ExpandedBodyProps>) {
   const {
     booking, timeline, error, refetch, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
@@ -102,6 +105,7 @@ function ExpandedBody({
     canStartJourney, canMarkLanded, canReportDelay, awaitingSenderPayment, canRate, hasRated,
     originCity, destinationCity, isOnlineOrder, returnEligible,
   } = getBookingGates(booking, role);
+  const disputeView = bookingDisputeView(booking);
 
   return (
     <View style={styles.expandedRoot}>
@@ -164,6 +168,33 @@ function ExpandedBody({
 
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
+        {/* A disputed booking hides its journey actions; without this the card
+            was a dead end with no way to the dispute (web parity). Open: "View
+            dispute"; dismissed mid-delivery: the note + "View dispute";
+            refunded / released: the normal finished state + "Dispute resolved". */}
+        {disputeView.note ? <Text style={styles.disputeNote}>{disputeView.note}</Text> : null}
+        {disputeView.link ? (
+          <Pressable
+            style={[
+              sharedStyles.actionButton,
+              disputeView.disputedChip ? sharedStyles.actionDanger : styles.disputeLinkResolved,
+              sharedStyles.fullWidthAction,
+            ]}
+            onPress={onNavigateDispute}
+            accessibilityRole="button"
+            accessibilityLabel={disputeView.link}
+          >
+            <Ionicons
+              name={disputeView.disputedChip ? "alert-circle-outline" : "checkmark-circle-outline"}
+              size={14}
+              color={disputeView.disputedChip ? colors.danger : colors.primary}
+            />
+            <Text style={disputeView.disputedChip ? sharedStyles.actionDangerText : styles.disputeLinkResolvedText}>
+              {disputeView.link}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {canPay ? (
           <Pressable
             style={[sharedStyles.actionButton, sharedStyles.actionPrimary, sharedStyles.fullWidthAction]}
@@ -380,6 +411,7 @@ interface BookingRowProps {
   onToggle: () => void;
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
+  onNavigateDispute: () => void;
 }
 
 function BookingRow({
@@ -389,6 +421,7 @@ function BookingRow({
   onToggle,
   onNavigateRate,
   onNavigatePay,
+  onNavigateDispute,
 }: Readonly<BookingRowProps>) {
   return (
     <Card style={styles.bookingCard}>
@@ -401,6 +434,7 @@ function BookingRow({
             role={role}
             onNavigateRate={onNavigateRate}
             onNavigatePay={onNavigatePay}
+            onNavigateDispute={onNavigateDispute}
           />
         </View>
       ) : null}
@@ -492,6 +526,8 @@ export function BookingsScreen() {
     [navigation],
   );
 
+  const handleNavigateDispute = useCallback(() => navigation.navigate("DisputesTab"), [navigation]);
+
   const keyExtractor = useCallback((b: Booking) => b.id, []);
 
   const renderItem = useCallback(
@@ -503,9 +539,10 @@ export function BookingsScreen() {
         onToggle={() => handleToggle(item.id)}
         onNavigateRate={handleNavigateRate}
         onNavigatePay={handleNavigatePay}
+        onNavigateDispute={handleNavigateDispute}
       />
     ),
-    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay],
+    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay, handleNavigateDispute],
   );
 
   // Loading / error / empty all render through ListEmptyComponent so the fixed

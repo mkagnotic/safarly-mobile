@@ -40,26 +40,8 @@ export const FILE_CATEGORIES: { key: string; label: string; icon: IconName }[] =
   { key: "other", label: CATEGORY_LABELS.other, icon: "ellipsis-horizontal" },
 ];
 
-/**
- * Booking statuses a dispute can be raised against (web parity: the file form's
- * booking picker is limited to these).
- */
-export const DISPUTABLE_STATUSES: ReadonlySet<string> = new Set([
-  "confirmed",
-  "awaiting_handoff",
-  // Both post-possession: the carrier is holding the parcel, which is precisely
-  // when a dispute is most likely. They were missing, so those bookings could
-  // not be disputed at all.
-  "payment_secured",
-  "unpaid_return",
-  "handoff_rejected",
-  "in_transit",
-  "delivered",
-  "cancelled_post_possession",
-]);
-
-/** Minimum description length on the file-dispute form (web parity). */
-export const MIN_DESCRIPTION = 20;
+// Rules live in the pure module so node:test can cover them.
+export { DISPUTABLE_STATUSES, MIN_DESCRIPTION } from "./disputeRules";
 
 export function statusColor(status: string): string {
   switch (status) {

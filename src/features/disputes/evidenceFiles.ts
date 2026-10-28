@@ -8,6 +8,19 @@ import type { RNUploadFile } from "@/services/api";
  * instead of finding it missing afterwards.
  */
 export const EVIDENCE_MAX_FILES = 8;
+/** Total files one dispute can hold, across every upload (server: limit_reached). */
+export const EVIDENCE_MAX_PER_DISPUTE = 24;
+export const EVIDENCE_TOTAL_LIMIT_TEXT = "A dispute can have up to 24 files.";
+
+/** "5/24 files". */
+export function evidenceCountLabel(count: number): string {
+  return `${count}/${EVIDENCE_MAX_PER_DISPUTE} files`;
+}
+
+/** How many more files this upload may take: 8 at a time, 24 per dispute. */
+export function evidenceRoom(existing: number): number {
+  return Math.max(0, Math.min(EVIDENCE_MAX_FILES, EVIDENCE_MAX_PER_DISPUTE - existing));
+}
 export const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 export const EVIDENCE_ALLOWED_TYPES: readonly string[] = [
   "image/jpeg",
@@ -41,6 +54,8 @@ export interface ScreenedEvidence {
   tooLarge: number;
   unsupported: number;
   overLimit: number;
+  /** Dropped because the dispute already holds (or would pass) 24 files. */
+  overTotal?: number;
 }
 
 function extOf(value: string | null | undefined): string {
@@ -56,8 +71,14 @@ export function evidenceMimeType(file: PickedEvidence): string {
   return TYPE_BY_EXT[extOf(file.name) || extOf(file.uri)] ?? "application/octet-stream";
 }
 
-export function screenEvidence(picked: readonly PickedEvidence[], now = Date.now()): ScreenedEvidence {
-  const out: ScreenedEvidence = { files: [], tooLarge: 0, unsupported: 0, overLimit: 0 };
+export function screenEvidence(
+  picked: readonly PickedEvidence[],
+  now = Date.now(),
+  /** Files the dispute (or the form) already holds, toward the 24 total. */
+  existing = 0,
+): ScreenedEvidence {
+  const out: ScreenedEvidence = { files: [], tooLarge: 0, unsupported: 0, overLimit: 0, overTotal: 0 };
+  const totalRoom = Math.max(0, EVIDENCE_MAX_PER_DISPUTE - existing);
   picked.forEach((p, i) => {
     const type = evidenceMimeType(p);
     if (!EVIDENCE_ALLOWED_TYPES.includes(type)) {
@@ -66,6 +87,10 @@ export function screenEvidence(picked: readonly PickedEvidence[], now = Date.now
     }
     if (p.size != null && p.size > EVIDENCE_MAX_BYTES) {
       out.tooLarge += 1;
+      return;
+    }
+    if (out.files.length >= totalRoom) {
+      out.overTotal = (out.overTotal ?? 0) + 1;
       return;
     }
     if (out.files.length >= EVIDENCE_MAX_FILES) {
@@ -84,5 +109,7 @@ export function skippedEvidenceMessage(s: ScreenedEvidence): string | null {
   if (s.unsupported) parts.push(`${s.unsupported} not a JPEG, PNG, WebP, GIF or PDF`);
   if (s.tooLarge) parts.push(`${s.tooLarge} over 10 MB`);
   if (s.overLimit) parts.push(`${s.overLimit} past the ${EVIDENCE_MAX_FILES}-file limit`);
-  return parts.length ? `Skipped: ${parts.join("; ")}.` : null;
+  const head = parts.length ? `Skipped: ${parts.join("; ")}.` : "";
+  const total = s.overTotal ? `${head ? " " : ""}${s.overTotal} not added. ${EVIDENCE_TOTAL_LIMIT_TEXT}` : "";
+  return head || total ? head + total : null;
 }

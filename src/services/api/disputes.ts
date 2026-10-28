@@ -67,7 +67,5 @@ export const disputesApi = {
 
   adminResolve: (id: string, resolution: string) =>
     api.put<{ status: string }>(`/dispute-handler/admin/${id}/resolve`, { resolution }),
-
-  adminEscalate: (id: string) =>
-    api.put<{ status: string }>(`/dispute-handler/admin/${id}/escalate`),
+  // No escalate call: the server has no escalate route (the old call 404'd).
 };

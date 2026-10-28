@@ -92,6 +92,9 @@ export const styles = StyleSheet.create({
   // Actions
   actionsWrap: { gap: 8, flexDirection: "row", flexWrap: "wrap" },
   actionWarning: { backgroundColor: "rgba(245,159,10,0.12)" },
+  disputeNote: { color: colors.mutedText, fontSize: 13, fontWeight: "600", lineHeight: 18 },
+  disputeLinkResolved: { backgroundColor: colors.surfaceTintPrimary },
+  disputeLinkResolvedText: { color: colors.primary, fontSize: 13, fontWeight: "800" },
   actionWarningText: { color: colors.warning, fontSize: 13, fontWeight: "800" },
   actionRated: { backgroundColor: "rgba(34,197,94,0.12)" },
   actionRatedText: { color: colors.safe, fontSize: 13, fontWeight: "800" },

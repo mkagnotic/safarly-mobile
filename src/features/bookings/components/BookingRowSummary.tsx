@@ -18,6 +18,7 @@ import {
   STATUS_TONES,
 } from "@/features/bookings/lib/bookingDisplay";
 import { bookingEventLabel, bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
+import { bookingDisputeView, chipStatusLabel } from "@/features/disputes/disputeRules";
 
 interface BookingRowSummaryProps {
   booking: Booking;
@@ -33,8 +34,13 @@ export function BookingRowSummary({
   expanded,
   onToggle,
 }: Readonly<BookingRowSummaryProps>) {
-  const tone = STATUS_TONES[booking.status] ?? { bg: "#E5E7EB", fg: colors.subtleText };
-  const icon = STATUS_ICONS[booking.status] ?? "ellipse";
+  // "Disputed" only while the dispute is open; a resolved one never keeps it.
+  const disputeView = bookingDisputeView(booking);
+  const staleDisputed = booking.status === "disputed" && !disputeView.disputedChip;
+  const tone = staleDisputed
+    ? { bg: "#E5E7EB", fg: colors.subtleText }
+    : STATUS_TONES[booking.status] ?? { bg: "#E5E7EB", fg: colors.subtleText };
+  const icon = staleDisputed ? "checkmark-circle" : STATUS_ICONS[booking.status] ?? "ellipse";
   const roleColor = role === "sender" ? colors.primary : "#F08020";
 
   return (
@@ -120,7 +126,8 @@ export function BookingRowSummary({
             minimumFontScale={0.75}
             maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
           >
-            {bookingStatusLabel(booking.status)}
+            {/* A booking still reading "disputed" after its dispute resolved never says "Disputed". */}
+            {staleDisputed ? chipStatusLabel(booking, "") : <>{bookingStatusLabel(booking.status)}</>}
           </Text>
         </View>
         {booking.parcel ? (
@@ -129,11 +136,13 @@ export function BookingRowSummary({
           </Text>
         ) : null}
       </View>
+      {disputeView.note ? <Text style={styles.disputeNote}>{disputeView.note}</Text> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  disputeNote: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginTop: 6 },
   cardSummary: { padding: 16 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardHeaderMain: { flex: 1, minWidth: 0, gap: 5 },
