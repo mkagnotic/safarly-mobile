@@ -2219,6 +2219,21 @@ const CHECKS = [
     why: "See carrier-flow-wording (web repo). Plus mobile asked 'Will the merchant refund the sender?' and stored it as will_return (whether YOU return the parcel), took the penalty 'from your wallet' (there is none; it comes from the next payout), showed a raw 'Tier: x', titled every failure 'Action failed', and typed labels in capitals.",
     must: ['{ key: "will_return", label: "Will you return the parcel to the sender?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with the sender in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
     mustNot: ["seller_will_refund", "deducted from your wallet", "`Tier: ${data.tier}.", 'title: "Action failed"', "Handoff complete — you're in transit.", ".toUpperCase()}", '{e.event.replace(/_/g, " ")}', "Chat with your receiver", '"TRIP LISTING"', ">AWAITING PAYMENT</Text>"],
+  },  {
+    repo: "web",
+    file: ["src/features/parcels/pages/CustomerOpportunities.tsx"],
+    id: "carry-request-same-everywhere",
+    why: "27 Oct 2026 (user: wording AND behaviour the same on web, Android and iOS): a carry offer is a MATCH REQUEST with an optional starting price - mobile called it 'Make Offer' and required an amount. The price label follows the parcel's currency (it said '$' on rupee parcels).",
+    must: ["Request to carry", "Send match request", "Starting price ({currencySymbol(parcel.fee_currency)}) — optional", "Match request sent — continue in Messages."],
+    mustNot: ["Starting price ($) — optional"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/opportunities/OpportunitiesScreen.tsx", "src/services/api/carriers.ts"],
+    id: "mobile-carry-request-same-everywhere",
+    why: "See carry-request-same-everywhere (web repo).",
+    must: ['"Request to carry"', ">Send match request</Text>", "Starting price ({currencySymbol(parcel.fee_currency)}) — optional", "Match request sent — continue in Messages.", "offer_amount?: number;"],
+    mustNot: ["Make Offer", "Submit Offer", "Offer submitted", "Offer amount must be greater than 0.", "Your offer has been submitted!"],
   },
 ];
 

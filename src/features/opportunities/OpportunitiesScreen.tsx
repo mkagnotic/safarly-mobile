@@ -34,6 +34,7 @@ import {
 import { colors } from "@/theme/colors";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
+import { currencySymbol } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "OpportunitiesTab">,
@@ -169,13 +170,10 @@ function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onLis
       setFormError("Please select a trip.");
       return;
     }
+    // Web's rule (27 Oct 2026): this is a MATCH REQUEST - the price is agreed later
+    // in chat, so a starting price is optional; named, it follows the $5 / ₹500 minimum.
     const amount = parseFloat(offerAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setFormError("Offer amount must be greater than 0.");
-      return;
-    }
-    // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
-    const tooSmall = minAmountProblem(amount, parcel.fee_currency);
+    const tooSmall = amount > 0 ? minAmountProblem(amount, parcel.fee_currency) : undefined;
     if (tooSmall) {
       setFormError(tooSmall);
       return;
@@ -222,7 +220,7 @@ function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onLis
 
       {/* Offer amount */}
       <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Offer Amount ($) *</Text>
+        <Text style={styles.fieldLabel}>Starting price ({currencySymbol(parcel.fee_currency)}) — optional</Text>
         <TextInput
           value={offerAmount}
           onChangeText={setOfferAmount}
@@ -257,14 +255,14 @@ function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onLis
         disabled={pending}
         style={[styles.submitButton, pending && styles.submitDisabled]}
         accessibilityRole="button"
-        accessibilityLabel="Submit Offer"
+        accessibilityLabel="Send match request"
       >
         {pending ? (
           <ActivityIndicator size="small" color={colors.white} />
         ) : (
           <>
             <Ionicons name="paper-plane" size={14} color={colors.white} />
-            <Text style={styles.submitText}>Submit Offer</Text>
+            <Text style={styles.submitText}>Send match request</Text>
           </>
         )}
       </Pressable>
@@ -323,7 +321,7 @@ function OpportunityCard({
         ) : null}
         {submitted ? (
           <View style={styles.submittedBadge}>
-            <Text style={styles.submittedText}>Offer Submitted</Text>
+            <Text style={styles.submittedText}>Request sent</Text>
           </View>
         ) : null}
       </View>
@@ -387,14 +385,14 @@ function OpportunityCard({
         ]}
         accessibilityRole="button"
         accessibilityLabel={
-          submitted ? "Offer submitted" : expanded ? "Cancel offer" : "Make offer"
+          submitted ? "Request sent" : expanded ? "Cancel" : "Request to carry"
         }
       >
         {submitted ? (
-          <Text style={styles.makeOfferSubmittedText}>Offer Submitted</Text>
+          <Text style={styles.makeOfferSubmittedText}>Request sent</Text>
         ) : (
           <>
-            <Text style={styles.makeOfferText}>{expanded ? "Cancel" : "Make Offer"}</Text>
+            <Text style={styles.makeOfferText}>{expanded ? "Cancel" : "Request to carry"}</Text>
             <Ionicons
               name={expanded ? "chevron-up" : "chevron-down"}
               size={14}
@@ -482,7 +480,7 @@ export function OpportunitiesScreen() {
       try {
         await carriersApi.submitBid(values.parcelId, {
           trip_id: values.selectedTripId,
-          offer_amount: parseFloat(values.offerAmount),
+          offer_amount: parseFloat(values.offerAmount) > 0 ? parseFloat(values.offerAmount) : undefined,
           message: values.message.trim() || undefined,
         });
         setSubmittedIds((prev) => {
@@ -492,7 +490,7 @@ export function OpportunitiesScreen() {
         });
         setExpandedId(null);
         showToast({
-          title: "Your offer has been submitted!",
+          title: "Match request sent — continue in Messages.",
           variant: "success",
         });
       } catch (err) {

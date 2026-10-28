@@ -83,7 +83,7 @@ export interface CarrierRequest {
 export const carriersApi = {
   submitBid: (
     parcel_id: string,
-    data: { trip_id: string; offer_amount: number; message?: string },
+    data: { trip_id: string; offer_amount?: number; message?: string },
   ) => api.post<CarrierRequest>(`/carrier-request-handler/${parcel_id}/requests`, data),
 
   getBids: (parcel_id: string) =>
