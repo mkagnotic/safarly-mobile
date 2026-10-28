@@ -29,12 +29,18 @@ export function resolveNotificationRoute(
 
   const messagesMatch = l.match(/^\/customer\/messages\/([0-9a-f-]{36})/i);
   if (messagesMatch) {
+    // `?deal=<carrier_request_id>` names the delivery the notice is about (e.g.
+    // "trip details changed"). With several deals in one chat, dropping it opened
+    // the server's default deal - the warning and the step were about another one.
+    // Web reads the same param (`useThreadDeal` dealHint).
+    const deal = l.match(/[?&]deal=([0-9a-f-]{36})(?:[&#]|$)/i);
     return {
       screen: "OfferChatTab",
       params: {
         conversationId: messagesMatch[1],
         name: title?.replace(/^New message from /i, "") ?? "Conversation",
         source: "messages",
+        ...(deal ? { dealId: deal[1] } : {}),
       },
     };
   }

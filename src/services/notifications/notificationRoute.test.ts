@@ -161,3 +161,24 @@ describe("the in-app notification banner opens what it is about", () => {
     assert.ok(resolveNotificationRoute(null, null, null).screen, "always a screen");
   });
 });
+
+// A chat link that names a deal (`?deal=`, e.g. "trip details changed") must open
+// THAT deal. Dropping it opened the server's default deal in a multi-deal chat, so
+// the warning and the step on screen were about another delivery. Web parity.
+describe("chat links keep the deal they name", () => {
+  const CONV = "bbbbbbbb-2222-4000-8000-bbbbbbbbbbbb";
+  test("?deal= becomes the chat's dealId", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}?deal=${ID}`, "message", "Trip details changed");
+    assert.equal(r.screen, "OfferChatTab");
+    assert.equal(r.params?.conversationId, CONV);
+    assert.equal(r.params?.dealId, ID);
+  });
+  test("a plain chat link carries no dealId", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}`, "message", "New message from Roja");
+    assert.equal(r.params?.dealId, undefined);
+  });
+  test("a malformed deal id is ignored", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}?deal=not-a-uuid`, "message");
+    assert.equal(r.params?.dealId, undefined);
+  });
+});

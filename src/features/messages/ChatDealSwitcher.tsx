@@ -56,7 +56,7 @@ export function dealSwitcherHeading(
  *
  * Renders NOTHING for a single deal, which is the overwhelmingly common case: a chat
  * with one delivery looks exactly as it always has. Keep in sync with web
- * `src/customer/components/ChatDealSwitcher.tsx`.
+ * `src/features/messages/components/ChatDealSwitcher.tsx`.
  */
 function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }: Props) {
   // A cancelled or expired delivery is history - keep it out of the picker. The one
@@ -102,6 +102,8 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
       <ScrollView
         ref={scrollRef}
         horizontal
+        accessibilityRole="tablist"
+        accessibilityLabel="Choose which delivery to view"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
       >
@@ -112,7 +114,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
           return (
             <Pressable
               key={id}
-              accessibilityRole="button"
+              accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={`Show ${labels.get(id)?.chip ?? "delivery"}`}
               onPress={() => onSelect(id)}
@@ -124,7 +126,10 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
                 finished ? styles.chipDim : null,
               ]}
             >
-              <Text numberOfLines={1} style={[styles.chipText, selected ? styles.chipTextOn : styles.chipTextOff]}>
+              {/* Two lines, as web wraps on phones: the "#7eba" that tells two
+                  same-route deals apart sits at the END, and one line cut it off
+                  at 320pt / large text. */}
+              <Text numberOfLines={2} style={[styles.chipText, selected ? styles.chipTextOn : styles.chipTextOff]}>
                 {labels.get(id)?.chip ?? "Delivery"}
                 {finished ? "  · ended" : ""}
               </Text>
@@ -134,7 +139,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
         {buddy ? (
           <Pressable
             key={BUDDY_ENTRY_ID}
-            accessibilityRole="button"
+            accessibilityRole="tab"
             accessibilityState={{ selected: buddySelected }}
             accessibilityLabel={`Show ${buddyLabel}`}
             onPress={() => onSelect(BUDDY_ENTRY_ID)}
@@ -142,7 +147,7 @@ function ChatDealSwitcherBase({ deals, selectedDealId, onSelect, buddy = null }:
             style={[styles.chip, styles.buddyChip, { maxWidth: chipMax }, buddySelected ? styles.chipOn : styles.chipOff]}
           >
             <Ionicons name="people-outline" size={12} color={buddySelected ? colors.primary : colors.subtleText} />
-            <Text numberOfLines={1} style={[styles.chipText, styles.chipTextShrink, buddySelected ? styles.chipTextOn : styles.chipTextOff]}>
+            <Text numberOfLines={2} style={[styles.chipText, styles.chipTextShrink, buddySelected ? styles.chipTextOn : styles.chipTextOff]}>
               {buddyLabel}
             </Text>
           </Pressable>
@@ -170,8 +175,11 @@ const styles = StyleSheet.create({
     color: colors.subtleText,
   },
   row: { flexDirection: "row", gap: 6, paddingBottom: 8, paddingRight: 12 },
+  // 44pt minimum touch target (the label stays compact; the chip grows to fit).
   chip: {
-    borderRadius: 999,
+    minHeight: 44,
+    justifyContent: "center",
+    borderRadius: 22,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,

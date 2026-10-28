@@ -53,13 +53,22 @@ export interface UseActiveDealResult {
  */
 const EMPTY_DEALS: DealProjection[] = [];
 
-export function useActiveDeal(conversationId: string | null, buddyListingId?: string | null): UseActiveDealResult {
+/**
+ * `dealHint`: a link named the deal to open (`?deal=`, e.g. a "trip details changed"
+ * notice). With several deals between two people the server's default pick is often
+ * a different one, so the chat opens on the named deal - web `useThreadDeal` parity.
+ */
+export function useActiveDeal(
+  conversationId: string | null,
+  buddyListingId?: string | null,
+  dealHint?: string | null,
+): UseActiveDealResult {
   const [activeDeal, setActiveDeal] = useState<ActiveDeal | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
   const [deals, setDeals] = useState<DealProjection[]>([]);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [buddy, setBuddy] = useState<BuddyEntry | null>(null);
-  const [wantedDealId, setWantedDealId] = useState<string | null>(null);
+  const [wantedDealId, setWantedDealId] = useState<string | null>(dealHint ?? null);
   const [loading, setLoading] = useState(Boolean(conversationId));
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   /**
@@ -84,8 +93,13 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
   currentConversationRef.current = conversationId;
   // Read inside refetch without making it a dependency: re-creating refetch on every
   // switch would retrigger the realtime subscriptions below.
-  const wantedRef = useRef<string | null>(null);
+  const wantedRef = useRef<string | null>(dealHint ?? null);
   wantedRef.current = wantedDealId;
+  // A new conversation (or a new link into this one) starts from the link's deal,
+  // in THIS render - the fetch below must not ask the new chat for the old chat's deal.
+  const selectionKey = `${conversationId ?? ""}|${dealHint ?? ""}`;
+  const selectionKeyRef = useRef(selectionKey);
+  if (selectionKeyRef.current !== selectionKey) wantedRef.current = dealHint ?? null;
   const buddyHintRef = useRef<string | null>(buddyListingId ?? null);
   buddyHintRef.current = buddyListingId ?? null;
 
@@ -142,11 +156,26 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
     };
   }, [refetch]);
 
-  // A different conversation is a different set of deals, so the selection resets.
+  // A different conversation is a different set of deals, so the selection resets -
+  // to the deal a link named, if any (web: `setSelectedDealId(dealHint)`). Runs only
+  // when the conversation or the link changes, never over a chip the user tapped.
+  // Unset on mount, so the first run is "a new conversation" and fetches only once.
+  const lastSelectionRef = useRef<{ conversationId: string | null; dealHint: string | null } | null>(null);
   useEffect(() => {
-    setWantedDealId(null);
-    if (conversationId) setLoading(true);
-  }, [conversationId]);
+    const hint = dealHint ?? null;
+    const last = lastSelectionRef.current;
+    if (last && last.conversationId === conversationId && last.dealHint === hint) return;
+    lastSelectionRef.current = { conversationId, dealHint: hint };
+    selectionKeyRef.current = `${conversationId ?? ""}|${hint ?? ""}`;
+    setWantedDealId(hint);
+    wantedRef.current = hint;
+    if (!last || last.conversationId !== conversationId) {
+      if (conversationId) setLoading(true);
+      return; // `refetch` changed with the conversation; its own effect fetches.
+    }
+    // Same chat, a new link naming a deal: fetch that deal.
+    if (hint) void refetch();
+  }, [conversationId, dealHint, refetch]);
 
   const selectDeal = useCallback((dealId: string | null) => {
     const wasBuddy = wantedRef.current === BUDDY_ENTRY_ID;

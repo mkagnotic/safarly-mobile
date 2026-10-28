@@ -25,6 +25,8 @@ export type RootStackParamList = {
         source?: "home" | "messages" | "buddies" | "travels";
         /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
         buddyListingId?: string;
+        /** A link named the deal to open (`?deal=`), as on web. */
+        dealId?: string;
       }
     | undefined;
   SendParcel: undefined;
@@ -105,6 +107,8 @@ export type MainTabParamList = {
         source?: "home" | "messages" | "buddies" | "travels";
         /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
         buddyListingId?: string;
+        /** A link named the deal to open (`?deal=`), as on web. */
+        dealId?: string;
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };

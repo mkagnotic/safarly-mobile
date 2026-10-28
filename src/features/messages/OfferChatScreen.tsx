@@ -17,7 +17,8 @@ import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
 import { labelDeals, selectableDeals } from "@/utils/dealLabel";
-import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount } from "@/utils/buddyEntry";
+import { BUDDY_ENTRY_ID, buddyEntryLabel } from "@/utils/buddyEntry";
+import { dealContextLine } from "@/utils/dealContext";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { dismissChatNotifications, setActiveChat } from "@/services/notifications/push";
@@ -91,6 +92,11 @@ export function OfferChatScreen() {
   // Opened from a Travel Buddy card while the chat stays a parcel thread: open on
   // the travel-buddy entry for that trip.
   const buddyListingId = route.params?.buddyListingId ?? null;
+  // A link that names a deal opens on it - notification `dealId`, or `?deal=` on a
+  // `safarly://messages/:id` link (React Navigation passes query keys as params).
+  // Web parity: `useThreadDeal` dealHint.
+  const dealHint =
+    route.params?.dealId ?? (route.params as { deal?: string } | undefined)?.deal ?? null;
   const fallbackBackTarget = getBackTarget(source);
 
   const {
@@ -101,7 +107,7 @@ export function OfferChatScreen() {
   const {
     activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
     buddy, buddySelected, switchingDeal,
-  } = useActiveDeal(conversationId, buddyListingId);
+  } = useActiveDeal(conversationId, buddyListingId, dealHint);
 
   // Header badge, match banner and match-action subject — see `useChatMatchStatus`.
   const {
@@ -161,10 +167,15 @@ export function OfferChatScreen() {
   // ⚠️ Gated on the SELECTABLE deals, exactly as the switcher is - see web.
   // The travel-buddy entry counts as one more thing to choose between.
   const selectedDealLabel = useMemo(() => {
-    const shown = selectableDeals(deals ?? [], selectedDealId);
-    // Same rule as the switcher: two or more things to choose between.
-    if (selectableDeals(deals ?? [], selectedDealId).length < 2 && switcherEntryCount(shown.length, buddy) < 2) return null;
-    if (buddySelected && buddy) return { full: buddyEntryLabel(buddy) };
+    // Web's rule (see `utils/dealContext.ts`): no switcher, no line; a lone deal
+    // beside the buddy entry is not named.
+    const line = dealContextLine({
+      selectableCount: selectableDeals(deals ?? [], selectedDealId).length,
+      hasBuddy: !!buddy,
+      buddySelected,
+    });
+    if (line === "buddy" && buddy) return { full: buddyEntryLabel(buddy) };
+    if (line !== "deal") return null;
     return labelDeals(deals ?? []).get(selectedDealId ?? "") ?? null;
   }, [deals, selectedDealId, buddy, buddySelected]);
 
