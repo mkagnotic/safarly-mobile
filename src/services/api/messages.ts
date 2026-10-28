@@ -505,6 +505,10 @@ export const messagesApi = {
   markDelivered: (conversationId: string) =>
     api.post<{ ok: boolean }>(`/message-handler/conversations/${conversationId}/mark-delivered`),
 
+  /** The open chat saw new messages: mark them (and the chat's notifications) read. */
+  markRead: (conversationId: string) =>
+    api.post<{ ok: boolean; unread_count: number }>(`/message-handler/conversations/${conversationId}/mark-read`),
+
   reportMessage: (messageId: string, reason: string, details?: string) =>
     api.post<{ report_id: string }>(`/message-handler/${messageId}/report`, { reason, details }),
 

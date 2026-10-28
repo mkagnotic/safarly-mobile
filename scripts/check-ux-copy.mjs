@@ -2392,6 +2392,40 @@ const CHECKS = [
     must: ['waitKind === "setup"', "offerCurrencyNote(mode, currencyCode)"],
     mustNot: [],
   },
+  // ------------------------------------------------- ended deal (bug bash 28 Oct 2026)
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/dealState.ts", "supabase/functions/booking-handler/lib/dealConversation.ts", "supabase/functions/booking-handler/routes/returns.ts", "supabase/functions/message-handler/routes/activeDeal.ts", "supabase/functions/scheduled-workflow-timeouts/index.ts", "supabase/migrations/20261028160000_close_ended_deals.sql"],
+    id: "ended-deal-never-drives-the-chat",
+    why: "Client: User Four had carried User Six's parcel and cancelled after taking it; once the parcel was home the two listed a new pairing the other way round and the chat showed User Four the TRAVEL DOCUMENT step again. Every cancel path demotes the request to 'pending' and the retirements only matched 'accepted', so the finished deal stayed an open offer, drove the chat, and the next Match re-ran it with the old roles. An ended deal's request is retired as 'withdrawn' (closeBookingMatch, return received, the 15-minute sweep, migration backfill) and active-deal never drives a pending request whose bookings have all ended.",
+    must: ["export function requestIsEndedDeal(", "await closeEndedDealRequest(supabase, bk.carrier_request_id);", "await closeEndedDealRequest(supabase, booking.carrier_request_id);", "if (cr.status === 'pending') return !requestIsEndedDeal(cr, bookingsOfCr.get(cr.id) ?? []);", "supabase.rpc('fn_close_ended_deals')", "CREATE OR REPLACE FUNCTION public.fn_close_ended_deals()"],
+    mustNot: ["return cr.status === 'pending';"],
+  },
+  // ------------------------------------------- read chat, unread count (28 Oct 2026)
+  {
+    repo: "web",
+    file: ["supabase/functions/message-handler/lib/markRead.ts", "supabase/functions/message-handler/routes/messages.ts", "supabase/functions/message-handler/routes/read.ts", "supabase/functions/message-handler/index.ts"],
+    id: "read-chat-clears-every-count",
+    why: "Client: 'in chat, message is read but still the count shows as unread'. A message that arrived into the open chat was never marked read (only GET /messages marked), and reading a chat never cleared its 'message' notifications, so the Inbox badge, the bell and the app-icon badge stayed up. Opening (GET) and POST /mark-read share markThreadRead, which also reads the chat's notifications.",
+    must: ["markThreadRead(supabase, convId, authResult.user.id, nowIso)", "await markThreadRead(supabase, convId, userId);", ".eq('data->>conversation_id', conversationId)", "markRead,"],
+    mustNot: ["supabase.from('messages').update({ read_at: nowIso }) .eq('conversation_id', convId)"],
+  },
+  {
+    repo: "web",
+    file: ["src/hooks/useRealtimeSync.ts", "src/features/messages/hooks/useThreadMessages.ts", "src/features/messages/lib/markOpenThreadRead.ts"],
+    id: "web-open-chat-marks-incoming-read",
+    why: "See read-chat-clears-every-count. A realtime message into the visible open chat, or a hidden tab coming back to it, calls POST /mark-read and recounts the badge after it.",
+    must: ["if (readNow) void markOpenThreadRead(queryClient, convId);", "void markOpenThreadRead(queryClient, activeConversationId)", "await messagesApi.markRead(conversationId);"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/hooks/api/useChatMessages.ts", "src/features/messages/chat/markOpenThreadRead.ts", "src/features/messages/chat/lib/readRules.ts"],
+    id: "mobile-open-chat-marks-incoming-read",
+    why: "Same as web web-open-chat-marks-incoming-read: a message from the other side into the open chat with the app in front is marked read, and the tab badge and bell recount after every thread fetch (a chat opened from a push too).",
+    must: ["})) void markOpenThreadRead(conversationId);", "recountAfterThreadRead();", "await messagesApi.markRead(conversationId);", 'return s.appState === "active";'],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

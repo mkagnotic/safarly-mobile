@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 import { supabase } from "@/integrations/supabase/client";
 import { applyMessageInsert, applyMessageUpdate } from "@/utils/realtimeMessages";
@@ -10,6 +11,8 @@ import {
 } from "@/services/api";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { useResilientChannel } from "@/hooks/realtime/useResilientChannel";
+import { markOpenThreadRead, recountAfterThreadRead } from "@/features/messages/chat/markOpenThreadRead";
+import { shouldMarkIncomingRead } from "@/features/messages/chat/lib/readRules";
 import { ChatSendError, isPermanentRefusal, retryPayload } from "@/features/messages/chat/lib/chatSendRules";
 
 /** Local-only marker for messages that haven't reached the server yet. */
@@ -105,6 +108,9 @@ export function useChatMessages({
         if (!mountedRef.current) return;
         setServerMessages(res.data?.messages ?? []);
         setHasMore(!!res.data?.has_more);
+        // The GET just marked the thread read: bring the tab badge and bell down
+        // now, wherever the chat was opened from (a push, a link, the Inbox).
+        recountAfterThreadRead();
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -187,6 +193,13 @@ export function useChatMessages({
           // Skips a row we already have (e.g. our own send already echoed).
           const incoming = payload.new as Partial<Message> | undefined;
           setServerMessages((prev) => applyMessageInsert(prev, incoming));
+          // A message from the other side into the chat on screen is read
+          // (chat/lib/readRules.ts); it used to stay unread under the badge.
+          if (conversationId && shouldMarkIncomingRead({
+            senderId: incoming?.from_user_id ?? incoming?.sender_id,
+            currentUserId,
+            appState: AppState.currentState,
+          })) void markOpenThreadRead(conversationId);
         },
       )
       .on(
