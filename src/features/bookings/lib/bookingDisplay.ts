@@ -4,6 +4,13 @@ import type { Booking } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { BOOKING_STATUS_LABELS } from "@/features/bookings/lib/bookingEventLabel";
 
+/**
+ * Shown under the search box while a search is active and more pages exist:
+ * the search filters the rows loaded so far, not the server (bookings canon #12).
+ * Byte-identical to web's BOOKINGS_SEARCH_SCOPE_NOTE (bookingsListRules.ts).
+ */
+export const BOOKINGS_SEARCH_SCOPE_NOTE = "Searching loaded bookings only.";
+
 export const FILTERS: ReadonlyArray<{ label: string; status?: string }> = [
   { label: "All", status: undefined },
   { label: "Active", status: "active" },

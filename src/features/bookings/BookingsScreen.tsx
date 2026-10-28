@@ -36,7 +36,7 @@ import { SenderDelayNotice } from "@/features/bookings/components/SenderDelayNot
 import { ParcelDetailsSection } from "@/features/bookings/components/ParcelDetailsSection";
 import { useExpandedBooking } from "@/features/bookings/hooks/useExpandedBooking";
 import { createBookingActions } from "@/features/bookings/lib/bookingActions";
-import { FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
+import { BOOKINGS_SEARCH_SCOPE_NOTE, FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
 import { getBookingGates } from "@/features/bookings/lib/bookingGates";
 import { bookingDisputeView } from "@/features/disputes/disputeRules";
 import type { Nav, Route } from "@/features/bookings/lib/navigation";
@@ -89,8 +89,11 @@ function ExpandedBody({
 
   if (!booking && !error) {
     return (
-      <View style={styles.expandedLoading}>
+      // The card body (timeline included) comes from the detail fetch; say what
+      // it waits for, in web's words (web CustomerBookings "Loading timeline…").
+      <View style={styles.expandedLoading} accessibilityRole="progressbar" accessibilityLabel="Loading timeline" testID="booking-timeline-loading">
         <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.updatingText}>Loading timeline…</Text>
       </View>
     );
   }
@@ -653,6 +656,14 @@ export function BookingsScreen() {
             accessibilityLabel="Search bookings"
           />
         </View>
+        {/* The search filters the rows loaded so far; the server takes no search
+            term, so with more pages unloaded it can miss a booking (canon #12).
+            Same words as web's BOOKINGS_SEARCH_SCOPE_NOTE. */}
+        {search.trim() && hasMore ? (
+          <Text style={styles.updatingText} testID="bookings-search-scope">
+            {BOOKINGS_SEARCH_SCOPE_NOTE}
+          </Text>
+        ) : null}
 
         {/* Filter chips */}
         <View style={styles.filterRow}>

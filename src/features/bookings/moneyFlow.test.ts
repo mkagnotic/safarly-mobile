@@ -277,3 +277,18 @@ test("delivery details: Receiver, real status tag, auth id, no raw error text", 
   assert.ok(s.includes('<ErrorState error={error} subject="this delivery" onRetry={() => void refetch()} />'));
   assert.ok(!s.includes("? getErrorMessage(error)"));
 });
+
+test("bookings: the open card says it is loading the timeline (web parity)", () => {
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes('<Text style={styles.updatingText}>Loading timeline…</Text>'));
+  assert.ok(s.includes('testID="booking-timeline-loading"'));
+});
+
+test("bookings: search scope note, same words as web, only while more pages exist", () => {
+  const d = src("src/features/bookings/lib/bookingDisplay.ts");
+  assert.ok(d.includes('export const BOOKINGS_SEARCH_SCOPE_NOTE = "Searching loaded bookings only.";'));
+  const s = src("src/features/bookings/BookingsScreen.tsx");
+  assert.ok(s.includes("{search.trim() && hasMore ? ("));
+  assert.ok(s.includes("{BOOKINGS_SEARCH_SCOPE_NOTE}"));
+  assert.ok(!s.includes("Searching this page only."));
+});
