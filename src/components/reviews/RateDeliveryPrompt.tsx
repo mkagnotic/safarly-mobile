@@ -3,38 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useBookings } from "@/hooks/api/useBookings";
-import { navigationRef } from "@/navigation/navigationRef";
 import { getErrorMessage, ratingsApi } from "@/services/api";
 import { RateDeliverySheet, type RateDeliveryValues } from "./RateDeliverySheet";
 import { RATING_COPY, counterpartRoleLabel, isAlreadyRatedError } from "@/features/bookings/lib/ratingCopy";
-
-// Screens where an interrupting popup would get in the way of an active task —
-// mirrors web's SUPPRESSED route list (pay / rate / payment result). Onboarding
-// and profile-setup are already excluded by the mount gate in RootNavigator.
-const SUPPRESSED_ROUTES = new Set<string>([
-  "PayBookingTab",
-  "DeliveryReviewTab",
-  "KycVerification",
-  "KycVerificationTab",
-]);
-
-/**
- * Reactive active-route name via the container ref. We're mounted as a sibling
- * of the navigator (not inside it), so `useNavigationState` isn't available —
- * `navigationRef.getCurrentRoute()` returns the deepest focused route instead.
- */
-function useActiveRouteName(): string | undefined {
-  const [name, setName] = useState<string | undefined>(() =>
-    navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined,
-  );
-  useEffect(() => {
-    const update = () => setName(navigationRef.getCurrentRoute()?.name);
-    update();
-    const unsub = navigationRef.addListener("state", update);
-    return unsub;
-  }, []);
-  return name;
-}
 
 /**
  * Auto-opens the delivery-rating prompt for the first delivered booking the
@@ -50,7 +21,8 @@ export function RateDeliveryPrompt({
   held = false,
   onActiveChange,
 }: {
-  /** Another app-wide popup is showing; wait (iOS can present one Modal at a time). */
+  /** Another app-wide popup or a form is showing; wait (iOS can present one Modal at a time).
+   *  AutoPrompts owns the "don't interrupt" screen list (autoPromptRules). */
   held?: boolean;
   onActiveChange?: (active: boolean) => void;
 } = {}) {
@@ -61,13 +33,10 @@ export function RateDeliveryPrompt({
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const activeRoute = useActiveRouteName();
-  const suppressed = activeRoute ? SUPPRESSED_ROUTES.has(activeRoute) : false;
-
   const pending = useMemo(() => {
-    if (!user || suppressed || held) return null;
+    if (!user || held) return null;
     return bookings.find((b) => !b.viewer_has_rated && !dismissed.includes(b.id)) ?? null;
-  }, [bookings, user, suppressed, held, dismissed]);
+  }, [bookings, user, held, dismissed]);
 
   useEffect(() => {
     setOpen(pending != null);

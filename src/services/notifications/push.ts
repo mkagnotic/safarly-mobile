@@ -2,16 +2,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { navigationRef } from "@/navigation/navigationRef";
-import { usersApi } from "@/services/api";
+import { notificationsApi, usersApi } from "@/services/api";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import { useAppStore } from "@/store/useAppStore";
 
 import {
   resolveNotificationRoute,
   type NotificationTarget,
 } from "./notificationRoute";
+import { tappedNotificationIds, type NotificationTap } from "./notificationTap";
 import { foregroundPresentation, startupPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
@@ -56,8 +58,11 @@ export function configureNotifications(): void {
       const data = notification.request.content.data as { conversation_id?: string } | undefined;
       // Signed out: nothing for this device should show, even if a push slips
       // through before the server unlinks it.
+      // App open and in front: the in-app banner (useRealtimeSync) is the one
+      // notice for this event, so the OS adds none - web's rule (29 Oct 2026).
       const { show, badge } = foregroundPresentation({
         signedIn: useAppStore.getState().authenticated,
+        appActive: AppState.currentState === "active",
         conversationId: data?.conversation_id,
         activeConversationId,
       });
@@ -311,6 +316,24 @@ export function watchPushTokenRefresh(): () => void {
  * ready — see `flushPendingNotificationTarget`.
  */
 let pendingTarget: NotificationTarget | null = null;
+/** The tapped push to mark read once signed in (cold start replays it too). */
+let pendingTap: NotificationTap | null = null;
+
+/** Marks the tapped notification read and refreshes the bell + app badge. Best effort. */
+async function markTappedRead(tap: NotificationTap): Promise<void> {
+  try {
+    let ids = tappedNotificationIds(tap, []);
+    if (ids.length === 0 && !tap.id && tap.link) {
+      const res = await notificationsApi.list({ page: 1, per_page: 50 });
+      ids = tappedNotificationIds(tap, res?.data ?? []);
+    }
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => notificationsApi.markAsRead(id).catch(() => {})));
+    bumpRealtimeTopic("notifications");
+  } catch {
+    /* the notice just stays unread */
+  }
+}
 
 function canNavigate(): boolean {
   // MainTabs exists only once profile setup is done: navigating to it from the
@@ -322,26 +345,40 @@ function canNavigate(): boolean {
 }
 
 function doNavigate(target: NotificationTarget): void {
-  // All targets are tab routes nested under the root "MainTabs" stack screen.
-  // The typed `navigate` can't express a computed nested route, so go through
-  // the loosely-typed signature — every target is a real MainTab route.
-  (navigationRef.navigate as (name: string, params?: object) => void)("MainTabs", {
+  const nav = navigationRef.navigate as (name: string, params?: object) => void;
+  // The legal pages are root-stack screens, not tabs (`/terms`, `/privacy`).
+  if (target.root) {
+    nav(target.screen);
+    return;
+  }
+  // Every other target is a tab route nested under the root "MainTabs" stack
+  // screen. The typed `navigate` can't express a computed nested route, so go
+  // through the loosely-typed signature — every target is a real MainTab route.
+  nav("MainTabs", {
     screen: target.screen,
     params: target.params,
   });
 }
 
-export function navigateToNotificationTarget(target: NotificationTarget): void {
-  if (canNavigate()) doNavigate(target);
-  else pendingTarget = target; // replayed by flushPendingNotificationTarget
+export function navigateToNotificationTarget(target: NotificationTarget, tap?: NotificationTap): void {
+  if (canNavigate()) {
+    doNavigate(target);
+    if (tap) void markTappedRead(tap);
+  } else {
+    pendingTarget = target; // replayed by flushPendingNotificationTarget
+    pendingTap = tap ?? null;
+  }
 }
 
 /** Called once the navigator + auth are ready (see `usePushNotifications`). */
 export function flushPendingNotificationTarget(): void {
   if (!pendingTarget || !canNavigate()) return;
   const target = pendingTarget;
+  const tap = pendingTap;
   pendingTarget = null;
+  pendingTap = null;
   doNavigate(target);
+  if (tap) void markTappedRead(tap);
 }
 
 /** Routes a tapped notification (foreground/background/cold-start alike). */
@@ -349,7 +386,9 @@ export function handleNotificationResponse(
   response: Notifications.NotificationResponse,
 ): void {
   const content = response.notification.request.content;
-  const data = content.data as { link?: string; type?: string } | undefined;
+  const data = content.data as { link?: string; type?: string; notification_id?: string } | undefined;
   const target = resolveNotificationRoute(data?.link, data?.type, content.title);
-  navigateToNotificationTarget(target);
+  // Opening it marks it read (server sends notification_id; older pushes fall
+  // back to link + type) and refreshes the bell and app badge (29 Oct 2026).
+  navigateToNotificationTarget(target, { id: data?.notification_id, link: data?.link, type: data?.type });
 }

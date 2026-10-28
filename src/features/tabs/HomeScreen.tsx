@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
@@ -7,7 +7,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Animated, Image, StyleSheet, Text, View } from "react-native";
 
 import { PillarIcon, type PillarIconName } from "@/components/icons/PillarIcons";
-import { KycPromptDialog } from "@/components/kyc/KycPromptDialog";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -16,7 +15,6 @@ import { Screen } from "@/components/ui/Screen";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage } from "@/services/api";
-import { useAppStore } from "@/store/useAppStore";
 import { colors, primaryTint } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
 
@@ -82,15 +80,8 @@ export function HomeScreen() {
   // } = useMyConversations({ currentUserId: user?.id ?? null, perPage: 20 });
   // const { count: messagesUnread } = useUnreadInboxCount();
 
-  // One-shot KYC welcome prompt: consume the flag immediately so it shows once.
-  const kycWelcomePending = useAppStore((s) => s.kycWelcomePending);
-  const setKycWelcomePending = useAppStore((s) => s.setKycWelcomePending);
-  const [showKycWelcome, setShowKycWelcome] = useState(false);
-  useEffect(() => {
-    if (!kycWelcomePending) return;
-    setShowKycWelcome(true);
-    setKycWelcomePending(false);
-  }, [kycWelcomePending, setKycWelcomePending]);
+  // The one-shot KYC welcome moved to AutoPrompts, so it can never open on top
+  // of another popup (iOS drops a second Modal) - 29 Oct 2026.
 
   const formError = profileError ? getErrorMessage(profileError) : null;
 
@@ -339,15 +330,6 @@ export function HomeScreen() {
       </Card>
       ───────── end Activity + Messages ───────── */}
 
-      <KycPromptDialog
-        open={showKycWelcome}
-        variant="welcome"
-        onClose={() => setShowKycWelcome(false)}
-        onVerify={() => {
-          setShowKycWelcome(false);
-          navigation.navigate("KycVerificationTab");
-        }}
-      />
     </Screen>
   );
 }

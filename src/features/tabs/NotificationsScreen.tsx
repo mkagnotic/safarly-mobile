@@ -143,7 +143,7 @@ export function NotificationsScreen() {
   const handleClearAll = useCallback(() => {
     showAppAlert({
       title: "Clear all notifications?",
-      message: "This removes every notification. This can't be undone.",
+      message: "This removes every notification from your list. It can't be undone.",
       actions: [
         { text: "Cancel", style: "cancel" },
         {
@@ -152,8 +152,8 @@ export function NotificationsScreen() {
           onPress: () => {
             void (async () => {
               try {
+                // No success toast (web parity): the list itself empties.
                 await clearAll();
-                showToast({ title: "Notifications cleared", variant: "info", duration: 1800 });
               } catch (err) {
                 showToast({
                   title: "Couldn't clear",
@@ -170,8 +170,8 @@ export function NotificationsScreen() {
 
   const handleMarkAll = useCallback(async () => {
     try {
+      // No success toast (web parity): the rows themselves change.
       await markAllAsRead();
-      showToast({ title: "All caught up", variant: "success", duration: 2000 });
     } catch (err) {
       showToast({
         title: "Couldn't mark all as read",

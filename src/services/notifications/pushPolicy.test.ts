@@ -57,8 +57,11 @@ test("Preferences shows the account setting, not this phone's permission", () =>
 
 test("foregroundPresentation: signed out shows nothing; the open chat shows no banner; anything else shows", async () => {
   const { foregroundPresentation } = await import("./pushPolicy.ts");
-  assert.deepEqual(foregroundPresentation({ signedIn: false, conversationId: "c1", activeConversationId: null }), { show: false, badge: false });
-  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: "c1", activeConversationId: "c1" }), { show: false, badge: true });
-  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: "c2", activeConversationId: "c1" }), { show: true, badge: true });
-  assert.deepEqual(foregroundPresentation({ signedIn: true, conversationId: undefined, activeConversationId: "c1" }), { show: true, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: false, appActive: false, conversationId: "c1", activeConversationId: null }), { show: false, badge: false });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, appActive: false, conversationId: "c1", activeConversationId: "c1" }), { show: false, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, appActive: false, conversationId: "c2", activeConversationId: "c1" }), { show: true, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, appActive: false, conversationId: undefined, activeConversationId: "c1" }), { show: true, badge: true });
+  // notify_canon bug 2 (29 Oct 2026): app in front = the in-app banner is the one notice.
+  assert.deepEqual(foregroundPresentation({ signedIn: true, appActive: true, conversationId: "c2", activeConversationId: "c1" }), { show: false, badge: true });
+  assert.deepEqual(foregroundPresentation({ signedIn: true, appActive: true, conversationId: undefined, activeConversationId: null }), { show: false, badge: true });
 });

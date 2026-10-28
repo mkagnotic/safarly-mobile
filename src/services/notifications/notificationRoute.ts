@@ -1,10 +1,14 @@
 // Type-only: this module is pure and must stay importable without a bundler.
 import type { MainTabParamList } from "@/navigation/types";
 
-export interface NotificationTarget {
-  screen: keyof MainTabParamList;
-  params?: Record<string, unknown>;
-}
+/**
+ * A tab screen (under MainTabs), or a root-stack page that is not a tab - the
+ * legal pages, which web also allows as notification destinations ("A note
+ * about your conduct" links `/terms`). `root` tells the navigator which.
+ */
+export type NotificationTarget =
+  | { screen: keyof MainTabParamList; params?: Record<string, unknown>; root?: false }
+  | { screen: "TermsOfService" | "PrivacyPolicy"; params?: undefined; root: true };
 
 /**
  * Maps a notification (its web-style `data.link`, `type`, and `title`) to the
@@ -38,7 +42,11 @@ export function resolveNotificationRoute(
       screen: "OfferChatTab",
       params: {
         conversationId: messagesMatch[1],
-        name: title?.replace(/^New message from /i, "") ?? "Conversation",
+        // Only a message's title is the other person's name. "Match confirmed",
+        // "Parcel approved" or "Ravi sent a new offer" sat in the chat header
+        // until the chat loaded (or for good if it failed), so anything else
+        // gets the neutral placeholder and the loader fills the name (29 Oct 2026).
+        name: (type === "message" ? title?.replace(/^New message from /i, "") : null) || "Conversation",
         source: "messages",
         ...(deal ? { dealId: deal[1] } : {}),
       },
@@ -58,6 +66,11 @@ export function resolveNotificationRoute(
     }
     return { screen: "PayBookingTab", params: { bookingId: payMatch[1] } };
   }
+
+  // `/customer/bookings/:id/rate` — "How was your experience?". Before the
+  // generic bookings matcher, like /pay (web route CustomerRateDelivery).
+  const rateMatch = l.match(/^\/customer\/bookings\/([0-9a-f-]{36})\/rate(?:[/?#]|$)/i);
+  if (rateMatch) return { screen: "DeliveryReviewTab", params: { bookingId: rateMatch[1] } };
 
   // Listing detail pages (web `/customer/parcels/:id`, `/customer/trips/:id`).
   const parcelMatch = l.match(/^\/customer\/parcels\/([0-9a-f-]{36})/i);
@@ -107,8 +120,9 @@ export function resolveNotificationRoute(
   if (l.startsWith("/customer/bookings")) return { screen: "BookingsTab" };
   // Carrier "set up payouts to accept this delivery" nudge links here.
   if (l.includes("/payout-setup")) return { screen: "PayoutSetupTab" };
-  // Covers web's `/customer/profile/wallet` as well as older `/customer/wallet` links.
-  if (l.includes("/wallet")) return { screen: "TransactionsTab" };
+  // Payments: web's `/customer/profile/payments` ("Payout sent 💰" opened Profile
+  // here, Payments on web - 29 Oct 2026), plus the older wallet links.
+  if (/^\/customer\/profile\/payments(?:[/?#]|$)/.test(l) || l.includes("/wallet")) return { screen: "TransactionsTab" };
   if (l.includes("/kyc")) return { screen: "KycVerificationTab" };
   if (/^\/customer\/profile\/reviews(?:[/?#]|$)/.test(l)) return { screen: "ReviewsTab" };
   if (/^\/customer\/notifications(?:[/?#]|$)/.test(l)) return { screen: "Notifications" };
@@ -122,6 +136,12 @@ export function resolveNotificationRoute(
   // Partners is where a buddy request is accepted.
   if (l.startsWith("/customer/buddies")) return { screen: "Parcels", params: { tab: "partners" } };
   if (l.startsWith("/customer/activity")) return { screen: "ActivityTab" };
+  // Bare `/customer` is web's Home; the explicit link wins over the type (it
+  // used to fall to the type, so a `booking` notice opened My Bookings).
+  if (/^\/customer\/?(?:[?#]|$)/.test(l)) return { screen: "Home" };
+  // The public legal pages (web allows them too): root-stack pages, not tabs.
+  if (/^\/terms(?:[/?#]|$)/.test(l)) return { screen: "TermsOfService", root: true };
+  if (/^\/privacy(?:[/?#]|$)/.test(l)) return { screen: "PrivacyPolicy", root: true };
 
   switch (type) {
     case "message":

@@ -53,12 +53,20 @@ export function accountPushOn(prefs: { push_enabled?: boolean | null } | null | 
  * How a push that arrives while the app is open is presented (27 Oct 2026).
  * Signed out: never shown. For the chat on screen: no banner/sound/list entry
  * (the message is already in front of the user), like every chat app.
+ *
+ * App active (in front): exactly ONE notice per event - the in-app banner
+ * (useRealtimeSync), which skips the chat on screen the same way. The OS
+ * banner showed as well, so every event came twice (29 Oct 2026). Web's rule:
+ * a visible Safarly tab gets the toast, never also a system notification
+ * (public/sw.js). The badge still updates.
  */
 export function foregroundPresentation(s: {
   signedIn: boolean;
+  /** AppState is "active": the in-app banner shows it instead (29 Oct 2026). */
+  appActive: boolean;
   conversationId?: string | null;
   activeConversationId: string | null;
 }): { show: boolean; badge: boolean } {
   const forOpenChat = !!s.conversationId && s.conversationId === s.activeConversationId;
-  return { show: s.signedIn && !forOpenChat, badge: s.signedIn };
+  return { show: s.signedIn && !s.appActive && !forOpenChat, badge: s.signedIn };
 }

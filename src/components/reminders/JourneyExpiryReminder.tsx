@@ -4,7 +4,6 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { AppButton } from "@/components/ui/AppButton";
-import { useMyNotifications } from "@/hooks/api/useMyNotifications";
 import { navigateToNotificationTarget } from "@/services/notifications/push";
 import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
 import { type Notification } from "@/services/api";
@@ -44,14 +43,18 @@ async function persistSeen(ids: Set<string>): Promise<void> {
  * `journey_expiry` notice, then marks them seen.
  */
 export function JourneyExpiryReminder({
+  notifications,
+  loading,
   held = false,
   onActiveChange,
 }: {
-  /** Another app-wide popup is showing; wait (iOS can present one Modal at a time). */
+  /** The newest notifications, loaded once by AutoPrompts (shared with the match catch-up). */
+  notifications: Notification[];
+  loading: boolean;
+  /** Another app-wide popup or a form is showing; wait (iOS can present one Modal at a time). */
   held?: boolean;
   onActiveChange?: (active: boolean) => void;
-} = {}) {
-  const { notifications, loading } = useMyNotifications({ perPage: 50 });
+}) {
   const [items, setItems] = useState<Notification[] | null>(null);
   const [closed, setClosed] = useState(false);
   const decidedRef = useRef(false);
@@ -65,8 +68,10 @@ export function JourneyExpiryReminder({
   }, []);
 
   useEffect(() => {
-    // Decide exactly once, after notifications first finish loading.
-    if (decidedRef.current || loading) return;
+    // Decide exactly once, after notifications first finish loading - and only
+    // when it can show: deciding marks the notices seen, so deciding while a
+    // form or another popup has the screen would lose them (29 Oct 2026).
+    if (decidedRef.current || loading || held) return;
     decidedRef.current = true;
     void (async () => {
       const seen = await readSeen();
@@ -89,7 +94,7 @@ export function JourneyExpiryReminder({
       }
       if (mountedRef.current) setItems(fresh);
     })();
-  }, [loading, notifications]);
+  }, [loading, notifications, held]);
 
   const active = !held && !closed && !!items && items.length > 0;
   useEffect(() => {
@@ -127,7 +132,7 @@ export function JourneyExpiryReminder({
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
             {items.slice(0, 5).map((n) => (
               <Pressable key={n.id} style={styles.item} onPress={() => view(n)} accessibilityRole="button" accessibilityLabel={n.title}>
-                <Text style={styles.itemTitle} numberOfLines={1}>{n.title}</Text>
+                <Text style={styles.itemTitle} numberOfLines={2}>{n.title}</Text>
                 {n.body ? <Text style={styles.itemBody} numberOfLines={2}>{n.body}</Text> : null}
               </Pressable>
             ))}
@@ -139,7 +144,7 @@ export function JourneyExpiryReminder({
           <View style={styles.footer}>
             <AppButton label="Dismiss" variant="secondary" onPress={close} style={styles.footerButton} />
             <AppButton
-              label="View my travels"
+              label="View in My Travels"
               onPress={() => view(items[0])}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.footerButton}

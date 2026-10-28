@@ -6,6 +6,8 @@ import { messagesApi } from "@/services/api/messages";
 import { notificationsApi } from "@/services/api/notifications";
 import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
 import { navigateToNotificationTarget } from "@/services/notifications/push";
+import { isMatchNotice } from "@/services/notifications/matchPromptRules";
+import { rememberPrompted } from "@/services/notifications/matchPrompted";
 import { getActiveConversation } from "@/store/activeConversation";
 import { bumpRealtimeTopic, type RealtimeTopic } from "@/store/realtimeBus";
 
@@ -22,7 +24,7 @@ interface NotificationPayload {
   type?: string;
   title?: string;
   body?: string;
-  data?: { link?: string; conversation_id?: string } | null;
+  data?: { link?: string; conversation_id?: string; kind?: string } | null;
 }
 
 /** The conversation a notification refers to, from its data (id or link). */
@@ -101,6 +103,8 @@ function buildUserChannel(uid: string) {
             if (n.id) void notificationsApi.markAsRead(n.id).catch(() => {});
             return;
           }
+          // Shown live: the route-match catch-up must not announce it again (29 Oct 2026).
+          if (n.id && isMatchNotice(n.data)) void rememberPrompted(uid, [n.id]);
           // Tapping it opens what it is about - the same screen a push tap or the
           // Notifications list opens (resolveNotificationRoute). It used to only
           // dismiss, unlike web (client, 26 Oct 2026).
@@ -110,7 +114,12 @@ function buildUserChannel(uid: string) {
             variant: "info",
             duration: 4200,
             onPress: () => {
-              if (n.id) void notificationsApi.markAsRead(n.id).catch(() => {});
+              if (n.id) {
+                void notificationsApi
+                  .markAsRead(n.id)
+                  .then(() => bumpRealtimeTopic("notifications"))
+                  .catch(() => {});
+              }
               navigateToNotificationTarget(resolveNotificationRoute(n.data?.link, n.type, n.title));
             },
           });
