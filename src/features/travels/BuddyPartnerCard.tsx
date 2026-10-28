@@ -34,7 +34,7 @@ function formatDateRange(item: BuddyListing): string {
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
   const fromLabel = formatLocalDate(from, opts, "");
   if (!to || from === to) return fromLabel;
-  return `${fromLabel} - ${formatLocalDate(to, opts, "")}`;
+  return `${fromLabel} – ${formatLocalDate(to, opts, "")}`;
 }
 
 export const BuddyPartnerCard = memo(function BuddyPartnerCard({
@@ -48,8 +48,8 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   // A buddy post whose buddy trip was marked complete reads "Completed" (27 Oct 2026, web parity).
   const completed = !!(item as { completed_at?: string | null }).completed_at;
   const isMatched = completed || MATCHED_STATUSES.has(rawStatus);
-  // Buddy-only wording (27 Oct 2026); an unknown status shows no pill.
-  const statusLabel = labelForBuddyStatus(completed ? "completed" : isMatched ? "matched" : rawStatus);
+  // Web logic (28 Oct 2026): label the raw status; an unknown one shows no pill.
+  const statusLabel = labelForBuddyStatus(completed ? "completed" : rawStatus);
   // Web parity: a buddy listing whose travel window has passed reads as expired.
   const expired = !completed && isListingExpired(
     rawStatus,
@@ -66,7 +66,7 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   const metaLine = useMemo(() => {
     const range = formatDateRange(item);
     const airline = item.airline?.trim();
-    return [range, airline].filter(Boolean).join(" | ");
+    return [range, airline].filter(Boolean).join(" · ");
   }, [item]);
 
   const handleDeletePress = useCallback(() => {

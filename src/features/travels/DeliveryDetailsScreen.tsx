@@ -65,7 +65,8 @@ export function DeliveryDetailsScreen() {
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Parcels", { tab: "packages" }); // My Travels lives on the "Parcels" tab key
+    // Reached from the Archive, so the fallback goes back there (28 Oct 2026).
+    else navigation.navigate("Parcels", { tab: "archive" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
   const handleRate = useCallback(() => {
@@ -107,7 +108,7 @@ export function DeliveryDetailsScreen() {
               : "This delivery may have been removed or is no longer available."}
           </Text>
           <AppButton
-            label="Back to My travels"
+            label="Back to My Travels"
             onPress={handleBack}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.emptyButton}
@@ -155,8 +156,12 @@ export function DeliveryDetailsScreen() {
           {(parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight) != null ? (
             <Fact label="Weight" value={`${parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight} kg`} />
           ) : null}
-          {parcel?.fee_offered != null ? (
-            <Fact label="Fee" value={formatMoneyShort(parcel.fee_offered, parcel.fee_currency)} />
+          {/* The AGREED price, never the editable listing fee (28 Oct 2026). */}
+          {(booking.agreed_amount ?? parcel?.fee_offered) != null ? (
+            <Fact
+              label="Agreed price"
+              value={formatMoneyShort((booking.agreed_amount ?? parcel?.fee_offered) as number, parcel?.fee_currency)}
+            />
           ) : null}
         </View>
 

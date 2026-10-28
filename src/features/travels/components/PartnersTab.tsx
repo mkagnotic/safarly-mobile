@@ -80,7 +80,7 @@ export function PartnersTab({
     loading && listings.length === 0 ? (
       <ListSkeleton />
     ) : error && listings.length === 0 ? (
-      <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />
+      <ErrorBlock subject="your travel partners" message={getErrorMessage(error)} onRetry={onRetry} />
     ) : listings.length === 0 ? (
       <EmptyBlock
         icon="people-outline"
@@ -151,9 +151,9 @@ export function PartnersTab({
             <Text style={sharedStyles.sectionTitle}>My buddies</Text>
           </View>
           {connectionsError && activeBuddies.length === 0 && onRetryConnections ? (
-            <ErrorBlock message={getErrorMessage(connectionsError)} onRetry={onRetryConnections} />
+            <ErrorBlock subject="your travel partners" message={getErrorMessage(connectionsError)} onRetry={onRetryConnections} />
           ) : activeBuddies.length === 0 ? (
-            <Text style={styles.emptyText}>No connected buddies yet</Text>
+            <Text style={styles.emptyText}>No travel buddies yet</Text>
           ) : null}
           {activeBuddies.map((c) => (
             <BuddyConnectionCard

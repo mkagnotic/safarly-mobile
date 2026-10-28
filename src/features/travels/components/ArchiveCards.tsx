@@ -24,7 +24,8 @@ export function ArchiveBookingCard({
 }>) {
   const isSender = !!myUserId && booking.sender_id === myUserId;
   const counterpart = isSender ? booking.carrier : booking.sender;
-  const roleLabel = isSender ? "Carrier" : "Sender";
+  // The parcel owner on a deal is the "Receiver" (client rule, 28 Oct 2026).
+  const roleLabel = isSender ? "Carrier" : "Receiver";
   const route = booking.parcel
     ? `${booking.parcel.from_city} → ${booking.parcel.to_city}`
     : "Delivery";
@@ -67,7 +68,7 @@ export function ArchiveBookingCard({
           </View>
         ) : (
           <AppButton
-            label={`Rate ${roleLabel}`}
+            label={`Rate ${roleLabel.toLowerCase()}`}
             onPress={onRate}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.archiveRateBtn}

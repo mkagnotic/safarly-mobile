@@ -92,7 +92,8 @@ export const TravelCard = memo(function TravelCard({
       : ((item as FlightItem & { travel_date_to?: string | null }).travel_date_to ??
         (item as FlightItem).travel_date);
   const expired = isListingExpired(status, expiryDate);
-  const showStatusPill = !expired && !!status && !isImplicitStatus(status);
+  // Unknown status -> no pill, never the raw code (28 Oct 2026).
+  const showStatusPill = !expired && !!labelForStatus(status) && !isImplicitStatus(status);
   // A matched/accepted listing's badge opens the list of matching counterparts.
   const matchClickable =
     showStatusPill && !!onViewMatches && (status === "matched" || status === "accepted");
@@ -158,7 +159,7 @@ export const TravelCard = memo(function TravelCard({
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
         (type === "flight"
-          ? "Your trip will be removed from search. This can't be undone."
+          ? "Your trip will be removed from search and any pending requests from senders will be declined. This can't be undone."
           : "Carriers won't see it any more, and any match or offer on it will be closed. This can't be undone."),
       actions: [
         { text: "Keep it", style: "cancel" },
@@ -286,15 +287,8 @@ function renderFlightMeta(trip: FlightItem): string {
   const date = formatTravelDateRange(trip, { year: true });
   const airline = trip.airline?.trim();
   const cap = trip.luggage_capacity_kg ?? trip.luggage_capacity;
-  const offers = trip.offers_count;
-  return [
-    date,
-    airline,
-    cap ? `${cap}kg capacity` : "",
-    offers ? `${offers} offers` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  // No "N offers" meta (28 Oct 2026): web doesn't show it.
+  return [date, airline, cap ? `${cap}kg capacity` : ""].filter(Boolean).join(" · ");
 }
 
 function renderParcelMeta(parcel: Parcel): string {
@@ -307,7 +301,7 @@ function renderParcelMeta(parcel: Parcel): string {
   const fee = agreed != null
     ? `${formatMoneyShort(agreed, parcel.fee_currency)} agreed`
     : parcel.fee_offered != null ? formatMoneyShort(parcel.fee_offered, parcel.fee_currency) : "";
-  return [date, category, weight, fee].filter(Boolean).join(" | ");
+  return [date, category, weight, fee].filter(Boolean).join(" · ");
 }
 
 const styles = StyleSheet.create({

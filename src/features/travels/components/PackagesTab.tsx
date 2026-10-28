@@ -17,7 +17,6 @@ export function PackagesTab({
   receiveError,
   onOpen,
   onEdit,
-  onDeleteSend,
   onDeleteReceive,
   onViewMatches,
   deletingId,
@@ -42,7 +41,6 @@ export function PackagesTab({
   receiveError: Error | null;
   onOpen: (id: string) => void;
   onEdit: (parcel: Parcel) => void;
-  onDeleteSend: (parcel: Parcel) => void;
   onDeleteReceive: (parcel: Parcel) => void;
   onViewMatches: (parcel: Parcel) => void;
   deletingId: string | null;
@@ -63,20 +61,21 @@ export function PackagesTab({
   /** The other party on a matched parcel — carrier if I sent it, else the sender. */
   const counterpartOf = (p: Parcel) =>
     (myUserId && p.sender_id === myUserId ? p.carrier : p.sender) ?? null;
-  const roleOf = (p: Parcel) => (myUserId && p.sender_id === myUserId ? "carrier" : "sender");
+  // The parcel owner on a deal is the "Receiver" (client rule, 28 Oct 2026).
+  const roleOf = (p: Parcel) => (myUserId && p.sender_id === myUserId ? "carrier" : "receiver");
 
   return (
     <View>
       <View style={sharedStyles.section}>
         <View style={sharedStyles.sectionHeading}>
           <Ionicons name="cube-outline" size={16} color={colors.wordmark} />
-          <Text style={sharedStyles.sectionTitle}>Send</Text>
-          <Text style={styles.sectionHint}>(Packages I'm Delivering)</Text>
+          <Text style={sharedStyles.sectionTitle}>Delivering</Text>
+          <Text style={styles.sectionHint}>(packages you carry)</Text>
         </View>
         {sendLoading && sendParcels.length === 0 ? (
           <ListSkeleton count={2} />
         ) : sendError && sendParcels.length === 0 ? (
-          <ErrorBlock message={getErrorMessage(sendError)} onRetry={onRetrySend} />
+          <ErrorBlock subject="your packages" message={getErrorMessage(sendError)} onRetry={onRetrySend} />
         ) : sendParcels.length === 0 ? (
           <View style={styles.emptyPanel}>
             <Text style={styles.emptyPanelText}>No packages to deliver yet</Text>
@@ -86,11 +85,11 @@ export function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="Package delivery"
+              tag="Package you're delivering"
               item={p}
               onPress={() => onOpen(p.id)}
-              onEdit={() => onEdit(p)}
-              onDelete={() => onDeleteSend(p)}
+              // No Edit/Delete on a package you carry (28 Oct 2026): the server
+              // refuses; the carrier cancels in the booking or chat.
               onViewMatches={() => onViewMatches(p)}
               isDeleting={deletingId === p.id}
               counterpart={counterpartOf(p)}
@@ -110,13 +109,13 @@ export function PackagesTab({
       <View style={sharedStyles.section}>
         <View style={sharedStyles.sectionHeading}>
           <Ionicons name="cube-outline" size={16} color={colors.safe} />
-          <Text style={sharedStyles.sectionTitle}>Receive</Text>
-          <Text style={styles.sectionHint}>(Packages I'm Receiving)</Text>
+          <Text style={sharedStyles.sectionTitle}>Receiving</Text>
+          <Text style={styles.sectionHint}>(packages you posted)</Text>
         </View>
         {receiveLoading && receiveParcels.length === 0 ? (
           <ListSkeleton count={2} />
         ) : receiveError && receiveParcels.length === 0 ? (
-          <ErrorBlock message={getErrorMessage(receiveError)} onRetry={onRetryReceive} />
+          <ErrorBlock subject="your packages" message={getErrorMessage(receiveError)} onRetry={onRetryReceive} />
         ) : receiveParcels.length === 0 ? (
           // Matches the Send section above and web's dashed placeholder. The
           // "Send a Parcel" CTA already sits in the header actions row, so
@@ -129,7 +128,7 @@ export function PackagesTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="Parcel request"
+              tag="Your package"
               item={p}
               onPress={() => onOpen(p.id)}
               onEdit={() => onEdit(p)}

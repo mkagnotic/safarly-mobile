@@ -82,7 +82,7 @@ function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?:
 }
 
 function StatusPill({ status }: Readonly<{ status: string }>) {
-  if (!status || isImplicitStatus(status)) return null;
+  if (!status || isImplicitStatus(status) || !labelForStatus(status)) return null;
   const tone = toneForStatus(status);
   return (
     <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>

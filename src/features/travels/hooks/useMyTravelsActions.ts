@@ -37,6 +37,12 @@ type MyTravelsActionsInput = Pick<
   | "myProfile"
 > & { navigation: Nav };
 
+/** The server's reason as a sentence, so "Try again." reads after it. */
+function asSentence(text: string): string {
+  const t = text.trim();
+  return !t || /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
 /**
  * What My Travels can do to its lists - edit, delete, rate, accept / reject /
  * cancel buddy requests, open chats - with the pending and error state each
@@ -88,19 +94,22 @@ export function useMyTravelsActions({
     [],
   );
 
+  // 28 Oct 2026: a success toast and an error that names the thing (web words).
   const withDeleteFlow = useCallback(
     async (
       id: string,
       mutate: (id: string) => Promise<unknown>,
       after: () => void,
+      words: { done: string; failed: string },
     ) => {
       setDeletingId(id);
       setFormError(null);
       try {
         await mutate(id);
+        showToast({ title: words.done, variant: "success" });
         after();
       } catch (err) {
-        setFormError(`Couldn't remove. ${getErrorMessage(err)}`);
+        setFormError([words.failed, asSentence(getErrorMessage(err)), "Try again."].filter(Boolean).join(" "));
       } finally {
         setDeletingId(null);
       }
@@ -110,14 +119,11 @@ export function useMyTravelsActions({
 
   const handleDeleteTrip = useCallback(
     (trip: Trip) =>
-      withDeleteFlow(trip.id, (id) => tripsApi.delete(id), flights.refetch),
+      withDeleteFlow(trip.id, (id) => tripsApi.delete(id), flights.refetch, {
+        done: "Trip cancelled",
+        failed: "Couldn't cancel this trip.",
+      }),
     [withDeleteFlow, flights.refetch],
-  );
-
-  const handleDeleteSendParcel = useCallback(
-    (parcel: Parcel) =>
-      withDeleteFlow(parcel.id, (id) => parcelsApi.delete(id), sendParcels.refetch),
-    [withDeleteFlow, sendParcels.refetch],
   );
 
   const handleDeleteReceiveParcel = useCallback(
@@ -126,13 +132,17 @@ export function useMyTravelsActions({
         parcel.id,
         (id) => parcelsApi.delete(id),
         receiveParcels.refetch,
+        { done: "Parcel cancelled", failed: "Couldn't cancel this parcel." },
       ),
     [withDeleteFlow, receiveParcels.refetch],
   );
 
   const handleDeleteBuddy = useCallback(
     (id: string) =>
-      withDeleteFlow(id, (lid) => buddiesApi.deleteListing(lid), partners.refetch),
+      withDeleteFlow(id, (lid) => buddiesApi.deleteListing(lid), partners.refetch, {
+        done: "Buddy listing removed",
+        failed: "Couldn't remove this buddy listing.",
+      }),
     [withDeleteFlow, partners.refetch],
   );
 
@@ -185,6 +195,7 @@ export function useMyTravelsActions({
         await buddiesApi.update(editingBuddy.id, payload);
         await partners.refetch();
         setEditingBuddy(null);
+        showToast({ title: "Buddy listing updated", variant: "success" });
       } catch (err) {
         setFormError(`Couldn't update listing. ${getErrorMessage(err)}`);
       } finally {
@@ -291,6 +302,7 @@ export function useMyTravelsActions({
         // The parcel lives in either Send or Receive — refresh both.
         await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
         setEditingParcel(null);
+        showToast({ title: "Parcel updated", variant: "success" });
       } catch (err) {
         setEditParcelError(getErrorMessage(err));
         setFormError(`Couldn't update parcel. ${getErrorMessage(err)}`);
@@ -380,7 +392,8 @@ export function useMyTravelsActions({
         // A buddy listing was added or removed: Travel Partners must show it.
         await Promise.all([flights.refetch(), ...(buddyMsg ? [partners.refetch()] : [])]);
         setEditingTrip(null);
-        if (buddyMsg) showToast({ title: buddyMsg.text, variant: buddyMsg.variant });
+        // The buddy note, when there is one, already says the trip saved.
+        showToast(buddyMsg ? { title: buddyMsg.text, variant: buddyMsg.variant } : { title: "Trip updated", variant: "success" });
       } catch (err) {
         setFormError(`Couldn't update trip. ${getErrorMessage(err)}`);
       } finally {
@@ -406,6 +419,7 @@ export function useMyTravelsActions({
       setFormError(null);
       try {
         await buddiesApi.acceptRequest(id);
+        showToast({ title: "Buddy request accepted", variant: "success" });
         await Promise.all([requests.refetch(), connections.refetch()]);
       } catch (err) {
         setFormError(`Couldn't accept request. ${getErrorMessage(err)}`);
@@ -450,6 +464,7 @@ export function useMyTravelsActions({
                 setFormError(null);
                 try {
                   await buddiesApi.cancelRequest(request.id);
+                  showToast({ title: "Buddy request cancelled", variant: "success" });
                   await sentRequests.refetch();
                 } catch (err) {
                   // 409 = they answered first (or it was already cancelled);
@@ -585,7 +600,6 @@ export function useMyTravelsActions({
     handleViewTripMatches,
     handleViewParcelMatches,
     handleDeleteTrip,
-    handleDeleteSendParcel,
     handleDeleteReceiveParcel,
     handleDeleteBuddy,
     handleOpenTrip,

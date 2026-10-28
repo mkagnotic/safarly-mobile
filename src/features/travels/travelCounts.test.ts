@@ -53,7 +53,7 @@ describe("My Travels tab counts", () => {
     const archive = read("src/features/travels/components/ArchiveTab.tsx");
     assert.match(archive, /onLoadMoreDelivered/);
     assert.match(archive, /Past packages/);
-    assert.match(archive, /Past travel partner posts/);
+    assert.match(archive, /Past buddy listings/);
   });
 });
 

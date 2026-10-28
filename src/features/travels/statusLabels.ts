@@ -7,19 +7,22 @@ import { toLocalYmd } from "@/utils/travelDate";
  * render with identical text + tone.
  */
 export const STATUS_LABEL: Readonly<Record<string, string>> = {
-  open: "Looking for Carrier",
-  active: "Can Carry Parcel",
+  // Sentence case, same map as web lib/helpers.ts (28 Oct 2026).
+  open: "Looking for a carrier",
+  active: "Can carry parcels",
   matched: "Matched",
-  in_transit: "In Progress",
+  in_transit: "In transit",
   delivered: "Completed",
   completed: "Completed",
   cancelled: "Cancelled",
   expired: "Expired",
   archived: "Expired",
-  pending: "Looking for Match",
+  pending: "Looking for a match",
   accepted: "Matched",
-  looking_for_match: "Looking for Carrier",
-  can_carry: "Can Carry Parcel",
+  looking_for_match: "Looking for a carrier",
+  can_carry: "Can carry parcels",
+  match_requested: "Match requested",
+  chatting: "Chatting",
   // buddy_request_status: the sender cancelled their request.
   withdrawn: "Cancelled",
 };
@@ -48,8 +51,9 @@ export const STATUS_TONE: Readonly<Record<string, StatusTone>> = {
 
 const DEFAULT_TONE: StatusTone = { bg: colors.surfaceMuted, fg: colors.mutedText };
 
+/** Unknown status -> "" so no pill shows, never the raw code (28 Oct 2026). */
 export function labelForStatus(status: string): string {
-  return STATUS_LABEL[status] ?? status;
+  return STATUS_LABEL[status] ?? "";
 }
 
 /**

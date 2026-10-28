@@ -60,14 +60,16 @@ export function ListSkeleton({ count = 3 }: Readonly<{ count?: number }>) {
   );
 }
 
+/** Names the list that failed, e.g. "your flights" (28 Oct 2026, web parity). */
 export function ErrorBlock({
+  subject,
   message,
   onRetry,
-}: Readonly<{ message: string; onRetry: () => Promise<void> }>) {
+}: Readonly<{ subject: string; message: string; onRetry: () => Promise<void> }>) {
   return (
     <View style={styles.centered}>
       <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
-      <Text style={styles.errorTitle}>Couldn't load this list</Text>
+      <Text style={styles.errorTitle}>Couldn't load {subject}</Text>
       <Text style={styles.errorBody}>{message}</Text>
       <AppButton
         label="Try again"
@@ -91,8 +93,8 @@ interface EmptyBlockProps {
 /**
  * Whole-tab empty state.
  *
- * No action button by design: every tab's primary CTA ("Carry a Parcel" /
- * "Send a Parcel") already sits in the header actions row, so repeating it here
+ * No action button by design: every tab's primary CTA ("Carry a parcel" /
+ * "Send a parcel") already sits in the header actions row, so repeating it here
  * put two identical primary buttons on one screen.
  */
 export function EmptyBlock({ icon, title, subtitle, actionLabel, onAction }: Readonly<EmptyBlockProps>) {
