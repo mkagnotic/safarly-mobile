@@ -2257,6 +2257,29 @@ const CHECKS = [
     why: "See receiver-end-wording (web repo). Plus mobile had no 'already reviewed' state (the form failed on submit), 'Resend' for a button that makes a NEW code (the old one stops working), and a pin saying 'never to the carrier'.",
     must: ["When the parcel is in your hands and looks right, give this 6-digit code to the carrier.", "If you get a new code, the old one stops working.", ">Get a new code</Text>", "We'll tell your receiver so you can agree the drop-off in chat", "CARRIER_NEXT[resolution]", "SENDER_ASKED[resolution]", "You already reviewed this delivery", "never send it to them ahead of time"],
     mustNot: [">Resend</Text>", "that's the receiver's", "{RESOLUTION_LABEL[resolution].toLowerCase()}", "- never to the carrier.", "Couldn't load booking"],
+  },  {
+    repo: "web",
+    file: ["supabase/migrations/20261027170000_buddy_hardening.sql", "supabase/functions/_shared/buddyRequests.ts", "supabase/functions/_shared/rateLimit.ts", "supabase/functions/_shared/buddyTrips.ts"],
+    id: "buddy-server-hardening",
+    why: "27 Oct 2026 travel buddy flow (SECURITY + logic): RLS let any user insert buddy requests and the receiver rewrite sender/status (forced connections, revived requests) and owners write listings past every rule; blocks were ignored by requests/accept/lists; request->cancel loops spammed pushes; finished/completed listings and deleted senders could still be connected; reads ended a finished trip inside its grace days.",
+    must: ['DROP POLICY IF EXISTS "Users can create buddy requests" ON public.buddy_requests;', 'DROP POLICY IF EXISTS "Receivers can update buddy requests" ON public.buddy_requests;', 'DROP POLICY IF EXISTS "Users can manage own listings" ON public.buddy_listings;', "You can't send a request to this traveller.", "This trip has already happened, so it can't take new travel buddies.", "This traveller's account no longer exists.", "name: 'buddy-request'", "Keep your message under 500 characters.", "export async function endFinishedBuddyTrip("],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: ["src/features/buddies/pages/CustomerCreateBuddy.tsx", "src/features/my-trips/components/BuddyPartnerCard.tsx", "src/features/my-trips/components/PartnersTab.tsx", "src/features/buddies/components/RateBuddyDialog.tsx", "src/hooks/api/useBuddies.ts", "src/features/my-trips/lib/helpers.ts"],
+    id: "buddy-wording-same-everywhere",
+    why: "27 Oct 2026 travel buddy flow: the same screens read differently on web and mobile (statuses with parcel words, 'request' for a listing, 'connect' after matching became chat-first, three remove dialogs, two rate dialogs, Title Case); one spec for both (buddy_canon).",
+    must: ["Remove this buddy listing?", "It will no longer appear in search or My Travels. This can't be undone.", "No buddy listings yet", "Create a buddy listing", "Submit rating", "Buddy request declined", "Select a travel date up to 12 months from today.", "export const buddyListingStatusLabel = (status?: string | null): string =>"],
+    mustNot: ["Buddy request rejected", "Yes, delete listing", "My Buddies (Connected partners)", "Select a single date or a date range", "Buddy Listing Created!"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/buddies/CreateBuddyScreen.tsx", "src/features/travels/BuddyPartnerCard.tsx", "src/features/travels/components/PartnersTab.tsx", "src/features/buddies/RateBuddyModal.tsx", "src/features/travels/hooks/useMyTravelsActions.ts", "src/features/travels/statusLabels.ts", "src/features/buddies/PartnerDetailsScreen.tsx"],
+    id: "mobile-buddy-wording-same-everywhere",
+    why: "See buddy-wording-same-everywhere (web repo). Plus mobile said 'send connection requests', showed parcel words ('Looking for Carrier') on buddy listings, had no connections error state, no journey-confirm toasts, an uncapped review and typed capitals.",
+    must: ["find you and start a chat.", "Remove this buddy listing?", "No buddy listings yet", "Buddy request declined", "Journey confirmed — you can now leave a review", "maxLength={500}", "export function labelForBuddyStatus(", "Share your travel plans and meet fellow travelers on your route."],
+    mustNot: ["send connection requests", "Couldn't reject request.", "Yes, delete listing", "TRAVEL BUDDY REQUEST", "Partner details"],
   },
 ];
 

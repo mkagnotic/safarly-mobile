@@ -18,7 +18,7 @@ import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlock
 import {
   isImplicitStatus,
   isTerminal,
-  labelForStatus,
+  labelForBuddyStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
 import { useAuth } from "@/context/AuthContext";
@@ -74,19 +74,21 @@ function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?:
       >
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
-      <Text style={styles.title}>Partner details</Text>
+      <Text style={styles.title}>Buddy listing</Text>
       {right}
     </View>
   );
 }
 
 function StatusPill({ status }: Readonly<{ status: string }>) {
-  if (!status || isImplicitStatus(status)) return null;
+  // Buddy-only wording (27 Oct 2026), never the parcel labels.
+  const label = labelForBuddyStatus(status);
+  if (!status || isImplicitStatus(status) || !label) return null;
   const tone = toneForStatus(status);
   return (
     <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
       <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
-        {labelForStatus(status)}
+        {label}
       </Text>
     </View>
   );
@@ -98,13 +100,13 @@ function PartnerCard({ listing }: Readonly<{ listing: BuddyListing }>) {
       <RouteHeader fromCity={listing.from_city} toCity={listing.to_city} kind="trip" />
       <View style={styles.metricsGrid}>
         <MetricRow>
-          <MetricTile label="DATES" value={formatDateRange(listing)} />
-          <MetricTile label="AIRLINE" value={listing.airline?.trim() || "—"} />
+          <MetricTile label="Dates" value={formatDateRange(listing)} />
+          <MetricTile label="Airline" value={listing.airline?.trim() || "—"} />
         </MetricRow>
         <MetricRow>
-          <MetricTile label="AGE" value={listing.age != null ? `${listing.age}` : "—"} />
+          <MetricTile label="Age" value={listing.age != null ? `${listing.age}` : "—"} />
           <MetricTile
-            label="LANGUAGES"
+            label="Languages"
             value={
               listing.languages && listing.languages.length > 0
                 ? listing.languages.join(", ")
@@ -137,12 +139,12 @@ function NotFoundCard({
 }: Readonly<{ onBack: () => void; errorMessage?: string }>) {
   return (
     <Card style={styles.emptyCard}>
-      <Text style={styles.emptyTitle}>We couldn't find that listing.</Text>
+      <Text style={styles.emptyTitle}>Buddy listing not found.</Text>
       <Text style={styles.emptySubtitle}>
-        {errorMessage ?? "This buddy listing may have been removed or cancelled."}
+        {errorMessage ?? "It may have been removed."}
       </Text>
       <AppButton
-        label="Back to my travels"
+        label="Back to My Travels"
         onPress={onBack}
         gradientColors={[colors.ctaAccent, colors.ctaAccent]}
         style={styles.emptyButtonWrap}
@@ -353,9 +355,9 @@ export function PartnerDetailsScreen() {
 
       <PartnerCard listing={listing} />
 
-      <BodyCard label="BIO" value={listing.bio} />
-      <BodyCard label="INTERESTS" value={listing.interests} />
-      {listing.layover ? <BodyCard label="LAYOVER" value={listing.layover} /> : null}
+      <BodyCard label="Bio" value={listing.bio} />
+      <BodyCard label="Interests" value={listing.interests} />
+      {listing.layover ? <BodyCard label="Layover" value={listing.layover} /> : null}
 
       {canModify ? (
         <>
@@ -387,9 +389,9 @@ export function PartnerDetailsScreen() {
 
       <ConfirmActionModal
         open={cancelOpen}
-        title="Remove this listing?"
-        body="This action cannot be undone. Your travel buddy request will no longer appear in search."
-        confirmLabel="Yes, remove listing"
+        title="Remove this buddy listing?"
+        body="It will no longer appear in search or My Travels. This can't be undone."
+        confirmLabel="Remove listing"
         cancelLabel="Keep listing"
         tone="destructive"
         icon="alert-circle"
@@ -452,6 +454,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 6,
+    textTransform: "uppercase",
   },
   bodyText: {
     color: colors.text,

@@ -26,6 +26,9 @@ export interface RateBuddyValues {
 interface Props {
   open: boolean;
   buddyName: string;
+  /** Route of the buddy trip, for the prompt; omitted when unknown. */
+  fromCity?: string | null;
+  toCity?: string | null;
   pending: boolean;
   onCancel: () => void;
   onSubmit: (values: RateBuddyValues) => void;
@@ -34,10 +37,17 @@ interface Props {
 export function RateBuddyModal({
   open,
   buddyName,
+  fromCity,
+  toCity,
   pending,
   onCancel,
   onSubmit,
 }: Readonly<Props>) {
+  // 27 Oct 2026: same prompt as web; route only when both ends are known.
+  const prompt =
+    fromCity && toCity
+      ? `How was traveling with ${buddyName} on ${fromCity} → ${toCity}?`
+      : `How was traveling with ${buddyName}?`;
   const [score, setScore] = useState(0);
   const [review, setReview] = useState("");
   const wasOpenRef = useRef(false);
@@ -99,7 +109,7 @@ export function RateBuddyModal({
               </Pressable>
             </View>
 
-            <Text style={styles.label}>How was your experience?</Text>
+            <Text style={styles.label}>{prompt}</Text>
             <View style={styles.starsRow}>
               {[1, 2, 3, 4, 5].map((n) => (
                 <Pressable
@@ -121,12 +131,13 @@ export function RateBuddyModal({
             {score > 0 ? <Text style={styles.scoreLabel}>{STAR_LABELS[score - 1]}</Text> : null}
 
             <Text style={[styles.label, styles.reviewLabel]}>
-              Review <Text style={styles.labelMuted}>(Optional)</Text>
+              Review <Text style={styles.labelMuted}>(optional)</Text>
             </Text>
             <TextInput
               value={review}
               onChangeText={setReview}
-              placeholder="Share a few words about your trip together…"
+              placeholder="Share your experience traveling together…"
+              maxLength={500}
               placeholderTextColor={colors.subtleText}
               style={[styles.input, styles.textarea]}
               multiline

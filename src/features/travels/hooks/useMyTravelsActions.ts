@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { showAppAlert } from "@/feedback/appFeedback";
+import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { ANY_CITY } from "@/features/search/CityPicker";
 import type { EditBuddyListingFormValues } from "@/features/buddies/EditBuddyListingModal";
 import type { RateBuddyValues } from "@/features/buddies/RateBuddyModal";
@@ -405,9 +405,11 @@ export function useMyTravelsActions({
       setFormError(null);
       try {
         await buddiesApi.rejectRequest(id);
+        // 27 Oct 2026: same words as web.
+        showToast({ title: "Buddy request declined", variant: "success" });
         await requests.refetch();
       } catch (err) {
-        setFormError(`Couldn't reject request. ${getErrorMessage(err)}`);
+        setFormError(`Couldn't decline request. ${getErrorMessage(err)}`);
       } finally {
         setActioningId(null);
       }
@@ -418,8 +420,8 @@ export function useMyTravelsActions({
   const handleCancelSentRequest = useCallback(
     (request: BuddyRequest, recipientName: string) => {
       showAppAlert({
-        title: "Cancel buddy request?",
-        message: `Your request to ${recipientName} will be removed from their requests. You can send a new one later.`,
+        title: `Cancel your request to ${recipientName}?`,
+        message: "It will be removed from their requests. You can send a new one later.",
         actions: [
           { text: "Keep request", style: "cancel" },
           {
@@ -454,7 +456,15 @@ export function useMyTravelsActions({
       setActioningId(id);
       setFormError(null);
       try {
-        await buddiesApi.completeConnection(id);
+        const res = await buddiesApi.completeConnection(id);
+        // 27 Oct 2026: tell the user where the journey stands (web parity).
+        showToast({
+          title:
+            res.data?.status === "completed"
+              ? "Journey confirmed — you can now leave a review"
+              : "Marked complete — waiting for your buddy to confirm",
+          variant: "success",
+        });
         await connections.refetch();
       } catch (err) {
         setFormError(`Couldn't confirm the journey. ${getErrorMessage(err)}`);
@@ -500,7 +510,7 @@ export function useMyTravelsActions({
       if (!conn.conversation_id) return;
       navigation.navigate("OfferChatTab", {
         conversationId: conn.conversation_id,
-        name: conn.buddy?.name ?? "Travel buddy",
+        name: conn.buddy?.name ?? "Traveler",
         source: "buddies",
       });
     },

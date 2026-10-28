@@ -765,6 +765,10 @@ export function SearchScreen() {
               highlightId={highlightId}
               ringId={buddyRingId(highlightId, flashId)}
               onFocusCardLayout={onFocusCardLayout}
+              noBuddyRoutes={
+                isAutoMatch &&
+                (results?.my_buddy_route_targets_count ?? results?.my_buddy_listings_count ?? 0) === 0
+              }
             />
           ) : (
             <ReceiverTabResults
@@ -997,6 +1001,7 @@ function BuddyTabResults({
   highlightId,
   ringId,
   onFocusCardLayout,
+  noBuddyRoutes,
 }: Readonly<{
   loading: boolean;
   matches: BuddySearchMatch[];
@@ -1008,6 +1013,8 @@ function BuddyTabResults({
   /** The card ringed right now - `highlightId` until its few seconds are up. */
   ringId?: string;
   onFocusCardLayout?: (y: number) => void;
+  /** Auto-match with no buddy listing of my own - the empty state says how to get one. */
+  noBuddyRoutes?: boolean;
 }>) {
   if (loading && matches.length === 0) return <MatchListSkeleton />;
   if (matches.length === 0)
@@ -1015,7 +1022,11 @@ function BuddyTabResults({
       <EmptyResults
         icon="people-outline"
         title="No travel buddy matches"
-        body="Try adjusting your filters."
+        body={
+          noBuddyRoutes
+            ? "Create a buddy listing or enable Travel Buddy on a trip to find companions"
+            : "Try adjusting your filters."
+        }
       />
     );
   return (
@@ -1070,11 +1081,11 @@ function BuddyMatchCard({
   const dateLabel = buddyDateLabel(match);
 
   const details: { label: string; value: string }[] = [
-    ...(match.age != null ? [{ label: "AGE", value: `${match.age} yrs` }] : []),
+    ...(match.age != null ? [{ label: "Age", value: `${match.age} yrs` }] : []),
     ...(match.languages?.length
-      ? [{ label: "LANGUAGES", value: match.languages.slice(0, 3).join(", ") }]
+      ? [{ label: "Languages", value: match.languages.slice(0, 3).join(", ") }]
       : []),
-    ...(match.layover ? [{ label: "LAYOVER", value: match.layover }] : []),
+    ...(match.layover ? [{ label: "Layover", value: match.layover }] : []),
   ];
 
   const { chatStarting, handleStartChat } = useStartBuddyChat(match, navigation);

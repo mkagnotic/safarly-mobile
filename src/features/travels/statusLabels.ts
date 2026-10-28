@@ -52,6 +52,24 @@ export function labelForStatus(status: string): string {
   return STATUS_LABEL[status] ?? status;
 }
 
+/**
+ * Buddy listings only (27 Oct 2026) - never the parcel map above. Unknown
+ * statuses read "" so a raw value is never shown.
+ */
+export const BUDDY_STATUS_LABEL: Readonly<Record<string, string>> = {
+  open: "Looking for buddies",
+  looking_for_match: "Looking for buddies",
+  pending: "Looking for buddies",
+  active: "Looking for buddies",
+  matched: "Buddies available",
+  completed: "Completed",
+  expired: "Expired",
+};
+
+export function labelForBuddyStatus(status: string): string {
+  return BUDDY_STATUS_LABEL[status] ?? "";
+}
+
 export function toneForStatus(status: string): StatusTone {
   return STATUS_TONE[status] ?? DEFAULT_TONE;
 }

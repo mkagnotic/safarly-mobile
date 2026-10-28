@@ -107,6 +107,7 @@ export function CreateBuddyScreen() {
   const [bio, setBio] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+  const [matching, setMatching] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, string>>>({});
@@ -257,6 +258,8 @@ export function CreateBuddyScreen() {
       // route-matching search the Search screen runs (web parity:
       // CustomerCreateBuddy). Matches for THIS listing -> show them on the
       // Travel Buddy tab; none, or the check fails -> the usual success screen.
+      // 27 Oct 2026: say what we're doing while the match check runs (web parity).
+      setMatching(true);
       try {
         const results = await searchApi.search({ ...MATCH_MY_ROUTES_QUERY });
         const target = postCreateBuddyTarget(
@@ -270,6 +273,8 @@ export function CreateBuddyScreen() {
         }
       } catch {
         // Non-fatal: the listing is saved; fall through to the success screen.
+      } finally {
+        setMatching(false);
       }
       setSubmitted(true);
     } catch (err) {
@@ -320,11 +325,11 @@ export function CreateBuddyScreen() {
           </View>
           <Text style={styles.successTitle}>Buddy listing created</Text>
           <Text style={styles.successBody}>
-            Travelers on your route can now find you and send connection requests.
+            Travelers on your route can now find you and start a chat.
           </Text>
           <View style={styles.successButtons}>
             <AppButton
-              label="View in my travels"
+              label="View in My Travels"
               onPress={() => navigation.navigate("Parcels", { tab: "partners" })}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.successButtonFlex}
@@ -362,7 +367,7 @@ export function CreateBuddyScreen() {
           <Text style={styles.title}>Find a travel buddy</Text>
         </View>
         <Text style={styles.subtitle}>
-          Share your travel plans and connect with fellow travelers on your route.
+          Share your travel plans and meet fellow travelers on your route.
         </Text>
 
 
@@ -379,7 +384,7 @@ export function CreateBuddyScreen() {
           }}
         >
           <SectionCard first>
-            <Text style={styles.fieldLabel}>From</Text>
+            <Text style={styles.fieldLabel}>From city</Text>
             <LocationCard flag={fromFlag} label={fromCountryName} filled onToggle={toggleFromCountry} />
             <View>
               <CityPicker
@@ -398,7 +403,7 @@ export function CreateBuddyScreen() {
               ) : null}
             </View>
 
-            <Text style={styles.fieldLabel}>To</Text>
+            <Text style={styles.fieldLabel}>To city</Text>
             <LocationCard flag={toFlag} label={toCountryName} filled onToggle={toggleToCountry} />
             <View>
               <CityPicker
@@ -512,10 +517,7 @@ export function CreateBuddyScreen() {
             </View>
 
             <View style={[styles.labelRow, styles.labelRowTopGap]}>
-              <Text style={styles.fieldLabel}>Languages</Text>
-              <View style={styles.optionalPill}>
-                <Text style={styles.optionalPillText}>Up to {MAX_LANGUAGES}</Text>
-              </View>
+              <Text style={styles.fieldLabel}>Languages (optional, up to {MAX_LANGUAGES})</Text>
             </View>
             {languages.length > 0 ? (
               <View style={styles.chipsRow}>
@@ -587,7 +589,7 @@ export function CreateBuddyScreen() {
 
         <View style={styles.submitRow}>
           <AppButton
-            label={submitting ? "Creating…" : "Find my travel buddy"}
+            label={matching ? "Finding buddies…" : submitting ? "Creating…" : "Find my travel buddy"}
             onPress={() => void handleSubmit()}
             disabled={submitting}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}

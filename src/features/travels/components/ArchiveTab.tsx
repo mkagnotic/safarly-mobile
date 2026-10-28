@@ -132,7 +132,7 @@ export function ArchiveTab({
         <View style={sharedStyles.section}>
           <View style={sharedStyles.sectionHeading}>
             <Ionicons name="people-outline" size={16} color={colors.safe} />
-            <Text style={sharedStyles.sectionTitle}>Completed buddies</Text>
+            <Text style={sharedStyles.sectionTitle}>Completed buddy trips</Text>
           </View>
           {completedBuddies.map((c) => (
             <ArchiveBuddyCard key={c.id} connection={c} onRate={() => onRateBuddy(c)} />

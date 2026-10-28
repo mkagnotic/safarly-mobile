@@ -155,7 +155,7 @@ export function MyTravelsScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.titleBlock}>
-            <Text style={styles.title}>My travels</Text>
+            <Text style={styles.title}>My Travels</Text>
             <Text style={styles.subtitle}>
               Track all your flights, packages, and travel partners.
             </Text>
@@ -258,6 +258,10 @@ export function MyTravelsScreen() {
             onReject={handleRejectRequest}
             onChat={handleChatConnection}
             onComplete={handleCompleteConnection}
+            onCreate={() => navigation.navigate("CreateBuddyTab")}
+            connectionsLoading={connections.loading}
+            connectionsError={connections.error}
+            onRetryConnections={connections.refetch}
           />
         ) : null}
 

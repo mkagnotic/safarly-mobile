@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { AppButton } from "@/components/ui/AppButton";
 import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { usePublicProfile } from "@/hooks/api/usePublicProfile";
-import type { BuddyConnection, BuddyRequest } from "@/services/api";
+import type { BuddyConnection, BuddyListing, BuddyRequest } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatLocalDate, toLocalYmd } from "@/utils/travelDate";
 import { getInitials } from "@/features/travels/lib/initials";
@@ -14,12 +14,24 @@ import {
 
 export function BuddyRequestCard({
   request,
+  listing,
   pending,
   onAccept,
   onReject,
-}: Readonly<{ request: BuddyRequest; pending: boolean; onAccept: () => void; onReject: () => void }>) {
+}: Readonly<{
+  request: BuddyRequest;
+  /** My listing the request is for - gives the route + date (27 Oct 2026). */
+  listing?: BuddyListing | null;
+  pending: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+}>) {
   const sender = request.requester ?? request.user_profiles ?? null;
   const message = request.message?.trim() || "wants to be your travel buddy";
+  const date = listing ? formatLocalDate(listing.travel_date_from ?? listing.travel_date, undefined, "") : "";
+  const routeLine = listing
+    ? [`${listing.from_city} → ${listing.to_city}`, date].filter(Boolean).join(" · ")
+    : null;
   return (
     <View style={styles.lcCard}>
       <View style={styles.lcPersonRow}>
@@ -31,26 +43,32 @@ export function BuddyRequestCard({
         </View>
         <View style={styles.lcPersonInfo}>
           <Text style={styles.lcName} numberOfLines={1}>
-            {sender?.name || "Someone"}
+            {sender?.name || "Traveler"}
           </Text>
+          {routeLine ? (
+            <Text style={styles.lcMessage} numberOfLines={1}>
+              {routeLine}
+            </Text>
+          ) : null}
           <Text style={styles.lcMessage} numberOfLines={2}>
             {message}
           </Text>
         </View>
       </View>
+      {/* Accept first, then Decline - same order as web (27 Oct 2026). */}
       <View style={styles.lcActions}>
-        <AppButton
-          label="Decline"
-          variant="secondary"
-          onPress={onReject}
-          disabled={pending}
-          style={styles.lcActionFlex}
-        />
         <AppButton
           label={pending ? "…" : "Accept"}
           onPress={onAccept}
           disabled={pending}
           gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.lcActionFlex}
+        />
+        <AppButton
+          label="Decline"
+          variant="secondary"
+          onPress={onReject}
+          disabled={pending}
           style={styles.lcActionFlex}
         />
       </View>
@@ -135,7 +153,7 @@ export function BuddyConnectionCard({
         </View>
         <View style={styles.lcPersonInfo}>
           <Text style={styles.lcName} numberOfLines={1}>
-            {c.buddy?.name || "Travel buddy"}
+            {c.buddy?.name || "Traveler"}
           </Text>
           {route ? (
             <Text style={styles.lcMessage} numberOfLines={1}>

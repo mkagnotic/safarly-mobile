@@ -49,10 +49,10 @@ export function BuddyMatchCardBody({
         <View style={sharedStyles.personInfo}>
           <View style={styles.buddyTitleRow}>
             <Text style={sharedStyles.personName} numberOfLines={2}>
-              {match.user?.name || "Travel buddy"}
+              {match.user?.name || "Traveler"}
             </Text>
             <View style={styles.badgeSafe}>
-              <Text style={styles.badgeText}>BUDDY</Text>
+              <Text style={styles.badgeText}>Buddy</Text>
             </View>
           </View>
           <Text style={sharedStyles.ratingText}>
@@ -67,11 +67,11 @@ export function BuddyMatchCardBody({
       </View>
 
       <View style={styles.travelDetailsBlock}>
-        <Text style={styles.travelLabel}>TRAVEL DETAILS</Text>
+        <Text style={styles.travelLabel}>Travel details</Text>
         <RouteHeader fromCity={match.from_city} toCity={match.to_city} kind="trip" compact />
         <MetricRow>
-          <MetricTile label="DATE" value={dateLabel} compact />
-          <MetricTile label="AIRLINE" value={match.airline || "—"} highlight compact />
+          <MetricTile label="Date" value={dateLabel} compact />
+          <MetricTile label="Airline" value={match.airline || "—"} highlight compact />
         </MetricRow>
         {details.length > 0 ? (
           <View style={styles.detailsGrid}>
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "rgba(34, 197, 94, 0.12)",
   },
-  badgeText: { color: colors.safe, fontSize: 10, lineHeight: 13, fontWeight: "800", letterSpacing: 0.4 },
+  badgeText: { color: colors.safe, fontSize: 10, lineHeight: 13, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
   travelDetailsBlock: {
     backgroundColor: colors.card,
     borderRadius: 14,
@@ -141,6 +141,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   detailsGrid: {
     flexDirection: "row",
@@ -157,6 +158,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "700",
     letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   detailValue: {
     color: colors.text,

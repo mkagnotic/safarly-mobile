@@ -83,6 +83,9 @@ interface EmptyBlockProps {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
+  /** Only where the screen header has no CTA for it (buddy listings, 27 Oct 2026). */
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 /**
@@ -92,7 +95,7 @@ interface EmptyBlockProps {
  * "Send a Parcel") already sits in the header actions row, so repeating it here
  * put two identical primary buttons on one screen.
  */
-export function EmptyBlock({ icon, title, subtitle }: Readonly<EmptyBlockProps>) {
+export function EmptyBlock({ icon, title, subtitle, actionLabel, onAction }: Readonly<EmptyBlockProps>) {
   return (
     <View style={styles.emptyWrap}>
       <View style={styles.emptyIconBox}>
@@ -100,6 +103,14 @@ export function EmptyBlock({ icon, title, subtitle }: Readonly<EmptyBlockProps>)
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptySubtitle}>{subtitle}</Text>
+      {actionLabel && onAction ? (
+        <AppButton
+          label={actionLabel}
+          onPress={onAction}
+          gradientColors={[colors.ctaAccent, colors.ctaAccent]}
+          style={styles.retryButtonWrap}
+        />
+      ) : null}
     </View>
   );
 }

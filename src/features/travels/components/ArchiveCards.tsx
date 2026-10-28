@@ -89,10 +89,10 @@ export function ArchiveBuddyCard({
   return (
     <View style={styles.archiveCard}>
       <View style={[styles.archiveTag, styles.archiveTagBuddy]}>
-        <Text style={styles.archiveTagText}>TRAVEL BUDDY</Text>
+        <Text style={styles.archiveTagText}>Travel buddy</Text>
       </View>
       <Text style={styles.archiveRoute} numberOfLines={1}>
-        {c.buddy?.name || "Travel buddy"}
+        {c.buddy?.name || "Traveler"}
       </Text>
       {route ? (
         <Text style={styles.archiveMeta} numberOfLines={1}>

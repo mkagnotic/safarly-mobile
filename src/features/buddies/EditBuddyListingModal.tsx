@@ -235,7 +235,7 @@ export function EditBuddyListingModal({
         <View style={styles.center} pointerEvents="box-none">
           <View style={styles.card}>
             <View style={styles.header}>
-              <Text style={styles.title}>Edit travel partner request</Text>
+              <Text style={styles.title}>Edit buddy listing</Text>
               <Pressable
                 onPress={onCancel}
                 hitSlop={8}
@@ -255,7 +255,7 @@ export function EditBuddyListingModal({
             >
               {/* ───── Route ───── */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>From</Text>
+                <Text style={styles.fieldLabel}>From city</Text>
                 <LocationCard
                   flag={fromFlag}
                   label={fromCountryName}
@@ -278,7 +278,7 @@ export function EditBuddyListingModal({
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>To</Text>
+                <Text style={styles.fieldLabel}>To city</Text>
                 <LocationCard
                   flag={toFlag}
                   label={toCountryName}
@@ -370,7 +370,7 @@ export function EditBuddyListingModal({
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
                   Languages{" "}
-                  <Text style={styles.fieldLabelMuted}>(Optional, up to {MAX_LANGUAGES})</Text>
+                  <Text style={styles.fieldLabelMuted}>(optional, up to {MAX_LANGUAGES})</Text>
                 </Text>
                 {form.languages.length > 0 ? (
                   <View style={styles.chipsRow}>

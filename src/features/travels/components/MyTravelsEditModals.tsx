@@ -74,7 +74,9 @@ export function MyTravelsEditModals({
       {ratingConn ? (
         <RateBuddyModal
           open
-          buddyName={ratingConn.buddy?.name ?? "your buddy"}
+          buddyName={ratingConn.buddy?.name ?? "Traveler"}
+          fromCity={ratingConn.from_city}
+          toCity={ratingConn.to_city}
           pending={ratePending}
           onCancel={handleRateCancel}
           onSubmit={handleRateSubmit}
