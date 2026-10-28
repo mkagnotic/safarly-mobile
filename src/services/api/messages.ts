@@ -340,6 +340,8 @@ export interface Message {
   read_at?: string | null;
   attachment_url?: string | null;
   attachment_type?: string | null;
+  /** The file name the sender attached (null on older rows - show the type label). */
+  attachment_name?: string | null;
   sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   /** Discriminates typed offer/system messages; absent on legacy text rows. */
   message_kind?: MessageKind;
@@ -469,12 +471,14 @@ export const messagesApi = {
   sendMessage: (
     conversationId: string,
     text: string,
-    attachment?: { url: string; type: string },
+    attachment?: { url: string; type: string; name?: string },
   ) =>
     api.post<Message>(`/message-handler/conversations/${conversationId}/messages`, {
       text,
       attachment_url: attachment?.url,
       attachment_type: attachment?.type,
+      // Stored as attachment_name, so web and mobile show the real file name.
+      attachment_name: attachment?.name,
     }),
 
   /**

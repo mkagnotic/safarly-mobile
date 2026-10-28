@@ -16,6 +16,8 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { BusyLabel } from "@/components/ui/BusyLabel";
+import { travelDocOutOfTries } from "@/features/messages/chat/lib/verificationTries";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
@@ -51,7 +53,7 @@ async function openDocument(url: string): Promise<void> {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert("Couldn't open the document", "Please try again. If it keeps happening, ask the traveller to upload it again.");
+    Alert.alert("Couldn't open the document", "Please try again. If it keeps happening, ask the traveler to upload it again.");
   }
 }
 
@@ -131,7 +133,9 @@ export function TravelDocModal({
   const room = Math.max(0, maxFiles - files.length);
   const addFiles = (incoming: StagedFile[]) => {
     const ok = incoming.filter((f) => !f.size || f.size <= MAX_FILE_BYTES);
-    if (ok.length < incoming.length) setLocalError("Each file must be under 10 MB.");
+    if (ok.length < incoming.length) setLocalError("Each file must be 10 MB or smaller.");
+    // Say so when a pick goes over the limit (the Android PDF picker ignores it).
+    else if (files.length + ok.length > maxFiles) setLocalError(`You can add up to ${maxFiles} files per try.`);
     setFiles((prev) => [...prev, ...ok].slice(0, maxFiles));
   };
   const [rejecting, setRejecting] = useState(false);
@@ -228,7 +232,7 @@ export function TravelDocModal({
         multiple: room > 1,
       });
       if (result.canceled || !result.assets?.length) return;
-      addFiles(result.assets.slice(0, room).map((asset) => ({
+      addFiles(result.assets.map((asset) => ({
         file: { uri: asset.uri, name: asset.name, type: asset.mimeType ?? "application/pdf" },
         previewUri: null,
         size: asset.size ?? null,
@@ -428,7 +432,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
             accessibilityRole="button"
           >
             {pending === "admin" ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Sending…" textStyle={styles.btnPrimaryText} />
             ) : (
               <Text style={styles.btnPrimaryText}>Request admin review</Text>
             )}
@@ -443,7 +447,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
               accessibilityRole="button"
             >
               {pending === "withdraw" ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <BusyLabel label="Cancelling…" textStyle={styles.btnDangerText} />
               ) : (
                 <Text style={styles.btnDangerText}>Yes, cancel match</Text>
               )}
@@ -512,7 +516,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
       ))}
       {files.length < maxFiles ? (
         <View style={styles.pickerRow}>
-          <PickerChip icon="image" label="Photo" onPress={pickImage} disabled={busy} />
+          <PickerChip icon="image" label="Photos" onPress={pickImage} disabled={busy} />
           <PickerChip icon="camera" label="Camera" onPress={takePhoto} disabled={busy} />
           <PickerChip icon="document-text" label="PDF" onPress={pickPdf} disabled={busy} />
         </View>
@@ -528,7 +532,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
         accessibilityRole="button"
       >
         {pending === "upload" ? (
-          <ActivityIndicator size="small" color={colors.white} />
+          <BusyLabel label="Uploading…" textStyle={styles.btnPrimaryText} />
         ) : (
           <Text style={styles.btnPrimaryText}>Upload document</Text>
         )}
@@ -564,6 +568,17 @@ function SenderContent(props: Readonly<ContentProps>) {
   }
 
   if (doc.status === "rejected") {
+    // Out of tries = the carrier can't upload; our team reviews (chat spec bug 6).
+    if (travelDocOutOfTries(doc)) {
+      return (
+        <InfoBlock
+          icon="time-outline"
+          tone="muted"
+          title="Under review by our team"
+          body="The traveler has no tries left. Our team will review the document and let you both know."
+        />
+      );
+    }
     return (
       <InfoBlock
         icon="time-outline"
@@ -637,7 +652,7 @@ function SenderContent(props: Readonly<ContentProps>) {
               accessibilityRole="button"
             >
               {pending === "reject" ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
                 <Text style={styles.btnWarningText}>Request re-upload</Text>
               )}
@@ -664,7 +679,7 @@ function SenderContent(props: Readonly<ContentProps>) {
             accessibilityRole="button"
           >
             {pending === "approve" ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Approving…" textStyle={styles.btnPrimaryText} />
             ) : (
               <Text style={styles.btnPrimaryText}>Approve</Text>
             )}

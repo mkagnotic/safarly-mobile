@@ -7,8 +7,7 @@ import { formatMoney as formatMoneyCanonical } from "@/utils/money";
  * and documents up to 5 MB, video up to 10 MB. A larger client cap only let a
  * file through the picker for the upload to be refused afterwards.
  */
-export const MAX_FILE_BYTES = 5 * 1024 * 1024;
-export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+export { MAX_FILE_BYTES, MAX_VIDEO_BYTES } from "./lib/chatAttachments";
 
 export function getBackTarget(source: "home" | "messages" | "buddies" | "travels") {
   switch (source) {

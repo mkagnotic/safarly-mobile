@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { ownOfferWaitKind, type ResolvedOffers } from "@/features/messages/offerResolution";
 import { type UseOffersResult } from "@/hooks/api/useOffers";
 import { colors } from "@/theme/colors";
+import { BusyLabel } from "@/components/ui/BusyLabel";
 
 import { formatMoney } from "../chatHelpers";
 import { chatStyles } from "../chatStyles";
@@ -97,7 +98,7 @@ export function OfferBar({
             accessibilityLabel="Decline offer"
           >
             {offerPending === `reject:${liveOffer.offerId}` ? (
-              <ActivityIndicator size="small" color={colors.danger} />
+              <BusyLabel label="Declining…" color={colors.danger} textStyle={styles.offerBarBtnGhostText} />
             ) : (
               <Text style={styles.offerBarBtnGhostText}>Decline</Text>
             )}
@@ -119,7 +120,7 @@ export function OfferBar({
             accessibilityLabel="Accept offer"
           >
             {offerPending === `accept:${liveOffer.offerId}` ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Accepting…" textStyle={styles.offerBarBtnPrimaryText} />
             ) : (
               <Text style={styles.offerBarBtnPrimaryText}>Accept</Text>
             )}

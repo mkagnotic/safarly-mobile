@@ -33,11 +33,11 @@ export function PayoutRequiredModal({ open, onClose, onSetup }: Readonly<PayoutR
           <Text style={styles.title}>Set up payouts to accept this delivery</Text>
           <Text style={styles.body}>
             Before you can carry a parcel, you need a payout account so your earnings can reach your
-            bank. It only takes a minute, and you can come straight back to accept.
+            bank. It only takes a minute, and you'll come straight back to finish accepting.
           </Text>
 
           <View style={styles.reasons}>
-            <Reason icon="shield-checkmark-outline" text="Handled securely by Stripe — Safarly never stores your bank details." />
+            <Reason icon="shield-checkmark-outline" text="Handled securely by our payment partner — Safarly never stores your bank details." />
             <Reason icon="cash-outline" text="Free to connect. The sender's payment is held securely and paid out to your bank once delivery is confirmed." />
           </View>
 

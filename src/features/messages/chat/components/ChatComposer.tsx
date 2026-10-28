@@ -5,6 +5,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
 
 import { type ChatComposerController } from "../hooks/useChatComposer";
+import { MESSAGE_MAX_LENGTH, messageCounter } from "../lib/chatSendRules";
 
 interface ChatComposerProps {
   composer: ChatComposerController;
@@ -32,6 +33,8 @@ export function ChatComposer({
     handleRetryUpload,
     clearPending,
   } = composer;
+  // "1,850/2,000", shown only from 1,800 characters on.
+  const counter = messageCounter(draft.length);
 
   return (
     <View style={[styles.composerWrap, { paddingBottom: composerBottomPad }]}>
@@ -76,15 +79,26 @@ export function ChatComposer({
               <Ionicons name="refresh" size={18} color={colors.white} />
             </Pressable>
           ) : null}
-          <Pressable
-            onPress={clearPending}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Remove attachment"
-          >
-            <Ionicons name="close-circle" size={22} color={colors.mutedText} />
-          </Pressable>
+          {/* No X while uploading: the upload can't be cancelled, so a live X
+              only hid a file that was posted anyway (chat spec bug 13). */}
+          {uploading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Pressable
+              onPress={clearPending}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Remove attachment"
+            >
+              <Ionicons name="close-circle" size={22} color={colors.mutedText} />
+            </Pressable>
+          )}
         </View>
+      ) : null}
+      {counter ? (
+        <Text style={[styles.counter, draft.length >= MESSAGE_MAX_LENGTH && styles.counterFull]} accessibilityLiveRegion="polite">
+          {counter}
+        </Text>
       ) : null}
       <View style={styles.composerRow}>
         {/*
@@ -119,6 +133,7 @@ export function ChatComposer({
           style={styles.composerInput}
           multiline
           editable={!uploading}
+          maxLength={MESSAGE_MAX_LENGTH}
         />
         <Pressable
           onPress={() => void handleSend()}
@@ -185,6 +200,8 @@ const styles = StyleSheet.create({
   previewBody: { flex: 1, minWidth: 0 },
   previewName: { color: colors.text, fontSize: 13, fontWeight: "700" },
   previewType: { color: colors.mutedText, fontSize: 11 },
+  counter: { alignSelf: "flex-end", color: colors.mutedText, fontSize: 11, fontWeight: "600" },
+  counterFull: { color: colors.danger },
   composerRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   composerIconButton: {
     width: 38,

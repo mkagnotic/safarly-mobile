@@ -135,6 +135,7 @@ export function MessageBubble({
           <Attachment
             url={message.attachment_url}
             type={message.attachment_type ?? ""}
+            name={message.attachment_name}
             onOpenImage={onOpenImage}
           />
         ) : null}
@@ -164,6 +165,8 @@ export function MessageBubble({
       </Pressable>
       {failed ? (
         <View style={styles.failedActionsRow}>
+          <Text style={styles.failedNotSent}>Not sent</Text>
+          <Text style={styles.failedSep}>·</Text>
           <Pressable onPress={onRetry} hitSlop={4} accessibilityRole="button" accessibilityLabel="Retry send">
             <Text style={styles.failedAction}>Retry</Text>
           </Pressable>
@@ -210,6 +213,7 @@ const bubbleStyles = StyleSheet.create({
   failedActionsRow: { flexDirection: "row", gap: 6, marginTop: 4, alignItems: "center" },
   failedAction: { color: colors.danger, fontSize: 11, fontWeight: "800" },
   failedSep: { color: colors.mutedText, fontSize: 11 },
+  failedNotSent: { color: colors.danger, fontSize: 11, fontWeight: "600" },
 });
 
 const styles = { ...chatStyles, ...bubbleStyles };

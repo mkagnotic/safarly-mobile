@@ -36,7 +36,7 @@ export function AttachSheet({ composer, sheetInset }: Readonly<AttachSheetProps>
         <Text style={styles.actionSheetTitle}>Attach</Text>
         <ActionRow
           icon="image"
-          label="Send a photo"
+          label="Photo or video"
           onPress={() => afterAttachMenu(() => setAttachMenuOpen(false), () => void handlePickImage())}
         />
         <ActionRow
@@ -46,7 +46,7 @@ export function AttachSheet({ composer, sheetInset }: Readonly<AttachSheetProps>
         />
         <ActionRow
           icon="document-attach"
-          label="Send a document or video"
+          label="Document (PDF or Word)"
           onPress={() => afterAttachMenu(() => setAttachMenuOpen(false), () => void handlePickDocument())}
         />
         <View style={styles.actionDivider} />

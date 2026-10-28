@@ -369,7 +369,7 @@ export function PayBookingScreen() {
           </View>
 
           <AppButton
-            label={paying ? "Opening secure checkout…" : checking ? "Checking…" : `Pay ${money(total, bookingCurrency)}`}
+            label={paying ? "Opening payment…" : checking ? "Checking…" : `Pay ${money(total, bookingCurrency)}`}
             // Not disabled for an unverified status: that status can be stale, and the
             // tap is what re-checks it (handlePay) before showing the KYC prompt.
             disabled={paying || checking}

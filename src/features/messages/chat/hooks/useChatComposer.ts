@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 
@@ -9,7 +9,8 @@ import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicke
 import { getErrorMessage, type RNUploadFile } from "@/services/api";
 import { notifyPermissionDenied } from "@/utils/permissionBanner";
 
-import { MAX_FILE_BYTES, MAX_VIDEO_BYTES } from "../chatHelpers";
+import { attachmentProblem, DOCUMENT_PICKER_TYPES, resolveAttachmentType } from "../lib/chatAttachments";
+import { ChatSendError, MESSAGE_MAX_LENGTH, sendFailurePlan } from "../lib/chatSendRules";
 
 interface UseChatComposerInput {
   canSend: boolean;
@@ -38,6 +39,27 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
   // fading out, so anything opened from a sheet waits for it to dismiss.
   const { after: afterAttachMenu, onDismiss: onAttachMenuDismissed } = useModalHandoff();
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const sendingRef = useRef(false);
+
+  /**
+   * Stage a picked file after the SERVER's checks (allow-list + size; see
+   * lib/chatAttachments). A file the server would refuse is never uploaded.
+   */
+  const stageFile = useCallback(
+    (asset: { uri: string; name?: string | null; mimeType?: string | null; size?: number | null }, fallbackName: string, preview: boolean) => {
+      const name = asset.name || fallbackName;
+      const type = resolveAttachmentType(asset.mimeType, name);
+      const problem = attachmentProblem(type, asset.size);
+      if (problem) {
+        showToast({ title: "Can't attach this file", message: problem, variant: "error" });
+        return;
+      }
+      setPendingFile({ uri: asset.uri, name, type: type! });
+      setPreviewUri(preview && type!.startsWith("image/") ? asset.uri : null);
+      setUploadFailed(false);
+    },
+    [],
+  );
 
   const handlePickImage = useCallback(async () => {
     try {
@@ -48,27 +70,23 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         ...LIBRARY_PICK_OPTIONS,
+        // "Photo or video" (= web's photo input, which takes video too).
         // SDK 54 deprecated MediaTypeOptions in favor of the string-array form.
-        mediaTypes: ["images"],
+        mediaTypes: ["images", "videos"],
         quality: 0.8,
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        showToast({ title: "Too large", message: "Images must be 5 MB or smaller.", variant: "error" });
-        return;
-      }
-      const file: RNUploadFile = {
-        uri: asset.uri,
-        name: asset.fileName ?? `photo-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
-      };
-      setPendingFile(file);
-      setPreviewUri(asset.uri);
+      const isVideo = asset.type === "video" || (asset.mimeType ?? "").startsWith("video/");
+      stageFile(
+        { uri: asset.uri, name: asset.fileName, mimeType: asset.mimeType ?? (isVideo ? null : "image/jpeg"), size: asset.fileSize },
+        isVideo ? `video-${Date.now()}.mp4` : `photo-${Date.now()}.jpg`,
+        true,
+      );
     } catch (err) {
       showToast({ title: "Couldn't pick image", message: getErrorMessage(err), variant: "error" });
     }
-  }, []);
+  }, [stageFile]);
 
   const handleTakePhoto = useCallback(async () => {
     try {
@@ -82,60 +100,31 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
       const asset = result.assets[0];
       // Same 5 MB cap as the library picker — high-res phones can produce
       // larger raw captures.
-      if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        showToast({
-          title: "Too large",
-          message: "Photos must be 5 MB or smaller.",
-          variant: "error",
-        });
-        return;
-      }
-      const file: RNUploadFile = {
-        uri: asset.uri,
-        name: asset.fileName ?? `camera-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
-      };
-      setPendingFile(file);
-      setPreviewUri(asset.uri);
+      stageFile(
+        { uri: asset.uri, name: asset.fileName, mimeType: asset.mimeType ?? "image/jpeg", size: asset.fileSize },
+        `camera-${Date.now()}.jpg`,
+        true,
+      );
     } catch (err) {
       showToast({ title: "Couldn't take photo", message: getErrorMessage(err), variant: "error" });
     }
-  }, []);
+  }, [stageFile]);
 
   const handlePickDocument = useCallback(async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          "application/pdf",
-          "application/msword",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "video/*",
-        ],
+        // PDF and Word only - videos come from "Photo or video".
+        type: DOCUMENT_PICKER_TYPES,
         copyToCacheDirectory: true,
         multiple: false,
       });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      const isVideo = (asset.mimeType ?? "").startsWith("video/");
-      if (asset.size && asset.size > (isVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES)) {
-        showToast({
-          title: "Too large",
-          message: isVideo ? "Videos must be 10 MB or smaller." : "Documents must be 5 MB or smaller.",
-          variant: "error",
-        });
-        return;
-      }
-      const file: RNUploadFile = {
-        uri: asset.uri,
-        name: asset.name,
-        type: asset.mimeType ?? "application/octet-stream",
-      };
-      setPendingFile(file);
-      setPreviewUri(null);
+      stageFile({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType, size: asset.size }, `document-${Date.now()}`, false);
     } catch (err) {
       showToast({ title: "Couldn't pick file", message: getErrorMessage(err), variant: "error" });
     }
-  }, []);
+  }, [stageFile]);
 
   const clearPending = useCallback(() => {
     setPendingFile(null);
@@ -147,6 +136,10 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
     const trimmed = draft.trim();
     if (!trimmed && !pendingFile) return;
     if (!canSend) return;
+    // The input is locked while uploading; this stops a second tap that lands
+    // before the lock has rendered (no double send).
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     const fileToSend = pendingFile;
     const draftSnapshot = trimmed;
     // Clear text immediately for responsive feel; keep the file in the
@@ -160,14 +153,23 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
       // Success: drop the preview now that the bubble is in flight.
       if (fileToSend) clearPending();
     } catch (err) {
-      // Restore the draft text so the user doesn't lose what they typed.
-      if (draftSnapshot) setDraft(draftSnapshot);
-      if (fileToSend) setUploadFailed(true);
-      showToast({
-        title: "Couldn't send",
-        message: getErrorMessage(err),
-        variant: "error",
+      // ONE failure signal (chat spec bugs 9/10, lib/chatSendRules): a failed
+      // upload -> the composer preview; a failed send -> the failed bubble; a
+      // refusal a retry can't fix -> the server's reason + the text back.
+      const plan = sendFailurePlan({
+        phase: err instanceof ChatSendError ? err.phase : "send",
+        hadFile: !!fileToSend,
+        code: err instanceof ChatSendError ? err.code : null,
+        message: getErrorMessage(err instanceof ChatSendError ? err.original : err),
       });
+      if (plan.restoreDraft && draftSnapshot) setDraft(draftSnapshot);
+      if (fileToSend) {
+        if (plan.keepFile) setUploadFailed(true);
+        else clearPending();
+      }
+      if (plan.notice) showToast({ title: "Couldn't send", message: plan.notice, variant: "error" });
+    } finally {
+      sendingRef.current = false;
     }
   }, [draft, pendingFile, canSend, clearPending, send, stopTyping]);
 
@@ -180,7 +182,8 @@ export function useChatComposer({ canSend, send, notifyTyping, stopTyping }: Use
 
   const handleDraftChange = useCallback(
     (next: string) => {
-      setDraft(next);
+      // The input's maxLength stops typing; this also caps a paste / emoji insert.
+      setDraft(next.length > MESSAGE_MAX_LENGTH ? next.slice(0, MESSAGE_MAX_LENGTH) : next);
       if (next.length > 0) notifyTyping();
       else stopTyping();
     },

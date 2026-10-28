@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   ScrollView,
@@ -15,6 +16,7 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { BusyLabel } from "@/components/ui/BusyLabel";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
@@ -135,6 +137,10 @@ export function ParcelReviewModal({
   const busy = pending !== null;
 
   const addFiles = (incoming: RNUploadFile[]) => {
+    // Say so when a pick goes over the limit (the Android PDF picker ignores it).
+    if (files.length + incoming.length > maxPhotos) {
+      setLocalError(`You can add up to ${maxPhotos} photos per try.`);
+    }
     setFiles((prev) => [...prev, ...incoming].slice(0, maxPhotos));
   };
 
@@ -159,7 +165,7 @@ export function ParcelReviewModal({
       const picked: RNUploadFile[] = [];
       for (const asset of result.assets) {
         if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-          setLocalError("Each file must be under 10 MB.");
+          setLocalError("Each file must be 10 MB or smaller.");
           continue;
         }
         picked.push({
@@ -187,7 +193,7 @@ export function ParcelReviewModal({
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
       if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        setLocalError("Each file must be under 10 MB.");
+        setLocalError("Each file must be 10 MB or smaller.");
         return;
       }
       addFiles([
@@ -214,7 +220,7 @@ export function ParcelReviewModal({
       const picked: RNUploadFile[] = [];
       for (const asset of result.assets) {
         if (asset.size && asset.size > MAX_FILE_BYTES) {
-          setLocalError("Each file must be under 10 MB.");
+          setLocalError("Each file must be 10 MB or smaller.");
           continue;
         }
         picked.push({ uri: asset.uri, name: asset.name, type: asset.mimeType ?? "application/pdf" });
@@ -441,7 +447,7 @@ function CarrierView({
               accessibilityRole="button"
             >
               {pending === "reject" ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
                 <Text style={styles.btnWarningText}>Request changes</Text>
               )}
@@ -468,7 +474,7 @@ function CarrierView({
             accessibilityRole="button"
           >
             {pending === "approve" ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Approving…" textStyle={styles.btnPrimaryText} />
             ) : (
               <Text style={styles.btnPrimaryText}>Accept</Text>
             )}
@@ -548,6 +554,14 @@ function SenderView({
           title={`You've used all ${maxAttempts} tries for parcel photos.`}
           body="Please contact the Safarly support team, or cancel the request."
         />
+        {/* The way out the body names (chat spec bug 4): cancel, no new try. */}
+        <CancelRequestControl
+          pending={pending}
+          busy={busy}
+          confirmCancel={confirmCancel}
+          setConfirmCancel={setConfirmCancel}
+          onCancelRequest={onCancelRequest}
+        />
       </View>
     );
   }
@@ -607,7 +621,7 @@ function SenderView({
       ) : null}
 
       <Text style={styles.attemptsText}>
-        {files.length}/{maxPhotos} selected
+        {files.length}/{maxPhotos} added
       </Text>
 
       <Pressable
@@ -617,52 +631,75 @@ function SenderView({
         accessibilityRole="button"
       >
         {pending === "upload" ? (
-          <ActivityIndicator size="small" color={colors.white} />
+          <BusyLabel label="Uploading…" textStyle={styles.btnPrimaryText} />
         ) : (
           <Text style={styles.btnPrimaryText}>Submit for review</Text>
         )}
       </Pressable>
 
       {rejected ? (
-        confirmCancel ? (
-          <View style={styles.row}>
-            <Pressable
-              onPress={onCancelRequest}
-              disabled={busy}
-              style={[styles.btn, styles.btnDanger, styles.flex, busy && styles.btnDisabled]}
-              accessibilityRole="button"
-            >
-              {pending === "cancel" ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.btnDangerText}>Yes, cancel request</Text>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => setConfirmCancel(false)}
-              disabled={busy}
-              style={[styles.btn, styles.btnMuted]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.btnMutedText}>Keep</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => setConfirmCancel(true)}
-            disabled={busy}
-            style={[styles.btn, styles.btnOutlineDanger]}
-            accessibilityRole="button"
-          >
-            <Text style={styles.btnOutlineDangerText}>Cancel request</Text>
-          </Pressable>
-        )
+        <CancelRequestControl
+          pending={pending}
+          busy={busy}
+          confirmCancel={confirmCancel}
+          setConfirmCancel={setConfirmCancel}
+          onCancelRequest={onCancelRequest}
+        />
       ) : null}
     </View>
   );
 }
 
 // ───────────────────────── Small pieces ─────────────────────────
+
+/** "Cancel request" -> "Yes, cancel request" / "Keep". After a rejection AND when out of tries. */
+function CancelRequestControl({
+  pending,
+  busy,
+  confirmCancel,
+  setConfirmCancel,
+  onCancelRequest,
+}: Readonly<{
+  pending: ParcelReviewPending;
+  busy: boolean;
+  confirmCancel: boolean;
+  setConfirmCancel: (v: boolean) => void;
+  onCancelRequest: () => void;
+}>) {
+  return confirmCancel ? (
+    <View style={styles.row}>
+      <Pressable
+        onPress={onCancelRequest}
+        disabled={busy}
+        style={[styles.btn, styles.btnDanger, styles.flex, busy && styles.btnDisabled]}
+        accessibilityRole="button"
+      >
+        {pending === "cancel" ? (
+          <BusyLabel label="Cancelling…" textStyle={styles.btnDangerText} />
+        ) : (
+          <Text style={styles.btnDangerText}>Yes, cancel request</Text>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={() => setConfirmCancel(false)}
+        disabled={busy}
+        style={[styles.btn, styles.btnMuted]}
+        accessibilityRole="button"
+      >
+        <Text style={styles.btnMutedText}>Keep</Text>
+      </Pressable>
+    </View>
+  ) : (
+    <Pressable
+      onPress={() => setConfirmCancel(true)}
+      disabled={busy}
+      style={[styles.btn, styles.btnOutlineDanger]}
+      accessibilityRole="button"
+    >
+      <Text style={styles.btnOutlineDangerText}>Cancel request</Text>
+    </Pressable>
+  );
+}
 
 function PhotoStrip({ photos }: Readonly<{ photos: ParcelReviewPhoto[] }>) {
   if (!photos.length) return null;
@@ -677,7 +714,10 @@ function PhotoStrip({ photos }: Readonly<{ photos: ParcelReviewPhoto[] }>) {
         return (
           <Pressable
             key={p.path}
-            onPress={() => p.url && void Linking.openURL(p.url)}
+            onPress={() => {
+              if (!p.url) return;
+              Linking.openURL(p.url).catch(() => Alert.alert("Couldn't open the file", "Please try again."));
+            }}
             style={styles.photoTile}
             accessibilityRole="button"
             accessibilityLabel={pdf ? "Open PDF" : "Open photo"}

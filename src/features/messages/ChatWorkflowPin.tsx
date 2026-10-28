@@ -7,6 +7,7 @@ import type { ActiveDeal, WorkflowView } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { journeyStepPrefix as P, journeyStepRef as R } from "@/utils/journeySteps";
 import { formatMoneyShort } from "@/utils/money";
+import { outOfTriesCta, type TriesState } from "@/features/messages/chat/lib/verificationTries";
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 type Tone = "primary" | "good" | "warn" | "bad" | "neutral";
@@ -24,7 +25,7 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   await_match_accept: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for them to accept your match request." },
   // Travel document
   upload_travel_doc: { icon: "document-attach-outline", tone: "primary", blurb: "Upload your travel document so the sender can verify the trip." },
-  review_travel_doc: { icon: "shield-checkmark-outline", tone: "primary", blurb: "The carrier uploaded their travel document — review it." },
+  review_travel_doc: { icon: "shield-checkmark-outline", tone: "primary", blurb: "The traveler uploaded their travel document — review it." },
   await_travel_doc: { icon: "time-outline", tone: "neutral", blurb: "The traveler needs to upload a boarding pass or flight ticket before you can pay." },
   await_travel_doc_reupload: { icon: "time-outline", tone: "neutral", blurb: "You asked for a new document. Waiting for the traveler to upload it." },
   await_travel_doc_review: { icon: "time-outline", tone: "neutral", blurb: "Your travel document is uploaded. The sender is checking it — you'll be notified once it's verified." },
@@ -34,7 +35,7 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   review_parcel_photos: { icon: "eye-outline", tone: "primary", blurb: "The sender added parcel photos — review and approve them." },
   await_parcel_photos: { icon: "time-outline", tone: "neutral", blurb: "The sender needs to add parcel photos before you can review them." },
   await_parcel_update: { icon: "time-outline", tone: "neutral", blurb: "You asked for changes. Waiting for the sender to update the parcel photos." },
-  await_parcel_review: { icon: "time-outline", tone: "neutral", blurb: "Your parcel photos are uploaded. The traveler is reviewing them." },
+  await_parcel_review: { icon: "time-outline", tone: "neutral", blurb: "Your parcel photos are uploaded. The carrier is reviewing them." },
   // Offer
   make_offer: { icon: "pricetag-outline", tone: "primary", blurb: "Verification is done — send a delivery-fee offer." },
   accept_offer: { icon: "checkmark-circle-outline", tone: "good", blurb: "Review the current offer and accept, counter or decline." },
@@ -43,10 +44,10 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   // ⚠️ It can never "auto-cancel": once handoff is accepted a real object belongs
   // to someone else, so a lapsed window opens the PARCEL RETURN flow instead.
   // Saying "auto-cancels" here told the sender the opposite of what happens.
-  pay: { icon: "card-outline", tone: "primary", blurb: `${P("payment")}your carrier has the parcel - pay within 48 hours to secure the delivery.` },
-  pay_grace: { icon: "alert-circle-outline", tone: "warn", blurb: `${P("payment")}payment is overdue. Pay now - if the grace period runs out the parcel is returned to you, not silently cancelled.` },
-  await_payment: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("payment")}waiting for the sender to pay. You keep the parcel meanwhile.` },
-  await_payment_grace: { icon: "hourglass-outline", tone: "warn", blurb: `${P("payment")}payment is overdue and the grace period is running. If it lapses you arrange the parcel's return.` },
+  pay: { icon: "card-outline", tone: "primary", blurb: `${P("payment")}your carrier has the parcel. Pay within 48 hours. Your payment is held by Safarly and released to the carrier only after you confirm delivery.` },
+  pay_grace: { icon: "alert-circle-outline", tone: "warn", blurb: `${P("payment")}payment is overdue. Pay now — if the grace period runs out the parcel is returned to you.` },
+  await_payment: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("payment")}waiting for payment — keep holding the parcel.` },
+  await_payment_grace: { icon: "hourglass-outline", tone: "warn", blurb: `${P("payment")}payment overdue — please keep holding the parcel. If the grace period runs out you arrange the parcel's return.` },
   // The journey the user sees, end to end (numbering: utils/journeySteps):
   //   1 Handoff           - the parcel reaches the CARRIER in the origin city
   //                         (couriered to their local address, or in person).
@@ -151,6 +152,11 @@ export interface ChatWorkflowPinProps {
   onAction: (code: string) => void;
   /** True while the current CTA's action is in flight (spins the button). */
   pending?: boolean;
+  /**
+   * The upload steps' tries (travel doc / parcel photos), when loaded. Used up
+   * => no "Upload" button, whatever the server's label says (chat spec bugs 4/5).
+   */
+  uploadTries?: { travelDoc?: TriesState | null; parcelReview?: TriesState | null };
 }
 
 /**
@@ -168,6 +174,7 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
   activeDeal,
   onAction,
   pending,
+  uploadTries,
 }: ChatWorkflowPinProps) {
   const [expanded, setExpanded] = useState(false);
   const { expires_at: expiresAt, timeout_kind: timeoutKind } = workflow;
@@ -181,7 +188,8 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
   const tone: Tone =
     cta.variant === "destructive" ? "bad" : cta.variant === "secondary" ? "neutral" : meta.tone;
   const isAction = cta.kind === "action" || cta.kind === "link";
-  const label = cta.label ?? "Update";
+  const noTries = outOfTriesCta(cta.code, uploadTries ?? {});
+  const label = noTries?.label ?? cta.label ?? "Update";
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -225,7 +233,7 @@ export const ChatWorkflowPin = memo(function ChatWorkflowPin({
             {pending ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={styles.actionButtonText}>{ctaButtonText(cta.code)}</Text>
+              <Text style={styles.actionButtonText}>{noTries?.button ?? ctaButtonText(cta.code)}</Text>
             )}
           </Pressable>
         ) : (
@@ -273,7 +281,7 @@ function reviewerCta(cta: WorkflowView["cta"], deal: ActiveDeal | null | undefin
     return waiting("await_travel_doc_review", "Waiting for the sender to verify your travel document");
   }
   if (cta.code === "upload_parcel_photos" && deal?.parcel_review_status === "pending") {
-    return waiting("await_parcel_review", "Waiting for the traveller to review your parcel photos");
+    return waiting("await_parcel_review", "Waiting for the carrier to review your parcel photos");
   }
   if (cta.code === "review_parcel_photos") {
     if (deal?.parcel_review_status === "none") return waiting("await_parcel_photos", "Awaiting parcel photos");

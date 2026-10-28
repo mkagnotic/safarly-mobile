@@ -106,7 +106,7 @@ export function OfferChatScreen() {
   // ───────── Server-owned workflow (pinned action bar) ─────────
   const {
     activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
-    buddy, buddySelected, switchingDeal,
+    buddy, buddySelected, switchingDeal, loading: activeDealLoading,
   } = useActiveDeal(conversationId, buddyListingId, dealHint);
 
   // Header badge, match banner and match-action subject — see `useChatMatchStatus`.
@@ -454,7 +454,8 @@ export function OfferChatScreen() {
         {/* An edit made the deal stop fitting (route, dates, weight): warn, never
             auto-cancel — same words as web (23 Oct 2026). */}
         {/* Another deal was tapped: a loader in the step's place, never the old deal's step. */}
-        {!buddySelected && switchingDeal ? (
+        {/* Also on the first load, so the step area is a skeleton, not empty. */}
+        {!buddySelected && (switchingDeal || (activeDealLoading && !workflow)) ? (
           <View style={styles.dealSwitching} accessibilityRole="progressbar" accessibilityLabel="Loading this delivery" testID="deal-switching">
             <View style={styles.dealSwitchingText}>
               <SkeletonBlock style={styles.dealSwitchingLine} />
@@ -481,6 +482,7 @@ export function OfferChatScreen() {
             workflow={workflow}
             activeDeal={activeDeal}
             onAction={handlePinAction}
+            uploadTries={{ travelDoc: travelDoc.doc, parcelReview: parcelReview.review }}
           />
         ) : null}
 
