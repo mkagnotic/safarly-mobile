@@ -25,6 +25,7 @@ import { getErrorMessage, messagesApi, type Conversation } from "@/services/api"
 import { colors } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
+import { matchModalKind } from "./chat/matchModalKind";
 import { ArchivedBanner, ArchivedEmpty, ArchivedHeader } from "./inbox/ArchivedViews";
 import { ConversationRow } from "./inbox/ConversationRow";
 import { InboxSkeleton } from "./inbox/InboxSkeleton";
@@ -311,7 +312,9 @@ export function MessagesScreen() {
         open={!!acceptTarget}
         pending={acceptPending}
         userRole={acceptUserRole}
-        contextType={acceptTarget?.context_type}
+        // No deal is loaded on the inbox row, so this can only fall back to the
+        // thread's label - same rule as web's inbox accept (matchModalKind).
+        contextType={matchModalKind({ contextType: acceptTarget?.context_type, hasParcelDeal: false })}
         onCancel={() => {
           if (!acceptPending) setAcceptTarget(null);
         }}

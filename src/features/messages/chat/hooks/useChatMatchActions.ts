@@ -155,6 +155,9 @@ export function useChatMatchActions({
     matchPending,
     decliningPending,
     matchBusy,
+    // The match acts on a parcel deal - decides the confirm sheet's copy, not the
+    // thread's `context_type` label (one shared pair thread can say "buddy").
+    hasParcelDeal: !!matchableDeal,
     handleAccept,
     handlePickDeal,
     handleDeclineConfirm,
