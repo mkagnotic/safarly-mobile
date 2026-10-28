@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { kycApi } from "@/services/api";
+import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { isKycApprovedStatus, isKycPendingStatus } from "@/features/profile/kycGateStatus";
 
 export interface UseKycGateResult {
@@ -19,6 +20,8 @@ export interface UseKycGateResult {
    * last render (e.g. Pay right after coming back from verification).
    */
   refetch: () => Promise<boolean>;
+  /** Whether the LAST read failed, known right after `await refetch()` (state lags a render). */
+  lastReadFailed: () => boolean;
 }
 
 /**
@@ -35,16 +38,19 @@ export function useKycGate(): UseKycGateResult {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const mountedRef = useRef(true);
+  const failedRef = useRef(false);
 
   const refetch = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     try {
       const res = await kycApi.getStatus();
       const next = res.data?.status ?? null;
+      failedRef.current = false;
       if (mountedRef.current) { setStatus(next); setIsError(false); }
       return isKycApprovedStatus(next);
     } catch {
       // Fail safe to "not approved" — the server still enforces KYC_REQUIRED.
+      failedRef.current = true;
       if (mountedRef.current) { setStatus(null); setIsError(true); }
       return false;
     } finally {
@@ -74,6 +80,10 @@ export function useKycGate(): UseKycGateResult {
     return () => sub.remove();
   }, [refetch]);
 
+  // A webhook approval while the screen is open (Pay, payouts): the realtime
+  // "profile" bump re-reads it, as useKycStatus and web already do.
+  useRealtimeBus("profile", refetch);
+
   return {
     isApproved: isKycApprovedStatus(status),
     isPending: isKycPendingStatus(status),
@@ -81,5 +91,6 @@ export function useKycGate(): UseKycGateResult {
     isError,
     status,
     refetch,
+    lastReadFailed: () => failedRef.current,
   };
 }

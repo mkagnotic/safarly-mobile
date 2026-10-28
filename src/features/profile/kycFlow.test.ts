@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   DIDIT_COPY,
+  INITIATE_FAILED_COPY,
   KYC_RETURN_URL,
   attemptsLeftText,
   diditView,
@@ -10,6 +11,7 @@ import {
   isDiditUrl,
   kycMode,
   kycPollInterval,
+  refusedUrlReport,
   statusCheckMessage,
   startLabel,
 } from "./kycFlow.ts";
@@ -86,15 +88,29 @@ test("polling: 5 s for 2 min, then 15 s, stops at 30 min; never when not in prog
   assert.equal(kycPollInterval(null), false);
 });
 
-test("start errors: outage → unavailable; server moved on → refresh; anything else → message", () => {
+test("start errors: ONLY the explicit outage code is 'unavailable' (29 Oct 2026)", () => {
   assert.equal(initiateErrorAction({ code: "KYC_PROVIDER_UNAVAILABLE", status: 503 }), "unavailable");
-  assert.equal(initiateErrorAction({ code: "INTERNAL_ERROR", status: 500 }), "unavailable");
-  assert.equal(initiateErrorAction({ code: "KYC_PROVIDER_DISABLED", status: 409 }), "unavailable");
-  for (const code of ["KYC_CONSENT_REQUIRED", "KYC_ATTEMPTS_EXHAUSTED", "CONFLICT"]) {
+  // A 500 (auth hiccup), a 401 or no network never drops a Didit user into the manual wizard.
+  assert.equal(initiateErrorAction({ code: "INTERNAL_ERROR", status: 500 }), "retry");
+  assert.equal(initiateErrorAction({ code: "UNAUTHENTICATED", status: 401 }), "retry");
+  assert.equal(initiateErrorAction({ code: "NETWORK_ERROR", status: 0 }), "retry");
+  assert.equal(initiateErrorAction(null), "retry");
+  for (const code of ["KYC_PROVIDER_DISABLED", "KYC_CONSENT_REQUIRED", "KYC_ATTEMPTS_EXHAUSTED", "CONFLICT"]) {
     assert.equal(initiateErrorAction({ code, status: 409 }), "refresh");
   }
   assert.equal(initiateErrorAction({ code: "RATE_LIMITED", status: 429 }), "message");
-  assert.equal(initiateErrorAction(null), "message");
+  assert.equal(INITIATE_FAILED_COPY, "Something went wrong. Try again.");
+});
+
+test("a refused (non-Didit) URL is reported by origin only, never the session path", () => {
+  const r = refusedUrlReport("https://evil.example/session/secret-token");
+  assert.match(r, /https:\/\/evil\.example/);
+  assert.doesNotMatch(r, /secret-token/);
+  assert.match(refusedUrlReport(undefined), /no url/);
+});
+
+test("KYC titles are sentence case (same as web)", () => {
+  assert.deepEqual([DIDIT_COPY.verifiedTitle, DIDIT_COPY.reviewTitle, DIDIT_COPY.actionTitle], ["Identity verified", "Under review", "Action needed"]);
 });
 
 test("labels and copy match web", () => {

@@ -46,9 +46,9 @@ export function kycPollInterval(block: Pick<KycStatusBlock, "provider" | "state"
 }
 
 export const DIDIT_COPY = {
-  verifiedTitle: "Identity Verified",
+  verifiedTitle: "Identity verified",
   verifiedDesc: "Your identity has been verified. You have full access to all features.",
-  reviewTitle: "Under Review",
+  reviewTitle: "Under review",
   reviewDesc: "Our team is reviewing your verification. We'll let you know as soon as it's done.",
   actionTitle: "Action needed",
   declinedFallback: "We couldn't verify your identity. Please make sure your ID is valid and clearly visible, then try again.",
@@ -113,13 +113,38 @@ export function startLabel(kind: DiditView["kind"]): string {
   return kind === "in_progress" ? "Continue verification" : kind === "declined" ? "Try again" : "Start verification";
 }
 
-/** How an /initiate error is handled. Same mapping as web. */
-export type InitiateErrorAction = "unavailable" | "refresh" | "message";
+/**
+ * How an /initiate error is handled. Same rule as web (src/features/profile/lib/kycInitiate.ts).
+ *  - "unavailable": ONLY the server's explicit KYC_PROVIDER_UNAVAILABLE (Didit is
+ *    down). The one case that may open the manual upload fallback.
+ *  - "refresh": the server's state moved on (provider switched, consent needed,
+ *    attempts used up, already verified / in review): re-read and render it.
+ *  - "message": a 4xx the server explained (e.g. too many attempts): show it.
+ *  - "retry": anything else - a 500 (auth hiccup), a 401, no network.
+ *    "Something went wrong. Try again." Before 29 Oct 2026 any 5xx counted as
+ *    "Didit is down" and dropped a Didit user into the manual upload wizard.
+ */
+export type InitiateErrorAction = "unavailable" | "refresh" | "message" | "retry";
+
+export const INITIATE_FAILED_COPY = "Something went wrong. Try again.";
+
 export function initiateErrorAction(err: { code?: string; status?: number } | null | undefined): InitiateErrorAction {
   const code = err?.code ?? "";
-  if (code === "KYC_PROVIDER_UNAVAILABLE" || code === "KYC_PROVIDER_DISABLED" || (err?.status ?? 0) >= 500) return "unavailable";
-  if (code === "KYC_CONSENT_REQUIRED" || code === "KYC_ATTEMPTS_EXHAUSTED" || code === "CONFLICT") return "refresh";
-  return "message";
+  const status = err?.status ?? 0;
+  if (code === "KYC_PROVIDER_UNAVAILABLE") return "unavailable";
+  if (code === "KYC_PROVIDER_DISABLED" || code === "KYC_CONSENT_REQUIRED" || code === "KYC_ATTEMPTS_EXHAUSTED" || code === "CONFLICT") return "refresh";
+  if (code && status >= 400 && status < 500 && status !== 401) return "message";
+  return "retry";
+}
+
+/** For the error report when the server hands back a URL that isn't Didit's. Never the path (it carries the session). */
+export function refusedUrlReport(url: unknown): string {
+  let where = "no url";
+  if (typeof url === "string" && url) {
+    const m = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]*)/i.exec(url);
+    where = m ? m[1] : "unparseable url";
+  }
+  return `KYC: refused to open the verification page: initiate returned ${where}, expected https://verify.didit.me/`;
 }
 
 /**

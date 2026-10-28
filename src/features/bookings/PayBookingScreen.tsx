@@ -202,7 +202,8 @@ export function PayBookingScreen() {
       // The status on screen may be from before the user verified: ask the server
       // once more before blocking, and pay straight away if they are approved now.
       if (!kyc.isApproved && !(await kyc.refetch())) {
-        setShowKycPrompt(true);
+        // A failed re-check is not "unverified": the card above offers a retry.
+        if (!kyc.lastReadFailed()) setShowKycPrompt(true);
         return;
       }
       await pay();
@@ -354,7 +355,18 @@ export function PayBookingScreen() {
           </Card>
 
           {/* KYC gate */}
-          {!kyc.isApproved && !kyc.isLoading ? (
+          {/* The lookup failed: this person may well be verified, so never tell
+              them to verify - offer a retry (Pay re-checks on tap anyway). */}
+          {kyc.isError && !kyc.isLoading ? (
+            <Pressable style={styles.kycCard} onPress={() => void kyc.refetch()} accessibilityRole="button" accessibilityLabel="Check identity status again" testID="pay-kyc-retry">
+              <Ionicons name="refresh-outline" size={20} color={colors.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kycTitle}>We couldn't check your identity status</Text>
+                <Text style={styles.kycBody}>Something went wrong. Try again.</Text>
+              </View>
+              <Text style={styles.kycAction}>Try again</Text>
+            </Pressable>
+          ) : !kyc.isApproved && !kyc.isLoading ? (
             <Pressable style={styles.kycCard} onPress={goKyc} accessibilityRole="button" accessibilityLabel="Complete identity verification">
               <Ionicons name="shield-half-outline" size={20} color={colors.warning} />
               <View style={{ flex: 1 }}>

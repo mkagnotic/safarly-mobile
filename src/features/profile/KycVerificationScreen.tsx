@@ -421,7 +421,7 @@ function VerifiedCard() {
       <View style={[styles.statusIconWrap, { backgroundColor: colors.safe }]}>
         <Ionicons name="checkmark" size={34} color={colors.white} />
       </View>
-      <Text style={styles.statusHeadline}>Identity Verified</Text>
+      <Text style={styles.statusHeadline}>Identity verified</Text>
       <Text style={styles.statusDescription}>
         Your identity has been verified. You have full access to all features.
       </Text>
@@ -439,7 +439,7 @@ function PendingCard({
         <View style={[styles.statusIconWrap, { backgroundColor: colors.warning }]}>
           <Ionicons name="time-outline" size={32} color={colors.white} />
         </View>
-        <Text style={styles.statusHeadline}>Under Review</Text>
+        <Text style={styles.statusHeadline}>Under review</Text>
         <Text style={styles.statusDescription}>
           We're reviewing your documents. This usually takes 1–2 business days — you'll be notified once it's complete.
         </Text>

@@ -3,26 +3,21 @@ import { Modal, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
+import { resolveCopy, type KycPromptVariant } from "./kycPromptCopy";
 
-export type KycPromptVariant = "welcome" | "payment";
+export type { KycPromptVariant } from "./kycPromptCopy";
 
 interface KycPromptDialogProps {
   open: boolean;
   variant: KycPromptVariant;
   /** Payment variant only — `true` when a submission is already under review. */
   pending?: boolean;
+  /** Which check is under review: Didit never promises "1–2 business days" (web parity). */
+  provider?: "manual" | "didit";
   /** Dismiss without navigating (backdrop / secondary button / close). */
   onClose: () => void;
   /** Primary CTA — caller closes the dialog and routes to the KYC screen. */
   onVerify: () => void;
-}
-
-interface Copy {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  body: string;
-  cta: string;
-  dismiss: string;
 }
 
 /**
@@ -34,10 +29,11 @@ export function KycPromptDialog({
   open,
   variant,
   pending = false,
+  provider = "manual",
   onClose,
   onVerify,
 }: Readonly<KycPromptDialogProps>) {
-  const copy = resolveCopy(variant, pending);
+  const copy = resolveCopy(variant, pending, provider);
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
@@ -77,34 +73,6 @@ export function KycPromptDialog({
       </View>
     </Modal>
   );
-}
-
-function resolveCopy(variant: KycPromptVariant, pending: boolean): Copy {
-  if (variant === "welcome") {
-    return {
-      icon: "shield-checkmark-outline",
-      title: "Verify your identity",
-      body: "Complete a quick identity check to send parcels and make secure payments. It only takes a minute.",
-      cta: "Verify now",
-      dismiss: "Maybe later",
-    };
-  }
-  if (pending) {
-    return {
-      icon: "time-outline",
-      title: "Verification under review",
-      body: "Your documents are being reviewed. You'll be able to pay once it's approved — usually within 1–2 business days.",
-      cta: "View status",
-      dismiss: "Close",
-    };
-  }
-  return {
-    icon: "shield-half-outline",
-    title: "Verification required",
-    body: "For your security, please complete identity verification before making a payment.",
-    cta: "Complete verification",
-    dismiss: "Not now",
-  };
 }
 
 const styles = StyleSheet.create({
