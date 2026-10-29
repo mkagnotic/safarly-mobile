@@ -14,7 +14,7 @@ import {
   type NotificationTarget,
 } from "./notificationRoute";
 import { tappedNotificationIds, type NotificationTap } from "./notificationTap";
-import { foregroundPresentation, startupPushAction } from "./pushPolicy";
+import { foregroundPresentation, shouldReregisterOnTokenEvent, startupPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
 const LAST_TOKEN_KEY = "safarly.pushToken";
@@ -131,12 +131,45 @@ export async function getPushPermission(): Promise<{ granted: boolean; canAskAga
   }
 }
 
+/**
+ * The registration in flight, if any. Fetching the token makes expo-notifications
+ * emit a "token changed" event (see `shouldReregisterOnTokenEvent`), so while
+ * this is set every such event is our own echo and must be ignored. It also
+ * coalesces concurrent callers into one request.
+ */
+let registering: Promise<void> | null = null;
+/** The device (FCM/APNs) token we last saw from our own fetch, this app run. */
+let lastDeviceToken: string | null = null;
+/** The Expo token the server already has from this app run. */
+let registeredThisRun: string | null = null;
+
 /** Fetches the Expo token, registers it with the backend, and caches it. */
-async function acquireAndRegister(projectId: string): Promise<void> {
+function acquireAndRegister(projectId: string): Promise<void> {
+  if (registering) return registering;
+  registering = (async () => {
+    try {
+      await doAcquireAndRegister(projectId);
+    } finally {
+      // Let the echo events of our own fetch drain before accepting new ones.
+      setTimeout(() => { registering = null; }, 2000);
+    }
+  })();
+  return registering;
+}
+
+async function doAcquireAndRegister(projectId: string): Promise<void> {
   await ensureAndroidChannel();
+  try {
+    lastDeviceToken = (await Notifications.getDevicePushTokenAsync()).data as string;
+  } catch {
+    // Keep going: the Expo token below is what the server needs.
+  }
   const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+  // Same token already registered this run: nothing to tell the server.
+  if (registeredThisRun === token) return;
   const platform: DevicePlatform = Platform.OS === "ios" ? "ios" : "android";
   await usersApi.registerPushToken(token, platform);
+  registeredThisRun = token;
   await AsyncStorage.setItem(LAST_TOKEN_KEY, token);
 }
 
@@ -290,14 +323,28 @@ export async function clearCachedPushToken(): Promise<void> {
 export function watchPushTokenRefresh(): () => void {
   if (getPushAvailability() !== "available") return () => {};
   const projectId = getProjectId();
-  const sub = Notifications.addPushTokenListener(() => {
+  const sub = Notifications.addPushTokenListener((event) => {
     void (async () => {
       try {
         if (!projectId) return;
+        // Our own token fetch emits this event: ignore the echo (29 Oct 2026 loop).
+        if (registering) return;
         const previous = await AsyncStorage.getItem(LAST_TOKEN_KEY);
-        if (!previous) return; // never opted in on this device
         const { granted } = await getPushPermission();
-        if (!granted) return;
+        const eventToken = typeof event?.data === "string" ? event.data : null;
+        if (
+          !shouldReregisterOnTokenEvent({
+            eventToken,
+            lastDeviceToken,
+            registering: !!registering,
+            optedIn: !!previous,
+            granted,
+          })
+        ) {
+          return;
+        }
+        lastDeviceToken = eventToken;
+        registeredThisRun = null; // a genuinely new device token: tell the server
         await acquireAndRegister(projectId);
       } catch (err) {
         // eslint-disable-next-line no-console

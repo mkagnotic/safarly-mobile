@@ -5,6 +5,7 @@ import { toUserMessage } from "@/lib/userFacingError";
 import { bodyBytes, uploadTimeoutMs } from "@/integrations/supabase/authFetch";
 
 import { abortable, withDeadline as runWithDeadline } from "./deadline";
+import { allowCall } from "./loopBreaker";
 
 /**
  * Edge-function HTTP client.
@@ -226,6 +227,10 @@ async function request<T>(
   options?: RequestOptions,
 ): Promise<ApiResponse<T>> {
   const url = `${SUPABASE_FUNCTIONS_URL}${path}${buildQuery(params)}`;
+  // A runaway loop never reaches the server (29 Oct 2026 push-token storm).
+  if (!allowCall(method, path)) {
+    throw new ApiClientError("Please wait a moment and try again.", "CLIENT_LOOP_BLOCKED", 429);
+  }
   return withDeadline(async (signal) => {
     const headers = await authHeaders(
       {

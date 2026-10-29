@@ -70,3 +70,32 @@ export function foregroundPresentation(s: {
   const forOpenChat = !!s.conversationId && s.conversationId === s.activeConversationId;
   return { show: s.signedIn && !s.appActive && !forOpenChat, badge: s.signedIn };
 }
+
+/**
+ * Should a "push token changed" event re-register this phone? (29 Oct 2026)
+ *
+ * expo-notifications EMITS that event every time the app fetches the token
+ * itself (Android PushTokenModule.getDevicePushTokenAsync calls onNewToken),
+ * and registering fetches the token. Re-registering on every event therefore
+ * looped forever: 1.1.1 phones called POST /me/push-token ~4 times a second
+ * and starved user-handler on prod (Profile / My Travels / Chat stopped
+ * loading). Only a GENUINELY new device token, seen while no registration of
+ * ours is running, may re-register.
+ */
+export function shouldReregisterOnTokenEvent(s: {
+  /** The device token the event carries. */
+  eventToken: string | null | undefined;
+  /** The device token we last registered (or last saw from our own fetch). */
+  lastDeviceToken: string | null | undefined;
+  /** A registration of ours is in flight: the event is our own echo. */
+  registering: boolean;
+  /** This phone registered before (opted in). */
+  optedIn: boolean;
+  /** OS permission is granted. */
+  granted: boolean;
+}): boolean {
+  if (s.registering) return false;
+  if (!s.optedIn || !s.granted) return false;
+  if (!s.eventToken) return false;
+  return s.eventToken !== s.lastDeviceToken;
+}
