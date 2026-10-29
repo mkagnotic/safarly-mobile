@@ -1165,6 +1165,22 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: "supabase/functions/trip-handler/index.ts",
+    id: "trip-capacity-change-tells-the-sender",
+    why: "E2E AF5: a carrier cut a matched trip's luggage capacity below the parcel and the sender was never told (capacity is not a route/date change, so tripChanged missed it). The sender hears it in chat and as a notification.",
+    must: ["capacityKg: nextCapacity", "nextCapacity !== Number(priorCapacity)"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/dealTermsChange.ts",
+    id: "trip-capacity-change-wording",
+    why: "E2E AF5: the sender's chat line for a capacity cut names the new number and asks them to check the parcel still fits.",
+    must: ["changed their luggage capacity to ${kg} kg. Check your parcel still fits."],
+    mustNot: [],
+  },
+  {
+    repo: "web",
     file: "supabase/migrations/20261023120000_race_guards_capacity_and_buddy_requests.sql",
     id: "race-guards-in-the-database",
     why: "Many-user E2E: two simultaneous 4 kg handovers into 6 kg were both accepted, and two crossing buddy requests both landed. The database enforces both rules now - do not weaken them.",
@@ -2606,6 +2622,7 @@ const CHECKS = [
     must: ["const held = heldParcelUnmatchRefusal((heldRows || []) as UnmatchBookingRow[], which);", "if (pendingText) return errorResponse('CONFLICT', pendingText);", "Cancel that booking instead: it arranges the parcel's return.", "is being returned to the sender. Finish the return from the booking first, then the match can end.", "Your match request hasn't been answered yet, so there's no match to end."],
     mustNot: [],
   },
+
   {
     repo: "web",
     file: "supabase/functions/booking-handler/routes/cancel.ts",
