@@ -2234,6 +2234,22 @@ const CHECKS = [
     mustNot: ["if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {"],
   },
   {
+    repo: "web",
+    file: ["supabase/functions/user-handler/index.ts", "src/features/customer-shell/layouts/CustomerLayout.tsx"],
+    id: "slow-profile-read-is-not-onboarding",
+    why: "29 Oct 2026 manual test (User Five, staging): when the database was slow, GET /me ignored fn_me_payload's error and answered a counts-only profile (no id, no terms_accepted_at); web read it as 'not onboarded', redirected to onboarding and forgot the onboarded hint. The server now errors (Try again) and the gate ignores id-less profiles.",
+    must: ["const { data: payload, error: payloadError } = await supabase.rpc('fn_me_payload', { p_uid: uid });", "if (payloadError) {", "const profile = rawProfile?.id ? rawProfile : undefined;"],
+    mustNot: ["const { data: payload } = await supabase.rpc('fn_me_payload'"],
+  },
+  {
+    repo: "mobile",
+    file: "src/context/AuthContext.tsx",
+    id: "mobile-slow-profile-read-is-not-onboarding",
+    why: "See slow-profile-read-is-not-onboarding (web repo): mobile read the id-less profile's missing terms_accepted_at as 'terms not accepted' and showed ProfileSetup to an onboarded user. An id-less profile now throws, so the check answers 'unknown' with Try again.",
+    must: ["if (!profile?.id) throw new Error(\"We couldn't load your account. Please try again.\");"],
+    mustNot: [],
+  },
+  {
     repo: "mobile",
     file: ["src/features/auth/LoginScreen.tsx", "src/services/auth/authErrors.ts"],
     id: "mobile-unconfirmed-login-opens-the-code-step",

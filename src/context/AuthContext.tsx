@@ -109,7 +109,15 @@ const isDeletedAccount = (error: unknown) =>
 
 const loadOnboardingStatus = () =>
   checkOnboarding(
-    async () => (await usersApi.getMyProfile()).data?.profile?.terms_accepted_at,
+    async () => {
+      const profile = (await usersApi.getMyProfile()).data?.profile;
+      // No id = not a profile (what a failed server read looked like: counts
+      // only, no terms_accepted_at). Reading it as "terms not accepted" sent
+      // onboarded users to ProfileSetup when the database was slow (29 Oct
+      // 2026). Throw, so the check answers "unknown" and shows Try again.
+      if (!profile?.id) throw new Error("We couldn't load your account. Please try again.");
+      return profile.terms_accepted_at;
+    },
     { isTimeout: isTimeoutError, isUnauthenticated, isDeleted: isDeletedAccount },
   );
 
