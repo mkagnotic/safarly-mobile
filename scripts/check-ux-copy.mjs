@@ -1198,6 +1198,14 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: "supabase/functions/_shared/buddyTripChange.ts",
+    id: "buddy-either-side-date-change",
+    why: "29 Oct 2026 prod (Pratik + Mahesh): a buddy connection is the listing the request was sent to, and only an edit of THAT listing told the partner. The other buddy moving their own listing on the route told nobody, and nothing said when the two buddies' dates stopped overlapping. Both sides' same-route edits now tell the partner, and the note says so in plain words when the dates no longer match. The connection is never changed.",
+    must: ["connectionsToNotify(edited, actorId, rows, prior)", "Your travel dates no longer match — check you're still travelling together.", "datesNoLongerMatch(next, partnerSides(", "if (!fresh) return;"],
+    mustNot: [".in('request_id', ids)"],
+  },
+  {
+    repo: "web",
     file: "supabase/functions/trip-handler/index.ts",
     id: "booked-trip-route-and-dates-locked",
     why: "Client: a matched user changing dates must not silently move a booked deal. Same rule the parcel side already had for its route; matched-not-booked deals are told instead.",
