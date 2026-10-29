@@ -1153,6 +1153,35 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: [
+      "supabase/functions/_shared/offerPricing.ts",
+      "supabase/functions/message-handler/routes/activeDeal.ts",
+      "supabase/migrations/20261029200000_parcel_price_updated_at.sql",
+    ],
+    id: "reprice-signal-is-price-updated-at",
+    why: "E2E E4 (29 Oct 2026): a cancel with NO re-price made the offer box suggest the listing's asking price over the agreed one, because the re-price test read parcel_requests.updated_at and the cancel relist bumps it. Only price_updated_at (moved by a trigger when fee_offered/fee_currency change) may say the listing was re-priced.",
+    must: [
+      "askingPricedAt: active.parcel?.price_updated_at ?? null",
+      "status, price_updated_at, delivery_by",
+      "Date.parse(askingPricedAt) > Date.parse(agreedAt)",
+      "NEW.fee_offered IS DISTINCT FROM OLD.fee_offered",
+      "NEW.price_updated_at := OLD.price_updated_at;",
+    ],
+    mustNot: ["askingUpdatedAt", "active.parcel?.updated_at"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/offerSeedAmount.ts", "src/features/messages/OfferChatScreen.tsx"],
+    id: "offer-seed-is-server-suggestion",
+    why: "E2E E4 (29 Oct 2026): which price the offer box opens at (live offer, last agreement, or a listing re-priced after it) is decided once, server-side, so web and mobile agree. Mobile seeds a first offer from pricing.suggested_amount only - never the listing price or its own timestamp comparison.",
+    must: [
+      "return pricing?.suggested_amount ?? null;",
+      "currentAmount={offerSeedAmount(offerComposer?.mode, liveOffer?.amount, activeDeal?.pricing)}",
+    ],
+    mustNot: ["pricing?.asking_amount ?? null", "parcel?.updated_at", "parcel.updated_at"],
+  },
+  {
+    repo: "web",
     file: "supabase/functions/_shared/stripe.ts",
     id: "inr-payout-in-settlement-currency",
     why: "A rupee charge settles to the US platform's USD balance and Stripe refuses a rupee transfer against it: every INR delivery left the carrier unpaid. Pay the share in the settled currency at the charge's own rate; reverse in the transfer's currency.",

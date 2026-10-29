@@ -27,6 +27,7 @@ import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
 import { useOffers } from "@/hooks/api/useOffers";
 import { dealCurrencyMap, resolveOffers } from "@/features/messages/offerResolution";
+import { offerSeedAmount } from "@/features/messages/offerSeedAmount";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { messagesApi } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -639,11 +640,7 @@ export function OfferChatScreen() {
         // A first offer seeds from what the deal already knows (previous
         // agreement -> last offer -> the listing's asking price); a counter
         // still seeds from the offer being responded to.
-        currentAmount={
-          offerComposer?.mode === "counter" || offerComposer?.mode === "revise"
-            ? liveOffer?.amount ?? null
-            : activeDeal?.pricing?.suggested_amount ?? null
-        }
+        currentAmount={offerSeedAmount(offerComposer?.mode, liveOffer?.amount, activeDeal?.pricing)}
         currencySymbol={offerCurrencySymbol}
         onCancel={() => {
           if (offerPending !== "seed" && offerPending !== "counter") setOfferComposer(null);
