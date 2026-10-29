@@ -2745,6 +2745,14 @@ const CHECKS = [
     must: ["cancelRefusalText(booking.status, authResult.user.id === booking.carrier_id)", "This parcel is paid for and with you, so it can't be cancelled here. Use \\\"I can't complete this delivery\\\" on the booking instead"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/_shared/fsm.ts", "supabase/functions/message-handler/routes/activeDeal.ts"],
+    id: "block-never-strands-a-disputed-held-parcel",
+    why: "Interruption matrix H-CB1 (29 Oct 2026): a dispute filed in transit, then a block, made the chat read BLOCKED - the dispute and the parcel's steps vanished although the carrier holds it (plan AA9: a block never strands a parcel).",
+    must: ["(booking.status === 'disputed' && !!booking.held)", "held: !!bk.handoff_accepted_at,"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
