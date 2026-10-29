@@ -24,10 +24,21 @@ import { describe, test } from "node:test";
  * or fails to block the right ones.
  *
  * One number, asserted here, so the next bump cannot drift.
+ *
+ * Numbering (user decision, 29 Oct 2026):
+ *   version = MAJOR.MINOR.PATCH - phase . big changes . bug fixes (1.1.1)
+ *   build   = yyyymmddNN - the release date plus a two-digit counter for that
+ *             day (2026102901 = first build of 29 Oct 2026). It goes in
+ *             build.gradle versionCode, app.json android.versionCode and
+ *             app.json ios.buildNumber (a local Mac/Xcode build reads that).
+ *             yyyymmddNN stays under Play's 2,100,000,000 versionCode cap
+ *             until 2100 and only ever grows. Every release raises BOTH.
+ *   EAS cloud builds use appVersionSource "remote" + autoIncrement, so they
+ *   take EAS's own counter, not these files.
  */
 
 const appJson = JSON.parse(readFileSync("app.json", "utf8")) as {
-  expo: { version?: string };
+  expo: { version?: string; ios?: { buildNumber?: string }; android?: { versionCode?: number } };
 };
 const gradle = readFileSync("android/app/build.gradle", "utf8");
 
@@ -47,5 +58,15 @@ describe("the app has exactly one version number", () => {
       "The store would ship one version while the update gate compares another. " +
         "Bump BOTH: app.json expo.version and android/app/build.gradle versionName.",
     );
+  });
+
+  test("one build number, yyyymmddNN, in build.gradle and both app.json slots", () => {
+    const m = gradle.match(/versionCode\s+(\d+)/);
+    assert.ok(m, "no versionCode in android/app/build.gradle");
+    const code = m[1];
+    assert.match(code, /^20\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{2}$/, `versionCode ${code} is not yyyymmddNN`);
+    assert.ok(Number(code) <= 2_100_000_000, "versionCode is above Google Play's cap");
+    assert.equal(String(appJson.expo.android?.versionCode), code, "app.json android.versionCode must equal build.gradle versionCode");
+    assert.equal(appJson.expo.ios?.buildNumber, code, "app.json ios.buildNumber must equal build.gradle versionCode");
   });
 });
