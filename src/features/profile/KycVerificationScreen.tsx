@@ -233,7 +233,7 @@ export function KycVerificationScreen() {
   );
 
   return (
-    <Screen contentContainerStyle={styles.screenContent}>
+    <Screen contentContainerStyle={styles.screenContent} onRefresh={async () => { await kyc.refetch(); }}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />

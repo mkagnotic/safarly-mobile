@@ -248,7 +248,7 @@ export function PayBookingScreen() {
       : "We couldn't load this booking. It may have been cancelled, or it isn't yours to pay.";
 
   return (
-    <Screen contentContainerStyle={styles.content}>
+    <Screen contentContainerStyle={styles.content} onRefresh={async () => { await Promise.all([refetch(), kyc.refetch()]); }}>
       <View style={styles.headerRow}>
         <Pressable onPress={goBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />
