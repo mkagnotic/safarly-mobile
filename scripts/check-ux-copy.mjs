@@ -2598,6 +2598,22 @@ const CHECKS = [
     must: ['{ label: "Carrier fee", value: money(carrierFee, ccy) },', '{ label: "Platform fee (10%)", value: money(fee, ccy) },', '{ label: "Total paid", value: money(amount, ccy), strong: true },', '{ label: "Cancellation penalty deducted", value:', "`${company.platform} is operated by ${company.companyName}, ${company.jurisdiction}.`", "const totals = receiptTotals(tx, money);", "receiptDate(tx.created_at)", 'RECEIPT_FOOTER.map((l) => esc(l)).join("<br />")'],
     mustNot: ["<span>Net amount</span>", 'formatTxDate(tx.created_at) || "—"', 'value: tx.booking_id ? `#${tx.booking_id.slice(0, 8)}` : "—"'],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/message-handler/routes/declineUnmatch.ts", "supabase/functions/message-handler/lib/unmatchRules.ts"],
+    id: "unmatch-never-relists-a-held-parcel",
+    why: "Interruption matrix 29 Oct 2026: under handoff-first a pending_payment booking is one whose parcel the carrier HOLDS, and unmatch cancelled it outright and relisted the parcel; an unmatch during a return relisted it before it was back. Refuse and point to Cancel / the booking. A never-accepted request is not 'already ended'.",
+    must: ["const held = heldParcelUnmatchRefusal((heldRows || []) as UnmatchBookingRow[], which);", "if (pendingText) return errorResponse('CONFLICT', pendingText);", "Cancel that booking instead: it arranges the parcel's return.", "is being returned to the sender. Finish the return from the booking first, then the match can end.", "Your match request hasn't been answered yet, so there's no match to end."],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/booking-handler/routes/cancel.ts",
+    id: "cancel-refusal-addresses-the-carrier",
+    why: "Interruption matrix 29 Oct 2026: a carrier cancelling a paid, held parcel was told 'The carrier can still cancel from their booking' about themselves. Address them and name their button.",
+    must: ["cancelRefusalText(booking.status, authResult.user.id === booking.carrier_id)", "This parcel is paid for and with you, so it can't be cancelled here. Use \\\"I can't complete this delivery\\\" on the booking instead"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
