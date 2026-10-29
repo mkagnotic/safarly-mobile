@@ -1185,6 +1185,22 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: "supabase/functions/_shared/dealTermsChange.ts",
+    id: "one-change-one-chat-note",
+    why: "E2E I5: a double-tapped Save on a trip/parcel edit ran the notice twice in parallel and posted two identical chat notes. The notification's dedupeKey is the atomic check; only the call that created it posts the chat note.",
+    must: ["const fresh = await notifyUser(other,", "if (!fresh) return;"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/scheduled-workflow-timeouts/index.ts",
+    id: "deal-match-request-expiry-is-announced",
+    why: "E2E AE7: a pair's second deal never carries its match request on the shared thread, so its 72 h expiry was cleared silently - no chat line, no notification. Each expired deal now yields a match_expired event (once per thread per sweep).",
+    must: ["supabase.rpc('fn_expire_deal_match_request_events')", "dealMatchExpiryEvents(events, data)"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
     file: "supabase/functions/scheduled-payment-expiry/index.ts",
     id: "unpaid-return-same-from-both-sweeps",
     why: "E2E AE8: the 5-minute payment-expiry job (which usually expires the grace first) opened the return on a held parcel but posted no chat line, never asked the sender where it should go, and told no admin - only the 15-minute timeout job did. Both jobs now use _shared/unpaidReturnNotices.ts.",
