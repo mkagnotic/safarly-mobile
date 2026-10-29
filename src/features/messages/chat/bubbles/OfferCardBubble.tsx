@@ -11,6 +11,8 @@ import { chatStyles } from "../chatStyles";
 
 interface OfferCardBubbleProps {
   payload: OfferCardPayload;
+  /** The deal's currency when known; the card's stored label is pre-22-Oct USD on ₹ deals (AN14). */
+  currency?: string;
   mine: boolean;
   time: string;
   status: OfferStatus;
@@ -39,7 +41,7 @@ const OFFER_STATUS_META: Record<
   },
 };
 
-export function OfferCardBubble({ payload, mine, time, status, actions }: Readonly<OfferCardBubbleProps>) {
+export function OfferCardBubble({ payload, currency, mine, time, status, actions }: Readonly<OfferCardBubbleProps>) {
   const isClosed = status === "rejected" || status === "expired" || status === "superseded";
   const isOpen = status === "open";
   const meta = OFFER_STATUS_META[status] ?? OFFER_STATUS_META.open;
@@ -67,7 +69,7 @@ export function OfferCardBubble({ payload, mine, time, status, actions }: Readon
             status === "superseded" && styles.offerCardAmountStruck,
           ]}
         >
-          {formatMoney(payload.amount, payload.currency)}
+          {formatMoney(payload.amount, currency ?? payload.currency)}
         </Text>
 
         {payload.note ? (

@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { ApiClientError, getErrorMessage, kycApi, type KycConsentState, type KycStatusBlock } from "@/services/api";
 import { colors } from "@/theme/colors";
+import { reportError } from "@/lib/errorReporter";
 import {
   DIDIT_PRIVACY_NOTICE_URL,
   DIDIT_CONSENT_AGREEMENT,
@@ -17,12 +18,14 @@ import {
 } from "@/features/profile/kycConsentText";
 import {
   DIDIT_COPY,
+  INITIATE_FAILED_COPY,
   KYC_RETURN_URL,
   attemptsLeftText,
   diditView,
   initiateErrorAction,
   isDiditUrl,
   kycPollInterval,
+  refusedUrlReport,
   startLabel,
   statusCheckMessage,
   type KycCheckNote,
@@ -59,6 +62,8 @@ export function DiditKycPanel({ block, consent, refresh, checkStatus, agreeToCon
   const [unavailable, setUnavailable] = useState(false);
   const [consentAgreed, setConsentAgreed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // /initiate failed for a reason that is NOT "Didit is down": retry, no fallback.
+  const [failed, setFailed] = useState(false);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -99,18 +104,26 @@ export function DiditKycPanel({ block, consent, refresh, checkStatus, agreeToCon
   const start = useCallback(async () => {
     setUnavailable(false);
     setMessage(null);
+    setFailed(false);
     setCheckNote(null);
     setOpening(true);
     try {
       const res = await kycApi.initiate(Platform.OS === "ios" ? "ios" : "android");
       const url = res.data?.url;
-      if (!isDiditUrl(url)) { markUnavailable(); return; }
+      if (!isDiditUrl(url)) {
+        // Never opened (security), but never silent either: an outage shows up in Admin -> Errors.
+        reportError({ message: refusedUrlReport(url) });
+        markUnavailable();
+        return;
+      }
       // Resolves when Didit redirects to safarly://kyc-return or the user closes the sheet.
       await WebBrowser.openAuthSessionAsync(url, KYC_RETURN_URL, { preferEphemeralSession: true });
     } catch (err) {
       const action = initiateErrorAction(err instanceof ApiClientError ? err : null);
       if (action === "unavailable") markUnavailable();
       else if (action === "message") setMessage(getErrorMessage(err));
+      else if (action === "retry") setFailed(true);
+      // "refresh": the finally below re-reads the server's state.
     } finally {
       setOpening(false);
       void refreshRef.current();
@@ -184,6 +197,7 @@ export function DiditKycPanel({ block, consent, refresh, checkStatus, agreeToCon
     );
   }
 
+  // Both buttons wait for each other, but only opening Didit says "Opening…".
   const busy = opening || checking;
   return (
     <>
@@ -222,12 +236,25 @@ export function DiditKycPanel({ block, consent, refresh, checkStatus, agreeToCon
         </View>
       ) : null}
 
+      {failed ? (
+        <View style={styles.bannerSlot}>
+          <FormBanner
+            variant="error"
+            title="Couldn't start verification"
+            message={INITIATE_FAILED_COPY}
+            actionLabel="Try again"
+            onAction={() => void start()}
+            onDismiss={() => setFailed(false)}
+          />
+        </View>
+      ) : null}
+
       <AppButton
-        label={busy ? DIDIT_COPY.opening : startLabel(view.kind)}
+        label={opening ? DIDIT_COPY.opening : startLabel(view.kind)}
         onPress={() => void start()}
         disabled={busy}
         gradientColors={[colors.ctaAccent, colors.ctaAccent]}
-        leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
+        leftIcon={opening ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
         style={styles.button}
       />
       {view.kind === "in_progress" ? (

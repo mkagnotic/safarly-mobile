@@ -5,12 +5,15 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
 
 import { type ChatComposerController } from "../hooks/useChatComposer";
+import { MESSAGE_MAX_LENGTH, messageCounter } from "../lib/chatSendRules";
 
 interface ChatComposerProps {
   composer: ChatComposerController;
   composerBottomPad: number;
   uploading: boolean;
   stopTyping: () => void;
+  /** Blocked chat: shown disabled with web's placeholder, never hidden (web parity). */
+  blocked?: boolean;
 }
 
 /** ───────── Composer ───────── */
@@ -19,6 +22,7 @@ export function ChatComposer({
   composerBottomPad,
   uploading,
   stopTyping,
+  blocked = false,
 }: Readonly<ChatComposerProps>) {
   const {
     draft,
@@ -32,6 +36,9 @@ export function ChatComposer({
     handleRetryUpload,
     clearPending,
   } = composer;
+  // "1,850/2,000", shown only from 1,800 characters on.
+  const counter = messageCounter(draft.length);
+  const locked = blocked || uploading;
 
   return (
     <View style={[styles.composerWrap, { paddingBottom: composerBottomPad }]}>
@@ -76,15 +83,26 @@ export function ChatComposer({
               <Ionicons name="refresh" size={18} color={colors.white} />
             </Pressable>
           ) : null}
-          <Pressable
-            onPress={clearPending}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel="Remove attachment"
-          >
-            <Ionicons name="close-circle" size={22} color={colors.mutedText} />
-          </Pressable>
+          {/* No X while uploading: the upload can't be cancelled, so a live X
+              only hid a file that was posted anyway (chat spec bug 13). */}
+          {uploading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Pressable
+              onPress={clearPending}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Remove attachment"
+            >
+              <Ionicons name="close-circle" size={22} color={colors.mutedText} />
+            </Pressable>
+          )}
         </View>
+      ) : null}
+      {counter ? (
+        <Text style={[styles.counter, draft.length >= MESSAGE_MAX_LENGTH && styles.counterFull]} accessibilityLiveRegion="polite">
+          {counter}
+        </Text>
       ) : null}
       <View style={styles.composerRow}>
         {/*
@@ -97,7 +115,7 @@ export function ChatComposer({
           style={styles.composerIconButton}
           accessibilityRole="button"
           accessibilityLabel="Attach"
-          disabled={uploading}
+          disabled={locked}
         >
           <Ionicons name="attach" size={22} color={colors.mutedText} />
         </Pressable>
@@ -106,7 +124,7 @@ export function ChatComposer({
           style={styles.composerIconButton}
           accessibilityRole="button"
           accessibilityLabel="Insert emoji"
-          disabled={uploading}
+          disabled={locked}
         >
           <Ionicons name="happy" size={22} color={colors.mutedText} />
         </Pressable>
@@ -114,18 +132,19 @@ export function ChatComposer({
           value={draft}
           onChangeText={handleDraftChange}
           onBlur={stopTyping}
-          placeholder={uploading ? "Uploading…" : "Type a message"}
+          placeholder={blocked ? "This conversation is blocked" : uploading ? "Uploading…" : "Type a message"}
           placeholderTextColor={colors.subtleText}
           style={styles.composerInput}
           multiline
-          editable={!uploading}
+          editable={!locked}
+          maxLength={MESSAGE_MAX_LENGTH}
         />
         <Pressable
           onPress={() => void handleSend()}
-          disabled={uploading || (!draft.trim() && !pendingFile)}
+          disabled={locked || (!draft.trim() && !pendingFile)}
           style={[
             styles.sendButton,
-            (uploading || (!draft.trim() && !pendingFile)) && styles.sendButtonDisabled,
+            (locked || (!draft.trim() && !pendingFile)) && styles.sendButtonDisabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Send"
@@ -185,6 +204,8 @@ const styles = StyleSheet.create({
   previewBody: { flex: 1, minWidth: 0 },
   previewName: { color: colors.text, fontSize: 13, fontWeight: "700" },
   previewType: { color: colors.mutedText, fontSize: 11 },
+  counter: { alignSelf: "flex-end", color: colors.mutedText, fontSize: 11, fontWeight: "600" },
+  counterFull: { color: colors.danger },
   composerRow: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
   composerIconButton: {
     width: 38,

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import type { LookingForType, SearchCountry } from "@/features/search/searchPersistence";
 import { formatLocalDate } from "@/utils/travelDate";
+import { LOOKING_FOR_LABEL } from "@/features/search/lib/searchFilterLabels";
 
 /** Per-side country for the route filter — independent, so IN -> IN is reachable. */
 export const COUNTRY_LABEL: Record<SearchCountry, string> = { IN: "India", US: "USA" };
@@ -13,8 +14,6 @@ export interface Notice {
   title?: string;
   variant: NoticeVariant;
 }
-
-export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Local-midnight ISO "YYYY-MM-DD" (avoids UTC day-shift). */
 function isoDay(d: Date): string {
@@ -45,9 +44,9 @@ interface LookingForOption {
 }
 
 export const LOOKING_FOR_OPTIONS: readonly LookingForOption[] = [
-  { value: "travel_buddy", label: "Travel Buddy", icon: "people-outline" },
-  { value: "carrier", label: "Carrier", icon: "car-sport" },
-  { value: "receive_request", label: "Receive Request", icon: "mail-outline" },
+  { value: "travel_buddy", label: LOOKING_FOR_LABEL.travel_buddy, icon: "people-outline" },
+  { value: "carrier", label: LOOKING_FOR_LABEL.carrier, icon: "car-sport" },
+  { value: "receive_request", label: LOOKING_FOR_LABEL.receive_request, icon: "mail-outline" },
 ] as const;
 
 export function formatDateLabel(iso: string | null | undefined): string {

@@ -1,4 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RNUploadFile } from "@/services/api";
+import { uploadStagedListingFiles } from "@/lib/uploadStagedListingFiles";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
@@ -32,6 +35,15 @@ import { getErrorMessage, tripsApi } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { sanitizeDecimalInput, sanitizeDigitsOnly } from "@/utils/inputSanitizers";
+import {
+  BUDDY_AGE_HINT,
+  BUDDY_TEXT_MAX,
+  OPEN_BUDDY_HELPER,
+  OPEN_BUDDY_LABEL,
+  buddyAgeError,
+  listTripBuddySentence,
+  type BuddyListingResult,
+} from "./model/openBuddy";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "ListTripTab">,
@@ -199,6 +211,8 @@ export function ListTripScreen() {
   const [languagePickerOpen, setLanguagePickerOpen] = useState(false);
   const [buddyInterests, setBuddyInterests] = useState("");
   const [buddyLayover, setBuddyLayover] = useState("");
+  /** What the server did about the buddy listing, for the success line (27 Oct 2026). */
+  const [buddyResult, setBuddyResult] = useState<BuddyListingResult>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -258,6 +272,7 @@ export function ListTripScreen() {
     setLanguagePickerOpen(false);
     setBuddyInterests("");
     setBuddyLayover("");
+    setBuddyResult(null);
     setSubmitting(false);
     setSubmitted(false);
     setFormError(null);
@@ -352,6 +367,7 @@ export function ListTripScreen() {
     fromCountry === toCountry &&
     fromCity === toCity;
 
+  const [ownerFiles, setOwnerFiles] = useState<RNUploadFile[]>([]);
   const handleSubmit = useCallback(async () => {
     const errors: Partial<Record<FieldKey, string>> = {};
     if (!fromCity) errors.fromCity = "Select a departure city";
@@ -368,11 +384,9 @@ export function ListTripScreen() {
     const weightErr = maxWeightError(maxWeight, weightUnit);
     if (weightErr) errors.maxWeight = weightErr;
 
-    if (openToBuddy && buddyAge !== "") {
-      const n = Number(buddyAge);
-      if (!Number.isInteger(n) || n < 18 || n > 120) {
-        errors.age = "Age must be between 18 and 120";
-      }
+    if (openToBuddy) {
+      const ageErr = buddyAgeError(buddyAge);
+      if (ageErr) errors.age = ageErr;
     }
 
     if (Object.keys(errors).length > 0 || hasSizeError) {
@@ -408,7 +422,7 @@ export function ListTripScreen() {
 
     setSubmitting(true);
     try {
-      await tripsApi.create({
+      const created = await tripsApi.create({
         from_city: isAnyFrom ? "Any" : fromCity,
         from_country: fromCountry,
         to_city: isAnyTo ? "Any" : toCity,
@@ -438,6 +452,10 @@ export function ListTripScreen() {
             .filter(Boolean)
             .join(" | ") || undefined,
       });
+      // Optional travel document, kept with the trip for the carrier only (26 Oct 2026).
+      const createdId = created?.data?.id;
+      if (createdId) await uploadStagedListingFiles("trip", createdId, ownerFiles);
+      setBuddyResult(openToBuddy ? (created?.data?.buddy_listing ?? null) : null);
       setSubmitted(true);
     } catch (err) {
       setFormError(`Couldn't post trip. ${getErrorMessage(err)}`);
@@ -468,7 +486,11 @@ export function ListTripScreen() {
     buddyInterests,
     buddyLayover,
     scrollToField,
+    ownerFiles,
   ]);
+
+  // Live age check while typing, same as web (27 Oct 2026); submit uses the same rule.
+  const ageError = fieldErrors.age ?? (openToBuddy ? buddyAgeError(buddyAge) : null);
 
   if (submitted) {
     return (
@@ -492,9 +514,7 @@ export function ListTripScreen() {
           <Text style={styles.successTitle}>You're all set</Text>
           <Text style={styles.successBody}>
             We're searching for the best parcel matches for your route.
-            {openToBuddy
-              ? " A Travel Buddy listing was also created — fellow travelers can now find you!"
-              : ""}
+            {listTripBuddySentence(buddyResult)}
           </Text>
           <View style={styles.successButtons}>
             <AppButton
@@ -664,7 +684,7 @@ export function ListTripScreen() {
       >
         <SectionCard>
         <View style={styles.labelToggleRow}>
-          <Text style={styles.fieldLabel}>Max Parcel Size</Text>
+          <Text style={styles.fieldLabel}>Max parcel size</Text>
           <View style={styles.optionalPill}>
             <Text style={styles.optionalPillText}>Optional</Text>
           </View>
@@ -706,7 +726,7 @@ export function ListTripScreen() {
         </Text>
 
         <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>
-          <Text style={styles.fieldLabel}>Max Weight You Can Carry</Text>
+          <Text style={styles.fieldLabel}>Max weight you can carry</Text>
           <View style={styles.flexSpacer} />
           <UnitToggle<WeightUnit>
             options={[
@@ -750,10 +770,8 @@ export function ListTripScreen() {
       <SectionCard last>
         <View style={styles.buddyToggleCard}>
           <View style={styles.buddyToggleText}>
-            <Text style={styles.buddyOptInTitle}>I'm open to being a Travel Buddy</Text>
-            <Text style={styles.buddyOptInBody}>
-              Connect with travelers on the same route for companionship.
-            </Text>
+            <Text style={styles.buddyOptInTitle}>{OPEN_BUDDY_LABEL}</Text>
+            <Text style={styles.buddyOptInBody}>{OPEN_BUDDY_HELPER}</Text>
           </View>
           <Switch
             value={openToBuddy}
@@ -761,20 +779,17 @@ export function ListTripScreen() {
             trackColor={{ false: colors.border, true: colors.wordmark }}
             thumbColor={colors.white}
             ios_backgroundColor={colors.border}
-            accessibilityLabel="Open to being a Travel Buddy"
+            accessibilityLabel={OPEN_BUDDY_LABEL}
           />
         </View>
-        <Text style={styles.helperText}>
-          You'll only see parcel-carrying matches.
-        </Text>
 
         {openToBuddy ? (
           <View style={styles.buddyPanel}>
-            <Text style={styles.buddyPanelHeading}>Travel companion details</Text>
+            <Text style={styles.buddyPanelHeading}>About you</Text>
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Age <Text style={styles.fieldLabelMuted}>(optional)</Text>
               </Text>
               <TextInput
                 value={buddyAge}
@@ -785,17 +800,20 @@ export function ListTripScreen() {
                 placeholder="e.g. 28"
                 placeholderTextColor={colors.subtleText}
                 keyboardType="number-pad"
-                style={[styles.input, fieldErrors.age && styles.inputError]}
+                accessibilityLabel="Your age"
+                style={[styles.input, ageError && styles.inputError]}
               />
-              {fieldErrors.age ? (
-                <Text style={styles.inlineError}>{fieldErrors.age}</Text>
-              ) : null}
+              {ageError ? (
+                <Text style={styles.inlineError}>{ageError}</Text>
+              ) : (
+                <Text style={styles.helperText}>{BUDDY_AGE_HINT}</Text>
+              )}
             </View>
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
                 Languages{" "}
-                <Text style={styles.fieldLabelMuted}>(Optional, up to 3)</Text>
+                <Text style={styles.fieldLabelMuted}>(optional, up to 3)</Text>
               </Text>
               {buddyLanguages.length > 0 ? (
                 <View style={styles.chipsRow}>
@@ -835,11 +853,12 @@ export function ListTripScreen() {
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Interests <Text style={styles.fieldLabelMuted}>(optional)</Text>
               </Text>
               <TextInput
                 value={buddyInterests}
                 onChangeText={setBuddyInterests}
+                maxLength={BUDDY_TEXT_MAX}
                 placeholder="e.g. Photography, Hiking, Food"
                 placeholderTextColor={colors.subtleText}
                 style={styles.input}
@@ -848,12 +867,13 @@ export function ListTripScreen() {
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Layover <Text style={styles.fieldLabelMuted}>(optional)</Text>
               </Text>
               <TextInput
                 value={buddyLayover}
                 onChangeText={setBuddyLayover}
-                placeholder="e.g. New York — 4h layover"
+                maxLength={BUDDY_TEXT_MAX}
+                placeholder="e.g. Dubai — 4h layover"
                 placeholderTextColor={colors.subtleText}
                 style={styles.input}
               />
@@ -861,6 +881,16 @@ export function ListTripScreen() {
           </View>
         ) : null}
       </SectionCard>
+      </View>
+
+      <View style={styles.submitRow}>
+        <ListingFilesField
+          kind="trip"
+          staged={ownerFiles}
+          onStagedChange={setOwnerFiles}
+          label="Travel document"
+          hint="ticket, boarding pass or ID page (PDF or photos)"
+        />
       </View>
 
       <View style={styles.submitRow}>

@@ -11,8 +11,9 @@ import { type ChatNav, type ChatUser } from "../chatTypes";
 interface UseChatOfferActionsInput {
   liveOffer: ResolvedOffers["live"];
   activeDeal: UseActiveDealResult["activeDeal"];
-  user: ChatUser;
-  navigation: ChatNav;
+  /** Kept for the call site; accepting no longer navigates (handoff-first). */
+  user?: ChatUser;
+  navigation?: ChatNav;
   participantName: string;
   seedOffer: UseOffersResult["seedOffer"];
   postOffer: UseOffersResult["postOffer"];
@@ -31,8 +32,6 @@ interface UseChatOfferActionsInput {
 export function useChatOfferActions({
   liveOffer,
   activeDeal,
-  user,
-  navigation,
   participantName,
   seedOffer,
   postOffer,
@@ -129,14 +128,13 @@ export function useChatOfferActions({
     async (offerId: string) => {
       setOfferBanner(null);
       try {
-        const result = await acceptOffer(offerId);
+        await acceptOffer(offerId);
         markOfferSettled(offerId);
         setOfferBanner({ variant: "success", title: "Offer accepted — match confirmed!" });
-        // Only the parcel sender is routed onward to pay (Part 3); the carrier stays here.
-        const booking = result.booking;
-        if (booking?.id && booking.sender_id === user?.id) {
-          navigation.navigate("PayBookingTab", { bookingId: booking.id });
-        }
+        // Both sides stay in the chat. Handoff-first: the booking starts
+        // awaiting_handoff with no payment window, so the pin moves to the
+        // handoff step; Pay is reached from the pin once it is pending_payment.
+        void refetchActiveDeal?.();
       } catch (err) {
         // Carrier payout not set up: turn the backend dead-end into an action.
         // If the viewer IS the carrier, show the actionable dialog; if they're
@@ -161,7 +159,7 @@ export function useChatOfferActions({
         });
       }
     },
-    [acceptOffer, navigation, user?.id, activeDeal?.viewer_role, participantName, markOfferSettled],
+    [acceptOffer, activeDeal?.viewer_role, participantName, markOfferSettled, refetchActiveDeal],
   );
 
   const handleDeclineOffer = useCallback(

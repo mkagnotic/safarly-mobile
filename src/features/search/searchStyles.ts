@@ -23,6 +23,7 @@ export const sharedStyles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 8,
+    textTransform: "uppercase",
   },
 
   // Match card

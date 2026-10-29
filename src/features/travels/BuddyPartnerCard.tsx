@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showAppAlert } from "@/feedback/appFeedback";
-import { isListingExpired } from "@/features/travels/statusLabels";
+import { isListingExpired, labelForBuddyStatus } from "@/features/travels/statusLabels";
 import type { BuddyListing } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { shadowCard } from "@/theme/elevation";
@@ -34,7 +34,7 @@ function formatDateRange(item: BuddyListing): string {
   const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
   const fromLabel = formatLocalDate(from, opts, "");
   if (!to || from === to) return fromLabel;
-  return `${fromLabel} - ${formatLocalDate(to, opts, "")}`;
+  return `${fromLabel} – ${formatLocalDate(to, opts, "")}`;
 }
 
 export const BuddyPartnerCard = memo(function BuddyPartnerCard({
@@ -45,10 +45,13 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   isDeleting,
 }: Readonly<Props>) {
   const rawStatus = (item.status ?? "").toLowerCase();
-  const isMatched = MATCHED_STATUSES.has(rawStatus);
-  const statusLabel = isMatched ? "Matched" : "Looking for Match";
+  // A buddy post whose buddy trip was marked complete reads "Completed" (27 Oct 2026, web parity).
+  const completed = !!(item as { completed_at?: string | null }).completed_at;
+  const isMatched = completed || MATCHED_STATUSES.has(rawStatus);
+  // Web logic (28 Oct 2026): label the raw status; an unknown one shows no pill.
+  const statusLabel = labelForBuddyStatus(completed ? "completed" : rawStatus);
   // Web parity: a buddy listing whose travel window has passed reads as expired.
-  const expired = isListingExpired(
+  const expired = !completed && isListingExpired(
     rawStatus,
     item.travel_date_to ?? item.travel_date_from ?? item.travel_date,
   );
@@ -63,19 +66,19 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
   const metaLine = useMemo(() => {
     const range = formatDateRange(item);
     const airline = item.airline?.trim();
-    return [range, airline].filter(Boolean).join(" | ");
+    return [range, airline].filter(Boolean).join(" · ");
   }, [item]);
 
   const handleDeletePress = useCallback(() => {
     if (!onDelete) return;
     showAppAlert({
-      title: "Remove this travel buddy listing?",
+      title: "Remove this buddy listing?",
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
-        "This will remove your travel buddy request from search and My Travels.",
+        "It will no longer appear in search or My Travels. This can't be undone.",
       actions: [
         { text: "Keep listing", style: "cancel" },
-        { text: "Yes, delete listing", style: "destructive", onPress: onDelete },
+        { text: "Remove listing", style: "destructive", onPress: onDelete },
       ],
     });
   }, [onDelete, item.from_city, item.to_city]);
@@ -85,10 +88,10 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
       onPress={onPress}
       style={[styles.card, shadowCard()]}
       accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={`Travel buddy request: ${item.from_city} to ${item.to_city}`}
+      accessibilityLabel={`Buddy listing: ${item.from_city} to ${item.to_city}`}
     >
       <View style={styles.tag}>
-        <Text style={styles.tagText}>TRAVEL BUDDY REQUEST</Text>
+        <Text style={styles.tagText}>Buddy listing</Text>
       </View>
 
       <View style={styles.row}>
@@ -113,15 +116,15 @@ export const BuddyPartnerCard = memo(function BuddyPartnerCard({
           {expired ? (
             <View style={styles.expiredPill}>
               <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
-              <Text style={styles.expiredPillText}>EXPIRED</Text>
+              <Text style={styles.expiredPillText}>Expired</Text>
             </View>
-          ) : (
+          ) : statusLabel ? (
             <View style={[styles.statusPill, { backgroundColor: statusTone.bg }]}>
               <Text style={[styles.statusPillText, { color: statusTone.fg }]} numberOfLines={1}>
                 {statusLabel}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {onEdit || onDelete ? (
@@ -189,6 +192,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   row: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   bodyCol: { flex: 1, minWidth: 0 },
@@ -239,6 +243,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   expiredPillText: {
+    textTransform: "uppercase",
     color: colors.mutedText,
     fontSize: 10,
     lineHeight: 14,

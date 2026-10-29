@@ -116,6 +116,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 6,
+    // 27 Oct 2026: labels are written as words; the style shows them in capitals.
+    textTransform: "uppercase",
   },
   metricLabelHighlight: { color: colors.wordmark, opacity: 0.95 },
   metricValue: { color: colors.text, fontSize: 17, lineHeight: 22, fontWeight: "800" },

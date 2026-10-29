@@ -112,6 +112,11 @@ export interface Booking {
   cancelled_at: string | null;
   cancellation_reason: string | null;
   delivery_proof_url: string | null;
+  /** The booking's dispute, when it has one (open / investigating / resolved).
+   *  Optional: older backends don't send it. */
+  dispute_status?: string | null;
+  /** The outcome text once resolved. Optional, as above. */
+  dispute_resolution?: string | null;
   // ── Part 4 fulfillment fields ──
   cancellation_phase?: string | null;
   penalty_amount?: number | null;
@@ -142,6 +147,8 @@ export interface Booking {
   /** A live delivery code exists = step 6. Server-derived; the raw OTP
    *  columns are never sent to either client. */
   delivery_code_issued?: boolean | null;
+  /** The sender actually paid (held, released or refunded) - never say "refunded" otherwise. */
+  payment_made?: boolean | null;
   /** Reported delay. A delay reschedules; it never starts a return by itself. */
   delay_reason?: JourneyDelayReason | null;
   delay_note?: string | null;
@@ -166,7 +173,7 @@ export interface Booking {
   return_destination_address?: HandoffAddress | null;
   /**
    * Travel date the pair agreed on. Returned by `booking-handler`'s list select
-   * and used by the journey tracker for the "Travel Tomorrow" / "Traveling"
+   * and used by the journey tracker for the "Ready to travel" / "In transit"
    * stages. `normalizeBooking` spreads the raw row, so this already arrived at
    * runtime before it was declared here.
    */
@@ -206,9 +213,9 @@ export interface Booking {
     return_state?: string | null;
     return_country?: string | null;
   };
-  sender?: { id?: string; name: string; avatar_url: string | null; rating?: number };
-  carrier?: { id?: string; name: string; avatar_url: string | null; rating?: number };
-  /** Deal-level travel-document verification — drives the tracker's "Flight Verified". */
+  sender?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
+  carrier?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating?: number };
+  /** Deal-level travel-document verification — drives the tracker's "Flight verified". */
   carrier_request?: {
     travel_doc_status?: "none" | "pending" | "approved" | "rejected";
     parcel_review_status?: "none" | "pending" | "approved" | "rejected";

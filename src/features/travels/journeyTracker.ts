@@ -44,17 +44,20 @@ export interface JourneyStageView {
   detail?: string;
 }
 
+// Sentence case, like every other label in the app (bookings canon #25).
+// "Ready to travel" / "In transit" replace "Travel Tomorrow" / "Traveling": the
+// first showed on trips a week out, and both now match the booking's own words.
 export const STAGE_LABELS: Record<StageKey, string> = {
-  matched: "Carrier Matching",
-  flight_verified: "Flight Verified",
-  parcel_approved: "Parcel Approved",
-  parcel_received: "Parcel Received",
-  payment_secured: "Payment Secured",
-  travel_tomorrow: "Travel Tomorrow",
-  traveling: "Traveling",
-  ready_for_delivery: "Ready for Delivery",
-  otp_verification: "Delivery Code",
-  payment_released: "Payment Released",
+  matched: "Carrier matched",
+  flight_verified: "Flight verified",
+  parcel_approved: "Parcel approved",
+  parcel_received: "Parcel received",
+  payment_secured: "Payment secured",
+  travel_tomorrow: "Ready to travel",
+  traveling: "In transit",
+  ready_for_delivery: "Ready for delivery",
+  otp_verification: "Delivery code",
+  payment_released: "Payment released",
   review: "Review",
 };
 
@@ -224,10 +227,13 @@ function progressReached(
     phase === "pre_handoff" ||
     phase === "post_possession" ||
     status === "handoff_rejected";
+  // A dispute freezes the status, not the money: a paid booking under review
+  // still has its payment held, so "Payment secured" stays done (canon #26).
   const paidReached =
     status !== "unpaid_return" &&
     ((!!status && (PAID_STATUSES.has(status) || status === "cancelled_post_possession")) ||
-      phase === "post_possession");
+      phase === "post_possession" ||
+      (status === "disputed" && booking?.payment_made === true));
   const traveledReached =
     (!!status && ["in_transit", "delivered"].includes(status)) ||
     !!booking?.journey_started_at ||
@@ -262,7 +268,7 @@ export function computeJourney(
       status && FAILURE_STAGE[status] != null && FAILURE_STAGE[status] > progress
         ? FAILURE_STAGE[status]
         : nextMilestone(progress);
-    const label = failedLabelFor(status);
+    const label = failedLabelFor(status, booking);
     const stages = STAGE_ORDER.map<JourneyStageView>((key, i) => {
       let state: StageState;
       if (i <= progress) state = "done";
@@ -405,7 +411,7 @@ function doneDetail(key: StageKey, booking: Booking | null | undefined): string 
   }
 }
 
-function failedLabelFor(status: string | null): string {
+function failedLabelFor(status: string | null, booking?: Booking | null): string {
   switch (status) {
     case "cancelled":
       return "Booking cancelled";
@@ -414,9 +420,10 @@ function failedLabelFor(status: string | null): string {
     case "expired_unpaid":
       return "Payment expired";
     case "unpaid_return":
-      return "Unpaid — parcel returned";
+      // Same words as the status chip: "returned" only once the sender has it back.
+      return booking?.return_received_at ? "Returned - cancelled" : "Unpaid - parcel returning";
     case "handoff_rejected":
-      return "Declined at handoff";
+      return "Declined at handover";
     default:
       return "Booking ended";
   }

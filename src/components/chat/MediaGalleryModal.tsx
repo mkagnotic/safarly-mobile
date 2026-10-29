@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Linking,
@@ -22,6 +23,7 @@ import {
 } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { openableMedia } from "@/features/messages/chat/lib/chatModerationRules";
 
 interface MediaGalleryModalProps {
   open: boolean;
@@ -52,6 +54,10 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [brokenIds, setBrokenIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markBroken = useCallback((id: string) => {
+    setBrokenIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, []);
 
   const tileSize = Math.floor((width - GRID_GAP * 2) / 3);
 
@@ -61,7 +67,8 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
     setError(null);
     try {
       const res = await messagesApi.getMedia(conversationId);
-      setMedia(res.data?.media ?? []);
+      // An item with no link can't be opened: no empty tile, and not counted (= web).
+      setMedia(openableMedia(res.data?.media ?? []));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -73,10 +80,16 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
     if (open) void load();
     else {
       setMedia([]);
+      setBrokenIds(new Set());
       setError(null);
       setViewerUrl(null);
     }
   }, [open, load]);
+
+  /** The system app may refuse the file (no viewer, expired link): say so (flow-18 bug 16). */
+  const openExternal = useCallback((url: string) => {
+    Linking.openURL(url).catch(() => Alert.alert("Couldn't open the file", "Please try again."));
+  }, []);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ChatMediaItem>) => {
@@ -95,20 +108,21 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
       return (
         <Pressable
           onPress={() => {
-            if (img && url) setViewerUrl(url);
-            else if (url) void Linking.openURL(url);
+            if (img && url && !brokenIds.has(item.id)) setViewerUrl(url);
+            else if (url) openExternal(url);
           }}
           style={{ width: tileSize, height: tileSize, marginBottom: GRID_GAP }}
           accessibilityRole="button"
           accessibilityLabel={item.attachment_name ?? label}
         >
-          {img && url ? (
-            <Image source={{ uri: url }} style={styles.tileImg} />
+          {img && url && !brokenIds.has(item.id) ? (
+            // A link that expired or broke falls back to the doc-style tile (bug 17).
+            <Image source={{ uri: url }} style={styles.tileImg} onError={() => markBroken(item.id)} />
           ) : (
             <View style={styles.tileDoc}>
               <Ionicons name={icon} size={26} color={colors.primary} />
               <Text style={styles.tileDocText} numberOfLines={1}>
-                {label}
+                {item.attachment_name || label}
               </Text>
               {isVideo(item.attachment_type) ? (
                 <View style={styles.playBadge}>
@@ -127,7 +141,7 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
         </Pressable>
       );
     },
-    [tileSize],
+    [tileSize, openExternal, brokenIds, markBroken],
   );
 
   return (
@@ -158,7 +172,7 @@ export function MediaGalleryModal({ open, conversationId, onClose }: Readonly<Me
           <View style={styles.centered}>
             <Ionicons name="images-outline" size={38} color={colors.mutedText} />
             <Text style={styles.emptyTitle}>No media yet</Text>
-            <Text style={styles.emptyBody}>Photos, videos and files you share will show up here.</Text>
+            <Text style={styles.emptyBody}>Photos, videos and documents shared in this chat will show up here.</Text>
           </View>
         ) : (
           <FlatList

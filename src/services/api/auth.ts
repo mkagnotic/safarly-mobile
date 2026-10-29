@@ -9,6 +9,7 @@ export interface AuthUser {
   role: string;
   name: string;
   avatar_url: string | null;
+  is_verified?: boolean | null;
   kyc_status: string;
   is_suspended: boolean;
 }
@@ -164,7 +165,7 @@ export const authApi = {
 
   /** Change password. */
   changePassword: (current_password: string, new_password: string) =>
-    api.put<{ message: string }>("/auth-handler/change-password", {
+    api.put<{ message: string; signed_out_others?: boolean; signed_out_here?: boolean }>("/auth-handler/change-password", {
       current_password,
       new_password,
     }),

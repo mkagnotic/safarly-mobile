@@ -88,10 +88,14 @@ export const styles = StyleSheet.create({
   },
   partyKey: { color: colors.subtleText, fontSize: 11, fontWeight: "600" },
   partyValue: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  partyRating: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginTop: 1 },
 
   // Actions
   actionsWrap: { gap: 8, flexDirection: "row", flexWrap: "wrap" },
   actionWarning: { backgroundColor: "rgba(245,159,10,0.12)" },
+  disputeNote: { color: colors.mutedText, fontSize: 13, fontWeight: "600", lineHeight: 18 },
+  disputeLinkResolved: { backgroundColor: colors.surfaceTintPrimary },
+  disputeLinkResolvedText: { color: colors.primary, fontSize: 13, fontWeight: "800" },
   actionWarningText: { color: colors.warning, fontSize: 13, fontWeight: "800" },
   actionRated: { backgroundColor: "rgba(34,197,94,0.12)" },
   actionRatedText: { color: colors.safe, fontSize: 13, fontWeight: "800" },
@@ -123,4 +127,7 @@ export const styles = StyleSheet.create({
   listContent: { paddingBottom: 24 },
   listContentEmpty: { flexGrow: 1 },
   footerLoading: { paddingVertical: 16, alignItems: "center" },
+  updatingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
+  updatingText: { fontSize: 12, color: colors.subtleText },
+  listUpdating: { opacity: 0.6 },
 });

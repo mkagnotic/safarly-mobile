@@ -7,7 +7,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { colors } from "@/theme/colors";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";
 import { KeyboardModalCard } from "@/features/bookings/components/KeyboardModalCard";
-import { REJECT_REASON_MIN, minLengthHint } from "@/features/bookings/lib/modalValidation";
+import { REJECT_REASON_MIN } from "@/features/bookings/lib/modalValidation";
 
 // ─────────────── Cancel post-possession modal (carrier mid-trip) ───────────────
 
@@ -29,23 +29,16 @@ interface CancelPostPossessionModalProps {
 }
 
 interface WaiverQuestion {
-  key: "online_order" | "seller_will_accept_return" | "seller_will_refund";
+  key: "will_return" | "online_order" | "free_return_eligible";
   label: string;
 }
 
+// Web's questions, in web's order (27 Oct 2026): mobile asked about a merchant
+// refund and stored the answer as will_return (whether YOU return the parcel).
 const WAIVER_QUESTIONS: ReadonlyArray<WaiverQuestion> = [
-  {
-    key: "online_order",
-    label: "Was this an online order the sender placed at a merchant?",
-  },
-  {
-    key: "seller_will_accept_return",
-    label: "Will the merchant accept a return of this parcel?",
-  },
-  {
-    key: "seller_will_refund",
-    label: "Will the merchant refund the sender after the return?",
-  },
+  { key: "will_return", label: "Will you return the parcel to the sender?" },
+  { key: "online_order", label: "Was this an online order shipped to your address?" },
+  { key: "free_return_eligible", label: "Is the item eligible for free return / refund?" },
 ];
 
 export function CancelPostPossessionModal({
@@ -58,18 +51,18 @@ export function CancelPostPossessionModal({
 }: Readonly<CancelPostPossessionModalProps>) {
   const [reason, setReason] = useState("");
   const [answers, setAnswers] = useState<Record<WaiverQuestion["key"], "yes" | "no" | null>>({
+    will_return: null,
     online_order: null,
-    seller_will_accept_return: null,
-    seller_will_refund: null,
+    free_return_eligible: null,
   });
 
   const handleClose = () => {
     if (pending) return;
     setReason("");
     setAnswers({
+      will_return: null,
       online_order: null,
-      seller_will_accept_return: null,
-      seller_will_refund: null,
+      free_return_eligible: null,
     });
     onCancel();
   };
@@ -90,9 +83,9 @@ export function CancelPostPossessionModal({
       trimmed,
       parcelIsReturnEligible
         ? {
+            will_return: answers.will_return === "yes",
             was_online_order: answers.online_order === "yes",
-            free_return_eligible: answers.seller_will_accept_return === "yes",
-            will_return: answers.seller_will_refund === "yes",
+            free_return_eligible: answers.free_return_eligible === "yes",
           }
         : undefined,
     );
@@ -105,22 +98,24 @@ export function CancelPostPossessionModal({
           <View style={sharedStyles.modalHeaderBubbleDanger}>
             <Ionicons name="alert-circle" size={18} color={colors.danger} />
           </View>
-          <Text style={sharedStyles.modalTitle}>Cancel mid-trip?</Text>
+          <Text style={sharedStyles.modalTitle}>Cancel this delivery?</Text>
           <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
         </View>
+        <Text style={sharedStyles.modalBody}>You've already accepted this parcel. Cancelling now:</Text>
         <Text style={sharedStyles.modalBody}>
-          You've already accepted the parcel. A penalty applies (5–25%) based on how close
-          you are to the delivery deadline. If this parcel is returnable to its merchant,
-          the sender can waive the cash penalty.
+          {"• Refunds the sender in full, if they have already paid\n" +
+            "• Takes a cash penalty (5–25%, depending on how close you are to the deadline) from your next payout\n" +
+            "• Adds a strike to your account\n" +
+            "• The parcel goes back: the sender chooses where, and you send it"}
         </Text>
 
-        <Text style={sharedStyles.modalFieldLabel}>Why are you cancelling?</Text>
+        <Text style={sharedStyles.modalFieldLabel}>Why are you cancelling? (required)</Text>
         <TextInput
           value={reason}
           onChangeText={setReason}
-          placeholder={`Reason (min ${REJECT_REASON_MIN} characters)…`}
+          placeholder="e.g. Came down with food poisoning, can't travel anymore"
           placeholderTextColor={colors.mutedText}
           style={sharedStyles.modalInput}
           maxLength={1000}
@@ -129,15 +124,19 @@ export function CancelPostPossessionModal({
           textAlignVertical="top"
           editable={!pending}
         />
-        {minLengthHint(trimmed.length, REJECT_REASON_MIN) ? (
-          <Text style={sharedStyles.modalHelper}>
-            {minLengthHint(trimmed.length, REJECT_REASON_MIN)}
-          </Text>
-        ) : null}
+        <Text style={sharedStyles.modalHelper}>
+          {`${reason.length}/1000 — at least ${REJECT_REASON_MIN} characters`}
+        </Text>
 
         {parcelIsReturnEligible ? (
         <Text style={[sharedStyles.modalFieldLabel, { marginTop: 12 }]}>
           Return-eligibility check
+        </Text>
+        ) : null}
+        {parcelIsReturnEligible ? (
+        <Text style={sharedStyles.modalHelper}>
+          The sender flagged this parcel as a returnable online order. If you answer "yes" to
+          all three, your cash penalty may be waived (the strike still applies):
         </Text>
         ) : null}
         {parcelIsReturnEligible ? (
@@ -201,8 +200,8 @@ export function CancelPostPossessionModal({
               ]}
             >
               {allYes
-                ? "The sender can waive the cash penalty after reviewing — strike still applies."
-                : "A cash penalty will be deducted from your wallet."}
+                ? "A waiver request will be opened. If the sender agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."
+                : "A cash penalty will be taken from your next payout."}
             </Text>
           </View>
         ) : null}
@@ -228,12 +227,12 @@ export function CancelPostPossessionModal({
               (pending || !reasonOk || !allAnswered) && sharedStyles.modalButtonDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Cancel mid-trip"
+            accessibilityLabel="Cancel delivery"
           >
             {pending ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={sharedStyles.modalButtonDangerText}>Cancel mid-trip</Text>
+              <Text style={sharedStyles.modalButtonDangerText}>Cancel delivery</Text>
             )}
           </Pressable>
         </View>

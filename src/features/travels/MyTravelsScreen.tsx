@@ -46,7 +46,7 @@ export function MyTravelsScreen() {
 
   const {
     deletingId, actioningId, formError, setFormError, matchSource, setMatchSource, chatPendingId,
-    handleViewTripMatches, handleViewParcelMatches, handleDeleteTrip, handleDeleteSendParcel,
+    handleViewTripMatches, handleViewParcelMatches, handleDeleteTrip,
     handleDeleteReceiveParcel, handleDeleteBuddy, handleOpenTrip, handleOpenParcel, handleEditBuddy,
     handleOpenBuddy, handleEditParcel, handleEditTrip, handleRateDelivery, handleOpenDelivery,
     handleAcceptRequest, handleRejectRequest, handleCancelSentRequest, handleCompleteConnection,
@@ -63,7 +63,7 @@ export function MyTravelsScreen() {
   const tabs: readonly TabConfig[] = [
     { key: "flights", label: "Flights", count: counts?.flights },
     { key: "packages", label: "Packages", count: counts?.packages },
-    { key: "partners", label: "Partners", count: counts?.partners },
+    { key: "partners", label: "Travel Partners", count: counts?.partners },
     { key: "archive", label: "Archive", count: counts?.archive },
   ];
 
@@ -75,6 +75,21 @@ export function MyTravelsScreen() {
     () => navigation.navigate("ListTripTab"),
     [navigation],
   );
+
+  // Archive is five lists (28 Oct 2026): loading until all have loaded, an
+  // error if any failed, and Try again reloads them all.
+  const archiveLists = [archive, delivered, connections, pastPackages, pastPosts];
+  const archiveLoading = archiveLists.some((l) => l.loading);
+  const archiveError = archiveLists.find((l) => l.error)?.error ?? null;
+  const retryArchive = useCallback(async () => {
+    await Promise.all([
+      archive.refetch(),
+      delivered.refetch(),
+      connections.refetch(),
+      pastPackages.refetch(),
+      pastPosts.refetch(),
+    ]);
+  }, [archive, delivered, connections, pastPackages, pastPosts]);
 
   const refetchActive = useCallback(async () => {
     // The counts refresh alongside whichever list is pulled.
@@ -99,16 +114,7 @@ export function MyTravelsScreen() {
       ]);
       return;
     }
-    if (activeTab === "archive") {
-      await Promise.all([
-        archive.refetch(),
-        delivered.refetch(),
-        connections.refetch(),
-        pastPackages.refetch(),
-        pastPosts.refetch(),
-      ]);
-      return;
-    }
+    if (activeTab === "archive") return retryArchive();
   }, [
     activeTab,
     flights,
@@ -122,8 +128,7 @@ export function MyTravelsScreen() {
     connections,
     senderBookings,
     travelCounts,
-    pastPackages,
-    pastPosts,
+    retryArchive,
   ]);
 
   const refreshing =
@@ -155,7 +160,7 @@ export function MyTravelsScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.titleBlock}>
-            <Text style={styles.title}>My travels</Text>
+            <Text style={styles.title}>My Travels</Text>
             <Text style={styles.subtitle}>
               Track all your flights, packages, and travel partners.
             </Text>
@@ -175,13 +180,13 @@ export function MyTravelsScreen() {
             primary/secondary button pair across the app. */}
         <View style={styles.actionsRow}>
           <AppButton
-            label="Carry a Parcel"
+            label="Carry a parcel"
             variant="secondary"
             onPress={goListTrip}
             style={styles.actionButtonFlex}
           />
           <AppButton
-            label="Send a Parcel"
+            label="Send a parcel"
             onPress={goSendParcel}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.actionButtonFlex}
@@ -217,7 +222,6 @@ export function MyTravelsScreen() {
             receiveError={receiveParcels.error}
             onOpen={handleOpenParcel}
             onEdit={handleEditParcel}
-            onDeleteSend={handleDeleteSendParcel}
             onDeleteReceive={handleDeleteReceiveParcel}
             onViewMatches={handleViewParcelMatches}
             deletingId={deletingId}
@@ -258,17 +262,20 @@ export function MyTravelsScreen() {
             onReject={handleRejectRequest}
             onChat={handleChatConnection}
             onComplete={handleCompleteConnection}
+            onCreate={() => navigation.navigate("CreateBuddyTab")}
+            connectionsLoading={connections.loading}
+            connectionsError={connections.error}
+            onRetryConnections={connections.refetch}
           />
         ) : null}
 
         {activeTab === "archive" ? (
           <ArchiveTab
-            loading={archive.loading}
-            error={archive.error}
+            loading={archiveLoading}
+            error={archiveError}
             trips={dedupedArchive}
-            onRetry={archive.refetch}
+            onRetry={retryArchive}
             onOpen={handleOpenTrip}
-            deliveredLoading={delivered.loading}
             deliveredBookings={dedupedDelivered}
             myUserId={myProfile.profile?.id ?? null}
             onRateDelivery={handleRateDelivery}

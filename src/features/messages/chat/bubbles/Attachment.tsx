@@ -1,18 +1,24 @@
+import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Linking, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, StyleSheet, Text } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
+
+import { attachmentLabel } from "../lib/chatAttachments";
 
 // ───────────────────────── Attachment ─────────────────────────
 
 interface AttachmentProps {
   url: string;
   type: string;
+  /** The stored file name (attachment_name); the type label is the fallback (= web). */
+  name?: string | null;
   onOpenImage: (url: string) => void;
 }
 
-export function Attachment({ url, type, onOpenImage }: Readonly<AttachmentProps>) {
+export function Attachment({ url, type, name, onOpenImage }: Readonly<AttachmentProps>) {
+  const [opening, setOpening] = useState(false);
   if (type.startsWith("image/")) {
     return (
       <Pressable
@@ -24,13 +30,7 @@ export function Attachment({ url, type, onOpenImage }: Readonly<AttachmentProps>
       </Pressable>
     );
   }
-  const fileName = type.includes("pdf")
-    ? "PDF Document"
-    : type.includes("word")
-      ? "Word Document"
-      : type.startsWith("video/")
-        ? "Video"
-        : "Document";
+  const fileName = attachmentLabel(name, type);
   const icon: keyof typeof Ionicons.glyphMap = type.startsWith("video/")
     ? "videocam"
     : type.includes("pdf")
@@ -38,16 +38,31 @@ export function Attachment({ url, type, onOpenImage }: Readonly<AttachmentProps>
       : "document-attach";
   return (
     <Pressable
-      onPress={() => {
-        void Linking.openURL(url);
+      onPress={async () => {
+        if (opening) return;
+        setOpening(true);
+        try {
+          await Linking.openURL(url);
+        } catch {
+          // Same pattern as TravelDocModal: a failed open says so.
+          Alert.alert("Couldn't open the file", "Please try again.");
+        } finally {
+          setOpening(false);
+        }
       }}
+      disabled={opening}
       style={styles.attachmentDocCard}
       accessibilityRole="button"
       accessibilityLabel={`Open ${fileName}`}
+      accessibilityState={{ busy: opening }}
     >
       <Ionicons name={icon} size={18} color={colors.primary} />
-      <Text style={styles.attachmentDocName}>{fileName}</Text>
-      <Ionicons name="open" size={14} color={colors.mutedText} />
+      <Text style={styles.attachmentDocName} numberOfLines={1}>{opening ? "Opening…" : fileName}</Text>
+      {opening ? (
+        <ActivityIndicator size="small" color={colors.mutedText} />
+      ) : (
+        <Ionicons name="open" size={14} color={colors.mutedText} />
+      )}
     </Pressable>
   );
 }

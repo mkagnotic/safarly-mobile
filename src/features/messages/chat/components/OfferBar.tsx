@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
-import { type ResolvedOffers } from "@/features/messages/offerResolution";
+import { ownOfferWaitKind, type ResolvedOffers } from "@/features/messages/offerResolution";
 import { type UseOffersResult } from "@/hooks/api/useOffers";
 import { colors } from "@/theme/colors";
+import { BusyLabel } from "@/components/ui/BusyLabel";
 
 import { formatMoney } from "../chatHelpers";
 import { chatStyles } from "../chatStyles";
@@ -18,6 +19,10 @@ interface OfferBarProps {
   handleOpenOfferComposer: () => void;
   /** The carrier can't be paid yet: say why it is waiting (client, 23 Oct 2026). */
   waitingOnPayouts?: boolean;
+  /** The viewer is the carrier: then THEY are the one to set up payouts. */
+  viewerIsCarrier?: boolean;
+  /** Opens Payout Setup (carrier only). */
+  onSetUpPayouts?: () => void;
 }
 
 /** ───────── Offer bar ───────── */
@@ -29,7 +34,10 @@ export function OfferBar({
   handleDeclineOffer,
   handleOpenOfferComposer,
   waitingOnPayouts = false,
+  viewerIsCarrier = false,
+  onSetUpPayouts,
 }: Readonly<OfferBarProps>) {
+  const waitKind = ownOfferWaitKind(waitingOnPayouts, viewerIsCarrier);
   const firstName = participantName.split(" ")[0];
   // The row WRAPS: on a 375pt phone (iPhone 8) the three buttons left the amount
   // ~40pt and it rendered as "₹…" (client, 23 Oct 2026). The info block keeps a
@@ -51,9 +59,25 @@ export function OfferBar({
         // Says who it waits for, and gives a way out: a bare "Waiting…" with no
         // action read as stuck. Change sends a new amount that replaces this offer.
         <View style={styles.offerBarActions}>
-          <Text style={styles.offerBarWaiting} numberOfLines={2}>
-            {waitingOnPayouts ? `Waiting for ${firstName} to set up payouts…` : `Waiting for ${firstName}…`}
+          {/* A carrier without payouts was told to wait for the SENDER to set them
+              up (28 Oct 2026). They are the one to act; Change stays beside it. */}
+          <Text style={styles.offerBarWaiting} numberOfLines={3}>
+            {waitKind === "setup"
+              ? `Set up payouts so ${firstName} can accept — they can't until your earnings have somewhere to go.`
+              : waitKind === "payouts"
+                ? `Waiting for ${firstName} to set up payouts…`
+                : `Waiting for ${firstName}…`}
           </Text>
+          {waitKind === "setup" && onSetUpPayouts ? (
+            <Pressable
+              onPress={onSetUpPayouts}
+              style={[styles.offerBarBtn, styles.offerBarBtnPrimary]}
+              accessibilityRole="button"
+              accessibilityLabel="Set up payouts"
+            >
+              <Text style={styles.offerBarBtnPrimaryText}>Set up payouts</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={handleOpenOfferComposer}
             disabled={!!offerPending}
@@ -74,7 +98,7 @@ export function OfferBar({
             accessibilityLabel="Decline offer"
           >
             {offerPending === `reject:${liveOffer.offerId}` ? (
-              <ActivityIndicator size="small" color={colors.danger} />
+              <BusyLabel label="Declining…" color={colors.danger} textStyle={styles.offerBarBtnGhostText} />
             ) : (
               <Text style={styles.offerBarBtnGhostText}>Decline</Text>
             )}
@@ -96,7 +120,7 @@ export function OfferBar({
             accessibilityLabel="Accept offer"
           >
             {offerPending === `accept:${liveOffer.offerId}` ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Accepting…" textStyle={styles.offerBarBtnPrimaryText} />
             ) : (
               <Text style={styles.offerBarBtnPrimaryText}>Accept</Text>
             )}

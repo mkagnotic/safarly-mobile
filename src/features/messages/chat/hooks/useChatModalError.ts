@@ -31,7 +31,7 @@ export function useClearModalErrorOnClose(
     matchModalOpen: boolean;
     matchCandidates: unknown[] | null;
     declineOpen: boolean;
-    confirmAction: "block" | "unmatch" | null;
+    confirmAction: "block" | "unblock" | "unmatch" | null;
     reportTarget: unknown;
     reportUserOpen: boolean;
     travelDocOpen: boolean;

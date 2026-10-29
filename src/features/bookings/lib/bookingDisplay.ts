@@ -2,6 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 
 import type { Booking } from "@/services/api";
 import { colors, primaryTint } from "@/theme/colors";
+import { BOOKING_STATUS_LABELS } from "@/features/bookings/lib/bookingEventLabel";
+
+/**
+ * Shown under the search box while a search is active and more pages exist:
+ * the search filters the rows loaded so far, not the server (bookings canon #12).
+ * Byte-identical to web's BOOKINGS_SEARCH_SCOPE_NOTE (bookingsListRules.ts).
+ */
+export const BOOKINGS_SEARCH_SCOPE_NOTE = "Searching loaded bookings only.";
 
 export const FILTERS: ReadonlyArray<{ label: string; status?: string }> = [
   { label: "All", status: undefined },
@@ -29,20 +37,8 @@ export const STATUS_TONES: Record<string, { bg: string; fg: string }> = {
 // The chip used to render the raw enum ("AWAITING HANDOFF" / "HANDOFF
 // REJECTED"), which is internal vocabulary — and "handoff" reads backwards to a
 // carrier, who is receiving the parcel, not giving it away.
-export const STATUS_LABELS: Record<string, string> = {
-  pending_payment: "Pending payment",
-  expired_unpaid: "Expired",
-  confirmed: "Confirmed",
-  awaiting_handoff: "Awaiting handoff",
-  handoff_rejected: "Declined at handoff",
-  payment_secured: "Ready to travel",
-  unpaid_return: "Unpaid - parcel returning",
-  in_transit: "In transit",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-  cancelled_post_possession: "Cancelled mid-trip",
-  disputed: "Disputed",
-};
+// One list for both apps (bookingEventLabel.ts).
+export const STATUS_LABELS: Record<string, string> = BOOKING_STATUS_LABELS;
 
 export const STATUS_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   pending_payment: "time-outline",

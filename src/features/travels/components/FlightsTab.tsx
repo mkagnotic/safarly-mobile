@@ -41,13 +41,13 @@ export function FlightsTab({
 }>) {
   if (loading && trips.length === 0) return <ListSkeleton />;
   if (error && trips.length === 0)
-    return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
+    return <ErrorBlock subject="your flights" message={getErrorMessage(error)} onRetry={onRetry} />;
   if (trips.length === 0)
     return (
       <EmptyBlock
         icon="airplane-outline"
         title="No flights listed"
-        subtitle="List a trip to start receiving parcel delivery offers."
+        subtitle="List a trip so senders on your route can find you and send match requests."
       />
     );
   return (
@@ -56,7 +56,7 @@ export function FlightsTab({
         <TravelCard
           key={t.id}
           type="flight"
-          tag="TRIP LISTING"
+          tag="Trip listing"
           item={t}
           onPress={() => onOpen(t.id)}
           onEdit={() => onEdit(t)}

@@ -94,13 +94,19 @@ describe("card actions report through the global toast, not the screen banner", 
   });
 
   test("the screen's own banner is still used for screen-level errors", () => {
-    // Filter and date validation belong in the header banner — the user is
-    // looking at the filters when those fire.
+    // Filter validation belongs in the header banner — the user is looking at
+    // the filters when it fires. (28 Oct 2026: the "Invalid date" checks went -
+    // the picker only gives valid days - so this pins the filter checks.)
     const screenCode = SRC.slice(0, CARDS_START);
     assert.match(
       screenCode,
-      /setNotice\(\{[\s\S]{0,80}Invalid date/,
-      "date validation should still use the inline banner next to the filters",
+      /setNotice\(\{[\s\S]{0,40}Choose at least one filter/,
+      "filter validation should still use the inline banner next to the filters",
+    );
+    assert.match(
+      screenCode,
+      /setNotice\(\{[\s\S]{0,80}Pick different cities/,
+      "route validation should still use the inline banner next to the filters",
     );
   });
 });

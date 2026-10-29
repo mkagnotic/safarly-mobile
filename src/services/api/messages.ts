@@ -28,12 +28,15 @@ export interface Conversation {
   declined_at: string | null;
   declined_by: string | null;
   decline_reason: string | null;
+  /** Who blocked the thread (null on legacy blocks). Only they may unblock. */
+  blocked_by?: string | null;
   /** Whether the current user has archived this conversation (per-user). */
   archived?: boolean;
   participant?: {
     id: string;
     name: string;
     avatar_url: string | null;
+    is_verified?: boolean | null;
   };
 }
 
@@ -339,7 +342,9 @@ export interface Message {
   read_at?: string | null;
   attachment_url?: string | null;
   attachment_type?: string | null;
-  sender?: { id: string; name: string; avatar_url: string | null };
+  /** The file name the sender attached (null on older rows - show the type label). */
+  attachment_name?: string | null;
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   /** Discriminates typed offer/system messages; absent on legacy text rows. */
   message_kind?: MessageKind;
   payload?: MessagePayload | null;
@@ -468,12 +473,14 @@ export const messagesApi = {
   sendMessage: (
     conversationId: string,
     text: string,
-    attachment?: { url: string; type: string },
+    attachment?: { url: string; type: string; name?: string },
   ) =>
     api.post<Message>(`/message-handler/conversations/${conversationId}/messages`, {
       text,
       attachment_url: attachment?.url,
       attachment_type: attachment?.type,
+      // Stored as attachment_name, so web and mobile show the real file name.
+      attachment_name: attachment?.name,
     }),
 
   /**
@@ -500,8 +507,12 @@ export const messagesApi = {
   markDelivered: (conversationId: string) =>
     api.post<{ ok: boolean }>(`/message-handler/conversations/${conversationId}/mark-delivered`),
 
+  /** The open chat saw new messages: mark them (and the chat's notifications) read. */
+  markRead: (conversationId: string) =>
+    api.post<{ ok: boolean; unread_count: number }>(`/message-handler/conversations/${conversationId}/mark-read`),
+
   reportMessage: (messageId: string, reason: string, details?: string) =>
-    api.post<{ report_id: string }>(`/message-handler/${messageId}/report`, { reason, details }),
+    api.post<{ report_id: string; duplicate?: boolean }>(`/message-handler/${messageId}/report`, { reason, details }),
 
   /** Request or confirm a match for ONE delivery. Naming the listings is what keeps a
    *  pair with several deliveries in common unambiguous; omit them and the server
@@ -522,7 +533,7 @@ export const messagesApi = {
     api.post<{ blocked: boolean }>(`/message-handler/conversations/${conversationId}/block`),
 
   unblockUser: (conversationId: string) =>
-    api.delete<{ unblocked: boolean }>(`/message-handler/conversations/${conversationId}/block`),
+    api.delete<{ unblocked: boolean; already?: boolean; still_blocked?: boolean }>(`/message-handler/conversations/${conversationId}/block`),
 
   /** End ONE deal (revert matched -> pending). Name it when the thread has more than
    *  one, or the server refuses rather than ending the wrong delivery. */

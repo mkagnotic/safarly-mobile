@@ -3,40 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { showToast } from "@/feedback/appFeedback";
 import { useBookings } from "@/hooks/api/useBookings";
-import { navigationRef } from "@/navigation/navigationRef";
 import { getErrorMessage, ratingsApi } from "@/services/api";
 import { RateDeliverySheet, type RateDeliveryValues } from "./RateDeliverySheet";
-
-// Screens where an interrupting popup would get in the way of an active task —
-// mirrors web's SUPPRESSED route list (pay / rate / payment result). Onboarding
-// and profile-setup are already excluded by the mount gate in RootNavigator.
-const SUPPRESSED_ROUTES = new Set<string>([
-  "PayBookingTab",
-  "ReviewPayTab",
-  "PaymentSuccessTab",
-  "PaymentFailureTab",
-  "DeliveryReviewTab",
-  "KycVerification",
-  "KycVerificationTab",
-]);
-
-/**
- * Reactive active-route name via the container ref. We're mounted as a sibling
- * of the navigator (not inside it), so `useNavigationState` isn't available —
- * `navigationRef.getCurrentRoute()` returns the deepest focused route instead.
- */
-function useActiveRouteName(): string | undefined {
-  const [name, setName] = useState<string | undefined>(() =>
-    navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined,
-  );
-  useEffect(() => {
-    const update = () => setName(navigationRef.getCurrentRoute()?.name);
-    update();
-    const unsub = navigationRef.addListener("state", update);
-    return unsub;
-  }, []);
-  return name;
-}
+import { RATING_COPY, counterpartRoleLabel, isAlreadyRatedError } from "@/features/bookings/lib/ratingCopy";
 
 /**
  * Auto-opens the delivery-rating prompt for the first delivered booking the
@@ -52,7 +21,8 @@ export function RateDeliveryPrompt({
   held = false,
   onActiveChange,
 }: {
-  /** Another app-wide popup is showing; wait (iOS can present one Modal at a time). */
+  /** Another app-wide popup or a form is showing; wait (iOS can present one Modal at a time).
+   *  AutoPrompts owns the "don't interrupt" screen list (autoPromptRules). */
   held?: boolean;
   onActiveChange?: (active: boolean) => void;
 } = {}) {
@@ -63,13 +33,10 @@ export function RateDeliveryPrompt({
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const activeRoute = useActiveRouteName();
-  const suppressed = activeRoute ? SUPPRESSED_ROUTES.has(activeRoute) : false;
-
   const pending = useMemo(() => {
-    if (!user || suppressed || held) return null;
+    if (!user || held) return null;
     return bookings.find((b) => !b.viewer_has_rated && !dismissed.includes(b.id)) ?? null;
-  }, [bookings, user, suppressed, held, dismissed]);
+  }, [bookings, user, held, dismissed]);
 
   useEffect(() => {
     setOpen(pending != null);
@@ -79,9 +46,15 @@ export function RateDeliveryPrompt({
     onActiveChange?.(open);
   }, [open, onActiveChange]);
 
-  const { ratedUserId, ratedUserName, routeSummary } = useMemo(() => {
+  const { ratedUserId, ratedUserName, ratedUser, roleLabel, routeSummary } = useMemo(() => {
     if (!pending || !user) {
-      return { ratedUserId: null as string | null, ratedUserName: "your delivery partner", routeSummary: null as string | null };
+      return {
+        ratedUserId: null as string | null,
+        ratedUserName: "your delivery partner",
+        ratedUser: null,
+        roleLabel: null as string | null,
+        routeSummary: null as string | null,
+      };
     }
     const viewerIsSender = pending.sender_id === user.id;
     const parcel = pending.parcel;
@@ -89,7 +62,9 @@ export function RateDeliveryPrompt({
       ratedUserId: viewerIsSender ? pending.carrier_id : pending.sender_id,
       ratedUserName: viewerIsSender
         ? pending.carrier?.name ?? "Carrier"
-        : pending.sender?.name ?? "Sender",
+        : pending.sender?.name ?? "Receiver",
+      ratedUser: (viewerIsSender ? pending.carrier : pending.sender) ?? null,
+      roleLabel: counterpartRoleLabel(viewerIsSender),
       routeSummary: parcel?.from_city && parcel?.to_city ? `${parcel.from_city} → ${parcel.to_city}` : null,
     };
   }, [pending, user]);
@@ -114,10 +89,18 @@ export function RateDeliveryPrompt({
         // `viewer_has_rated` flips and the next unrated delivery can take its turn.
         setDismissed((prev) => (prev.includes(pending.id) ? prev : [...prev, pending.id]));
         setOpen(false);
-        showToast({ title: "Rating submitted", message: "Thanks for your feedback!", variant: "success" });
+        showToast({ title: RATING_COPY.successTitle, message: RATING_COPY.successBody, variant: "success" });
         await refetch();
       } catch (err) {
-        showToast({ title: "Couldn't submit rating", message: getErrorMessage(err), variant: "error" });
+        // Already rated (another device, a double tap): that IS the rated
+        // state. Close, refresh, and don't call it a failure.
+        if (isAlreadyRatedError(err)) {
+          setDismissed((prev) => (prev.includes(pending.id) ? prev : [...prev, pending.id]));
+          setOpen(false);
+          void refetch();
+          return;
+        }
+        showToast({ title: RATING_COPY.errorTitle, message: getErrorMessage(err), variant: "error" });
       } finally {
         setSubmitting(false);
       }
@@ -131,6 +114,9 @@ export function RateDeliveryPrompt({
     <RateDeliverySheet
       open={open}
       ratedUserName={ratedUserName}
+      ratedUserAvatarUrl={ratedUser?.avatar_url ?? null}
+      ratedUserVerified={ratedUser?.is_verified === true}
+      roleLabel={roleLabel}
       routeSummary={routeSummary}
       pending={submitting}
       onDismiss={handleDismiss}

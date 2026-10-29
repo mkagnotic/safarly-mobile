@@ -6,7 +6,18 @@ import { Card } from "@/components/ui/Card";
 import { colors } from "@/theme/colors";
 import type { Nav } from "@/features/bookings/lib/navigation";
 
-/** Empty list state, with browse CTAs when no filter is narrowing the list. */
+/** Title per tab (FILTERS order): the empty state names the list that is empty. */
+export const EMPTY_TITLES: readonly string[] = [
+  "No bookings yet",
+  "No active bookings",
+  "No completed bookings",
+  "No cancelled bookings",
+];
+
+/**
+ * Empty list state, with browse CTAs when no filter is narrowing the list. Both
+ * CTAs open Search (parcels / trips), not the user's OWN listings in My Travels.
+ */
 export function BookingsEmptyCard({
   filterIdx,
   navigation,
@@ -16,7 +27,7 @@ export function BookingsEmptyCard({
       <View style={styles.emptyIconBox}>
         <Ionicons name="cube-outline" size={28} color={colors.primary} />
       </View>
-      <Text style={styles.emptyTitle}>No bookings yet</Text>
+      <Text style={styles.emptyTitle}>{EMPTY_TITLES[filterIdx] ?? EMPTY_TITLES[0]}</Text>
       <Text style={styles.emptySubtitle}>
         {filterIdx > 0
           ? "Try a different filter."
@@ -26,20 +37,20 @@ export function BookingsEmptyCard({
       {filterIdx === 0 ? (
         <View style={styles.emptyActions}>
           <Pressable
-            onPress={() => navigation.navigate("Parcels", { tab: "packages" })}
+            onPress={() => navigation.navigate("Trips", { tab: "receiver", browse: true })}
             style={[styles.emptyActionButton, styles.emptyActionPrimary]}
             accessibilityRole="button"
             accessibilityLabel="Browse parcels"
           >
-            <Text style={styles.emptyActionPrimaryText}>Browse Parcels</Text>
+            <Text style={styles.emptyActionPrimaryText}>Browse parcels</Text>
           </Pressable>
           <Pressable
-            onPress={() => navigation.navigate("Trips")}
+            onPress={() => navigation.navigate("Trips", { tab: "package", browse: true })}
             style={[styles.emptyActionButton, styles.emptyActionSecondary]}
             accessibilityRole="button"
             accessibilityLabel="Browse trips"
           >
-            <Text style={styles.emptyActionSecondaryText}>Browse Trips</Text>
+            <Text style={styles.emptyActionSecondaryText}>Browse trips</Text>
           </Pressable>
         </View>
       ) : null}

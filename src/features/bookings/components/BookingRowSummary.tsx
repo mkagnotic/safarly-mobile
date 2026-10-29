@@ -1,3 +1,4 @@
+import { payDeadline } from "@/features/bookings/paymentMath";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
@@ -16,6 +17,8 @@ import {
   STATUS_LABELS,
   STATUS_TONES,
 } from "@/features/bookings/lib/bookingDisplay";
+import { bookingEventLabel, bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
+import { bookingDisputeView, chipStatusLabel } from "@/features/disputes/disputeRules";
 
 interface BookingRowSummaryProps {
   booking: Booking;
@@ -31,8 +34,13 @@ export function BookingRowSummary({
   expanded,
   onToggle,
 }: Readonly<BookingRowSummaryProps>) {
-  const tone = STATUS_TONES[booking.status] ?? { bg: "#E5E7EB", fg: colors.subtleText };
-  const icon = STATUS_ICONS[booking.status] ?? "ellipse";
+  // "Disputed" only while the dispute is open; a resolved one never keeps it.
+  const disputeView = bookingDisputeView(booking);
+  const staleDisputed = booking.status === "disputed" && !disputeView.disputedChip;
+  const tone = staleDisputed
+    ? { bg: "#E5E7EB", fg: colors.subtleText }
+    : STATUS_TONES[booking.status] ?? { bg: "#E5E7EB", fg: colors.subtleText };
+  const icon = staleDisputed ? "checkmark-circle" : STATUS_ICONS[booking.status] ?? "ellipse";
   const roleColor = role === "sender" ? colors.primary : "#F08020";
 
   return (
@@ -92,7 +100,7 @@ export function BookingRowSummary({
       booking.agreed_travel_date ? (
         <View style={styles.cardPillsRow}>
           {booking.status === "pending_payment" && booking.payment_expires_at ? (
-            <PaymentExpiryCountdown expiresAt={booking.payment_expires_at} />
+            <PaymentExpiryCountdown expiresAt={(() => { const d = payDeadline(booking); return d ? new Date(d.at).toISOString() : booking.payment_expires_at; })()} />
           ) : null}
           {booking.agreed_travel_date ? (
             <View style={styles.travelDatePill}>
@@ -118,7 +126,10 @@ export function BookingRowSummary({
             minimumFontScale={0.75}
             maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}
           >
-            {(STATUS_LABELS[booking.status] ?? booking.status.replace(/_/g, " ")).toUpperCase()}
+            {/* A finished hand-back is no longer "returning": the parcel is home and the
+                deal is closed (web parity). A booking still reading "disputed" after its
+                dispute resolved never says "Disputed". */}
+            {booking.return_received_at ? "Returned - cancelled" : staleDisputed ? chipStatusLabel(booking, "") : <>{bookingStatusLabel(booking.status)}</>}
           </Text>
         </View>
         {booking.parcel ? (
@@ -127,11 +138,13 @@ export function BookingRowSummary({
           </Text>
         ) : null}
       </View>
+      {disputeView.note ? <Text style={styles.disputeNote}>{disputeView.note}</Text> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  disputeNote: { color: colors.mutedText, fontSize: 12, fontWeight: "600", marginTop: 6 },
   cardSummary: { padding: 16 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardHeaderMain: { flex: 1, minWidth: 0, gap: 5 },
@@ -174,7 +187,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-  statusBadgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
+  statusBadgeText: { textTransform: "uppercase", fontSize: 10, fontWeight: "800", letterSpacing: 0.3, flexShrink: 1 },
   feeText: { color: colors.primary, fontSize: 16, fontWeight: "800" },
 
   // Card pills (payment countdown + agreed travel date)

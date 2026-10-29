@@ -57,3 +57,24 @@ export function formatCountdown(msLeft: number): string {
 export function isUrgent(msLeft: number): boolean {
   return msLeft > 0 && msLeft < 6 * 3600_000;
 }
+
+/**
+ * When the sender must have paid by: the 48 h window, then - once the carrier
+ * holds the parcel - the 24 h grace after it. The server takes the payment until
+ * the grace sweep moves the booking to unpaid_return; this screen said "Payment
+ * window expired" and blocked paying while the grace notice said "You have 24
+ * hours left" (27 Oct 2026). Web twin: src/lib/payDeadline.ts.
+ */
+export const PAYMENT_GRACE_MS = 24 * 3_600_000;
+
+export function payDeadline(b: {
+  payment_expires_at?: string | null;
+  payment_grace_started_at?: string | null;
+  handoff_accepted_at?: string | null;
+}, now = Date.now()): { at: number; grace: boolean } | null {
+  if (!b.payment_expires_at) return null;
+  const windowEnd = new Date(b.payment_expires_at).getTime();
+  if (windowEnd > now || !b.handoff_accepted_at) return { at: windowEnd, grace: false };
+  const graceStart = b.payment_grace_started_at ? new Date(b.payment_grace_started_at).getTime() : windowEnd;
+  return { at: graceStart + PAYMENT_GRACE_MS, grace: true };
+}

@@ -1,4 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { formatRating } from "@/features/bookings/lib/ratingCopy";
+import { minAmountProblem } from "@/utils/minAmount";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -32,6 +35,7 @@ import {
 import { colors } from "@/theme/colors";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
+import { currencySymbol } from "@/utils/money";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "OpportunitiesTab">,
@@ -70,6 +74,8 @@ function getInitials(name: string | undefined): string {
 interface TripPickerModalProps {
   open: boolean;
   trips: Trip[];
+  /** Still fetching the user's trips: not the same as having none (27 Oct 2026). */
+  tripsLoading?: boolean;
   selectedTripId: string;
   onSelect: (tripId: string) => void;
   onClose: () => void;
@@ -78,6 +84,7 @@ interface TripPickerModalProps {
 function TripPickerModal({
   open,
   trips,
+  tripsLoading = false,
   selectedTripId,
   onSelect,
   onClose,
@@ -88,12 +95,14 @@ function TripPickerModal({
       <View style={styles.modalCenter} pointerEvents="box-none">
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Trip</Text>
+            <Text style={styles.modalTitle}>Select a trip</Text>
             <Pressable onPress={onClose} hitSlop={8}>
               <Ionicons name="close" size={20} color={colors.mutedText} />
             </Pressable>
           </View>
-          {trips.length === 0 ? (
+          {trips.length === 0 && tripsLoading ? (
+            <ActivityIndicator style={styles.modalLoading} size="small" color={colors.primary} />
+          ) : trips.length === 0 ? (
             <Text style={styles.modalEmpty}>You don't have any trips yet.</Text>
           ) : (
             <View style={styles.modalList}>
@@ -137,6 +146,7 @@ function TripPickerModal({
 interface BidFormProps {
   parcel: Parcel;
   trips: Trip[];
+  tripsLoading?: boolean;
   pending: boolean;
   onSubmit: (values: {
     selectedTripId: string;
@@ -146,7 +156,7 @@ interface BidFormProps {
   onListTrip: () => void;
 }
 
-function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidFormProps>) {
+function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onListTrip }: Readonly<BidFormProps>) {
   const [selectedTripId, setSelectedTripId] = useState("");
   const [offerAmount, setOfferAmount] = useState(`${parcel.fee_offered}`);
   const [message, setMessage] = useState("");
@@ -161,9 +171,12 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
       setFormError("Please select a trip.");
       return;
     }
+    // Web's rule (27 Oct 2026): this is a MATCH REQUEST - the price is agreed later
+    // in chat, so a starting price is optional; named, it follows the $5 / ₹500 minimum.
     const amount = parseFloat(offerAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setFormError("Offer amount must be greater than 0.");
+    const tooSmall = amount > 0 ? minAmountProblem(amount, parcel.fee_currency) : undefined;
+    if (tooSmall) {
+      setFormError(tooSmall);
       return;
     }
     onSubmit({ selectedTripId, offerAmount, message });
@@ -173,7 +186,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
     <View style={styles.bidForm}>
       {/* Trip select */}
       <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Select Trip *</Text>
+        <Text style={styles.fieldLabel}>Select a trip *</Text>
         <Pressable
           onPress={() => setPickerOpen(true)}
           style={styles.tripDropdown}
@@ -194,7 +207,9 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
           </Text>
           <Ionicons name="chevron-down" size={14} color={colors.mutedText} />
         </Pressable>
-        {trips.length === 0 ? (
+        {trips.length === 0 && tripsLoading ? (
+          <Text style={styles.fieldHelpRow}>Loading your trips…</Text>
+        ) : trips.length === 0 ? (
           <Text style={styles.fieldHelpRow}>
             No trips listed.{" "}
             <Text style={styles.fieldHelpLink} onPress={onListTrip}>
@@ -206,7 +221,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
 
       {/* Offer amount */}
       <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Offer Amount ($) *</Text>
+        <Text style={styles.fieldLabel}>Starting price ({currencySymbol(parcel.fee_currency)}) — optional</Text>
         <TextInput
           value={offerAmount}
           onChangeText={setOfferAmount}
@@ -241,14 +256,14 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
         disabled={pending}
         style={[styles.submitButton, pending && styles.submitDisabled]}
         accessibilityRole="button"
-        accessibilityLabel="Submit Offer"
+        accessibilityLabel="Send match request"
       >
         {pending ? (
           <ActivityIndicator size="small" color={colors.white} />
         ) : (
           <>
             <Ionicons name="paper-plane" size={14} color={colors.white} />
-            <Text style={styles.submitText}>Submit Offer</Text>
+            <Text style={styles.submitText}>Send match request</Text>
           </>
         )}
       </Pressable>
@@ -256,6 +271,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
       <TripPickerModal
         open={pickerOpen}
         trips={trips}
+        tripsLoading={tripsLoading}
         selectedTripId={selectedTripId}
         onSelect={setSelectedTripId}
         onClose={() => setPickerOpen(false)}
@@ -269,6 +285,7 @@ function BidForm({ parcel, trips, pending, onSubmit, onListTrip }: Readonly<BidF
 interface OpportunityCardProps {
   parcel: Parcel;
   trips: Trip[];
+  tripsLoading?: boolean;
   expanded: boolean;
   submitted: boolean;
   pending: boolean;
@@ -285,6 +302,7 @@ interface OpportunityCardProps {
 function OpportunityCard({
   parcel,
   trips,
+  tripsLoading = false,
   expanded,
   submitted,
   pending,
@@ -304,7 +322,7 @@ function OpportunityCard({
         ) : null}
         {submitted ? (
           <View style={styles.submittedBadge}>
-            <Text style={styles.submittedText}>Offer Submitted</Text>
+            <Text style={styles.submittedText}>Request sent</Text>
           </View>
         ) : null}
       </View>
@@ -338,18 +356,19 @@ function OpportunityCard({
 
       {sender ? (
         <View style={styles.senderRow}>
-          <View style={styles.senderAvatar}>
-            <Text style={styles.senderAvatarText}>{getInitials(sender.name)}</Text>
+          <View>
+            <View style={styles.senderAvatar}>
+              <Text style={styles.senderAvatarText}>{getInitials(sender.name)}</Text>
+            </View>
+            <VerifiedAvatarBadge verified={sender.is_verified} avatarSize={32} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.senderName} numberOfLines={2}>
               {sender.name}
             </Text>
-            {typeof sender.rating === "number" ? (
-              <View style={styles.senderRatingRow}>
-                <Ionicons name="star" size={10} color={colors.warning} />
-                <Text style={styles.senderRatingText}>{sender.rating.toFixed(1)}</Text>
-              </View>
+            {/* "★ 4.8" only for a real rating - never "0.0" for someone unrated. */}
+            {formatRating(sender.rating) ? (
+              <Text style={styles.senderRatingText}>{formatRating(sender.rating)}</Text>
             ) : null}
           </View>
         </View>
@@ -365,14 +384,14 @@ function OpportunityCard({
         ]}
         accessibilityRole="button"
         accessibilityLabel={
-          submitted ? "Offer submitted" : expanded ? "Cancel offer" : "Make offer"
+          submitted ? "Request sent" : expanded ? "Cancel" : "Request to carry"
         }
       >
         {submitted ? (
-          <Text style={styles.makeOfferSubmittedText}>Offer Submitted</Text>
+          <Text style={styles.makeOfferSubmittedText}>Request sent</Text>
         ) : (
           <>
-            <Text style={styles.makeOfferText}>{expanded ? "Cancel" : "Make Offer"}</Text>
+            <Text style={styles.makeOfferText}>{expanded ? "Cancel" : "Request to carry"}</Text>
             <Ionicons
               name={expanded ? "chevron-up" : "chevron-down"}
               size={14}
@@ -386,6 +405,7 @@ function OpportunityCard({
         <BidForm
           parcel={parcel}
           trips={trips}
+          tripsLoading={tripsLoading}
           pending={pending}
           onSubmit={(values) =>
             onSubmit({
@@ -407,7 +427,7 @@ export function OpportunitiesScreen() {
   const { opportunities, loading, loadingMore, error, hasMore, total, refetch, loadMore } =
     useOpportunities({ perPage: PER_PAGE });
   // The user's own trips populate the bid-form's trip dropdown.
-  const { trips } = useTrips({ filter: "my_trips" });
+  const { trips, loading: tripsLoading } = useTrips({ filter: "my_trips" });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<Category>("All");
@@ -459,7 +479,7 @@ export function OpportunitiesScreen() {
       try {
         await carriersApi.submitBid(values.parcelId, {
           trip_id: values.selectedTripId,
-          offer_amount: parseFloat(values.offerAmount),
+          offer_amount: parseFloat(values.offerAmount) > 0 ? parseFloat(values.offerAmount) : undefined,
           message: values.message.trim() || undefined,
         });
         setSubmittedIds((prev) => {
@@ -469,7 +489,7 @@ export function OpportunitiesScreen() {
         });
         setExpandedId(null);
         showToast({
-          title: "Your offer has been submitted!",
+          title: "Match request sent — continue in Messages.",
           variant: "success",
         });
       } catch (err) {
@@ -595,9 +615,9 @@ export function OpportunitiesScreen() {
               onPress={handleListTrip}
               style={styles.emptyCta}
               accessibilityRole="button"
-              accessibilityLabel="List a Trip"
+              accessibilityLabel="List a trip"
             >
-              <Text style={styles.emptyCtaText}>List a Trip</Text>
+              <Text style={styles.emptyCtaText}>List a trip</Text>
             </Pressable>
           ) : null}
         </Card>
@@ -608,6 +628,7 @@ export function OpportunitiesScreen() {
               key={parcel.id}
               parcel={parcel}
               trips={trips}
+              tripsLoading={tripsLoading}
               expanded={expandedId === parcel.id}
               submitted={submittedIds.has(parcel.id)}
               pending={pendingId === parcel.id}
@@ -848,6 +869,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   modalTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  modalLoading: { paddingVertical: 24 },
   modalEmpty: { color: colors.mutedText, fontSize: 13, paddingVertical: 16, textAlign: "center" },
   modalList: { gap: 6 },
   tripOption: {

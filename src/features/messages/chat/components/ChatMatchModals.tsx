@@ -3,6 +3,7 @@ import { MatchDealPickerModal } from "@/components/chat/MatchDealPickerModal";
 import { type Conversation } from "@/services/api";
 
 import { type ChatModal } from "../chatTypes";
+import { matchModalKind } from "../matchModalKind";
 import { type ChatMatchActionsController } from "../hooks/useChatMatchActions";
 
 interface ChatMatchModalsProps {
@@ -27,6 +28,7 @@ export function ChatMatchModals({
     matchCandidates,
     setMatchCandidates,
     handlePickDeal,
+    hasParcelDeal,
   } = match;
 
   return (
@@ -36,7 +38,9 @@ export function ChatMatchModals({
         open={matchModalOpen}
         pending={matchPending}
         userRole={userRole}
-        contextType={conversation?.context_type}
+        // What the Match ACTS ON, not the thread's label: one shared pair thread
+        // can be labelled "buddy" while the match is for a parcel delivery.
+        contextType={matchModalKind({ contextType: conversation?.context_type, hasParcelDeal })}
         error={errorFor("match")}
         onCancel={() => {
           if (!matchPending) setMatchModalOpen(false);

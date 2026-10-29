@@ -7,6 +7,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { Screen } from "@/components/ui/Screen";
 import { ProfileSkeleton } from "@/components/ui/Skeletons";
@@ -99,13 +100,13 @@ export function ProfileScreen() {
   const sections = useMemo<readonly MenuSection[]>(
     () => [
       {
-        title: "ACCOUNT",
+        title: "Account",
         items: [
           { icon: "calendar-clear", label: "My Bookings", target: "BookingsTab" },
           { icon: "alert-circle", label: "My Disputes", target: "DisputesTab" },
           { icon: "card-outline", label: "Payments", target: "TransactionsTab" },
           { icon: "business-outline", label: "Payout setup", target: "PayoutSetupTab" },
-          { icon: "shield-checkmark-outline", label: "KYC Verification", target: "KycVerificationTab" },
+          { icon: "shield-checkmark-outline", label: "Verify your identity", target: "KycVerificationTab" },
           { icon: "star", label: "Reviews", target: "ReviewsTab" },
           {
             icon: "chatbubble-ellipses",
@@ -116,7 +117,7 @@ export function ProfileScreen() {
         ],
       },
       {
-        title: "SETTINGS",
+        title: "Settings",
         items: [
           { icon: "lock-closed-outline", label: "Security", target: "SecurityTab" },
           {
@@ -129,7 +130,7 @@ export function ProfileScreen() {
         ],
       },
       {
-        title: "ABOUT",
+        title: "About",
         items: [
           { icon: "information-circle-outline", label: "About Safarly", target: "About" },
           { icon: "mail-outline", label: "Contact Us", target: "Contact" },
@@ -150,7 +151,7 @@ export function ProfileScreen() {
       await signOut();
       // RootNavigator transitions back to Login automatically via auth state.
     } catch (err) {
-      showToast({ title: "Sign out failed", message: getErrorMessage(err), variant: "error" });
+      showToast({ title: "Couldn't log out", message: getErrorMessage(err), variant: "error" });
       setSigningOut(false);
     }
   }, [signOut, signingOut]);
@@ -230,6 +231,7 @@ export function ProfileScreen() {
             >
               <Ionicons name="camera-outline" size={14} color={colors.white} />
             </Pressable>
+            <VerifiedAvatarBadge verified={kycVerified} avatarSize={76} />
           </View>
 
           <View style={styles.profileTextWrap}>
@@ -276,20 +278,20 @@ export function ProfileScreen() {
           icon="airplane-outline"
           iconColor={colors.primary}
           value={String(totalTrips)}
-          label="TRIPS"
+          label="Trips"
           tilt
         />
         <StatCard
           icon="cube-outline"
           iconColor={colors.safe}
           value={String(totalDeliveries)}
-          label="DELIVERIES"
+          label="Deliveries"
         />
         <StatCard
           icon="star"
           iconColor={colors.warning}
           value={rating.toFixed(1)}
-          label="RATING"
+          label="Rating"
         />
       </View>
 
@@ -490,7 +492,8 @@ const styles = StyleSheet.create({
   },
   iconTilt: { transform: [{ rotate: "-42deg" }] },
   statValue: { color: colors.text, fontSize: 18, lineHeight: 22, fontWeight: "800" },
-  statLabel: { color: colors.mutedText, fontSize: 10, fontWeight: "700", letterSpacing: 0.5 },
+  // Words are written normally and shown in capitals here: a screen reader spells out "TRIPS".
+  statLabel: { color: colors.mutedText, fontSize: 10, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
 
   // Menu
   section: { marginBottom: 18 },
@@ -499,6 +502,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.5,
+    textTransform: "uppercase",
     marginBottom: 8,
     paddingHorizontal: 4,
   },

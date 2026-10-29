@@ -12,13 +12,14 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { ANY_CITY } from "@/features/search/CityPicker";
 import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
+import { showToast } from "@/feedback/appFeedback";
+import { buddyEditInitial, buddyEditPayload } from "./editBuddyPayload";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
   isTerminal,
-  labelForStatus,
+  labelForBuddyStatus,
   toneForStatus,
 } from "@/features/travels/statusLabels";
 import { useAuth } from "@/context/AuthContext";
@@ -74,19 +75,21 @@ function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?:
       >
         <Ionicons name="chevron-back" size={18} color={colors.text} />
       </Pressable>
-      <Text style={styles.title}>Partner details</Text>
+      <Text style={styles.title}>Buddy listing</Text>
       {right}
     </View>
   );
 }
 
 function StatusPill({ status }: Readonly<{ status: string }>) {
-  if (!status || isImplicitStatus(status)) return null;
+  // Buddy-only wording (27 Oct 2026), never the parcel labels.
+  const label = labelForBuddyStatus(status);
+  if (!status || isImplicitStatus(status) || !label) return null;
   const tone = toneForStatus(status);
   return (
     <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
       <Text style={[styles.statusPillText, { color: tone.fg }]} numberOfLines={1}>
-        {labelForStatus(status)}
+        {label}
       </Text>
     </View>
   );
@@ -98,13 +101,13 @@ function PartnerCard({ listing }: Readonly<{ listing: BuddyListing }>) {
       <RouteHeader fromCity={listing.from_city} toCity={listing.to_city} kind="trip" />
       <View style={styles.metricsGrid}>
         <MetricRow>
-          <MetricTile label="DATES" value={formatDateRange(listing)} />
-          <MetricTile label="AIRLINE" value={listing.airline?.trim() || "—"} />
+          <MetricTile label="Dates" value={formatDateRange(listing)} />
+          <MetricTile label="Airline" value={listing.airline?.trim() || "—"} />
         </MetricRow>
         <MetricRow>
-          <MetricTile label="AGE" value={listing.age != null ? `${listing.age}` : "—"} />
+          <MetricTile label="Age" value={listing.age != null ? `${listing.age}` : "—"} />
           <MetricTile
-            label="LANGUAGES"
+            label="Languages"
             value={
               listing.languages && listing.languages.length > 0
                 ? listing.languages.join(", ")
@@ -137,12 +140,12 @@ function NotFoundCard({
 }: Readonly<{ onBack: () => void; errorMessage?: string }>) {
   return (
     <Card style={styles.emptyCard}>
-      <Text style={styles.emptyTitle}>We couldn't find that listing.</Text>
+      <Text style={styles.emptyTitle}>Buddy listing not found.</Text>
       <Text style={styles.emptySubtitle}>
-        {errorMessage ?? "This buddy listing may have been removed or cancelled."}
+        {errorMessage ?? "It may have been removed."}
       </Text>
       <AppButton
-        label="Back to my travels"
+        label="Back to My Travels"
         onPress={onBack}
         gradientColors={[colors.ctaAccent, colors.ctaAccent]}
         style={styles.emptyButtonWrap}
@@ -196,6 +199,8 @@ export function PartnerDetailsScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editPending, setEditPending] = useState(false);
+  // The server's refusal, shown inside the modal (the banner sits behind it).
+  const [editError, setEditError] = useState<string | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -204,7 +209,10 @@ export function PartnerDetailsScreen() {
     else navigation.navigate("Parcels", { tab: "partners" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
-  const handleEditOpen = useCallback(() => setEditOpen(true), []);
+  const handleEditOpen = useCallback(() => {
+    setEditError(null);
+    setEditOpen(true);
+  }, []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
@@ -213,40 +221,19 @@ export function PartnerDetailsScreen() {
     async (values: EditBuddyListingFormValues) => {
       if (!listingId || !listing) return;
 
-      // The modal validates before calling this, so every field is present and
-      // in range by now. The buddy-handler PUT is still a full upsert — it nulls
-      // any field omitted from the payload — so this must stay exhaustive.
-      const ymd = values.travel_date.trim();
-      const payload = {
-        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
-        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        // Single-date listing: buddy_listings has no date-mode column, so the
-        // "single" case is expressed as from === to.
-        travel_date: ymd,
-        travel_date_from: ymd,
-        travel_date_to: ymd,
-        airline: values.airline.trim(),
-        bio: values.bio.trim(),
-        age: values.age ? Number.parseInt(values.age, 10) : undefined,
-        languages: values.languages,
-        interests: values.interests.trim(),
-        layover: values.layover.trim(),
-      };
+      // Full upsert body, countries included (editBuddyPayload.ts, shared with My Travels).
+      const payload = buddyEditPayload(values);
 
       setEditPending(true);
+      setEditError(null);
       try {
         await buddiesApi.update(listingId, payload);
         await refetch();
         setEditOpen(false);
-        setNotice({
-          variant: "success",
-          title: "Listing updated",
-          message: "Your changes are saved.",
-        });
+        // Same toast as My Travels (28 Oct 2026).
+        showToast({ title: "Buddy listing updated", variant: "success" });
       } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setNotice({ variant: "error", title: "Couldn't update listing", message });
+        setEditError(err instanceof ApiClientError ? err.message : getErrorMessage(err as Error));
       } finally {
         setEditPending(false);
       }
@@ -312,19 +299,10 @@ export function PartnerDetailsScreen() {
     );
   }
 
-  const editInitial: EditBuddyListingFormValues = {
-    from_city: listing.from_city === "Any" ? ANY_CITY : listing.from_city,
-    from_country: USA_CITIES.includes(listing.from_city) ? "US" : "IN",
-    to_city: listing.to_city === "Any" ? ANY_CITY : listing.to_city,
-    to_country: INDIA_CITIES.includes(listing.to_city) ? "IN" : "US",
-    travel_date: listing.travel_date_from ?? listing.travel_date ?? "",
-    airline: listing.airline ?? "",
-    age: listing.age != null ? String(listing.age) : "",
-    languages: listing.languages ?? [],
-    interests: listing.interests ?? "",
-    layover: listing.layover ?? "",
-    bio: listing.bio ?? "",
-  };
+  const editInitial: EditBuddyListingFormValues = buddyEditInitial(listing, {
+    india: INDIA_CITIES,
+    usa: USA_CITIES,
+  });
 
   return (
     <Screen onRefresh={refetch}>
@@ -353,9 +331,9 @@ export function PartnerDetailsScreen() {
 
       <PartnerCard listing={listing} />
 
-      <BodyCard label="BIO" value={listing.bio} />
-      <BodyCard label="INTERESTS" value={listing.interests} />
-      {listing.layover ? <BodyCard label="LAYOVER" value={listing.layover} /> : null}
+      <BodyCard label="Bio" value={listing.bio} />
+      <BodyCard label="Interests" value={listing.interests} />
+      {listing.layover ? <BodyCard label="Layover" value={listing.layover} /> : null}
 
       {canModify ? (
         <>
@@ -383,13 +361,14 @@ export function PartnerDetailsScreen() {
         pending={editPending}
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
+        serverError={editError}
       />
 
       <ConfirmActionModal
         open={cancelOpen}
-        title="Remove this listing?"
-        body="This action cannot be undone. Your travel buddy request will no longer appear in search."
-        confirmLabel="Yes, remove listing"
+        title="Remove this buddy listing?"
+        body="It will no longer appear in search or My Travels. This can't be undone."
+        confirmLabel="Remove listing"
         cancelLabel="Keep listing"
         tone="destructive"
         icon="alert-circle"
@@ -452,6 +431,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
     marginBottom: 6,
+    textTransform: "uppercase",
   },
   bodyText: {
     color: colors.text,

@@ -10,6 +10,8 @@ import type { BookingActions } from "@/features/bookings/lib/bookingActions";
 interface DeliveryCodePanelProps {
   generatedOtp: string | null;
   otpEmailed: boolean;
+  /** The server's `expires_in` for this code, in seconds. */
+  otpExpiresInSec: number;
   handleCopyOtp: BookingActions["handleCopyOtp"];
   handleGenerateOtp: BookingActions["handleGenerateOtp"];
   actionPending: ExpandedBookingState["actionPending"];
@@ -19,6 +21,7 @@ interface DeliveryCodePanelProps {
 export function DeliveryCodePanel({
   generatedOtp,
   otpEmailed,
+  otpExpiresInSec,
   handleCopyOtp,
   handleGenerateOtp,
   actionPending,
@@ -33,9 +36,7 @@ export function DeliveryCodePanel({
         {generatedOtp}
       </Text>
       <Text style={styles.otpDisplayHint}>
-        Give this to the person receiving the parcel at the destination — they
-        read it out to the carrier at drop-off. It expires in 30 min; resend if
-        it lapses.
+        When the parcel is in your hands and looks right, give this 6-digit code to the carrier. Entering it completes the delivery. It expires in {Math.max(1, Math.floor(otpExpiresInSec / 60))} minutes. If you get a new code, the old one stops working.
       </Text>
       {otpEmailed ? (
         <Text style={styles.otpEmailedNote}>We&apos;ve also emailed this code to you.</Text>
@@ -55,14 +56,14 @@ export function DeliveryCodePanel({
           disabled={actionPending !== null}
           style={[sharedStyles.actionButton, styles.actionGhost, styles.otpDisplayBtn]}
           accessibilityRole="button"
-          accessibilityLabel="Generate a new code"
+          accessibilityLabel="Get a new code"
         >
           {actionPending === "generate-otp" ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
             <>
               <Ionicons name="refresh-outline" size={14} color={colors.text} />
-              <Text style={styles.actionGhostText}>Resend</Text>
+              <Text style={styles.actionGhostText}>Get a new code</Text>
             </>
           )}
         </Pressable>
@@ -74,14 +75,14 @@ export function DeliveryCodePanel({
       onPress={handleGenerateOtp}
       disabled={actionPending !== null}
       accessibilityRole="button"
-      accessibilityLabel="Generate Delivery Code"
+      accessibilityLabel="Generate delivery code"
     >
       {actionPending === "generate-otp" ? (
         <ActivityIndicator size="small" color={colors.safe} />
       ) : (
         <>
           <Ionicons name="key-outline" size={14} color={colors.safe} />
-          <Text style={styles.actionSafeText}>Generate Delivery Code</Text>
+          <Text style={styles.actionSafeText}>Generate delivery code</Text>
         </>
       )}
     </Pressable>

@@ -1,11 +1,15 @@
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
 
 import { safarlyMarkXml } from "@/assets/brand/safarlyMark";
 import type { Transaction } from "@/services/api";
-import { formatTxDate, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { penaltyView, txStatusLabel, txTypeMeta } from "@/features/wallet/transactionDisplay";
+import { COMPANY_JURISDICTION, COMPANY_NAME, PLATFORM_NAME, SUPPORT_EMAIL } from "@/constants/company";
+import { receiptDate, receiptFooter, receiptTotals } from "@/features/wallet/receiptModel";
 import { formatMoney } from "@/utils/money";
+import { receiptReference } from "@/features/wallet/receiptReference";
 
 /**
  * Native equivalent of web's `downloadTransactionReceipt`: render an HTML
@@ -13,8 +17,8 @@ import { formatMoney } from "@/utils/money";
  * (expo-sharing) so the user can Save to Files, email, or send it.
  *
  * Design mirrors the web (jsPDF) receipt — faint centred brand watermark,
- * header logo + "Safarly" wordmark, transaction details, and an Amount /
- * Platform fee / Net amount totals box — using the same `safarlyMarkXml`
+ * header logo + "Safarly" wordmark, transaction details, and the totals box from
+ * `receiptTotals` (shared with web) — using the same `safarlyMarkXml`
  * source of truth so both platforms produce the same-looking document. Web
  * uses jsPDF (browser-only, can't run in RN), so we build the identical layout
  * via HTML→PDF instead.
@@ -26,7 +30,18 @@ export function canDownloadReceipt(status: string): boolean {
 }
 
 // The shared formatter: the hand-rolled one printed "$" for any non-INR code.
-const money = (n: number | null | undefined, currency?: string) => formatMoney(Number(n) || 0, currency);
+const money = (n: number | null | undefined, currency?: string | null) => formatMoney(Number(n) || 0, currency);
+
+/** What the document is (27 Oct 2026: every one said "PAYMENT RECEIPT", refunds and earnings too). */
+export function receiptTitle(type: string): string {
+  switch (type) {
+    case "payment": return "PAYMENT RECEIPT";
+    case "refund": return "REFUND RECEIPT";
+    case "payout": return "EARNINGS STATEMENT";
+    case "penalty": return "PENALTY STATEMENT";
+    default: return "TRANSACTION RECEIPT";
+  }
+}
 
 function esc(s: string): string {
   return s
@@ -46,20 +61,26 @@ function markSvg(suffix: string): string {
     .replace(/mark_grad_2/g, `mg2_${suffix}`);
 }
 
-function receiptHtml(tx: Transaction): string {
+/** Both footer lines: support address + the legal entity (constants/company). Same as web. */
+export const RECEIPT_FOOTER = receiptFooter({
+  platform: PLATFORM_NAME, companyName: COMPANY_NAME, jurisdiction: COMPANY_JURISDICTION, supportEmail: SUPPORT_EMAIL,
+});
+
+export function receiptHtml(tx: Transaction): string {
   const currency = tx.currency;
-  const reference = tx.stripe_payment_intent_id || tx.stripe_refund_id || tx.reference || "—";
-  const platformFee = tx.platform_fee ?? null;
-  const netAmount =
-    tx.net_amount ?? (platformFee != null ? Math.max(0, Number(tx.amount) - Number(platformFee)) : null);
+  const reference = receiptReference(tx);
+  // Carrier fee + Platform fee (10%) = Total paid; refunds, earnings (net of any
+  // penalty) and penalties each get their own lines - the web PDF's exact lines.
+  const totals = receiptTotals(tx, money);
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: "Type", value: txTypeMeta(tx.type).label },
+    { label: "Type", value: penaltyView(tx)?.label ?? txTypeMeta(tx.type).label },
     ...(tx.route_from || tx.route_to
       ? [{ label: "Route", value: `${tx.route_from ?? "—"} → ${tx.route_to ?? "—"}` }]
       : []),
-    { label: "Booking", value: tx.booking_id ? `#${tx.booking_id.slice(0, 8)}` : "—" },
-    { label: "Reference", value: reference },
+    // Only when there is one (web parity): a top-up printed "Booking —".
+    ...(tx.booking_id ? [{ label: "Booking", value: `#${tx.booking_id.slice(0, 8)}` }] : []),
+    reference,
     { label: "Currency", value: (currency || "USD").toUpperCase() },
   ];
 
@@ -93,14 +114,17 @@ function receiptHtml(tx: Transaction): string {
   .status { text-transform: uppercase; }
   h2 { font-size: 14px; margin: 0 0 8px; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 9px 0; font-size: 13px; border-bottom: 1px solid #F0F1F4; }
-  td.k { color: #6B7280; }
-  td.v { text-align: right; font-weight: 700; }
+  td { padding: 9px 0; font-size: 13px; border-bottom: 1px solid #F0F1F4; vertical-align: top; }
+  tr, .totals { page-break-inside: avoid; break-inside: avoid; }
+  td.k { color: #6B7280; white-space: nowrap; padding-right: 16px; }
+  /* Long names, routes and references wrap instead of running off the page. */
+  td.v { text-align: right; font-weight: 700; overflow-wrap: anywhere; word-break: break-word; }
   .totals { margin-top: 20px; background: rgba(247,248,250,0.85); border: 1px solid #E4E6EB; border-radius: 10px; padding: 16px 18px; }
   .totals .line { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; }
   .totals .line.net { font-size: 15px; font-weight: 800; }
+  .totals .line .lbl { color: #6B7280; }
   .totals .line.net .lbl { color: #A74EFF; }
-  .foot { margin-top: 30px; text-align: center; color: #9AA1AC; font-size: 10px; }
+  .foot { margin-top: 30px; text-align: center; color: #9AA1AC; font-size: 10px; line-height: 1.5; }
 </style></head>
 <body>
   <div class="wm"><div class="m">${markSvg("w")}</div></div>
@@ -111,28 +135,51 @@ function receiptHtml(tx: Transaction): string {
         <span class="name">Safarly</span>
       </div>
       <div class="doc">
-        <div class="t">PAYMENT RECEIPT</div>
+        <div class="t">${esc(receiptTitle(tx.type))}</div>
         <div class="r">Receipt #${esc(tx.id)}</div>
       </div>
     </div>
     <div class="rule"></div>
     <div class="meta">
-      <div><div class="lbl">Issued</div><div class="val">${esc(formatTxDate(tx.created_at) || "—")}</div></div>
-      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(tx.status || "—")}</div></div>
+      <div><div class="lbl">Issued</div><div class="val">${esc(receiptDate(tx.created_at) || "—")}</div></div>
+      <div style="text-align:right"><div class="lbl">Status</div><div class="val status">${esc(penaltyView(tx)?.status ?? (tx.status ? txStatusLabel(tx.status) : "—"))}</div></div>
     </div>
     <h2>Transaction details</h2>
     <table>${rowsHtml}</table>
     <div class="totals">
-      <div class="line"><span>Amount</span><span>${money(tx.amount, currency)}</span></div>
-      <div class="line"><span>Platform fee</span><span>${platformFee != null ? money(platformFee, currency) : "—"}</span></div>
-      <div class="line net"><span class="lbl">Net amount</span><span>${netAmount != null ? money(netAmount, currency) : "—"}</span></div>
+      ${totals
+        .map((l) => `<div class="line${l.strong ? " net" : ""}"><span class="lbl">${esc(l.label)}</span><span>${esc(l.value)}</span></div>`)
+        .join("")}
     </div>
-    <div class="foot">This is a system-generated receipt from Safarly. For questions, contact support@safarly.com.</div>
+    <div class="foot">${RECEIPT_FOOTER.map((l) => esc(l)).join("<br />")}</div>
   </div>
 </body></html>`;
 }
 
-export async function shareTransactionReceipt(tx: Transaction): Promise<void> {
+/**
+ * "shared"  — the PDF went to the share sheet (or the web print dialog).
+ * "copied"  — this device has no share sheet: the receipt's details were copied
+ *             to the clipboard instead, and the caller must SAY so. It used to
+ *             do nothing at all, so the button looked broken.
+ */
+export type ReceiptOutcome = "shared" | "copied";
+
+function receiptText(tx: Transaction): string {
+  const ref = receiptReference(tx);
+  return [
+    "Safarly receipt",
+    `Type: ${penaltyView(tx)?.label ?? txTypeMeta(tx.type).label}`,
+    // The same lines as the PDF's totals box (a penalty printed "-$0.99" as the amount).
+    ...receiptTotals(tx, money).map((l) => `${l.label}: ${l.value}`),
+    `Date: ${receiptDate(tx.created_at)}`,
+    tx.booking_id ? `Booking: #${tx.booking_id.slice(0, 8)}` : null,
+    `${ref.label}: ${ref.value}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function shareTransactionReceipt(tx: Transaction): Promise<ReceiptOutcome> {
   const html = receiptHtml(tx);
 
   // On web (Expo Web / react-native-web), expo-print's shim ignores the `html`
@@ -142,17 +189,20 @@ export async function shareTransactionReceipt(tx: Transaction): Promise<void> {
   // document (watermark + logo). Native uses the real HTML→PDF + share sheet.
   if (Platform.OS === "web") {
     printReceiptOnWeb(html);
-    return;
+    return "shared";
   }
 
-  const { uri } = await Print.printToFileAsync({ html });
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, {
-      mimeType: "application/pdf",
-      dialogTitle: "Safarly receipt",
-      UTI: "com.adobe.pdf",
-    });
+  if (!(await Sharing.isAvailableAsync())) {
+    await Clipboard.setStringAsync(receiptText(tx));
+    return "copied";
   }
+  const { uri } = await Print.printToFileAsync({ html });
+  await Sharing.shareAsync(uri, {
+    mimeType: "application/pdf",
+    dialogTitle: "Safarly receipt",
+    UTI: "com.adobe.pdf",
+  });
+  return "shared";
 }
 
 /** Web-only: print the receipt HTML in an isolated iframe (avoids popup blockers

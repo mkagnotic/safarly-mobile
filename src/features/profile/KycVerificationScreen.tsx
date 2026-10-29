@@ -213,7 +213,8 @@ export function KycVerificationScreen() {
   const showIntro = kyc.isNotStarted && !replacing;
   const showActionNeeded = kyc.isRejected;
   const reviewNotes =
-    kyc.submission?.review_notes ??
+    // || not ??: an empty note left a blank "Action needed" banner (web parity).
+    kyc.submission?.review_notes ||
     "Your verification wasn't approved. Please review and resubmit your documents.";
 
   // Android hardware back on step 2/3 steps back through the wizard instead of
@@ -232,12 +233,12 @@ export function KycVerificationScreen() {
   );
 
   return (
-    <Screen contentContainerStyle={styles.screenContent}>
+    <Screen contentContainerStyle={styles.screenContent} onRefresh={async () => { await kyc.refetch(); }}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={goBack} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />
         </Pressable>
-        <Text style={styles.screenTitle}>Identity Verification</Text>
+        <Text style={styles.screenTitle}>Verify your identity</Text>
       </View>
 
       {banner ? (
@@ -420,7 +421,7 @@ function VerifiedCard() {
       <View style={[styles.statusIconWrap, { backgroundColor: colors.safe }]}>
         <Ionicons name="checkmark" size={34} color={colors.white} />
       </View>
-      <Text style={styles.statusHeadline}>Identity Verified</Text>
+      <Text style={styles.statusHeadline}>Identity verified</Text>
       <Text style={styles.statusDescription}>
         Your identity has been verified. You have full access to all features.
       </Text>
@@ -438,9 +439,9 @@ function PendingCard({
         <View style={[styles.statusIconWrap, { backgroundColor: colors.warning }]}>
           <Ionicons name="time-outline" size={32} color={colors.white} />
         </View>
-        <Text style={styles.statusHeadline}>Under Review</Text>
+        <Text style={styles.statusHeadline}>Under review</Text>
         <Text style={styles.statusDescription}>
-          We're reviewing your documents. This usually takes 1–2 business days — you'll be notified once it's complete.
+          We're reviewing your documents. This usually takes 1–2 business days, and you'll be notified once it's complete.
         </Text>
       </View>
 
@@ -461,6 +462,7 @@ function PendingCard({
         </Card>
       ) : null}
 
+      <Text style={styles.replaceHint}>Uploaded the wrong document? You can replace it while it's under review.</Text>
       <AppButton label="Replace documents" variant="secondary" onPress={onReplace} style={styles.replaceButton} />
     </>
   );
@@ -763,6 +765,7 @@ const styles = StyleSheet.create({
   replaceLabel: { color: colors.text, fontSize: 14, fontWeight: "700" },
   cancelLink: { color: colors.ctaAccent, fontSize: 14, fontWeight: "700" },
   replaceButton: { marginTop: 2 },
+  replaceHint: { color: colors.subtleText, fontSize: 12, lineHeight: 17, marginTop: 10, marginBottom: 6 },
 
   // Stepper
   stepper: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16, paddingHorizontal: 4 },

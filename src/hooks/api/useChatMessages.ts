@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 import { supabase } from "@/integrations/supabase/client";
 import { applyMessageInsert, applyMessageUpdate } from "@/utils/realtimeMessages";
@@ -10,6 +11,9 @@ import {
 } from "@/services/api";
 import { useSingleFlight } from "@/hooks/useSingleFlight";
 import { useResilientChannel } from "@/hooks/realtime/useResilientChannel";
+import { markOpenThreadRead, recountAfterThreadRead } from "@/features/messages/chat/markOpenThreadRead";
+import { shouldMarkIncomingRead } from "@/features/messages/chat/lib/readRules";
+import { ChatSendError, isPermanentRefusal, retryPayload } from "@/features/messages/chat/lib/chatSendRules";
 
 /** Local-only marker for messages that haven't reached the server yet. */
 export type ClientStatus = "pending" | "failed";
@@ -26,6 +30,7 @@ interface PendingMessage {
   text: string;
   attachment_url: string | null;
   attachment_type: string | null;
+  attachment_name?: string | null;
   created_at: string;
   status: ClientStatus;
 }
@@ -103,6 +108,9 @@ export function useChatMessages({
         if (!mountedRef.current) return;
         setServerMessages(res.data?.messages ?? []);
         setHasMore(!!res.data?.has_more);
+        // The GET just marked the thread read: bring the tab badge and bell down
+        // now, wherever the chat was opened from (a push, a link, the Inbox).
+        recountAfterThreadRead();
       } catch (err) {
         if (!mountedRef.current) return;
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -185,6 +193,13 @@ export function useChatMessages({
           // Skips a row we already have (e.g. our own send already echoed).
           const incoming = payload.new as Partial<Message> | undefined;
           setServerMessages((prev) => applyMessageInsert(prev, incoming));
+          // A message from the other side into the chat on screen is read
+          // (chat/lib/readRules.ts); it used to stay unread under the badge.
+          if (conversationId && shouldMarkIncomingRead({
+            senderId: incoming?.from_user_id ?? incoming?.sender_id,
+            currentUserId,
+            appState: AppState.currentState,
+          })) void markOpenThreadRead(conversationId);
         },
       )
       .on(
@@ -231,6 +246,7 @@ export function useChatMessages({
       created_at: p.created_at,
       attachment_url: p.attachment_url,
       attachment_type: p.attachment_type,
+      attachment_name: p.attachment_name ?? null,
       delivered_at: null,
       read_at: null,
       _clientStatus: p.status,
@@ -251,7 +267,7 @@ export function useChatMessages({
       const clientId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const createdAt = new Date().toISOString();
 
-      let attachment: { url: string; type: string } | undefined;
+      let attachment: { url: string; type: string; name?: string } | undefined;
 
       if (file) {
         setUploading(true);
@@ -263,6 +279,7 @@ export function useChatMessages({
             text: tempLabel,
             attachment_url: null,
             attachment_type: file.type,
+            attachment_name: file.name,
             created_at: createdAt,
             status: "pending",
           },
@@ -270,7 +287,9 @@ export function useChatMessages({
         try {
           const result = await messagesApi.uploadAttachment(conversationId, file);
           // uploadAttachment already returns the unwrapped { url, path, type }.
-          attachment = { url: result.url, type: result.type };
+          // The name goes with it, so the bubble (here and on web) shows the
+          // real file name instead of "PDF Document".
+          attachment = { url: result.url, type: result.type, name: file.name };
           setPending((prev) =>
             prev.map((p) =>
               p.clientId === clientId
@@ -283,13 +302,14 @@ export function useChatMessages({
             ),
           );
         } catch (err) {
+          // A failed UPLOAD leaves no bubble: it has no file to retry with. The
+          // composer keeps the file ("Upload failed — tap retry") and that
+          // preview is the only retry (chat spec bug 9; web useMessageSender).
           if (mountedRef.current) {
-            setPending((prev) =>
-              prev.map((p) => (p.clientId === clientId ? { ...p, status: "failed" } : p)),
-            );
+            setPending((prev) => prev.filter((p) => p.clientId !== clientId));
           }
           setUploading(false);
-          throw err;
+          throw new ChatSendError("upload", err);
         }
         setUploading(false);
       } else {
@@ -311,12 +331,17 @@ export function useChatMessages({
         // The realtime INSERT subscription will pick up the server echo
         // automatically; the dedupe effect drops the pending row.
       } catch (err) {
+        const failure = new ChatSendError("send", err);
         if (mountedRef.current) {
+          // A refusal a retry can't fix (e.g. a phone number) leaves no retry
+          // bubble - the composer gets the text back with the server's reason.
           setPending((prev) =>
-            prev.map((p) => (p.clientId === clientId ? { ...p, status: "failed" } : p)),
+            isPermanentRefusal(failure.code)
+              ? prev.filter((p) => p.clientId !== clientId)
+              : prev.map((p) => (p.clientId === clientId ? { ...p, status: "failed" } : p)),
           );
         }
-        throw err;
+        throw failure;
       }
     },
     [conversationId],
@@ -326,17 +351,18 @@ export function useChatMessages({
     async (clientId: string) => {
       const item = pending.find((p) => p.clientId === clientId);
       if (!item || !conversationId) return;
+      // Re-sends WITH the uploaded file (and its name); a row with nothing to
+      // send is dropped rather than sent empty and refused.
+      const payload = retryPayload(item);
+      if (!payload) {
+        setPending((prev) => prev.filter((p) => p.clientId !== clientId));
+        return;
+      }
       setPending((prev) =>
         prev.map((p) => (p.clientId === clientId ? { ...p, status: "pending" } : p)),
       );
       try {
-        await messagesApi.sendMessage(
-          conversationId,
-          item.text === "📎 Attachment" ? "" : item.text,
-          item.attachment_url && item.attachment_type
-            ? { url: item.attachment_url, type: item.attachment_type }
-            : undefined,
-        );
+        await messagesApi.sendMessage(conversationId, payload.text, payload.attachment);
       } catch (err) {
         if (mountedRef.current) {
           setPending((prev) =>

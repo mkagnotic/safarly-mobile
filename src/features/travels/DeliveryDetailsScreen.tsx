@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { canRateBooking } from "@/features/bookings/lib/ratingCopy";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import {
   CompositeNavigationProp,
@@ -11,14 +12,18 @@ import { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
-import { useMyProfile } from "@/hooks/api/useMyProfile";
+import { useAuth } from "@/context/AuthContext";
+import { STATUS_TONES } from "@/features/bookings/lib/bookingDisplay";
+import { bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { getErrorMessage, type Booking } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -60,11 +65,14 @@ export function DeliveryDetailsScreen() {
   const bookingId = route.params?.bookingId;
 
   const { booking, timeline, loading, error, refetch } = useBookingDetail(bookingId);
-  const myProfile = useMyProfile();
+  // The signed-in id is known at once; the profile fetch is not, and while it
+  // loaded the sender saw THEMSELVES as the other party (bookings canon #16).
+  const { user } = useAuth();
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Parcels", { tab: "packages" }); // My Travels lives on the "Parcels" tab key
+    // Reached from the Archive, so the fallback goes back there (28 Oct 2026).
+    else navigation.navigate("Parcels", { tab: "archive" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
   const handleRate = useCallback(() => {
@@ -93,6 +101,16 @@ export function DeliveryDetailsScreen() {
     );
   }
 
+  if (!booking && error) {
+    // Never the raw error text: ErrorState names the failure and offers a retry.
+    return (
+      <Screen onRefresh={refetch}>
+        <DetailsHeader onBack={handleBack} />
+        <ErrorState error={error} subject="this delivery" onRetry={() => void refetch()} />
+      </Screen>
+    );
+  }
+
   if (!booking) {
     return (
       <Screen onRefresh={refetch}>
@@ -101,12 +119,10 @@ export function DeliveryDetailsScreen() {
           <Ionicons name="cube-outline" size={28} color={colors.mutedText} />
           <Text style={styles.emptyTitle}>Delivery not found</Text>
           <Text style={styles.emptyBody}>
-            {error
-              ? getErrorMessage(error)
-              : "This delivery may have been removed or is no longer available."}
+            This delivery may have been removed or is no longer available.
           </Text>
           <AppButton
-            label="Back to My travels"
+            label="Back to My Travels"
             onPress={handleBack}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.emptyButton}
@@ -116,9 +132,15 @@ export function DeliveryDetailsScreen() {
     );
   }
 
-  const isSender = !!myProfile.profile?.id && booking.sender_id === myProfile.profile.id;
+  const isSender = !!user?.id && booking.sender_id === user.id;
   const counterpart = isSender ? booking.carrier : booking.sender;
-  const roleLabel = isSender ? "Carrier" : "Sender";
+  // The parcel owner is the "Receiver" everywhere (client rule
+  // party-label-receiver), so the button reads "Rate receiver".
+  const roleLabel = isSender ? "Carrier" : "Receiver";
+  // Archive holds ended deals too, so the tag says what happened, never a
+  // blanket "Delivered" (same chip words as My Bookings).
+  const statusText = booking.return_received_at ? "Returned - cancelled" : bookingStatusLabel(booking.status);
+  const tone = STATUS_TONES[booking.status] ?? STATUS_TONES.delivered;
   const deliveredOn = formatDate(booking.delivered_at);
   const parcel = booking.parcel;
 
@@ -128,13 +150,13 @@ export function DeliveryDetailsScreen() {
 
       {error ? (
         <View style={styles.bannerSlot}>
-          <FormBanner message={getErrorMessage(error)} />
+          <FormBanner title="Couldn't refresh this delivery" message={getErrorMessage(error)} />
         </View>
       ) : null}
 
       <Card style={styles.card}>
-        <View style={styles.tag}>
-          <Text style={styles.tagText}>DELIVERED</Text>
+        <View style={[styles.tag, { backgroundColor: tone.bg }]}>
+          <Text style={[styles.tagText, { color: tone.fg }]}>{statusText}</Text>
         </View>
         <View style={styles.routeRow}>
           <Text style={styles.routeText} numberOfLines={2}>
@@ -149,11 +171,17 @@ export function DeliveryDetailsScreen() {
 
         <View style={styles.factGrid}>
           {parcel?.category ? <Fact label="Category" value={parcel.category} /> : null}
-          {parcel?.weight_kg != null ? (
-            <Fact label="Weight" value={`${parcel.weight_kg} kg`} />
+          {/* The booking's parcel carries `weight` (weight_kg is the parcel API's name),
+              so the weight never showed here (27 Oct 2026). */}
+          {(parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight) != null ? (
+            <Fact label="Weight" value={`${parcel?.weight_kg ?? (parcel as { weight?: number } | undefined)?.weight} kg`} />
           ) : null}
-          {parcel?.fee_offered != null ? (
-            <Fact label="Fee" value={formatMoneyShort(parcel.fee_offered, parcel.fee_currency)} />
+          {/* The AGREED price, never the editable listing fee (28 Oct 2026). */}
+          {(booking.agreed_amount ?? parcel?.fee_offered) != null ? (
+            <Fact
+              label="Agreed price"
+              value={formatMoneyShort((booking.agreed_amount ?? parcel?.fee_offered) as number, parcel?.fee_currency)}
+            />
           ) : null}
         </View>
 
@@ -164,10 +192,13 @@ export function DeliveryDetailsScreen() {
 
       {counterpart ? (
         <Card style={styles.personCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
-              {initialsOf(counterpart.name)}
-            </Text>
+          <View>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+                {initialsOf(counterpart.name)}
+              </Text>
+            </View>
+            <VerifiedAvatarBadge verified={counterpart.is_verified} avatarSize={44} />
           </View>
           <View style={styles.personCol}>
             <Text style={styles.personName} numberOfLines={1}>
@@ -182,14 +213,17 @@ export function DeliveryDetailsScreen() {
               <Ionicons name="star" size={13} color={colors.safe} />
               <Text style={styles.ratedChipText}>Rated</Text>
             </View>
-          ) : (
+          ) : canRateBooking(booking.status) ? (
+            // Only a delivered booking can be rated (the server refuses the
+            // rest): a cancelled archive deal used to get a Rate button that
+            // failed with "Booking must be delivered".
             <AppButton
               label={`Rate ${roleLabel.toLowerCase()}`}
               onPress={handleRate}
               gradientColors={[colors.ctaAccent, colors.ctaAccent]}
               style={styles.rateButton}
             />
-          )}
+          ) : null}
         </Card>
       ) : null}
 
@@ -258,6 +292,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tagText: {
+    textTransform: "uppercase",
     color: colors.safe,
     fontSize: 10,
     lineHeight: 14,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useModalHandoff } from "@/hooks/useModalHandoff";
@@ -17,13 +17,17 @@ import { PayoutRequiredModal } from "@/components/chat/PayoutRequiredModal";
 import { TravelDocModal } from "@/components/chat/TravelDocModal";
 import { ChatDealSwitcher } from "@/features/messages/ChatDealSwitcher";
 import { labelDeals, selectableDeals } from "@/utils/dealLabel";
-import { BUDDY_ENTRY_ID, buddyEntryLabel, switcherEntryCount } from "@/utils/buddyEntry";
+import { BUDDY_ENTRY_ID, buddyEntryLabel } from "@/utils/buddyEntry";
+import { dealContextLine } from "@/utils/dealContext";
 import { ChatWorkflowPin } from "@/features/messages/ChatWorkflowPin";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+import { dismissChatNotifications, setActiveChat } from "@/services/notifications/push";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
 import { useOffers } from "@/hooks/api/useOffers";
-import { resolveOffers } from "@/features/messages/offerResolution";
+import { dealCurrencyMap, resolveOffers } from "@/features/messages/offerResolution";
+import { offerSeedAmount } from "@/features/messages/offerSeedAmount";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { messagesApi } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -32,6 +36,8 @@ import { currencySymbol } from "@/utils/money";
 import { getBackTarget } from "./chat/chatHelpers";
 import { chatStyles } from "./chat/chatStyles";
 import { type ChatNav, type ChatRoute } from "./chat/chatTypes";
+import { appendWithinCap, canUnblockConversation } from "./chat/lib/chatModerationRules";
+import { MESSAGE_MAX_LENGTH } from "./chat/lib/chatSendRules";
 import { AttachSheet } from "./chat/components/AttachSheet";
 import { BubbleMenuSheet } from "./chat/components/BubbleMenuSheet";
 import { BuddyPin } from "./chat/components/BuddyPin";
@@ -74,28 +80,46 @@ export function OfferChatScreen() {
     useChatKeyboardLayout(insets);
 
   const conversationId = route.params?.conversationId ?? null;
+  // While this chat is on screen its pushes show no banner, and opening it clears
+  // its notifications from the tray - how every chat app behaves (27 Oct 2026).
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversationId) return undefined;
+      setActiveChat(conversationId);
+      void dismissChatNotifications(conversationId);
+      return () => setActiveChat(null);
+    }, [conversationId]),
+  );
   const fallbackName = route.params?.name ?? "Conversation";
   const source = route.params?.source ?? "messages";
   // Opened from a Travel Buddy card while the chat stays a parcel thread: open on
   // the travel-buddy entry for that trip.
   const buddyListingId = route.params?.buddyListingId ?? null;
+  // A link that names a deal opens on it - notification `dealId`, or `?deal=` on a
+  // `safarly://messages/:id` link (React Navigation passes query keys as params).
+  // Web parity: `useThreadDeal` dealHint.
+  const dealHint =
+    route.params?.dealId ?? (route.params as { deal?: string } | undefined)?.deal ?? null;
   const fallbackBackTarget = getBackTarget(source);
 
   const {
     conversation, acceptMatch, declineMatch, refetchConversations,
-    participantName, participantInitials, participantId, participantAvatarUrl,
+    participantName, participantInitials, participantId, participantAvatarUrl, participantVerified,
   } = useChatConversation({ conversationId, fallbackName, user });
   // ───────── Server-owned workflow (pinned action bar) ─────────
   const {
     activeDeal, workflow, deals, selectedDealId, selectDeal, refetch: refetchActiveDeal,
-    buddy, buddySelected,
-  } = useActiveDeal(conversationId, buddyListingId);
+    buddy, buddySelected, switchingDeal, loading: activeDealLoading,
+  } = useActiveDeal(conversationId, buddyListingId, dealHint);
 
   // Header badge, match banner and match-action subject — see `useChatMatchStatus`.
   const {
     matchStatus, matchableDeal, isBlocked, matchedByOther, matchedByMe, wasUnmatched, isDeclined,
     canSend, userRole, isMatched, matchBannerVisible,
   } = useChatMatchStatus({ conversation, conversationId, activeDeal, workflow, user });
+  // Only the person who blocked sees Unblock and "You blocked {name}" (flow-18 bug 3):
+  // the other side got the server's FORBIDDEN. Same rule as web matchState.ts.
+  const canUnblock = canUnblockConversation(isBlocked, conversation?.blocked_by, user?.id);
 
   const {
     messages, loading, loadingOlder, hasMore, error, uploading, refetch, loadOlder, send, retry,
@@ -112,9 +136,15 @@ export function OfferChatScreen() {
   // ───────── In-chat offers ─────────
   const { pending: offerPending, seedOffer, postOffer, acceptOffer, rejectOffer } =
     useOffers(conversationId);
+  // Each deal's currency outranks an offer card's stored label: offers made before
+  // 22 Oct 2026 were stored as USD on rupee deals too (AN14, same as web).
+  const dealCurrencies = useMemo(
+    () => dealCurrencyMap([activeDeal, ...(deals ?? []).map((d) => d.active_deal)]),
+    [activeDeal, deals],
+  );
   const offerState = useMemo(
-    () => resolveOffers(messages, user?.id ?? null),
-    [messages, user?.id],
+    () => resolveOffers(messages, user?.id ?? null, dealCurrencies),
+    [messages, user?.id, dealCurrencies],
   );
   /**
    * Offers this screen has already settled, kept until the server's own
@@ -149,10 +179,15 @@ export function OfferChatScreen() {
   // ⚠️ Gated on the SELECTABLE deals, exactly as the switcher is - see web.
   // The travel-buddy entry counts as one more thing to choose between.
   const selectedDealLabel = useMemo(() => {
-    const shown = selectableDeals(deals ?? [], selectedDealId);
-    // Same rule as the switcher: two or more things to choose between.
-    if (selectableDeals(deals ?? [], selectedDealId).length < 2 && switcherEntryCount(shown.length, buddy) < 2) return null;
-    if (buddySelected && buddy) return { full: buddyEntryLabel(buddy) };
+    // Web's rule (see `utils/dealContext.ts`): no switcher, no line; a lone deal
+    // beside the buddy entry is not named.
+    const line = dealContextLine({
+      selectableCount: selectableDeals(deals ?? [], selectedDealId).length,
+      hasBuddy: !!buddy,
+      buddySelected,
+    });
+    if (line === "buddy" && buddy) return { full: buddyEntryLabel(buddy) };
+    if (line !== "deal") return null;
     return labelDeals(deals ?? []).get(selectedDealId ?? "") ?? null;
   }, [deals, selectedDealId, buddy, buddySelected]);
 
@@ -210,7 +245,7 @@ export function OfferChatScreen() {
   const { emojiOpen, setEmojiOpen, setDraft } = composer;
   // Header kebab: conversation actions and the dialogs they open.
   const actionMenu = useChatActionMenu({
-    conversationId, conversation, activeDeal, matchableDeal, navigation, refetchConversations,
+    conversationId, conversation, participantName, activeDeal, matchableDeal, navigation, refetchConversations,
     refetchActiveDeal, afterChildModal, setModalError,
   });
   const { setActionMenuOpen, reportUserOpen, confirmAction } = actionMenu;
@@ -351,6 +386,7 @@ export function OfferChatScreen() {
           participantName={participantName}
           participantInitials={participantInitials}
           participantAvatarUrl={participantAvatarUrl}
+          participantVerified={participantVerified}
           matchStatus={matchStatus}
           isBlocked={isBlocked}
           matchedByOther={matchedByOther}
@@ -369,6 +405,7 @@ export function OfferChatScreen() {
           isDeclined={isDeclined}
           wasUnmatched={wasUnmatched}
           isBlocked={isBlocked}
+          canUnblock={canUnblock}
           matchBusy={matchBusy}
           matchPending={matchPending}
           decliningPending={decliningPending}
@@ -429,7 +466,19 @@ export function OfferChatScreen() {
 
         {/* An edit made the deal stop fitting (route, dates, weight): warn, never
             auto-cancel — same words as web (23 Oct 2026). */}
-        {!buddySelected && activeDeal?.fit_warnings?.length ? (
+        {/* Another deal was tapped: a loader in the step's place, never the old deal's step. */}
+        {/* Also on the first load, so the step area is a skeleton, not empty. */}
+        {!buddySelected && (switchingDeal || (activeDealLoading && !workflow)) ? (
+          <View style={styles.dealSwitching} accessibilityRole="progressbar" accessibilityLabel="Loading this delivery" testID="deal-switching">
+            <View style={styles.dealSwitchingText}>
+              <SkeletonBlock style={styles.dealSwitchingLine} />
+              <SkeletonBlock style={[styles.dealSwitchingLine, styles.dealSwitchingLineShort]} />
+            </View>
+            <SkeletonBlock style={styles.dealSwitchingButton} />
+          </View>
+        ) : null}
+
+        {!buddySelected && !switchingDeal && activeDeal?.fit_warnings?.length ? (
           <View style={styles.fitWarning} accessibilityRole="alert" testID="deal-fit-warning">
             {activeDeal.fit_warnings.map((w) => (
               <View key={w} style={styles.fitWarningRow}>
@@ -441,16 +490,17 @@ export function OfferChatScreen() {
         ) : null}
 
         {/* ───────── Workflow pin (server FSM) ───────── */}
-        {!buddySelected && showWorkflowPin && workflow ? (
+        {!buddySelected && !switchingDeal && showWorkflowPin && workflow ? (
           <ChatWorkflowPin
             workflow={workflow}
             activeDeal={activeDeal}
             onAction={handlePinAction}
+            uploadTries={{ travelDoc: travelDoc.doc, parcelReview: parcelReview.review }}
           />
         ) : null}
 
         {/* ───────── Offer bar ───────── */}
-        {!buddySelected && supportsOffers && liveOffer ? (
+        {!buddySelected && !switchingDeal && supportsOffers && liveOffer ? (
           <OfferBar
             liveOffer={liveOffer}
             participantName={participantName}
@@ -459,6 +509,8 @@ export function OfferChatScreen() {
             handleDeclineOffer={handleDeclineOffer}
             handleOpenOfferComposer={handleOpenOfferComposer}
             waitingOnPayouts={activeDeal?.carrier_payout_ready === false}
+            viewerIsCarrier={activeDeal?.viewer_role === "carrier"}
+            onSetUpPayouts={() => navigation.navigate("PayoutSetupTab")}
           />
         ) : null}
 
@@ -470,13 +522,16 @@ export function OfferChatScreen() {
           input box for the person who RECEIVED a match request, leaving the
           screen with the Accept banner and empty dead space below it. The
           accept/decline banner now sits above a live composer instead.
+          Blocked: the composer stays, disabled, saying "This conversation is
+          blocked" - the same as web's (handleSend refuses while !canSend).
         */}
-        {canSend ? (
+        {canSend || (isBlocked && !!conversationId) ? (
           <ChatComposer
             composer={composer}
             composerBottomPad={composerBottomPad}
             uploading={uploading}
             stopTyping={stopTyping}
+            blocked={!canSend}
           />
         ) : null}
       </View>
@@ -488,7 +543,9 @@ export function OfferChatScreen() {
         sheetInset={sheetInset}
         matchStatus={matchStatus}
         matchedByOther={matchedByOther}
+        matchedByMe={matchedByMe}
         isBlocked={isBlocked}
+        canUnblock={canUnblock}
         setMatchModalOpen={setMatchModalOpen}
         setDeclineOpen={setDeclineOpen}
       />
@@ -586,11 +643,7 @@ export function OfferChatScreen() {
         // A first offer seeds from what the deal already knows (previous
         // agreement -> last offer -> the listing's asking price); a counter
         // still seeds from the offer being responded to.
-        currentAmount={
-          offerComposer?.mode === "counter" || offerComposer?.mode === "revise"
-            ? liveOffer?.amount ?? null
-            : activeDeal?.pricing?.suggested_amount ?? null
-        }
+        currentAmount={offerSeedAmount(offerComposer?.mode, liveOffer?.amount, activeDeal?.pricing)}
         currencySymbol={offerCurrencySymbol}
         onCancel={() => {
           if (offerPending !== "seed" && offerPending !== "counter") setOfferComposer(null);
@@ -602,7 +655,9 @@ export function OfferChatScreen() {
       <EmojiPicker
         open={emojiOpen}
         onClose={() => setEmojiOpen(false)}
-        onEmojiSelected={(e) => setDraft((prev) => prev + e.emoji)}
+        // The emoji counts toward the 2,000 cap like any character: it goes in only
+        // if the whole emoji fits (flow-18 bug 15); the composer counter shows the cap.
+        onEmojiSelected={(e) => setDraft((prev) => appendWithinCap(prev, e.emoji, MESSAGE_MAX_LENGTH))}
       />
     </Screen>
   );
@@ -626,6 +681,11 @@ const screenStyles = StyleSheet.create({
   fitWarning: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#FDE68A", backgroundColor: "#FFFBEB", paddingHorizontal: 14, paddingVertical: 8, gap: 4 },
   fitWarningRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   fitWarningText: { flex: 1, fontSize: 12, lineHeight: 16, color: "#78350F" },
+  dealSwitching: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: 14, paddingVertical: 12 },
+  dealSwitchingText: { flex: 1, gap: 8 },
+  dealSwitchingLine: { height: 12, width: "80%" },
+  dealSwitchingLineShort: { width: "50%" },
+  dealSwitchingButton: { height: 40, width: 96, borderRadius: 12 },
 });
 
 const styles = { ...chatStyles, ...screenStyles };

@@ -18,16 +18,13 @@ import { colors } from "@/theme/colors";
 
 type Nav = BottomTabNavigationProp<MainTabParamList, "ChangePasswordTab">;
 
-// Stricter than the shared passwordPolicy because the backend's change-password
-// route (auth-handler) enforces upper + lower + digit — validate the same rule
-// client-side so a valid-looking password never bounces off the server. Mirrors
-// web's AccountSecuritySettings.handleChangePassword.
+// The shared rule (passwordPolicy): 8+ characters with letters and numbers - the
+// same as sign-up, reset and the server (27 Oct 2026; change used to demand upper
+// AND lower case too). Mirrors web's AccountSecuritySettings.handleChangePassword.
 const MIN_LEN = 8;
 function validateNewPassword(current: string, next: string): string | null {
   if (next.length < MIN_LEN) return `Password must be at least ${MIN_LEN} characters`;
-  if (!/[A-Z]/.test(next)) return "Include at least one uppercase letter";
-  if (!/[a-z]/.test(next)) return "Include at least one lowercase letter";
-  if (!/\d/.test(next)) return "Include at least one number";
+  if (!/[A-Za-z]/.test(next) || !/\d/.test(next)) return "Use both letters and numbers";
   if (current && current === next) return "New password must be different from current";
   return null;
 }
@@ -36,7 +33,7 @@ type Errors = { current?: string; next?: string; confirm?: string };
 
 export function ChangePasswordScreen() {
   const navigation = useNavigation<Nav>();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -79,21 +76,31 @@ export function ChangePasswordScreen() {
 
     setSubmitting(true);
     try {
-      await authApi.changePassword(current, next);
+      const res = await authApi.changePassword(current, next);
       if (!mountedRef.current) return;
+      // Rare ("Secure password change" with an old login): the server had to sign
+      // out every device, this one too, so sign in again now rather than later.
+      if (res.data?.signed_out_here) {
+        showToast({ title: "Password changed", message: "Sign in with your new password.", variant: "success" });
+        await signOut();
+        return;
+      }
       showToast({
         title: "Password changed",
-        message: "Use your new password next time you sign in.",
+        // The server now ends every other session (27 Oct 2026): say so
+        message: res.data?.signed_out_others
+          ? "You're still signed in here. Your other devices have been signed out."
+          : "Use your new password next time you sign in.",
         variant: "success",
       });
       goBack();
     } catch (err) {
       if (!mountedRef.current) return;
       const message = getErrorMessage(err);
-      // The server returns "Wrong current password" when re-auth fails — surface
-      // it on the field rather than as a generic banner.
-      if (/current password|wrong|incorrect|invalid/i.test(message)) {
-        setErrors((e) => ({ ...e, current: "That's not your current password" }));
+      // A wrong current password goes on its field, not a banner. For an account
+      // made with Google or Apple the server explains how to set a password; keep that.
+      if (/current password|wrong|incorrect/i.test(message)) {
+        setErrors((e) => ({ ...e, current: /Google or Apple/.test(message) ? message : "That's not your current password." }));
         currentRef.current?.focus();
       } else {
         setFormError(message);
@@ -101,7 +108,7 @@ export function ChangePasswordScreen() {
     } finally {
       if (mountedRef.current) setSubmitting(false);
     }
-  }, [submitting, validate, current, next, goBack]);
+  }, [submitting, validate, current, next, goBack, signOut]);
 
   return (
     <Screen contentContainerStyle={styles.content} refreshEnabled={false}>
@@ -165,7 +172,7 @@ export function ChangePasswordScreen() {
             clearFormError();
           }}
           placeholder="Enter a new password"
-          hint="At least 8 characters, with upper & lower case and a number"
+          hint="At least 8 characters, with letters and numbers"
           secureTextEntry={!showNew}
           autoCapitalize="none"
           autoCorrect={false}

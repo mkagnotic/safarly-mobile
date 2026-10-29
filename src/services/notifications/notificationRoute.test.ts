@@ -145,3 +145,40 @@ describe("listing, profile and pay deep links open their screens", () => {
     assert.notEqual(resolveNotificationRoute("/customer/profiles", null).screen, "Profile");
   });
 });
+
+// Client, 26 Oct 2026: tapping the in-app notification banner did nothing on
+// Android. The banner now opens resolveNotificationRoute's answer, like a push tap.
+describe("the in-app notification banner opens what it is about", () => {
+  const CONV = "11111111-2222-3333-4444-555555555555";
+  test("a new message opens that chat, named after the sender", () => {
+    const t = resolveNotificationRoute(`/customer/messages/${CONV}`, "message", "New message from User One");
+    assert.equal(t.screen, "OfferChatTab");
+    assert.equal((t.params as { conversationId: string }).conversationId, CONV);
+    assert.equal((t.params as { name: string }).name, "User One");
+  });
+  test("no link still lands somewhere sensible for its type", () => {
+    assert.equal(resolveNotificationRoute(undefined, "message", "hey").screen, "MessagesTab");
+    assert.ok(resolveNotificationRoute(null, null, null).screen, "always a screen");
+  });
+});
+
+// A chat link that names a deal (`?deal=`, e.g. "trip details changed") must open
+// THAT deal. Dropping it opened the server's default deal in a multi-deal chat, so
+// the warning and the step on screen were about another delivery. Web parity.
+describe("chat links keep the deal they name", () => {
+  const CONV = "bbbbbbbb-2222-4000-8000-bbbbbbbbbbbb";
+  test("?deal= becomes the chat's dealId", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}?deal=${ID}`, "message", "Trip details changed");
+    assert.equal(r.screen, "OfferChatTab");
+    assert.equal(r.params?.conversationId, CONV);
+    assert.equal(r.params?.dealId, ID);
+  });
+  test("a plain chat link carries no dealId", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}`, "message", "New message from Roja");
+    assert.equal(r.params?.dealId, undefined);
+  });
+  test("a malformed deal id is ignored", () => {
+    const r = resolveNotificationRoute(`/customer/messages/${CONV}?deal=not-a-uuid`, "message");
+    assert.equal(r.params?.dealId, undefined);
+  });
+});

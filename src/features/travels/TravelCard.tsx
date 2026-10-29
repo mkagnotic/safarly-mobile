@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { showAppAlert } from "@/feedback/appFeedback";
 import {
   isImplicitStatus,
@@ -43,7 +44,7 @@ interface Props {
    * The matched sender/carrier on the other side of this parcel. Renders a
    * footer row with a Chat entry point, mirroring web's `TripCard`.
    */
-  counterpart?: { id?: string; name?: string | null } | null;
+  counterpart?: { id?: string; name?: string | null; is_verified?: boolean | null } | null;
   /** Label for the counterpart's role, e.g. "carrier" / "sender". */
   counterpartRole?: string;
   onChat?: () => void;
@@ -87,15 +88,16 @@ export const TravelCard = memo(function TravelCard({
   // || travel_date), so a multi-day trip isn't marked expired while still ongoing.
   const expiryDate =
     type === "parcel"
-      ? (item as Parcel).delivery_by
+      ? ((item as Parcel & { delivery_by_to?: string | null }).delivery_by_to || (item as Parcel).delivery_by)
       : ((item as FlightItem & { travel_date_to?: string | null }).travel_date_to ??
         (item as FlightItem).travel_date);
   const expired = isListingExpired(status, expiryDate);
-  const showStatusPill = !expired && !!status && !isImplicitStatus(status);
+  // Unknown status -> no pill, never the raw code (28 Oct 2026).
+  const showStatusPill = !expired && !!labelForStatus(status) && !isImplicitStatus(status);
   // A matched/accepted listing's badge opens the list of matching counterparts.
   const matchClickable =
     showStatusPill && !!onViewMatches && (status === "matched" || status === "accepted");
-  const tagLabel = tag ?? (type === "flight" ? "TRIP LISTING" : "PARCEL");
+  const tagLabel = tag ?? (type === "flight" ? "Trip listing" : "Parcel");
   const hasActions = canModify && !!(onEdit || onDelete);
 
   /**
@@ -123,7 +125,7 @@ export const TravelCard = memo(function TravelCard({
   const statusNode = expired ? (
     <View style={styles.expiredPill}>
       <Ionicons name="calendar-clear-outline" size={11} color={colors.mutedText} />
-      <Text style={styles.expiredPillText}>EXPIRED</Text>
+      <Text style={styles.expiredPillText}>Expired</Text>
     </View>
   ) : matchClickable ? (
     <Pressable
@@ -157,7 +159,7 @@ export const TravelCard = memo(function TravelCard({
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
         (type === "flight"
-          ? "Your trip will be removed from search. This can't be undone."
+          ? "Your trip will be removed from search and any pending requests from senders will be declined. This can't be undone."
           : "Carriers won't see it any more, and any match or offer on it will be closed. This can't be undone."),
       actions: [
         { text: "Keep it", style: "cancel" },
@@ -246,8 +248,11 @@ export const TravelCard = memo(function TravelCard({
 
       {counterpart ? (
         <View style={styles.counterpartRow}>
-          <View style={styles.counterpartAvatar}>
-            <Text style={styles.counterpartAvatarText}>{initialsOf(counterpart.name)}</Text>
+          <View>
+            <View style={styles.counterpartAvatar}>
+              <Text style={styles.counterpartAvatarText}>{initialsOf(counterpart.name)}</Text>
+            </View>
+            <VerifiedAvatarBadge verified={counterpart.is_verified} avatarSize={36} />
           </View>
           <View style={styles.counterpartCol}>
             <Text style={styles.counterpartName} numberOfLines={1}>
@@ -282,15 +287,8 @@ function renderFlightMeta(trip: FlightItem): string {
   const date = formatTravelDateRange(trip, { year: true });
   const airline = trip.airline?.trim();
   const cap = trip.luggage_capacity_kg ?? trip.luggage_capacity;
-  const offers = trip.offers_count;
-  return [
-    date,
-    airline,
-    cap ? `${cap}kg capacity` : "",
-    offers ? `${offers} offers` : "",
-  ]
-    .filter(Boolean)
-    .join(" | ");
+  // No "N offers" meta (28 Oct 2026): web doesn't show it.
+  return [date, airline, cap ? `${cap}kg capacity` : ""].filter(Boolean).join(" · ");
 }
 
 function renderParcelMeta(parcel: Parcel): string {
@@ -303,7 +301,7 @@ function renderParcelMeta(parcel: Parcel): string {
   const fee = agreed != null
     ? `${formatMoneyShort(agreed, parcel.fee_currency)} agreed`
     : parcel.fee_offered != null ? formatMoneyShort(parcel.fee_offered, parcel.fee_currency) : "";
-  return [date, category, weight, fee].filter(Boolean).join(" | ");
+  return [date, category, weight, fee].filter(Boolean).join(" · ");
 }
 
 const styles = StyleSheet.create({
@@ -324,6 +322,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tagText: {
+    textTransform: "uppercase",
     color: colors.ctaAccent,
     fontSize: 10,
     lineHeight: 14,
@@ -384,6 +383,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   expiredPillText: {
+    textTransform: "uppercase",
     color: colors.mutedText,
     fontSize: 10,
     lineHeight: 14,

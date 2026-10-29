@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { colors } from "@/theme/colors";
+import { pageRangeLabel } from "@/features/search/lib/searchFilterLabels";
 
 // ───────────────────────── Pagination ─────────────────────────
 
@@ -11,13 +12,27 @@ interface PaginationProps {
   totalPages: number;
   loading: boolean;
   onChange: (next: number) => void;
+  /** 28 Oct 2026: "Showing 1–10 of 34 carrier trips" above the buttons (web wording). */
+  totalItems: number;
+  perPage: number;
+  itemLabel?: string;
 }
 
-export function Pagination({ page, totalPages, loading, onChange }: Readonly<PaginationProps>) {
+export function Pagination({
+  page,
+  totalPages,
+  loading,
+  onChange,
+  totalItems,
+  perPage,
+  itemLabel,
+}: Readonly<PaginationProps>) {
   if (totalPages <= 1) return null;
   const canPrev = page > 1 && !loading;
   const canNext = page < totalPages && !loading;
   return (
+    <View style={styles.wrap}>
+    <Text style={styles.rangeText}>{pageRangeLabel(page, perPage, totalItems, itemLabel)}</Text>
     <View style={styles.pagination}>
       <Pressable
         onPress={() => onChange(page - 1)}
@@ -47,16 +62,17 @@ export function Pagination({ page, totalPages, loading, onChange }: Readonly<Pag
         />
       </Pressable>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: { marginTop: 4, marginBottom: 8, gap: 8 },
+  rangeText: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500", textAlign: "center" },
   pagination: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 4,
-    marginBottom: 8,
   },
   pageButton: {
     flexDirection: "row",

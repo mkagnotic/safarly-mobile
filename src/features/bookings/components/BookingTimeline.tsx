@@ -4,6 +4,7 @@ import { colors } from "@/theme/colors";
 import type { UseBookingDetailResult } from "@/hooks/api/useBookingDetail";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";
 import { formatDateTime } from "@/features/bookings/lib/bookingDisplay";
+import { bookingEventLabel, bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
 
 /** The booking's event history, oldest first. */
 export function BookingTimeline({
@@ -17,9 +18,9 @@ export function BookingTimeline({
           <View style={styles.timelineDot} />
           <View style={{ flex: 1 }}>
             <Text style={styles.timelineEvent}>
-              <Text style={styles.timelineEventName}>{e.event.replace(/_/g, " ")}</Text>
+              <Text style={styles.timelineEventName}>{bookingEventLabel(e.event)}</Text>
               {e.description ? (
-                <Text style={styles.timelineEventDesc}> - {e.description}</Text>
+                <Text style={styles.timelineEventDesc}> — {e.description}</Text>
               ) : null}
             </Text>
             <Text style={styles.timelineDate}>{formatDateTime(e.created_at)}</Text>
@@ -41,7 +42,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   timelineEvent: { color: colors.text, fontSize: 12, lineHeight: 16 },
-  timelineEventName: { color: colors.text, fontWeight: "700", textTransform: "capitalize" },
+  timelineEventName: { color: colors.text, fontWeight: "700" },
   timelineEventDesc: { color: colors.mutedText },
   timelineDate: { color: colors.subtleText, fontSize: 11, marginTop: 2 },
 });

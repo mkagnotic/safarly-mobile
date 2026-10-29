@@ -34,9 +34,6 @@ import { ContactScreen } from "@/features/legal/ContactScreen";
 import { OnboardingScreen } from "@/features/onboarding/OnboardingScreen";
 import { SendParcelScreen } from "@/features/parcels/SendParcelScreen";
 import { ParcelDetailsScreen } from "@/features/parcels/ParcelDetailsScreen";
-import { ReviewPayScreen } from "@/features/parcels/ReviewPayScreen";
-import { PaymentSuccessScreen } from "@/features/parcels/PaymentSuccessScreen";
-import { PaymentFailureScreen } from "@/features/parcels/PaymentFailureScreen";
 import { ListTripScreen } from "@/features/trips/ListTripScreen";
 import { ListTripSuccessScreen } from "@/features/trips/ListTripSuccessScreen";
 import { TripDetailsScreen } from "@/features/trips/TripDetailsScreen";
@@ -54,11 +51,11 @@ import { PayoutSetupScreen } from "@/features/wallet/PayoutSetupScreen";
 import { TransactionsScreen } from "@/features/wallet/TransactionsScreen";
 import { ReviewsScreen } from "@/features/reviews/ReviewsScreen";
 import { KycVerificationScreen } from "@/features/profile/KycVerificationScreen";
-import { SettingsScreen } from "@/features/profile/SettingsScreen";
 import { SecurityScreen } from "@/features/profile/SecurityScreen";
 import { PreferencesScreen } from "@/features/profile/PreferencesScreen";
 import { ChangePasswordScreen } from "@/features/profile/ChangePasswordScreen";
 import { ChangeEmailScreen } from "@/features/profile/ChangeEmailScreen";
+import { BlockedUsersScreen } from "@/features/profile/BlockedUsersScreen";
 // New screens
 import { OpportunitiesScreen } from "@/features/opportunities/OpportunitiesScreen";
 import { BookingsScreen } from "@/features/bookings/BookingsScreen";
@@ -76,6 +73,7 @@ import { usePresenceBroadcast } from "@/hooks/realtime/usePresenceBroadcast";
 import { useRealtimeSync } from "@/hooks/realtime/useRealtimeSync";
 import { useUnreadInboxCount } from "@/hooks/api/useUnreadInboxCount";
 import { AutoPrompts } from "@/components/reminders/AutoPrompts";
+import { ConnectionBanner } from "@/components/ui/ConnectionBanner";
 import { colors, glassBlurIntensity, glassTabBarFallback, screenCanvas } from "@/theme/colors";
 import { t } from "@/i18n/translations";
 
@@ -137,12 +135,10 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   PreferencesTab: "options-outline",
   ChangePasswordTab: "lock-closed-outline",
   ChangeEmailTab: "mail-open-outline",
+  BlockedUsersTab: "ban-outline",
   DeleteAccountTab: "trash-outline",
   ForgotPasswordTab: "mail-outline",
   SendParcelTab: "cube-outline",
-  ReviewPayTab: "card-outline",
-  PaymentSuccessTab: "checkmark-circle",
-  PaymentFailureTab: "close-circle",
   ListTripTab: "airplane-outline",
   ListTripSuccessTab: "checkmark-circle",
   TripDetailsTab: "document-text-outline",
@@ -240,7 +236,12 @@ function MainTabs() {
         // double up by cross-blending scenes mid-transition (visible ghosting).
         animation: "none" as const,
         unmountOnBlur: false,
-        freezeOnBlur: true,
+        // 28 Oct 2026: OFF. Freeze hides a blurred tab inside a Suspense
+        // boundary and reveals it on return. Android hardware back reaches
+        // goBack() at default (concurrent) priority, not the sync priority of
+        // a press, and that reveal left Profile blank for good. Tabs stay
+        // mounted and detached natively; they just aren't frozen.
+        freezeOnBlur: false,
         // Transparent so the navigator-level HeroBackground shows through.
         // Flattening elevation/shadow stops react-native-screens from painting
         // a trailing edge between scenes.
@@ -318,17 +319,17 @@ function MainTabs() {
       <Tabs.Screen name="KycVerificationTab" component={KycVerificationScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="EditProfileTab" component={EditProfileScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ReviewsTab" component={ReviewsScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="SettingsTab" component={SettingsScreen} options={HIDDEN_TAB} />
+      {/* The old Settings screen had four rows that did nothing (and a "Payment Methods"
+          feature that doesn't exist); its only way in, the "settings" link, opens Security. */}
+      <Tabs.Screen name="SettingsTab" component={SecurityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SecurityTab" component={SecurityScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="PreferencesTab" component={PreferencesScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangePasswordTab" component={ChangePasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ChangeEmailTab" component={ChangeEmailScreen} options={HIDDEN_TAB} />
+      <Tabs.Screen name="BlockedUsersTab" component={BlockedUsersScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="DeleteAccountTab" component={DeleteAccountScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ForgotPasswordTab" component={ForgotPasswordScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="SendParcelTab" component={SendParcelScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="ReviewPayTab" component={ReviewPayScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="PaymentSuccessTab" component={PaymentSuccessScreen} options={HIDDEN_TAB} />
-      <Tabs.Screen name="PaymentFailureTab" component={PaymentFailureScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ListTripTab" component={ListTripScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="ListTripSuccessTab" component={ListTripSuccessScreen} options={HIDDEN_TAB} />
       <Tabs.Screen name="TripDetailsTab" component={TripDetailsScreen} options={HIDDEN_TAB} />
@@ -474,6 +475,10 @@ export function RootNavigator() {
           never fetches on splash / auth / profile-setup. */}
       {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
         <AutoPrompts />
+      )}
+      {/* Web ConnectionBanner parity (signed-in app only, like web's CustomerLayout). */}
+      {!showSplash && onboarded && authenticated && !authBootstrapping && profileSetupDone && (
+        <ConnectionBanner />
       )}
       {SHOW_DATA_TOGGLE && (
         <Pressable

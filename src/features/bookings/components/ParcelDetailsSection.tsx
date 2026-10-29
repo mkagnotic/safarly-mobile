@@ -6,20 +6,22 @@ import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
 import { sharedStyles } from "@/features/bookings/bookingsStyles";
+import { formatCategory } from "@/features/bookings/lib/bookingDisplay";
 
-/** Category, fee and agreed travel date of the booked parcel. */
+/** Category, agreed price and agreed travel date of the booked parcel. */
 export function ParcelDetailsSection({ booking }: Readonly<{ booking: Booking }>) {
   if (!booking.parcel) return null;
   return (
     <View style={sharedStyles.expandedSection}>
-      <Text style={sharedStyles.expandedLabel}>Parcel Details</Text>
+      <Text style={sharedStyles.expandedLabel}>Parcel details</Text>
       <View style={styles.parcelGrid}>
         <View style={styles.parcelCell}>
           <Text style={styles.parcelCellKey}>Category: </Text>
-          <Text style={styles.parcelCellValue}>{booking.parcel.category}</Text>
+          <Text style={styles.parcelCellValue}>{formatCategory(booking.parcel.category)}</Text>
         </View>
         <View style={styles.parcelCell}>
-          <Text style={styles.parcelCellKey}>Fee: </Text>
+          {/* The agreed amount (bookingFee), so it is named that (canon #21). */}
+          <Text style={styles.parcelCellKey}>Agreed price: </Text>
           <Text style={[styles.parcelCellValue, { color: colors.primary }]}>
             {formatMoney(bookingFee(booking), booking.parcel.fee_currency)}
           </Text>

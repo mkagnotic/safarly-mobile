@@ -13,6 +13,12 @@ import {
   type RNUploadFile,
 } from "@/services/api";
 import { formatMoney } from "@/utils/money";
+import {
+  cancelToast,
+  declineToast,
+  postPossessionResult,
+  returnResolutionToast,
+} from "@/features/bookings/lib/moneyMessages";
 import type { ExpandedBookingState } from "@/features/bookings/hooks/useExpandedBooking";
 
 type BookingActionDeps = Pick<
@@ -24,6 +30,7 @@ type BookingActionDeps = Pick<
   | "setOtpCode"
   | "setGeneratedOtp"
   | "setOtpEmailed"
+  | "setOtpExpiresInSec"
   | "setModalError"
   | "setAcceptHandoffOpen"
   | "setRejectHandoffOpen"
@@ -46,6 +53,7 @@ export function createBookingActions({
   setOtpCode,
   setGeneratedOtp,
   setOtpEmailed,
+  setOtpExpiresInSec,
   setModalError,
   setAcceptHandoffOpen,
   setRejectHandoffOpen,
@@ -61,7 +69,7 @@ export function createBookingActions({
       "set-handoff-plan",
       () => bookingsApi.setHandoffPlan(booking.id, plan),
       plan.mode === "shipped"
-        ? "Address shared - your sender can now send the parcel"
+        ? "Address shared — your sender can now send the parcel"
         : "Meetup details shared with your sender",
     );
 
@@ -69,7 +77,7 @@ export function createBookingActions({
     runAction(
       "mark-handoff-sent",
       () => bookingsApi.markHandoffDispatched(booking.id, args),
-      "Marked as sent - your carrier will inspect it on arrival",
+      "Marked as sent — your carrier will inspect it on arrival",
     );
 
   // ── Parcel return (after a decline / mid-trip cancel) ───────────────────────
@@ -77,14 +85,15 @@ export function createBookingActions({
     runAction(
       "set-return-resolution",
       () => bookingsApi.setReturnResolution(booking.id, args),
-      "Saved - your carrier has been told what to do with the parcel",
+      // "I already have the parcel" closes the deal at once; say so.
+      returnResolutionToast(args.resolution),
     );
 
   const handleCompleteReturn = (args: { tracking_reference?: string }) =>
     runAction(
       "complete-return",
       () => bookingsApi.completeReturn(booking.id, args),
-      "Thanks - the sender has been told the parcel is on its way back",
+      "Thanks — the sender has been told the parcel is on its way back",
     );
 
   // ⚠️ What actually CLOSES a hand-back. The carrier's step above only says they
@@ -94,7 +103,7 @@ export function createBookingActions({
     runAction(
       "confirm-return-received",
       () => bookingsApi.confirmReturnReceived(booking.id),
-      "Thanks - this delivery is now closed",
+      "Thanks — this delivery is now closed",
     );
 
   // ── Stages 8/9/10 ─────────────────────────────────────────────────────────
@@ -106,11 +115,11 @@ export function createBookingActions({
 
   const handleStartJourney = () =>
     runAction("start-journey", () => bookingsApi.startJourney(bookingId),
-      "Journey started - safe travels");
+      "Journey started — safe travels");
 
   const handleMarkLanded = () =>
     runAction("mark-landed", () => bookingsApi.markLanded(bookingId),
-      "Your receiver has been asked to coordinate pickup");
+      "The sender knows you've landed — agree the drop-off in chat.");
 
   // Deliberately separate from cancelling: a delayed flight reschedules the trip
   // and the parcel stays exactly where it is.
@@ -120,15 +129,19 @@ export function createBookingActions({
     new_travel_date?: string;
   }) =>
     runAction("report-delay", () => bookingsApi.reportDelay(bookingId, args),
-      "Delay reported - your sender has been told");
+      "Delay reported — your sender has been told");
 
   const handleAcceptHandoff = async () => {
     await runAction(
       "accept-handoff",
       () => bookingsApi.acceptHandoff(booking.id),
-      // Names the next phase so the delivery-code field that now appears doesn't
-      // read as "a code is required right now".
-      "Handoff complete — you're in transit. Enter the receiver's code at the destination.",
+      // Handoff-first: accepting normally leaves the booking WAITING FOR PAYMENT,
+      // not in transit - this said "you're in transit" while the card said "don't
+      // travel with it until then" (27 Oct 2026). Same words as web.
+      (res) =>
+        (res as { data?: { status?: string } } | null)?.data?.status === "in_transit"
+          ? "Parcel accepted — you're on your way. Ask the receiver for the delivery code at the destination."
+          : "Parcel accepted. The sender has been asked to pay — don't travel with it until the payment lands.",
     );
     setAcceptHandoffOpen(false);
   };
@@ -146,7 +159,8 @@ export function createBookingActions({
         }
         return bookingsApi.rejectHandoff(booking.id, { reason, photo_path, parcel_with_carrier: withCarrier });
       },
-      "Parcel declined — sender refunded in full",
+      // Still with the carrier = the deal isn't over: it has to go back.
+      declineToast(withCarrier),
       undefined,
       setModalError,
     );
@@ -158,7 +172,8 @@ export function createBookingActions({
     const result = await runAction(
       "cancel",
       () => bookingsApi.cancel(booking.id, reason),
-      "Booking cancelled",
+      // From the server's ANSWER: a held parcel opens a return; a paid one is refunded.
+      (res) => cancelToast((res as { data?: { status?: string; refunded?: boolean; refund_amount?: number } } | null)?.data),
       undefined,
       setModalError,
     );
@@ -173,7 +188,8 @@ export function createBookingActions({
     const result = await runAction(
       "cancel-post-possession",
       () => bookingsApi.cancelPostPossession(booking.id, { reason, return_answers: answers }),
-      "Cancelled mid-trip",
+      // The detailed banner below says what happened to the money.
+      null,
       (code, base) => {
         if (code === "RETURN_ADDRESS_REQUIRED")
           return "The sender has no return address on file — a returnable cancellation needs one first.";
@@ -185,46 +201,32 @@ export function createBookingActions({
     );
     if (!result) return;
     setCancelPostPossessionOpen(false);
-    // Tier/penalty are server-driven — surface whatever the response reports.
+    // Tier/penalty/refund are server-driven — say exactly what the response reports.
     const data = result.data;
-    if (data?.waiver_eligible) {
-      showBanner(
-        {
-          variant: "info",
-          title: "Return waiver opened",
-          message: "The sender can waive the cash penalty — your strike still applies.",
-        },
-        7000,
-      );
-    } else if (typeof data?.penalty_amount === "number") {
-      showBanner(
-        {
-          variant: "warning",
-          title: `Penalty applied: ${formatMoney(data.penalty_amount, (data as { currency?: string }).currency)}`,
-          message: `Tier: ${data.tier}. The sender has been refunded in full.`,
-        },
-        7000,
-      );
-    }
+    const currency = (data as { currency?: string } | undefined)?.currency ?? booking.parcel?.fee_currency;
+    const outcome = postPossessionResult(data, (n) => formatMoney(n, currency));
+    showBanner({ variant: "warning", title: outcome.title, message: outcome.message }, 9000);
   };
 
   const handleGenerateOtp = async () => {
     const result = await runAction(
       "generate-otp",
       () => bookingsApi.generateOtp(booking.id),
-      "Delivery code generated",
+      // No banner: the code panel itself is the confirmation (web parity).
+      null,
     );
     const otp = result?.data?.otp;
     if (otp) {
       setGeneratedOtp(otp);
       setOtpEmailed(!!result?.data?.emailed);
+      setOtpExpiresInSec(result?.data?.expires_in ?? 1800);
     }
   };
 
   const handleCopyOtp = async () => {
     if (!generatedOtp) return;
     await Clipboard.setStringAsync(generatedOtp);
-    showBanner({ variant: "success", title: "Code copied to clipboard" }, 2400);
+    showBanner({ variant: "success", title: "Code copied" }, 2400);
     // The delivery code is the proof of handoff; don't leave it on the
     // clipboard, where other apps and clipboard sync can read it. Cleared after
     // a minute, and only if it is still what's there, so anything the user has
@@ -243,16 +245,11 @@ export function createBookingActions({
     const result = await runAction(
       "confirm-otp",
       () => bookingsApi.confirmOtp(booking.id, trimmed),
+      // The server's words, as on web (27 Oct 2026): this used to swap them by error
+      // code, and every WRONG code came back as UNAUTHENTICATED, so a typo was shown
+      // as "That delivery code has expired". The server now says exactly what
+      // happened (tries left, expired, locked, no code yet).
       "Delivery confirmed",
-      (code, base) => {
-        if (code === "RATE_LIMITED")
-          return "Too many wrong codes. Ask the sender to tap Resend for a fresh code.";
-        if (code === "UNAUTHENTICATED")
-          return "That delivery code has expired. Ask the sender to resend a new one.";
-        if (code === "CONFLICT")
-          return "No delivery code has been generated yet. Ask the sender to generate one.";
-        return base;
-      },
     );
     if (result) setOtpCode("");
   };

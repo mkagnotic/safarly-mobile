@@ -2,12 +2,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { ApiClientError, getErrorMessage } from "@/services/api";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 
 /**
  * Everything one expanded booking card holds: its detail fetch, the action in
  * flight, which modal is open, the one-time delivery code and the inline
  * action banner. Moved verbatim out of `ExpandedBody` in BookingsScreen.tsx.
  */
+const ACTION_FAILED_TITLE: Record<string, string> = {
+  "accept-handoff": "Couldn't accept the parcel",
+  "reject-handoff": "Couldn't decline the parcel",
+  "set-handoff-plan": "Couldn't save the handover plan",
+  "mark-handoff-sent": "Couldn't mark the parcel as sent",
+  "set-return-resolution": "Couldn't save the return plan",
+  "complete-return": "Couldn't complete the return",
+  "confirm-return-received": "Couldn't confirm the return",
+  cancel: "Couldn't cancel the booking",
+  "cancel-post-possession": "Couldn't cancel the delivery",
+  "generate-otp": "Couldn't create a delivery code",
+  "confirm-otp": "Couldn't confirm the delivery",
+  "confirm-ready": "Couldn't confirm you're ready",
+  "start-journey": "Couldn't start the journey",
+  "mark-landed": "Couldn't mark that you've landed",
+  "report-delay": "Couldn't report the delay",
+};
+
 export function useExpandedBooking(bookingId: string) {
   // Detail fetch only fires when this row is expanded — so the list remains
   // light. Mirrors web's TanStack `useBookingDetail` enabled-on-mount of the
@@ -46,6 +65,9 @@ export function useExpandedBooking(bookingId: string) {
   // The plaintext code is returned ONCE, so the sender needs to know a durable
   // copy went to their inbox rather than assuming the screen is the only copy.
   const [otpEmailed, setOtpEmailed] = useState(false);
+  // How long the code lives, in seconds — the server's `expires_in`, not a
+  // hard-coded "30 minutes" (web parity).
+  const [otpExpiresInSec, setOtpExpiresInSec] = useState(1800);
 
   // Inline action feedback — matches the rest of the app (see SendParcelScreen)
   // by rendering `FormBanner` at the top of the affected card instead of toasts.
@@ -104,7 +126,8 @@ export function useExpandedBooking(bookingId: string) {
         | "mark-landed"
         | "report-delay",
       task: () => Promise<T>,
-      successMessage: string,
+      /** A function when the words depend on the server's answer; null = no banner. */
+      successMessage: string | null | ((result: T) => string | null),
       /** Optional per-action mapper for friendlier copy on specific error codes. */
       formatError?: (code: string, message: string) => string,
       /**
@@ -118,7 +141,13 @@ export function useExpandedBooking(bookingId: string) {
       try {
         const result = await task();
         await refetch();
-        showBanner({ variant: "success", title: successMessage });
+        // The opened card is not the only view of this booking: the collapsed
+        // row's status chip, the list filters and the chat's active-deal pin all
+        // read it too, and stayed stale until the next realtime event (money
+        // canon #45). One bump refreshes the list, the detail and the chat pin.
+        bumpRealtimeTopic("bookings");
+        const title = typeof successMessage === "function" ? successMessage(result) : successMessage;
+        if (title) showBanner({ variant: "success", title });
         return result;
       } catch (err) {
         const code = err instanceof ApiClientError ? err.code : "";
@@ -126,7 +155,8 @@ export function useExpandedBooking(bookingId: string) {
           err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
         const message = formatError ? formatError(code, base) : base;
         if (onError) onError(message);
-        else showBanner({ variant: "error", title: "Action failed", message }, 6000);
+        // Says WHAT failed; every carrier action used to read "Action failed" (27 Oct 2026).
+        else showBanner({ variant: "error", title: ACTION_FAILED_TITLE[key] ?? "Something went wrong", message }, 6000);
         // The guard may have rejected because the state moved — re-derive actions.
         void refetch();
         return null;
@@ -159,6 +189,8 @@ export function useExpandedBooking(bookingId: string) {
     setGeneratedOtp,
     otpEmailed,
     setOtpEmailed,
+    otpExpiresInSec,
+    setOtpExpiresInSec,
     actionBanner,
     dismissBanner,
     showBanner,

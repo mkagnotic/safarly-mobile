@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { ANY_CITY } from "@/features/search/CityPicker";
 import { isListingExpired, isTerminal, labelForStatus } from "@/features/travels/statusLabels";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { isHiddenOwner } from "@/features/moderation/blockFilter";
@@ -20,12 +19,15 @@ import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useTripDetail } from "@/hooks/api/useTripDetail";
 import { useAuth } from "@/context/AuthContext";
+import { showToast } from "@/feedback/appFeedback";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, tripsApi, type Trip } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatTravelDateRange } from "@/utils/travelDate";
 import { EditTripModal, type EditTripFormValues } from "./EditTripModal";
+import { tripEditInitial, tripEditPayload } from "./model/editTripPayload";
 import { viewerHasBookingOnTrip } from "./model/tripBookingAccess";
+import { editTripBuddyMessage } from "./model/openBuddy";
 
 type NoticeVariant = "success" | "error" | "warning" | "info";
 interface Notice {
@@ -141,6 +143,8 @@ export function TripDetailsScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editPending, setEditPending] = useState(false);
+  // The server's refusal, shown inside the modal (the banner sits behind it).
+  const [editError, setEditError] = useState<string | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -149,7 +153,10 @@ export function TripDetailsScreen() {
     else navigation.navigate("Parcels", { tab: "flights" }); // My Travels lives on the "Parcels" tab key
   }, [navigation]);
 
-  const handleEditOpen = useCallback(() => setEditOpen(true), []);
+  const handleEditOpen = useCallback(() => {
+    setEditError(null);
+    setEditOpen(true);
+  }, []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
@@ -157,54 +164,8 @@ export function TripDetailsScreen() {
   const handleEditSubmit = useCallback(
     async (values: EditTripFormValues) => {
       if (!tripId || !trip) return;
-      const data: Parameters<typeof tripsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setNotice({ variant: "error", title: "Departure city required", message: "Select a departure city." });
-        return;
-      }
-      if (!values.to_city) {
-        setNotice({ variant: "error", title: "Arrival city required", message: "Select an arrival city." });
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = trip.any_from ? "Any" : trip.from_city;
-      const curToCity = trip.any_to ? "Any" : trip.to_city;
-      const curFromCountry = (trip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (trip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const from = values.travel_date_from;
-      const to = values.travel_date_to || from; // empty Return ⇒ single date
-      if (
-        from &&
-        (from !== trip.travel_date_from || to !== trip.travel_date_to || from !== trip.travel_date)
-      ) {
-        data.travel_date = from;
-        data.travel_date_from = from;
-        data.travel_date_to = to;
-      }
-      const capacityNum = Number(values.luggage_capacity_kg);
-      if (
-        values.luggage_capacity_kg !== "" &&
-        Number.isFinite(capacityNum) &&
-        capacityNum !== trip.luggage_capacity_kg
-      ) {
-        data.luggage_capacity_kg = capacityNum;
-      }
-      if (values.notes !== (trip.notes ?? "")) {
-        data.notes = values.notes;
-      }
+      // Only what changed; the modal has validated (editTripPayload.ts, shared with My Travels).
+      const data = tripEditPayload(values, trip);
 
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
@@ -212,15 +173,20 @@ export function TripDetailsScreen() {
       }
 
       setEditPending(true);
+      setEditError(null);
       try {
-        await tripsApi.update(tripId, data);
+        const res = await tripsApi.update(tripId, data);
         await refetch();
         setEditOpen(false);
-        setNotice({ variant: "success", title: "Trip updated", message: "Your changes are saved." });
+        // Same toast as My Travels (28 Oct 2026); the buddy note already says the trip saved.
+        const buddyMsg = editTripBuddyMessage(data.open_to_buddy, res?.data?.buddy_listing);
+        showToast(
+          buddyMsg
+            ? { title: buddyMsg.text, variant: buddyMsg.variant }
+            : { title: "Trip updated", variant: "success" },
+        );
       } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setNotice({ variant: "error", title: "Couldn't update trip", message });
+        setEditError(err instanceof ApiClientError ? err.message : getErrorMessage(err as Error));
       } finally {
         setEditPending(false);
       }
@@ -267,19 +233,7 @@ export function TripDetailsScreen() {
     );
   }
 
-  const editFrom = trip.travel_date_from ?? trip.travel_date ?? "";
-  const editTo = trip.travel_date_to ?? "";
-  const editInitial: EditTripFormValues = {
-    from_city: trip.any_from ? ANY_CITY : (trip.from_city ?? ""),
-    from_country: (trip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    to_city: trip.any_to ? ANY_CITY : (trip.to_city ?? ""),
-    to_country: (trip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    travel_date_from: editFrom,
-    // Only treat it as a range (prefill Return) when "to" differs from "from".
-    travel_date_to: editTo && editTo !== editFrom ? editTo : "",
-    luggage_capacity_kg: `${trip.luggage_capacity_kg ?? ""}`,
-    notes: trip.notes ?? "",
-  };
+  const editInitial: EditTripFormValues = tripEditInitial(trip);
 
   // A trip past its travel date reads as "expired" even while its DB status is
   // still `active`/`open` (expiry is derived client-side, not a stored status).
@@ -365,10 +319,12 @@ export function TripDetailsScreen() {
 
       <EditTripModal
         open={editOpen}
+        listingId={tripId}
         initial={editInitial}
         pending={editPending}
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
+        serverError={editError}
       />
 
       <ConfirmActionModal

@@ -15,6 +15,8 @@ type Props = {
   initials: string;
   onChange: (url: string | null) => void;
   disabled?: boolean;
+  /** Told when an upload starts and ends, so a Save can wait for the new URL (28 Oct 2026). */
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
 type Status =
@@ -31,10 +33,14 @@ type Status =
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled }: Readonly<Props>) {
+export function AvatarUpload({ userId, currentUrl, initials, onChange, disabled, onUploadingChange }: Readonly<Props>) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl ?? null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<Status>(null);
+
+  useEffect(() => {
+    onUploadingChange?.(uploading);
+  }, [uploading, onUploadingChange]);
 
   // Follow the parent's `currentUrl` when it seeds/changes after mount — e.g. the
   // edit screen hydrates from the loaded profile a tick after this mounts. Every

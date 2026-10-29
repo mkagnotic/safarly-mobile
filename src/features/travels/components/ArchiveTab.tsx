@@ -27,7 +27,6 @@ export function ArchiveTab({
   trips,
   onRetry,
   onOpen,
-  deliveredLoading,
   deliveredBookings,
   myUserId,
   onRateDelivery,
@@ -52,12 +51,13 @@ export function ArchiveTab({
   onLoadMorePastPosts,
   onOpenBuddy,
 }: Readonly<{
+  /** True while ANY archive list is loading (28 Oct 2026). */
   loading: boolean;
+  /** The first error from ANY archive list; onRetry reloads them all. */
   error: Error | null;
   trips: Trip[];
   onRetry: () => Promise<void>;
   onOpen: (id: string) => void;
-  deliveredLoading: boolean;
   deliveredBookings: Booking[];
   myUserId: string | null;
   onRateDelivery: (bookingId: string) => void;
@@ -91,19 +91,24 @@ export function ArchiveTab({
     completedBuddies.length === 0 &&
     pastPackages.length === 0 &&
     pastPosts.length === 0;
-  if ((loading || deliveredLoading) && nothing) return <ListSkeleton />;
-  if (error && nothing)
-    return <ErrorBlock message={getErrorMessage(error)} onRetry={onRetry} />;
+  const errorBlock = error ? (
+    <ErrorBlock subject="your archive" message={getErrorMessage(error)} onRetry={onRetry} />
+  ) : null;
+  // An error wins over the loader, the loader over "empty": a list still on its
+  // way must not read as "No archived items" (28 Oct 2026).
+  if (errorBlock && nothing) return errorBlock;
+  if (loading && nothing) return <ListSkeleton />;
   if (nothing)
     return (
       <EmptyBlock
         icon="archive"
         title="No archived items"
-        subtitle="Completed deliveries, trips, and travel partners will appear here."
+        subtitle="Finished, expired and cancelled trips, packages and buddy listings will appear here."
       />
     );
   return (
     <View>
+      {errorBlock}
       {deliveredBookings.length > 0 ? (
         <View style={sharedStyles.section}>
           <View style={sharedStyles.sectionHeading}>
@@ -132,7 +137,7 @@ export function ArchiveTab({
         <View style={sharedStyles.section}>
           <View style={sharedStyles.sectionHeading}>
             <Ionicons name="people-outline" size={16} color={colors.safe} />
-            <Text style={sharedStyles.sectionTitle}>Completed buddies</Text>
+            <Text style={sharedStyles.sectionTitle}>Completed buddy trips</Text>
           </View>
           {completedBuddies.map((c) => (
             <ArchiveBuddyCard key={c.id} connection={c} onRate={() => onRateBuddy(c)} />
@@ -142,19 +147,17 @@ export function ArchiveTab({
 
       {trips.length > 0 ? (
         <View style={sharedStyles.section}>
-          {deliveredBookings.length > 0 ? (
-            <View style={sharedStyles.sectionHeading}>
-              <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
-              <Text style={sharedStyles.sectionTitle}>Flights</Text>
-            </View>
-          ) : null}
+          <View style={sharedStyles.sectionHeading}>
+            <Ionicons name="airplane-outline" size={16} color={colors.wordmark} />
+            <Text style={sharedStyles.sectionTitle}>Flights</Text>
+          </View>
           {trips.map((t) => (
             <TravelCard
               key={t.id}
               type="flight"
               // Neutral tag: these are closed records, so the accent orange read
               // as an active listing. The status pill carries the real outcome.
-              tag="ARCHIVED TRIP"
+              tag="Archived trip"
               tagTone="muted"
               item={t}
               onPress={() => onOpen(t.id)}
@@ -174,7 +177,7 @@ export function ArchiveTab({
             <TravelCard
               key={p.id}
               type="parcel"
-              tag="PAST PACKAGE"
+              tag="Past package"
               tagTone="muted"
               item={p}
               onPress={() => onOpenParcel(p.id)}
@@ -192,7 +195,7 @@ export function ArchiveTab({
         <View style={sharedStyles.section}>
           <View style={sharedStyles.sectionHeading}>
             <Ionicons name="people-outline" size={16} color={colors.mutedText} />
-            <Text style={sharedStyles.sectionTitle}>Past travel partner posts</Text>
+            <Text style={sharedStyles.sectionTitle}>Past buddy listings</Text>
           </View>
           {pastPosts.map((b) => (
             <BuddyPartnerCard key={b.id} item={b} onPress={() => onOpenBuddy(b.id)} />

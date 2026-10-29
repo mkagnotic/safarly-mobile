@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { formatRating } from "@/features/bookings/lib/ratingCopy";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, TextInput, View, type ListRenderItemInfo } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
@@ -18,7 +19,8 @@ import { JourneyActionsCard } from "@/features/bookings/JourneyActionsCard";
 import { journeyStepShort, currentJourneyStep } from "@/utils/journeySteps";
 import { JourneyProgress } from "@/features/bookings/JourneyProgress";
 import { useBookings } from "@/hooks/api/useBookings";
-import type { Booking } from "@/services/api";
+import { bookingsApi, getErrorMessage, type Booking } from "@/services/api";
+import { showToast } from "@/feedback/appFeedback";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
 import { styles } from "@/features/bookings/BookingsScreen.styles";
@@ -31,11 +33,13 @@ import { BookingsEmptyCard } from "@/features/bookings/components/BookingsEmptyC
 import { ConfirmDeliveryStep } from "@/features/bookings/components/ConfirmDeliveryStep";
 import { DeliveryCodePanel } from "@/features/bookings/components/DeliveryCodePanel";
 import { ExpandedBookingModals } from "@/features/bookings/components/ExpandedBookingModals";
+import { SenderDelayNotice } from "@/features/bookings/components/SenderDelayNotice";
 import { ParcelDetailsSection } from "@/features/bookings/components/ParcelDetailsSection";
 import { useExpandedBooking } from "@/features/bookings/hooks/useExpandedBooking";
 import { createBookingActions } from "@/features/bookings/lib/bookingActions";
-import { FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
+import { BOOKINGS_SEARCH_SCOPE_NOTE, FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
 import { getBookingGates } from "@/features/bookings/lib/bookingGates";
+import { bookingDisputeView } from "@/features/disputes/disputeRules";
 import type { Nav, Route } from "@/features/bookings/lib/navigation";
 
 // ExpandedBody and BookingRow stay in this file on purpose: `npm run check:ux`
@@ -50,25 +54,45 @@ interface ExpandedBodyProps {
   role: "sender" | "carrier" | "unknown";
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
+  onNavigateDispute: () => void;
+  /** Bumped by pull-to-refresh: the open card refetches with the list. */
+  refreshKey: number;
 }
+
+/** "★ 4.8" for a party with a rating; nothing when they have none yet (shared formatter). */
+const ratingText = formatRating;
 
 function ExpandedBody({
   bookingId,
   role,
   onNavigateRate,
   onNavigatePay,
+  onNavigateDispute,
+  refreshKey,
 }: Readonly<ExpandedBodyProps>) {
   const {
     booking, timeline, error, refetch, actionPending, cancelOpen, setCancelOpen, acceptHandoffOpen,
     setAcceptHandoffOpen, rejectHandoffOpen, setRejectHandoffOpen, cancelPostPossessionOpen,
     setCancelPostPossessionOpen, modalError, setModalError, otpCode, setOtpCode, generatedOtp,
-    setGeneratedOtp, otpEmailed, setOtpEmailed, actionBanner, dismissBanner, showBanner, runAction,
+    setGeneratedOtp, otpEmailed, setOtpEmailed, otpExpiresInSec, setOtpExpiresInSec, actionBanner, dismissBanner, showBanner, runAction,
   } = useExpandedBooking(bookingId);
+
+  // Pull-to-refresh reloaded only the list, so an open card kept showing the
+  // old stage. The first render is the initial load, owned by the hook.
+  const seenRefreshKey = useRef(refreshKey);
+  useEffect(() => {
+    if (seenRefreshKey.current === refreshKey) return;
+    seenRefreshKey.current = refreshKey;
+    void refetch();
+  }, [refreshKey, refetch]);
 
   if (!booking && !error) {
     return (
-      <View style={styles.expandedLoading}>
+      // The card body (timeline included) comes from the detail fetch; say what
+      // it waits for, in web's words (web CustomerBookings "Loading timeline…").
+      <View style={styles.expandedLoading} accessibilityRole="progressbar" accessibilityLabel="Loading timeline" testID="booking-timeline-loading">
         <ActivityIndicator size="small" color={colors.primary} />
+        <Text style={styles.updatingText}>Loading timeline…</Text>
       </View>
     );
   }
@@ -92,7 +116,7 @@ function ExpandedBody({
     handleCancelPostPossessionConfirm, handleGenerateOtp, handleCopyOtp, handleConfirmOtp,
   } = createBookingActions({
     booking, bookingId, runAction, showBanner, otpCode, generatedOtp, setOtpCode,
-    setGeneratedOtp, setOtpEmailed, setModalError, setAcceptHandoffOpen, setRejectHandoffOpen,
+    setGeneratedOtp, setOtpEmailed, setOtpExpiresInSec, setModalError, setAcceptHandoffOpen, setRejectHandoffOpen,
     setCancelOpen, setCancelPostPossessionOpen,
   });
 
@@ -102,6 +126,7 @@ function ExpandedBody({
     canStartJourney, canMarkLanded, canReportDelay, awaitingSenderPayment, canRate, hasRated,
     originCity, destinationCity, isOnlineOrder, returnEligible,
   } = getBookingGates(booking, role);
+  const disputeView = bookingDisputeView(booking);
 
   return (
     <View style={styles.expandedRoot}>
@@ -126,23 +151,31 @@ function ExpandedBody({
         <View style={styles.partiesRow}>
           {booking.sender ? (
             <View style={styles.partyItem}>
-              <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} />
+              <Avatar name={booking.sender.name} uri={booking.sender.avatar_url} size={36} verified={booking.sender.is_verified} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Receiver</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
                   {booking.sender.name}
+                  {role === "sender" ? " (you)" : ""}
                 </Text>
+                {role === "carrier" && ratingText(booking.sender.rating) ? (
+                  <Text style={styles.partyRating}>{ratingText(booking.sender.rating)}</Text>
+                ) : null}
               </View>
             </View>
           ) : null}
           {booking.carrier ? (
             <View style={styles.partyItem}>
-              <Avatar name={booking.carrier.name} uri={booking.carrier.avatar_url} size={36} />
+              <Avatar name={booking.carrier.name} uri={booking.carrier.avatar_url} size={36} verified={booking.carrier.is_verified} />
               <View style={{ minWidth: 0, flex: 1 }}>
                 <Text style={styles.partyKey}>Carrier</Text>
                 <Text style={styles.partyValue} numberOfLines={2}>
                   {booking.carrier.name}
+                  {role === "carrier" ? " (you)" : ""}
                 </Text>
+                {role === "sender" && ratingText(booking.carrier.rating) ? (
+                  <Text style={styles.partyRating}>{ratingText(booking.carrier.rating)}</Text>
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -155,15 +188,46 @@ function ExpandedBody({
       {/* One authoritative position for the whole booking. The action cards below
           can appear out of order (the delivery card is available during transit on
           purpose), so without this the user saw two cards each claiming to be the
-          current step. Hidden once the deal is dead - there is no journey left. */}
-      {!["cancelled", "cancelled_post_possession", "handoff_rejected", "expired_unpaid", "disputed"].includes(
+          current step. Hidden once the deal is dead - there is no journey left.
+          unpaid_return too: it read "Step 2 · Payment" on a parcel going home;
+          the return card is the journey now (bookings canon #4). */}
+      {!["cancelled", "cancelled_post_possession", "handoff_rejected", "expired_unpaid", "disputed", "unpaid_return"].includes(
         booking.status,
       ) ? (
         <JourneyProgress booking={booking} />
       ) : null}
 
+      {role === "sender" ? <SenderDelayNotice booking={booking} /> : null}
+
       {/* Action buttons */}
       <View style={styles.actionsWrap}>
+        {/* A disputed booking hides its journey actions; without this the card
+            was a dead end with no way to the dispute (web parity). Open: "View
+            dispute"; dismissed mid-delivery: the note + "View dispute";
+            refunded / released: the normal finished state + "Dispute resolved". */}
+        {disputeView.note ? <Text style={styles.disputeNote}>{disputeView.note}</Text> : null}
+        {disputeView.link ? (
+          <Pressable
+            style={[
+              sharedStyles.actionButton,
+              disputeView.disputedChip ? sharedStyles.actionDanger : styles.disputeLinkResolved,
+              sharedStyles.fullWidthAction,
+            ]}
+            onPress={onNavigateDispute}
+            accessibilityRole="button"
+            accessibilityLabel={disputeView.link}
+          >
+            <Ionicons
+              name={disputeView.disputedChip ? "alert-circle-outline" : "checkmark-circle-outline"}
+              size={14}
+              color={disputeView.disputedChip ? colors.danger : colors.primary}
+            />
+            <Text style={disputeView.disputedChip ? sharedStyles.actionDangerText : styles.disputeLinkResolvedText}>
+              {disputeView.link}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {canPay ? (
           <Pressable
             style={[sharedStyles.actionButton, sharedStyles.actionPrimary, sharedStyles.fullWidthAction]}
@@ -223,7 +287,7 @@ function ExpandedBody({
             onConfirmReady={() => void handleConfirmReady()}
             onStartJourney={() => void handleStartJourney()}
             onMarkLanded={() => void handleMarkLanded()}
-            onReportDelay={(args) => void handleReportDelay(args)}
+            onReportDelay={(args) => handleReportDelay(args)}
           />
         ) : null}
 
@@ -271,10 +335,10 @@ function ExpandedBody({
             onPress={() => setCancelOpen(true)}
             disabled={actionPending !== null}
             accessibilityRole="button"
-            accessibilityLabel="Cancel Booking"
+            accessibilityLabel="Cancel booking"
           >
             <Ionicons name="ban" size={14} color={colors.danger} />
-            <Text style={sharedStyles.actionDangerText}>Cancel Booking</Text>
+            <Text style={sharedStyles.actionDangerText}>Cancel booking</Text>
           </Pressable>
         ) : null}
 
@@ -295,6 +359,7 @@ function ExpandedBody({
             <DeliveryCodePanel
               generatedOtp={generatedOtp}
               otpEmailed={otpEmailed}
+              otpExpiresInSec={otpExpiresInSec}
               handleCopyOtp={handleCopyOtp}
               handleGenerateOtp={handleGenerateOtp}
               actionPending={actionPending}
@@ -321,11 +386,17 @@ function ExpandedBody({
             onPress={() => setCancelPostPossessionOpen(true)}
             disabled={actionPending !== null}
             accessibilityRole="button"
-            accessibilityLabel="Cancel mid-trip"
+            accessibilityLabel="I can't complete this delivery"
           >
             <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
-            <Text style={sharedStyles.actionDangerText}>Cancel mid-trip</Text>
+            <Text style={sharedStyles.actionDangerText}>I can't complete this delivery</Text>
           </Pressable>
+        ) : null}
+        {canCancelPostPossession ? (
+          <Text style={sharedStyles.stepCardFootnote}>
+            Only if the trip is off entirely — you still have the parcel, so you'll arrange its return
+            and a cash penalty (5–25%) applies. If it's just running late, report a delay instead.
+          </Text>
         ) : null}
 
         {canRate ? (
@@ -333,10 +404,10 @@ function ExpandedBody({
             style={[sharedStyles.actionButton, styles.actionWarning]}
             onPress={() => onNavigateRate(booking.id)}
             accessibilityRole="button"
-            accessibilityLabel="Rate Delivery"
+            accessibilityLabel="Rate delivery"
           >
             <Ionicons name="star" size={14} color={colors.warning} />
-            <Text style={styles.actionWarningText}>Rate Delivery</Text>
+            <Text style={styles.actionWarningText}>Rate delivery</Text>
           </Pressable>
         ) : null}
 
@@ -366,6 +437,7 @@ function ExpandedBody({
         setCancelPostPossessionOpen={setCancelPostPossessionOpen}
         handleCancelPostPossessionConfirm={handleCancelPostPossessionConfirm}
         returnEligible={returnEligible}
+        isSender={role === "sender"}
       />
     </View>
   );
@@ -380,6 +452,8 @@ interface BookingRowProps {
   onToggle: () => void;
   onNavigateRate: (bookingId: string) => void;
   onNavigatePay: (bookingId: string) => void;
+  onNavigateDispute: () => void;
+  refreshKey: number;
 }
 
 function BookingRow({
@@ -389,6 +463,8 @@ function BookingRow({
   onToggle,
   onNavigateRate,
   onNavigatePay,
+  onNavigateDispute,
+  refreshKey,
 }: Readonly<BookingRowProps>) {
   return (
     <Card style={styles.bookingCard}>
@@ -401,6 +477,8 @@ function BookingRow({
             role={role}
             onNavigateRate={onNavigateRate}
             onNavigatePay={onNavigatePay}
+            onNavigateDispute={onNavigateDispute}
+            refreshKey={refreshKey}
           />
         </View>
       ) : null}
@@ -433,26 +511,62 @@ export function BookingsScreen() {
     return () => clearTimeout(id);
   }, [search]);
 
-  // Auto-expand if a notification deep-link or other navigator passed `expandId`.
-  // Mirrors web's `/customer/bookings` page where deep-links land on the list
-  // and the user finds their booking in the list.
+  // A deep link (notification, "Go to booking", "Cancel the booking first") opens
+  // THAT booking: shown first and expanded. It used to expand only when the booking
+  // happened to be on the loaded page, so anyone with more than a page of bookings
+  // landed on the list with nothing opened and could not tell which one was meant
+  // (client, 26 Oct 2026). Not on the page -> fetched by id.
+  const expandId = route.params?.expandId;
+  const [fetchedTarget, setFetchedTarget] = useState<Booking | null>(null);
+  // Opened once per link: a refetch must not re-open a booking the user closed.
+  // Keyed on the params OBJECT, not the id: tapping the same notification again
+  // sets new params and must open the booking again (bookings canon #14).
+  const linkParams = route.params;
+  const expandedFor = useRef<typeof linkParams | null>(null);
   useEffect(() => {
-    const expandId = route.params?.expandId;
-    if (expandId && bookings.some((b) => b.id === expandId)) {
+    if (!expandId) return;
+    if (expandedFor.current !== linkParams) {
+      expandedFor.current = linkParams;
       setExpandedId(expandId);
     }
-  }, [route.params?.expandId, bookings]);
+    if (bookings.some((b) => b.id === expandId)) return;
+    let cancelled = false;
+    void bookingsApi.getById(expandId)
+      .then((res) => { if (!cancelled && res.data?.booking) setFetchedTarget(res.data.booking as Booking); })
+      .catch(() => { /* not yours or gone: the list stays as it is */ });
+    return () => { cancelled = true; };
+  }, [expandId, linkParams, bookings]);
+  const target = expandId
+    ? bookings.find((b) => b.id === expandId) ?? (fetchedTarget?.id === expandId ? fetchedTarget : null)
+    : null;
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return bookings;
-    return bookings.filter(
+    // The deep-linked booking leads the list (once), whatever page it is on.
+    const list = target ? [target, ...bookings.filter((b) => b.id !== target.id)] : bookings;
+    if (!q) return list;
+    return list.filter(
       (b) =>
         b.id.toLowerCase().includes(q) ||
         b.parcel?.from_city?.toLowerCase().includes(q) ||
         b.parcel?.to_city?.toLowerCase().includes(q),
     );
-  }, [bookings, debouncedSearch]);
+  }, [bookings, debouncedSearch, target]);
+
+  // A failed background refetch (pull, realtime, filter tap) keeps the rows on
+  // screen, and it used to say nothing at all (bookings canon #6). Say so.
+  const hasRowsRef = useRef(false);
+  hasRowsRef.current = bookings.length > 0;
+  useEffect(() => {
+    if (!error || !hasRowsRef.current) return;
+    showToast({ title: "Couldn't refresh your bookings", message: getErrorMessage(error), variant: "error" });
+  }, [error]);
+
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    void refetch();
+  }, [refetch]);
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -474,6 +588,8 @@ export function BookingsScreen() {
     [navigation],
   );
 
+  const handleNavigateDispute = useCallback(() => navigation.navigate("DisputesTab"), [navigation]);
+
   const keyExtractor = useCallback((b: Booking) => b.id, []);
 
   const renderItem = useCallback(
@@ -485,9 +601,11 @@ export function BookingsScreen() {
         onToggle={() => handleToggle(item.id)}
         onNavigateRate={handleNavigateRate}
         onNavigatePay={handleNavigatePay}
+        onNavigateDispute={handleNavigateDispute}
+        refreshKey={refreshKey}
       />
     ),
-    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay],
+    [userId, expandedId, handleToggle, handleNavigateRate, handleNavigatePay, handleNavigateDispute, refreshKey],
   );
 
   // Loading / error / empty all render through ListEmptyComponent so the fixed
@@ -531,12 +649,20 @@ export function BookingsScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search by city, booking ID..."
+            placeholder="Search by city or booking ID…"
             placeholderTextColor={colors.subtleText}
             style={styles.searchInput}
             accessibilityLabel="Search bookings"
           />
         </View>
+        {/* The search filters the rows loaded so far; the server takes no search
+            term, so with more pages unloaded it can miss a booking (canon #12).
+            Same words as web's BOOKINGS_SEARCH_SCOPE_NOTE. */}
+        {search.trim() && hasMore ? (
+          <Text style={styles.updatingText} testID="bookings-search-scope">
+            {BOOKINGS_SEARCH_SCOPE_NOTE}
+          </Text>
+        ) : null}
 
         {/* Filter chips */}
         <View style={styles.filterRow}>
@@ -560,10 +686,19 @@ export function BookingsScreen() {
           })}
         </View>
 
+        {/* A filter tap reloads the list: the previous filter's bookings stayed up,
+            expandable and actionable, with no sign of loading (27 Oct 2026). */}
+        {loading && bookings.length > 0 ? (
+          <View style={styles.updatingRow} accessibilityRole="progressbar" accessibilityLabel="Loading bookings" testID="bookings-updating">
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.updatingText}>Loading bookings…</Text>
+          </View>
+        ) : null}
+
         {/* List (infinite scroll) */}
         <FlatList
           data={filtered}
-          style={styles.list}
+          style={[styles.list, loading && bookings.length > 0 && styles.listUpdating]}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           ListEmptyComponent={listEmpty}
@@ -586,7 +721,7 @@ export function BookingsScreen() {
           refreshControl={
             <RefreshControl
               refreshing={loading && bookings.length > 0}
-              onRefresh={refetch}
+              onRefresh={handleRefresh}
               tintColor={colors.primary}
               colors={[colors.primary]}
             />

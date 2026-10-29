@@ -14,9 +14,9 @@ import { authApi } from "@/services/api";
 import { mapOtpError } from "@/services/auth/authErrors";
 import { useAppStore } from "@/store/useAppStore";
 import { colors } from "@/theme/colors";
-import { sanitizeDigitsOnly } from "@/utils/inputSanitizers";
+import { EMAIL_CODE_MAX, isEmailCode, sanitizeDigitsOnly } from "@/utils/inputSanitizers";
 
-const CODE_LENGTH = 6;
+const CODE_LENGTH = EMAIL_CODE_MAX;
 /** Supabase throttles resend to one per 60s; mirror it so the button is honest. */
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -68,8 +68,8 @@ export function VerifyEmailScreen() {
     if (submitting) return;
     setFormError(null);
     setNotice(null);
-    if (code.length !== CODE_LENGTH) {
-      setCodeError(`Enter the ${CODE_LENGTH}-digit code`);
+    if (!isEmailCode(code)) {
+      setCodeError("Enter the code from your email");
       codeRef.current?.focus();
       return;
     }
@@ -142,7 +142,7 @@ export function VerifyEmailScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            We sent a {CODE_LENGTH}-digit code to <Text style={styles.email}>{email}</Text>. Enter it
+            We sent a verification code to <Text style={styles.email}>{email}</Text>. Enter it
             below to finish creating your account.
           </Text>
 

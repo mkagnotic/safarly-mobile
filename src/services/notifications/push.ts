@@ -2,20 +2,35 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 import { navigationRef } from "@/navigation/navigationRef";
-import { usersApi } from "@/services/api";
+import { notificationsApi, usersApi } from "@/services/api";
+import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import { useAppStore } from "@/store/useAppStore";
 
 import {
   resolveNotificationRoute,
   type NotificationTarget,
 } from "./notificationRoute";
-import { loginPushAction } from "./pushPolicy";
+import { tappedNotificationIds, type NotificationTap } from "./notificationTap";
+import { foregroundPresentation, startupPushAction } from "./pushPolicy";
 
 /** Persists the last Expo token so we can deregister it on sign-out. */
 const LAST_TOKEN_KEY = "safarly.pushToken";
+/** A token a sign-out could not unlink (offline); retried on the next start. */
+const PENDING_FORGET_KEY = "safarly.pushTokenToForget";
+/** This phone has shown the OS permission dialog once already: never nag (28 Oct 2026). */
+const ASKED_ONCE_KEY = "safarly.pushAskedOnce";
+
+/**
+ * The chat on screen right now. A push for it shows no banner (the message is
+ * already in front of the user) - every chat app works this way (27 Oct 2026).
+ */
+let activeConversationId: string | null = null;
+export function setActiveChat(conversationId: string | null): void {
+  activeConversationId = conversationId;
+}
 /** Android needs an explicit channel for heads-up notifications + sound. */
 const ANDROID_CHANNEL_ID = "default";
 
@@ -39,12 +54,20 @@ export function configureNotifications(): void {
   if (handlerConfigured) return;
   handlerConfigured = true;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const data = notification.request.content.data as { conversation_id?: string } | undefined;
+      // Signed out: nothing for this device should show, even if a push slips
+      // through before the server unlinks it.
+      // App open and in front: the in-app banner (useRealtimeSync) is the one
+      // notice for this event, so the OS adds none - web's rule (29 Oct 2026).
+      const { show, badge } = foregroundPresentation({
+        signedIn: useAppStore.getState().authenticated,
+        appActive: AppState.currentState === "active",
+        conversationId: data?.conversation_id,
+        activeConversationId,
+      });
+      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: badge };
+    },
   });
 }
 
@@ -73,7 +96,9 @@ function getProjectId(): string | undefined {
 
 /** Physical device + native support required — Expo Go (SDK 54) and web can't mint tokens. */
 function pushSupported(): boolean {
-  return Platform.OS !== "web" && Device.isDevice;
+  // EXPO_PUBLIC_PUSH_ON_EMULATOR=1 is for test builds only: a Google-APIs emulator
+  // can receive FCM, which is how push delivery is verified without a phone.
+  return Platform.OS !== "web" && (Device.isDevice || process.env.EXPO_PUBLIC_PUSH_ON_EMULATOR === "1");
 }
 
 /**
@@ -128,6 +153,7 @@ export async function requestAndRegisterPushToken(): Promise<PushRegisterResult>
 
     let { status } = await Notifications.getPermissionsAsync();
     if (status !== "granted") {
+      await AsyncStorage.setItem(ASKED_ONCE_KEY, "1").catch(() => undefined);
       status = (await Notifications.requestPermissionsAsync()).status;
     }
     if (status !== "granted") return { ok: false, reason: "denied" };
@@ -141,29 +167,40 @@ export async function requestAndRegisterPushToken(): Promise<PushRegisterResult>
   }
 }
 
+/** Who this phone last synced push for in this app run; cleared on sign-out. */
+let syncedFor: string | null = null;
+
 /**
- * On sign-in: register this device for push. Already allowed -> register
- * silently. Never asked (every new iPhone) -> ask ONCE, so the OS shows its
- * dialog; a user who already answered is never asked again. See
- * ./pushPolicy.ts for why: iOS had 0 registered devices because the only
- * prompt lived behind the Preferences toggle. Best-effort; swallows all errors.
+ * Push is one account setting for every device (28 Oct 2026). Called when the
+ * profile (which carries the preferences) loads - i.e. on sign-in AND on app
+ * start - once per account per app run. Account ON and this phone allowed ->
+ * register silently; never asked here -> ask ONCE (see `startupPushAction`).
+ * Best-effort; swallows all errors.
  */
-export async function syncPushRegistrationOnLogin(): Promise<void> {
+export async function syncPushForAccount(accountKey: string, accountOn: boolean): Promise<void> {
+  if (syncedFor === accountKey) return;
+  syncedFor = accountKey;
   try {
     if (!pushSupported()) return;
     const projectId = getProjectId();
     if (!projectId) return;
-    let { status } = await Notifications.getPermissionsAsync();
-    const action = loginPushAction(status);
-    if (action === "skip") return;
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    const askedBefore = (await AsyncStorage.getItem(ASKED_ONCE_KEY)) === "1";
+    const action = startupPushAction({
+      accountOn,
+      granted: status === "granted",
+      canAskAgain: canAskAgain !== false,
+      askedBefore,
+    });
+    if (action === "none") return;
     if (action === "ask") {
-      status = (await Notifications.requestPermissionsAsync()).status;
-      if (status !== "granted") return;
+      await AsyncStorage.setItem(ASKED_ONCE_KEY, "1");
+      if ((await Notifications.requestPermissionsAsync()).status !== "granted") return;
     }
     await acquireAndRegister(projectId);
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("[push] syncPushRegistrationOnLogin failed", err);
+    console.warn("[push] syncPushForAccount failed", err);
   }
 }
 
@@ -173,14 +210,61 @@ export async function syncPushRegistrationOnLogin(): Promise<void> {
  * would 401. Best-effort; never throws.
  */
 export async function unregisterPushToken(): Promise<void> {
+  await forgetThisDevice();
+}
+
+/**
+ * Unlink this phone from the account on EVERY sign-out (27 Oct 2026): the normal
+ * sign-out's DELETE never worked (it sent the token where the server didn't read
+ * it), and the forced sign-outs (refused / revoked session) only forgot it
+ * locally - so a signed-out phone kept getting the account's notifications.
+ * Needs no session. If the phone is offline, the token is kept and retried on
+ * the next start (`retryPendingForget`). Never throws.
+ */
+export async function forgetThisDevice(): Promise<void> {
+  syncedFor = null; // the next sign-in syncs again
+  // Signed out: the previous account's unread count must not stay on the icon.
+  if (Platform.OS !== "web") void Notifications.setBadgeCountAsync(0).catch(() => undefined);
   try {
     const token = await AsyncStorage.getItem(LAST_TOKEN_KEY);
-    if (!token) return;
-    await usersApi.removePushToken(token);
     await AsyncStorage.removeItem(LAST_TOKEN_KEY);
+    if (!token) return;
+    try {
+      await usersApi.forgetPushToken(token);
+      await AsyncStorage.removeItem(PENDING_FORGET_KEY);
+    } catch {
+      await AsyncStorage.setItem(PENDING_FORGET_KEY, token);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("[push] unregisterPushToken failed", err);
+    console.warn("[push] forgetThisDevice failed", err);
+  }
+}
+
+/** A sign-out that happened offline: unlink that token now (only while signed out). */
+export async function retryPendingForget(): Promise<void> {
+  try {
+    const token = await AsyncStorage.getItem(PENDING_FORGET_KEY);
+    if (!token || useAppStore.getState().authenticated) return;
+    await usersApi.forgetPushToken(token);
+    await AsyncStorage.removeItem(PENDING_FORGET_KEY);
+  } catch {
+    // still offline: try again next start
+  }
+}
+
+/** Opening a chat clears its notifications from the tray, like any chat app. */
+export async function dismissChatNotifications(conversationId: string): Promise<void> {
+  if (Platform.OS === "web") return;
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      shown
+        .filter((n) => (n.request.content.data as { conversation_id?: string } | undefined)?.conversation_id === conversationId)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
+    );
+  } catch {
+    // nothing to clear / not supported
   }
 }
 
@@ -232,32 +316,69 @@ export function watchPushTokenRefresh(): () => void {
  * ready — see `flushPendingNotificationTarget`.
  */
 let pendingTarget: NotificationTarget | null = null;
+/** The tapped push to mark read once signed in (cold start replays it too). */
+let pendingTap: NotificationTap | null = null;
+
+/** Marks the tapped notification read and refreshes the bell + app badge. Best effort. */
+async function markTappedRead(tap: NotificationTap): Promise<void> {
+  try {
+    let ids = tappedNotificationIds(tap, []);
+    if (ids.length === 0 && !tap.id && tap.link) {
+      const res = await notificationsApi.list({ page: 1, per_page: 50 });
+      ids = tappedNotificationIds(tap, res?.data ?? []);
+    }
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => notificationsApi.markAsRead(id).catch(() => {})));
+    bumpRealtimeTopic("notifications");
+  } catch {
+    /* the notice just stays unread */
+  }
+}
 
 function canNavigate(): boolean {
-  return navigationRef.isReady() && useAppStore.getState().authenticated;
+  // MainTabs exists only once profile setup is done: navigating to it from the
+  // onboarding stack was silently dropped, so "Verify my identity" on the last
+  // onboarding step landed on Home instead of the identity check (28 Oct 2026,
+  // emulator). Until then the target waits and is replayed.
+  const st = useAppStore.getState();
+  return navigationRef.isReady() && st.authenticated && st.profileSetupDone;
 }
 
 function doNavigate(target: NotificationTarget): void {
-  // All targets are tab routes nested under the root "MainTabs" stack screen.
-  // The typed `navigate` can't express a computed nested route, so go through
-  // the loosely-typed signature — every target is a real MainTab route.
-  (navigationRef.navigate as (name: string, params?: object) => void)("MainTabs", {
+  const nav = navigationRef.navigate as (name: string, params?: object) => void;
+  // The legal pages are root-stack screens, not tabs (`/terms`, `/privacy`).
+  if (target.root) {
+    nav(target.screen);
+    return;
+  }
+  // Every other target is a tab route nested under the root "MainTabs" stack
+  // screen. The typed `navigate` can't express a computed nested route, so go
+  // through the loosely-typed signature — every target is a real MainTab route.
+  nav("MainTabs", {
     screen: target.screen,
     params: target.params,
   });
 }
 
-export function navigateToNotificationTarget(target: NotificationTarget): void {
-  if (canNavigate()) doNavigate(target);
-  else pendingTarget = target; // replayed by flushPendingNotificationTarget
+export function navigateToNotificationTarget(target: NotificationTarget, tap?: NotificationTap): void {
+  if (canNavigate()) {
+    doNavigate(target);
+    if (tap) void markTappedRead(tap);
+  } else {
+    pendingTarget = target; // replayed by flushPendingNotificationTarget
+    pendingTap = tap ?? null;
+  }
 }
 
 /** Called once the navigator + auth are ready (see `usePushNotifications`). */
 export function flushPendingNotificationTarget(): void {
   if (!pendingTarget || !canNavigate()) return;
   const target = pendingTarget;
+  const tap = pendingTap;
   pendingTarget = null;
+  pendingTap = null;
   doNavigate(target);
+  if (tap) void markTappedRead(tap);
 }
 
 /** Routes a tapped notification (foreground/background/cold-start alike). */
@@ -265,7 +386,9 @@ export function handleNotificationResponse(
   response: Notifications.NotificationResponse,
 ): void {
   const content = response.notification.request.content;
-  const data = content.data as { link?: string; type?: string } | undefined;
+  const data = content.data as { link?: string; type?: string; notification_id?: string } | undefined;
   const target = resolveNotificationRoute(data?.link, data?.type, content.title);
-  navigateToNotificationTarget(target);
+  // Opening it marks it read (server sends notification_id; older pushes fall
+  // back to link + type) and refreshes the bell and app badge (29 Oct 2026).
+  navigateToNotificationTarget(target, { id: data?.notification_id, link: data?.link, type: data?.type });
 }

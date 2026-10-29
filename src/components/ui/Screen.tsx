@@ -86,18 +86,36 @@ export function Screen({
       return;
     }
     const enterMs = Platform.OS === "android" ? 180 : Platform.OS === "web" ? 200 : 210;
+    // The fade must never be able to leave a screen invisible. Emulator, 29 Oct
+    // 2026: the bell on Inbox opened a blank Notifications screen. A re-visited
+    // tab whose fade is stopped or never finishes stays at opacity 0. So: an
+    // interrupted fade snaps to 1, leaving the screen resets it to 1, and a
+    // fallback timer forces 1 if the fade never got to run.
+    let settled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
+      if (settled) return; // the fallback already showed the screen; don't blink it
       transition.setValue(0);
       Animated.timing(transition, {
         toValue: 1,
         duration: enterMs,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-      }).start();
+      }).start(({ finished }) => {
+        settled = true;
+        if (!finished) transition.setValue(1);
+      });
     });
+    const fallback = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      transition.stopAnimation();
+      transition.setValue(1);
+    }, enterMs + 400);
     return () => {
       handle.cancel();
+      clearTimeout(fallback);
       transition.stopAnimation();
+      transition.setValue(1);
     };
   }, [isFocused, transition]);
 

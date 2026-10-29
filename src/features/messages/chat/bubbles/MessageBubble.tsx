@@ -37,7 +37,7 @@ const SYSTEM_EVENT_LABELS: Record<string, string> = {
   payment_received: "Payment received",
   payment_pending: "Payment pending",
   handoff_accepted: "Parcel picked up",
-  handoff_rejected: "Declined at handoff",
+  handoff_rejected: "Declined at handover",
   parcel_return_opened: "Parcel return opened",
   return_resolution_set: "Return decision made",
   return_completed: "Parcel sent back",
@@ -64,6 +64,7 @@ export function MessageBubble({
     return (
       <OfferCardBubble
         payload={p}
+        currency={offer?.currency ?? p.currency}
         mine={mine}
         time={time}
         status={offer?.status ?? p.status ?? "open"}
@@ -135,6 +136,7 @@ export function MessageBubble({
           <Attachment
             url={message.attachment_url}
             type={message.attachment_type ?? ""}
+            name={message.attachment_name}
             onOpenImage={onOpenImage}
           />
         ) : null}
@@ -164,6 +166,8 @@ export function MessageBubble({
       </Pressable>
       {failed ? (
         <View style={styles.failedActionsRow}>
+          <Text style={styles.failedNotSent}>Not sent</Text>
+          <Text style={styles.failedSep}>·</Text>
           <Pressable onPress={onRetry} hitSlop={4} accessibilityRole="button" accessibilityLabel="Retry send">
             <Text style={styles.failedAction}>Retry</Text>
           </Pressable>
@@ -210,6 +214,7 @@ const bubbleStyles = StyleSheet.create({
   failedActionsRow: { flexDirection: "row", gap: 6, marginTop: 4, alignItems: "center" },
   failedAction: { color: colors.danger, fontSize: 11, fontWeight: "800" },
   failedSep: { color: colors.mutedText, fontSize: 11 },
+  failedNotSent: { color: colors.danger, fontSize: 11, fontWeight: "600" },
 });
 
 const styles = { ...chatStyles, ...bubbleStyles };

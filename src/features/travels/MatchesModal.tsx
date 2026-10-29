@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/AppButton";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { withoutBlocked } from "@/features/moderation/blockFilter";
@@ -48,6 +49,7 @@ interface MatchRow {
   key: string;
   personId: string | null;
   name: string;
+  verified: boolean;
   rating: number;
   fromCity: string;
   toCity: string;
@@ -127,6 +129,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
                 key: m.trip_id,
                 personId: m.carrier?.id ?? m.carrier_id ?? null,
                 name: m.carrier?.name ?? m.carrier_name ?? "Carrier",
+                verified: m.carrier?.is_verified === true,
                 rating: m.carrier?.rating ?? 0,
                 fromCity: m.from_city,
                 toCity: m.to_city,
@@ -148,6 +151,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
                 key: m.parcel_id,
                 personId: m.sender?.id ?? m.sender_id ?? null,
                 name: m.sender?.name ?? m.sender_name ?? "Sender",
+                verified: m.sender?.is_verified === true,
                 rating: m.sender?.rating ?? 0,
                 fromCity: m.from_city,
                 toCity: m.to_city,
@@ -266,8 +270,11 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
               {rows.map((r) => (
                 <View key={r.key} style={styles.matchRow}>
                   <View style={styles.personRow}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{getInitials(r.name)}</Text>
+                    <View>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{getInitials(r.name)}</Text>
+                      </View>
+                      <VerifiedAvatarBadge verified={r.verified} avatarSize={44} />
                     </View>
                     <View style={styles.personInfo}>
                       <Text style={styles.personName} numberOfLines={1}>

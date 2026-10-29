@@ -47,7 +47,7 @@ export function AcceptHandoffStep({
       </Text>
       <Text style={sharedStyles.stepCardBody}>
         You are receiving the parcel at this step, before you travel. Accepting it
-        asks your sender to pay within 48 hours; their money is then held in escrow
+        asks your sender to pay within 48 hours; their payment is then held securely
         until you deliver it.
       </Text>
 
@@ -82,12 +82,27 @@ export function AcceptHandoffStep({
         6-digit code belongs to the final Delivery step, from the receiver.
       </Text>
 
+      {/* Nothing to inspect until the sender marks it sent / handed over
+          (client, 26 Oct 2026); the server refuses an earlier accept too. Web parity. */}
+      {!handoffDispatched ? (
+        <Text style={styles.waitingNote} testID="handoff-accept-waiting">
+          Waiting for your sender to mark the parcel as sent (or handed over, if you're meeting). You can inspect and accept it after that.
+        </Text>
+      ) : null}
       <Pressable
-        style={[sharedStyles.actionButton, sharedStyles.actionPrimary, sharedStyles.fullWidthAction, styles.stepCardCta]}
+        style={[
+          sharedStyles.actionButton,
+          sharedStyles.actionPrimary,
+          sharedStyles.fullWidthAction,
+          styles.stepCardCta,
+          !handoffDispatched && styles.ctaDisabled,
+        ]}
         onPress={() => setAcceptHandoffOpen(true)}
-        disabled={actionPending !== null}
+        disabled={actionPending !== null || !handoffDispatched}
         accessibilityRole="button"
         accessibilityLabel="I have it and inspected it, accept the parcel"
+        accessibilityState={{ disabled: actionPending !== null || !handoffDispatched }}
+        testID="handoff-accept"
       >
         {actionPending === "accept-handoff" ? (
           <ActivityIndicator size="small" color={colors.white} />
@@ -112,8 +127,8 @@ export function AcceptHandoffStep({
       ) : null}
       <Text style={sharedStyles.stepCardFootnote}>
         {handoffDispatched
-          ? "Declining refunds the sender in full with no penalty to you. "
-          : "This is how you cancel at this step - it refunds your sender in full, with no penalty to you. "}
+          ? "Declining ends the delivery with no penalty to you, and your sender won't be charged. "
+          : "This is how you cancel at this step — no penalty to you, and your sender won't be charged. "}
         {returnEligible
           ? "This order can go back to the seller — the sender arranges the return."
           : "The sender then arranges collection of the parcel from you."}
@@ -152,4 +167,16 @@ const styles = StyleSheet.create({
   stepCardNoteText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
   stepCardNoteStrong: { color: colors.text, fontWeight: "800" },
   stepCardCta: { marginTop: 4 },
+  ctaDisabled: { opacity: 0.45 },
+  waitingNote: {
+    marginTop: 4,
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: colors.primary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
 });

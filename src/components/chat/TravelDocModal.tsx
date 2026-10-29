@@ -16,6 +16,8 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { BusyLabel } from "@/components/ui/BusyLabel";
+import { travelDocOutOfTries } from "@/features/messages/chat/lib/verificationTries";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
@@ -27,6 +29,14 @@ import { ErrorState } from "@/components/ui/ErrorState";
 
 /** 10 MB — same cap as chat attachments and the web uploader. */
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Files in one travel-document upload (the server says so too: max_files). */
+const MAX_FILES = 3;
+
+interface StagedFile {
+  file: RNUploadFile;
+  previewUri: string | null;
+  size: number | null;
+}
 
 /** Web parity (`ChatDocVerifyPrompt.tsx:21`). */
 const isPdfUrl = (u: string | null): boolean => !!u && /\.pdf(\?|$)/i.test(u);
@@ -43,7 +53,7 @@ async function openDocument(url: string): Promise<void> {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert("Couldn't open the document", "Please try again. If it keeps happening, ask the traveller to upload it again.");
+    Alert.alert("Couldn't open the document", "Please try again. If it keeps happening, ask the traveler to upload it again.");
   }
 }
 
@@ -63,7 +73,8 @@ interface TravelDocModalProps {
   error?: string | null;
   /** Clears `error` — called when the banner is dismissed. */
   onDismissError?: () => void;
-  onUpload: (file: RNUploadFile) => void;
+  /** 1 to 3 files (ticket, boarding pass, passport page) - client, 26 Oct 2026. */
+  onUpload: (files: RNUploadFile[]) => void;
   onApprove: () => void;
   onReject: (reason: string) => void;
   onRequestAdminReview: () => void;
@@ -83,10 +94,12 @@ interface TravelDocModalProps {
  */
 function attemptsHint(attempts: number, maxAttempts: number): string {
   const left = Math.max(0, maxAttempts - attempts);
-  if (attempts === 0) return `You can upload up to ${maxAttempts} times.`;
-  if (left <= 0) return "No attempts left — our team can review it for you.";
-  if (left === 1) return "Last attempt — after this, our team will review it.";
-  return `${left} attempts left.`;
+  // "tries" (not "uploads"/"times"): the files line below also counts to 3, and the two
+  // must not read as one limit (client, 26 Oct 2026).
+  if (attempts === 0) return `You get ${maxAttempts} tries to have your document approved.`;
+  if (left <= 0) return "No tries left — our team can review it for you.";
+  if (left === 1) return "Last try — after this, our team will review it.";
+  return `${left} tries left to have it approved.`;
 }
 
 /**
@@ -114,8 +127,17 @@ export function TravelDocModal({
   onRequestAdminReview,
   onCancelMatch,
 }: Readonly<TravelDocModalProps>) {
-  const [file, setFile] = useState<RNUploadFile | null>(null);
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  // 1 to MAX_FILES staged files, each with an image preview when it has one.
+  const [files, setFiles] = useState<StagedFile[]>([]);
+  const maxFiles = doc?.max_files ?? MAX_FILES;
+  const room = Math.max(0, maxFiles - files.length);
+  const addFiles = (incoming: StagedFile[]) => {
+    const ok = incoming.filter((f) => !f.size || f.size <= MAX_FILE_BYTES);
+    if (ok.length < incoming.length) setLocalError("Each file must be 10 MB or smaller.");
+    // Say so when a pick goes over the limit (the Android PDF picker ignores it).
+    else if (files.length + ok.length > maxFiles) setLocalError(`You can add up to ${maxFiles} files per try.`);
+    setFiles((prev) => [...prev, ...ok].slice(0, maxFiles));
+  };
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -132,8 +154,7 @@ export function TravelDocModal({
   // Reset all local UI when the sheet closes so the next open starts clean.
   useEffect(() => {
     if (!open) {
-      setFile(null);
-      setPreviewUri(null);
+      setFiles([]);
       setRejecting(false);
       setReason("");
       setConfirmCancel(false);
@@ -150,8 +171,7 @@ export function TravelDocModal({
   // file was wiped before the carrier could tap Upload, so a re-upload "did not
   // send" (client, 25 Oct 2026).
   useEffect(() => {
-    setFile(null);
-    setPreviewUri(null);
+    setFiles([]);
   }, [doc?.status, doc?.attempts]);
 
   const pickImage = async () => {
@@ -167,19 +187,15 @@ export function TravelDocModal({
         ...LIBRARY_PICK_OPTIONS,
         mediaTypes: ["images"],
         quality: 0.8,
+        allowsMultipleSelection: room > 1,
+        selectionLimit: room,
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        setLocalError("Files must be under 10 MB.");
-        return;
-      }
-      setFile({
-        uri: asset.uri,
-        name: asset.fileName ?? `travel-doc-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
-      });
-      setPreviewUri(asset.uri);
+      if (result.canceled || !result.assets?.length) return;
+      addFiles(result.assets.map((asset, i) => ({
+        file: { uri: asset.uri, name: asset.fileName ?? `travel-doc-${Date.now()}-${i}.jpg`, type: asset.mimeType ?? "image/jpeg" },
+        previewUri: asset.uri,
+        size: asset.fileSize ?? null,
+      })));
     } catch (err) {
       setLocalError(`Couldn't pick image. ${getErrorMessage(err)}`);
     }
@@ -197,16 +213,11 @@ export function TravelDocModal({
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > MAX_FILE_BYTES) {
-        setLocalError("Files must be under 10 MB.");
-        return;
-      }
-      setFile({
-        uri: asset.uri,
-        name: asset.fileName ?? `travel-doc-${Date.now()}.jpg`,
-        type: asset.mimeType ?? "image/jpeg",
-      });
-      setPreviewUri(asset.uri);
+      addFiles([{
+        file: { uri: asset.uri, name: asset.fileName ?? `travel-doc-${Date.now()}.jpg`, type: asset.mimeType ?? "image/jpeg" },
+        previewUri: asset.uri,
+        size: asset.fileSize ?? null,
+      }]);
     } catch (err) {
       setLocalError(`Couldn't take photo. ${getErrorMessage(err)}`);
     }
@@ -218,20 +229,14 @@ export function TravelDocModal({
       const result = await DocumentPicker.getDocumentAsync({
         type: "application/pdf",
         copyToCacheDirectory: true,
-        multiple: false,
+        multiple: room > 1,
       });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      if (asset.size && asset.size > MAX_FILE_BYTES) {
-        setLocalError("Files must be under 10 MB.");
-        return;
-      }
-      setFile({
-        uri: asset.uri,
-        name: asset.name,
-        type: asset.mimeType ?? "application/pdf",
-      });
-      setPreviewUri(null);
+      if (result.canceled || !result.assets?.length) return;
+      addFiles(result.assets.map((asset) => ({
+        file: { uri: asset.uri, name: asset.name, type: asset.mimeType ?? "application/pdf" },
+        previewUri: null,
+        size: asset.size ?? null,
+      })));
     } catch (err) {
       setLocalError(`Couldn't pick file. ${getErrorMessage(err)}`);
     }
@@ -315,22 +320,19 @@ export function TravelDocModal({
               doc={doc}
               pending={pending}
               busy={busy}
-              file={file}
-              previewUri={previewUri}
+              files={files}
+              maxFiles={maxFiles}
               rejecting={rejecting}
               reason={reason}
               confirmCancel={confirmCancel}
               setReason={setReason}
               setRejecting={setRejecting}
               setConfirmCancel={setConfirmCancel}
-              clearFile={() => {
-                setFile(null);
-                setPreviewUri(null);
-              }}
+              removeFile={(i: number) => setFiles((prev) => prev.filter((_, j) => j !== i))}
               pickImage={pickImage}
               takePhoto={takePhoto}
               pickPdf={pickPdf}
-              onUpload={() => file && onUpload(file)}
+              onUpload={() => files.length && onUpload(files.map((f) => f.file))}
               onApprove={onApprove}
               onReject={() => reason.trim() && onReject(reason.trim())}
               onRequestAdminReview={onRequestAdminReview}
@@ -346,15 +348,15 @@ interface ContentProps {
   doc: TravelDocState;
   pending: TravelDocPending;
   busy: boolean;
-  file: RNUploadFile | null;
-  previewUri: string | null;
+  files: StagedFile[];
+  maxFiles: number;
   rejecting: boolean;
   reason: string;
   confirmCancel: boolean;
   setReason: (v: string) => void;
   setRejecting: (v: boolean) => void;
   setConfirmCancel: (v: boolean) => void;
-  clearFile: () => void;
+  removeFile: (index: number) => void;
   pickImage: () => void;
   takePhoto: () => void;
   pickPdf: () => void;
@@ -382,12 +384,12 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
     doc,
     pending,
     busy,
-    file,
-    previewUri,
+    files,
+    maxFiles,
     exhausted,
     confirmCancel,
     setConfirmCancel,
-    clearFile,
+    removeFile,
     pickImage,
     takePhoto,
     pickPdf,
@@ -430,7 +432,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
             accessibilityRole="button"
           >
             {pending === "admin" ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Sending…" textStyle={styles.btnPrimaryText} />
             ) : (
               <Text style={styles.btnPrimaryText}>Request admin review</Text>
             )}
@@ -445,7 +447,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
               accessibilityRole="button"
             >
               {pending === "withdraw" ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <BusyLabel label="Cancelling…" textStyle={styles.btnDangerText} />
               ) : (
                 <Text style={styles.btnDangerText}>Yes, cancel match</Text>
               )}
@@ -489,44 +491,48 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
       />
       <Text style={styles.attemptsText}>{attemptsHint(doc.attempts, doc.max_attempts)}</Text>
 
-      {file ? (
-        <View style={styles.previewRow}>
-          {previewUri ? (
-            <Image source={{ uri: previewUri }} style={styles.previewThumb} />
+      {files.map((f, i) => (
+        <View key={`${f.file.uri}-${i}`} style={styles.previewRow}>
+          {f.previewUri ? (
+            <Image source={{ uri: f.previewUri }} style={styles.previewThumb} />
           ) : (
             <View style={styles.previewFile}>
               <Ionicons name="document-text-outline" size={20} color={colors.primary} />
             </View>
           )}
           <Text style={styles.previewName} numberOfLines={1}>
-            {file.name}
+            {f.file.name}
           </Text>
           <Pressable
-            onPress={clearFile}
+            onPress={() => removeFile(i)}
             hitSlop={6}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel="Remove file"
+            accessibilityLabel={`Remove ${f.file.name}`}
           >
             <Ionicons name="close-circle" size={22} color={colors.mutedText} />
           </Pressable>
         </View>
-      ) : (
+      ))}
+      {files.length < maxFiles ? (
         <View style={styles.pickerRow}>
-          <PickerChip icon="image" label="Photo" onPress={pickImage} disabled={busy} />
+          <PickerChip icon="image" label="Photos" onPress={pickImage} disabled={busy} />
           <PickerChip icon="camera" label="Camera" onPress={takePhoto} disabled={busy} />
           <PickerChip icon="document-text" label="PDF" onPress={pickPdf} disabled={busy} />
         </View>
-      )}
+      ) : null}
+      <Text style={styles.attemptsText}>
+        Add 1 to {maxFiles} files (ticket, boarding pass or ID page) · {files.length}/{maxFiles} added
+      </Text>
 
       <Pressable
         onPress={onUpload}
-        disabled={!file || busy}
-        style={[styles.btn, styles.btnPrimary, (!file || busy) && styles.btnDisabled]}
+        disabled={!files.length || busy}
+        style={[styles.btn, styles.btnPrimary, (!files.length || busy) && styles.btnDisabled]}
         accessibilityRole="button"
       >
         {pending === "upload" ? (
-          <ActivityIndicator size="small" color={colors.white} />
+          <BusyLabel label="Uploading…" textStyle={styles.btnPrimaryText} />
         ) : (
           <Text style={styles.btnPrimaryText}>Upload document</Text>
         )}
@@ -562,6 +568,17 @@ function SenderContent(props: Readonly<ContentProps>) {
   }
 
   if (doc.status === "rejected") {
+    // Out of tries = the carrier can't upload; our team reviews (chat spec bug 6).
+    if (travelDocOutOfTries(doc)) {
+      return (
+        <InfoBlock
+          icon="time-outline"
+          tone="muted"
+          title="Under review by our team"
+          body="The traveler has no tries left. Our team will review the document and let you both know."
+        />
+      );
+    }
     return (
       <InfoBlock
         icon="time-outline"
@@ -573,7 +590,8 @@ function SenderContent(props: Readonly<ContentProps>) {
   }
 
   // status === "pending" → sender reviews
-  const pdf = isPdfUrl(doc.doc_url) || !isImageUrl(doc.doc_url);
+  // Every file of the document (1-3); older servers send only doc_url.
+  const docUrls = doc.doc_urls?.length ? doc.doc_urls : doc.doc_url ? [doc.doc_url] : [];
   return (
     <View style={styles.stack}>
       <InfoBlock
@@ -583,28 +601,32 @@ function SenderContent(props: Readonly<ContentProps>) {
         body="Review it, then approve to unlock payment or ask for a re-upload."
       />
 
-      {doc.doc_url ? (
-        pdf ? (
+      {docUrls.map((url, i) => {
+        const n = docUrls.length > 1 ? ` ${i + 1}` : "";
+        const pdf = isPdfUrl(url) || !isImageUrl(url);
+        return pdf ? (
           <Pressable
-            onPress={() => void openDocument(doc.doc_url as string)}
+            key={url}
+            onPress={() => void openDocument(url)}
             style={styles.viewDocButton}
             accessibilityRole="button"
-            accessibilityLabel="Open document"
+            accessibilityLabel={`Open document${n}`}
           >
             <Ionicons name="document-text" size={16} color={colors.primary} />
-            <Text style={styles.viewDocText}>{isPdfUrl(doc.doc_url) ? "View document (PDF)" : "Open document"}</Text>
+            <Text style={styles.viewDocText}>{isPdfUrl(url) ? `View document${n} (PDF)` : `Open document${n}`}</Text>
             <Ionicons name="open-outline" size={14} color={colors.mutedText} />
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => void openDocument(doc.doc_url as string)}
+            key={url}
+            onPress={() => void openDocument(url)}
             accessibilityRole="button"
-            accessibilityLabel="View full document"
+            accessibilityLabel={`View full document${n}`}
           >
-            <Image source={{ uri: doc.doc_url }} style={styles.docImage} resizeMode="contain" />
+            <Image source={{ uri: url }} style={styles.docImage} resizeMode="contain" />
           </Pressable>
-        )
-      ) : null}
+        );
+      })}
 
       {rejecting ? (
         <View style={styles.stack}>
@@ -630,7 +652,7 @@ function SenderContent(props: Readonly<ContentProps>) {
               accessibilityRole="button"
             >
               {pending === "reject" ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
                 <Text style={styles.btnWarningText}>Request re-upload</Text>
               )}
@@ -657,7 +679,7 @@ function SenderContent(props: Readonly<ContentProps>) {
             accessibilityRole="button"
           >
             {pending === "approve" ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <BusyLabel label="Approving…" textStyle={styles.btnPrimaryText} />
             ) : (
               <Text style={styles.btnPrimaryText}>Approve</Text>
             )}

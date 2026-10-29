@@ -12,6 +12,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 
 import { ModerationMenu } from "@/components/moderation/ModerationMenu";
+import { VerifiedAvatarBadge } from "@/components/ui/Avatar";
 import { UnavailableContentCard } from "@/components/moderation/UnavailableContentCard";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { Card } from "@/components/ui/Card";
@@ -117,7 +118,7 @@ export function PublicProfileScreen() {
   // the cards under it. It used to count them: "5 reviews" over 3 cards.
   const hiddenOnPage = reviews.reviews.length - visibleReviews.length;
   const reviewCount = Math.max(visibleReviews.length, reviews.total - hiddenOnPage);
-  const verified = isKycVerified(profile?.kyc_status);
+  const verified = profile?.is_verified === true || isKycVerified(profile?.kyc_status);
   const preferredRoutes =
     [profile?.city, profile?.country].filter(Boolean).join(", ") || "—";
 
@@ -168,13 +169,16 @@ export function PublicProfileScreen() {
           {/* ───────── Profile card ───────── */}
           <Card style={styles.profileCard}>
             <View style={styles.profileRow}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarLabel}>{initials}</Text>
-                </View>
-              )}
+              <View>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarLabel}>{initials}</Text>
+                  </View>
+                )}
+                <VerifiedAvatarBadge verified={verified} avatarSize={76} />
+              </View>
               <View style={styles.profileTextWrap}>
                 <Text style={styles.profileName} numberOfLines={1}>
                   {name}
@@ -190,7 +194,7 @@ export function PublicProfileScreen() {
                 {verified ? (
                   <View style={styles.kycRow}>
                     <Ionicons name="shield-checkmark-outline" size={13} color={colors.safe} />
-                    <Text style={styles.kycText}>KYC Verified</Text>
+                    <Text style={styles.kycText}>Identity verified</Text>
                   </View>
                 ) : null}
               </View>
@@ -203,19 +207,19 @@ export function PublicProfileScreen() {
               icon="cube-outline"
               iconColor={colors.safe}
               value={String(profile?.total_deliveries ?? 0)}
-              label="DELIVERIES"
+              label="Deliveries"
             />
             <StatCard
               icon="people-outline"
               iconColor={colors.primary}
               value={String(profile?.total_trips ?? 0)}
-              label="BUDDY TRIPS"
+              label="Buddy trips"
             />
             <StatCard
               icon="calendar-outline"
               iconColor={colors.warning}
               value={memberSince(profile?.created_at)}
-              label="MEMBER SINCE"
+              label="Member since"
             />
           </View>
 
@@ -306,15 +310,18 @@ function ReviewCard({ review }: Readonly<{ review: Rating }>) {
   return (
     <Card style={styles.reviewCard}>
       <View style={styles.reviewTop}>
-        {raterAvatar ? (
-          <Image source={{ uri: raterAvatar }} style={styles.reviewAvatarImage} />
-        ) : (
-          <View style={styles.reviewAvatarFallback}>
-            <Text style={styles.reviewAvatarInitials} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
-              {getInitials(raterName)}
-            </Text>
-          </View>
-        )}
+        <View>
+          {raterAvatar ? (
+            <Image source={{ uri: raterAvatar }} style={styles.reviewAvatarImage} />
+          ) : (
+            <View style={styles.reviewAvatarFallback}>
+              <Text style={styles.reviewAvatarInitials} maxFontSizeMultiplier={FIXED_CELL_MAX_FONT_SCALE}>
+                {getInitials(raterName)}
+              </Text>
+            </View>
+          )}
+          <VerifiedAvatarBadge verified={review.rater?.is_verified} avatarSize={40} />
+        </View>
         <View style={styles.reviewerBlock}>
           <Text style={styles.reviewerName} numberOfLines={1}>
             {raterName}
@@ -409,7 +416,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: { color: colors.text, fontSize: 18, lineHeight: 22, fontWeight: "800" },
-  statLabel: { color: colors.mutedText, fontSize: 9, fontWeight: "700", letterSpacing: 0.4 },
+  statLabel: { color: colors.mutedText, fontSize: 9, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
 
   // About
   sectionTitle: {

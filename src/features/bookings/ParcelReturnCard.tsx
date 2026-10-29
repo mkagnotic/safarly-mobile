@@ -8,11 +8,31 @@ import { CountryPicker } from "@/components/ui/CountryPicker";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { showToast } from "@/feedback/appFeedback";
 import type { Booking, HandoffAddress, ReturnResolution } from "@/services/api";
-import { RETURN_COUNTRIES } from "@/utils/addressOptions";
+import { RETURN_COUNTRIES, countryCode, labelForCountry, labelForState } from "@/utils/addressOptions";
 import { colors } from "@/theme/colors";
 
 // CountryPicker takes {code,name}; addressOptions speaks {value,label}.
 const RETURN_COUNTRY_OPTIONS = RETURN_COUNTRIES.map((c) => ({ code: c.value, name: c.label }));
+
+type AddressParts = {
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+};
+
+/** One line, with full state and country names rather than codes (27 Oct 2026). */
+function formatAddress(a: AddressParts | null | undefined): string {
+  if (!a) return "";
+  const code = countryCode(a.country);
+  const state = (code && a.state && labelForState(code, a.state)) || a.state;
+  const country = (code && labelForCountry(code)) || a.country;
+  return [a.line1, a.line2, a.city, state, a.postal_code, country]
+    .filter((part) => !!part && String(part).trim().length > 0)
+    .join(", ");
+}
 
 /**
  * The parcel hand-back, after a carrier declines it at handoff or cancels
@@ -43,6 +63,23 @@ const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
   sender_collects: "I'll arrange collection from the carrier",
   sender_has_parcel: "I already have the parcel",
 };
+
+// One sentence per choice (27 Oct 2026): "Post it back to me" told the carrier the
+// sender was "arranging collection", and the sender read "You asked them to i'll
+// arrange collection from the carrier" (a label lower-cased into a sentence).
+const CARRIER_NEXT: Record<ReturnResolution, string> = {
+  return_to_seller: "Post the parcel to the seller's return address below, then confirm it here.",
+  return_to_sender: "Post the parcel to the sender's address below, then confirm it here.",
+  sender_collects: "The sender is arranging collection. Once you've handed the parcel over, confirm it here.",
+  sender_has_parcel: "The sender says they already have the parcel. Confirm it here once that's right.",
+};
+const SENDER_ASKED: Record<ReturnResolution, string> = {
+  return_to_seller: "You asked them to send it back to the seller.",
+  return_to_sender: "You asked them to post it back to you.",
+  sender_collects: "You said you'll arrange collection from them.",
+  sender_has_parcel: "You said you already have the parcel.",
+};
+
 
 const RESOLUTION_ICON: Record<ReturnResolution, keyof typeof Ionicons.glyphMap> = {
   return_to_seller: "storefront-outline",
@@ -80,7 +117,7 @@ function liabilityLine(
         : "The sender called the delivery off, so they cover the return postage.";
     case "no_fault":
       return youPay
-        ? "Neither side caused this, so the return postage is yours - it's still your parcel."
+        ? "Neither side caused this, so the return postage is yours — it's still your parcel."
         : "Neither side caused this, so the sender covers the return postage.";
     default:
       return youPay ? "The return postage is yours." : "The other side covers the return postage.";
@@ -108,11 +145,7 @@ export function ParcelReturnCard({
   const receivedAt = booking.return_received_at ?? null;
 
   const address = plan?.return_address ?? null;
-  const addressText = address
-    ? [address.line1, address.line2, address.city, address.state, address.postal_code, address.country]
-        .filter((part) => !!part && String(part).trim().length > 0)
-        .join(", ")
-    : "";
+  const addressText = formatAddress(address);
   const canReturnToSeller = !!addressText;
 
   // Default-from-props must be derived, not frozen: a `useState` initialiser only
@@ -191,11 +224,7 @@ export function ParcelReturnCard({
   ) : null;
 
   const dest = booking.return_destination_address ?? null;
-  const destText = dest
-    ? [dest.line1, dest.line2, dest.city, dest.state, dest.postal_code, dest.country]
-        .filter((part) => !!part && String(part).trim().length > 0)
-        .join(", ")
-    : "";
+  const destText = formatAddress(dest);
   const destinationBlock = destText ? (
     <View style={styles.addressBlock}>
       <View style={styles.headerRow}>
@@ -231,7 +260,7 @@ export function ParcelReturnCard({
   if (completedAt && !receivedAt && resolution !== "sender_has_parcel") {
     return (
       <View style={styles.card}>
-        {header("On its way back - confirm when it arrives")}
+        {header("On its way back — confirm when it arrives")}
         <Text style={styles.body}>
           {resolution ? RESOLUTION_LABEL[resolution] : "Resolved"} · sent {formatDateTime(completedAt)}
         </Text>
@@ -240,7 +269,7 @@ export function ParcelReturnCard({
         ) : null}
         {isCarrier ? (
           <Text style={styles.meta}>
-            Waiting for the sender to confirm the parcel arrived. The delivery closes then.
+            Waiting for {senderName} to confirm the parcel arrived. The delivery closes then.
           </Text>
         ) : (
           <Pressable
@@ -262,9 +291,9 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(
           resolution === "sender_has_parcel"
-            ? "Closed - the parcel never left the sender"
+            ? "Closed — the parcel never left the sender"
             : receivedAt
-              ? "Returned safely - this delivery is closed"
+              ? "Returned safely — this delivery is closed"
               : "The parcel is on its way back",
         )}
         <Text style={styles.body}>
@@ -293,8 +322,10 @@ export function ParcelReturnCard({
         <View style={styles.card}>
           {header(`Tell ${carrierName} what to do with the parcel`)}
           <Text style={styles.body}>
-            You have been refunded in full. The parcel itself is still with your carrier,
-            so it needs somewhere to go before this is finished.
+            {/* Only claim a refund for a booking that was actually paid (client, 26 Oct 2026). */}
+            {booking.payment_made ? "You've been refunded in full." : "You haven't been charged for this delivery."}{" "}
+            The parcel itself is still with your carrier, so it needs somewhere to go before
+            this is finished.
           </Text>
           {addressBlock}
           <View style={styles.optionList}>
@@ -318,12 +349,12 @@ export function ParcelReturnCard({
                       {value === "return_to_seller"
                         ? canReturnToSeller
                           ? "The carrier posts it to the return address you gave when listing the parcel."
-                          : "You did not declare a return address - pick another option, or add one in the note."
+                          : "You didn't add a return address when you listed this parcel, so pick another option."
                         : value === "return_to_sender"
-                          ? "The carrier posts it to an address you give below - the usual choice for a personal item."
+                          ? "The carrier posts it to an address you give below — the usual choice for a personal item."
                           : value === "sender_collects"
-                            ? "You book a courier or collect it yourself. Agree the details in chat."
-                            : "Nothing to move - close this off."}
+                            ? "You book a courier or collect it from the carrier yourself. Agree the details in chat."
+                            : "Nothing to move — close this off."}
                     </Text>
                   </View>
                 </Pressable>
@@ -407,11 +438,11 @@ export function ParcelReturnCard({
 
     return (
       <View style={styles.card}>
-        {header(`You still have the parcel - ${senderName} is deciding where it goes`)}
+        {header(`You still have the parcel — ${senderName} is deciding where it goes`)}
         <Text style={styles.body}>
-          You have been refunded out of it and the booking is closed, but the parcel is
-          physically with you. {senderName} has been asked whether it goes back to the
-          seller or they arrange collection. Keep it safe until then.
+          The booking is closed, but the parcel is still with you. {booking.sender?.name || "The sender"} is choosing
+          whether it goes back to the seller or they arrange collection. You'll get a
+          notification when they choose — keep it safe until then.
         </Text>
         {addressBlock}
       </View>
@@ -424,9 +455,7 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(RESOLUTION_LABEL[resolution])}
         <Text style={styles.body}>
-          {resolution === "return_to_seller"
-            ? "Post the parcel to the seller's return address below, then confirm it here."
-            : "The sender is arranging collection. Once you have handed the parcel over, confirm it here."}
+          {CARRIER_NEXT[resolution]}
         </Text>
         {resolution === "return_to_seller" ? addressBlock : null}
         {resolution === "return_to_sender" ? destinationBlock : null}
@@ -467,8 +496,8 @@ export function ParcelReturnCard({
     <View style={styles.card}>
       {header(`Waiting for ${carrierName} to send the parcel back`)}
       <Text style={styles.body}>
-        You asked them to {RESOLUTION_LABEL[resolution].toLowerCase()}. They have been
-        notified and will confirm here once it is done.
+        {SENDER_ASKED[resolution]} They've been
+        notified and will confirm here once it's done.
       </Text>
       {resolution === "return_to_seller" ? addressBlock : null}
       {resolution === "return_to_sender" ? destinationBlock : null}

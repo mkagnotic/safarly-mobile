@@ -13,6 +13,8 @@ import { KeyboardModalCard } from "@/features/bookings/components/KeyboardModalC
 interface CancelBookingModalProps {
   open: boolean;
   pending: boolean;
+  /** What happens to the money (and the parcel) if they go ahead. */
+  moneyLine?: string;
   /** Why the last attempt failed — shown inline; the modal stays open to retry. */
   error?: string | null;
   onCancel: () => void;
@@ -22,6 +24,7 @@ interface CancelBookingModalProps {
 export function CancelBookingModal({
   open,
   pending,
+  moneyLine,
   error,
   onCancel,
   onConfirm,
@@ -44,7 +47,7 @@ export function CancelBookingModal({
     <Modal statusBarTranslucent navigationBarTranslucent visible={open} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardModalCard onBackdropPress={handleClose}>
         <View style={sharedStyles.modalHeader}>
-          <Text style={sharedStyles.modalTitle}>Cancel Booking?</Text>
+          <Text style={sharedStyles.modalTitle}>Cancel this booking?</Text>
           <Pressable onPress={handleClose} hitSlop={8} disabled={pending}>
             <Ionicons name="close" size={20} color={colors.mutedText} />
           </Pressable>
@@ -52,6 +55,7 @@ export function CancelBookingModal({
         <Text style={sharedStyles.modalBody}>
           Tell the other party why you're cancelling. This is shared with them.
         </Text>
+        {moneyLine ? <Text style={sharedStyles.modalBody}>{moneyLine}</Text> : null}
         <TextInput
           value={reason}
           onChangeText={setReason}
@@ -72,9 +76,9 @@ export function CancelBookingModal({
             disabled={pending}
             style={[sharedStyles.modalButton, sharedStyles.modalButtonSecondary]}
             accessibilityRole="button"
-            accessibilityLabel="Keep Booking"
+            accessibilityLabel="Keep booking"
           >
-            <Text style={sharedStyles.modalButtonSecondaryText}>Keep Booking</Text>
+            <Text style={sharedStyles.modalButtonSecondaryText}>Keep booking</Text>
           </Pressable>
           <Pressable
             onPress={handleConfirm}
@@ -85,12 +89,12 @@ export function CancelBookingModal({
               (pending || !reason.trim()) && sharedStyles.modalButtonDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Confirm Cancellation"
+            accessibilityLabel="Cancel booking"
           >
             {pending ? (
               <ActivityIndicator size="small" color={colors.white} />
             ) : (
-              <Text style={sharedStyles.modalButtonDangerText}>Confirm Cancel</Text>
+              <Text style={sharedStyles.modalButtonDangerText}>Cancel booking</Text>
             )}
           </Pressable>
         </View>

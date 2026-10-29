@@ -55,13 +55,14 @@ export function ProfileFormFields({
 }: Readonly<Props>) {
   return (
     <View style={styles.column}>
-      <Field label={`FULL NAME${nameRequired ? " *" : ""}`} error={errors?.name}>
+      <Field label={`Full name${nameRequired ? " *" : ""}`} error={errors?.name}>
         <TextInput
           value={name}
           onChangeText={onName}
           style={[styles.input, errors?.name ? styles.inputError : null]}
-          placeholder={nameRequired ? "Your full name (required)" : "Your full name"}
+          placeholder="Your full name"
           placeholderTextColor={colors.subtleText}
+          maxLength={100}
           autoCapitalize="words"
           autoCorrect
           editable={!disabled}
@@ -103,12 +104,12 @@ export function ProfileFormFields({
         </>
       )}
 
-      <Field label="BIO">
+      <Field label="Bio" hint={`${bio.length}/280`}>
         <TextInput
           value={bio}
           onChangeText={onBio}
           style={[styles.input, styles.inputMultiline]}
-          placeholder="Tell others about yourself…"
+          placeholder="A line or two about you, like where you often travel"
           placeholderTextColor={colors.subtleText}
           multiline
           textAlignVertical="top"
@@ -129,12 +130,13 @@ function CityField({
   disabled,
 }: Readonly<{ city: string; onCity: (v: string) => void; error?: string; disabled?: boolean }>) {
   return (
-    <Field label="CITY" error={error}>
+    <Field label="City" error={error}>
       <TextInput
         value={city}
         onChangeText={onCity}
         style={[styles.input, error ? styles.inputError : null]}
-        placeholder="e.g. New York"
+        placeholder="Your city"
+        maxLength={100}
         placeholderTextColor={colors.subtleText}
         autoCapitalize="words"
         editable={!disabled}
@@ -156,7 +158,7 @@ function CountryField({
   disabled?: boolean;
 }>) {
   return (
-    <Field label="COUNTRY" error={error}>
+    <Field label="Country" error={error}>
       <CountryPicker
         value={country}
         onChange={onCountry}
@@ -171,11 +173,13 @@ function Field({
   label,
   children,
   error,
-}: Readonly<{ label: string; children: ReactNode; error?: string }>) {
+  hint,
+}: Readonly<{ label: string; children: ReactNode; error?: string; hint?: string }>) {
   return (
     <View style={styles.fieldBlock}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {children}
+      {hint && !error ? <Text style={styles.fieldHint}>{hint}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
   );
@@ -186,6 +190,7 @@ const styles = StyleSheet.create({
   gridRow: { flexDirection: "row", gap: 10 },
   gridCol: { flex: 1 },
   fieldBlock: { gap: 8 },
+  fieldHint: { alignSelf: "flex-end", fontSize: 11, color: colors.subtleText, marginTop: 4 },
   fieldLabel: { color: colors.mutedText, fontSize: 11, fontWeight: "700", letterSpacing: 0.5 },
   input: {
     minHeight: 50,

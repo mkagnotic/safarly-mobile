@@ -1,12 +1,17 @@
 import { useCallback, useState } from "react";
 
-import { showAppAlert } from "@/feedback/appFeedback";
-import { ANY_CITY } from "@/features/search/CityPicker";
+import { showAppAlert, showToast } from "@/feedback/appFeedback";
+import { buddyEditPayload } from "@/features/buddies/editBuddyPayload";
 import type { EditBuddyListingFormValues } from "@/features/buddies/EditBuddyListingModal";
 import type { RateBuddyValues } from "@/features/buddies/RateBuddyModal";
-import type { EditParcelFormValues } from "@/features/parcels/EditParcelModal";
+import type { EditParcelFormValues, EditParcelSubmitOptions } from "@/features/parcels/EditParcelModal";
+import { parcelEditPayload } from "@/features/parcels/model/editParcelPayload";
+import { returnFormChanges } from "@/utils/addressOptions";
 import type { MatchesSource } from "@/features/travels/MatchesModal";
 import type { EditTripFormValues } from "@/features/trips/EditTripModal";
+import { tripEditPayload } from "@/features/trips/model/editTripPayload";
+import { editTripBuddyMessage } from "@/features/trips/model/openBuddy";
+import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import {
   buddiesApi,
   getErrorMessage,
@@ -35,6 +40,12 @@ type MyTravelsActionsInput = Pick<
   | "myProfile"
 > & { navigation: Nav };
 
+/** The server's reason as a sentence, so "Try again." reads after it. */
+function asSentence(text: string): string {
+  const t = text.trim();
+  return !t || /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
 /**
  * What My Travels can do to its lists - edit, delete, rate, accept / reject /
  * cancel buddy requests, open chats - with the pending and error state each
@@ -56,10 +67,15 @@ export function useMyTravelsActions({
   const [formError, setFormError] = useState<string | null>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [editPending, setEditPending] = useState(false);
+  // Edit refusals show inside the open modal, not behind it (28 Oct 2026).
+  const [editTripError, setEditTripError] = useState<string | null>(null);
   const [editingParcel, setEditingParcel] = useState<Parcel | null>(null);
   const [editParcelPending, setEditParcelPending] = useState(false);
+  // The server's refusal of an edit, shown inside the modal (27 Oct 2026).
+  const [editParcelError, setEditParcelError] = useState<string | null>(null);
   const [editingBuddy, setEditingBuddy] = useState<BuddyListing | null>(null);
   const [editBuddyPending, setEditBuddyPending] = useState(false);
+  const [editBuddyError, setEditBuddyError] = useState<string | null>(null);
   const [ratingConn, setRatingConn] = useState<BuddyConnection | null>(null);
   const [ratePending, setRatePending] = useState(false);
   const [matchSource, setMatchSource] = useState<MatchesSource | null>(null);
@@ -84,19 +100,22 @@ export function useMyTravelsActions({
     [],
   );
 
+  // 28 Oct 2026: a success toast and an error that names the thing (web words).
   const withDeleteFlow = useCallback(
     async (
       id: string,
       mutate: (id: string) => Promise<unknown>,
       after: () => void,
+      words: { done: string; failed: string },
     ) => {
       setDeletingId(id);
       setFormError(null);
       try {
         await mutate(id);
+        showToast({ title: words.done, variant: "success" });
         after();
       } catch (err) {
-        setFormError(`Couldn't remove. ${getErrorMessage(err)}`);
+        setFormError([words.failed, asSentence(getErrorMessage(err)), "Try again."].filter(Boolean).join(" "));
       } finally {
         setDeletingId(null);
       }
@@ -106,14 +125,11 @@ export function useMyTravelsActions({
 
   const handleDeleteTrip = useCallback(
     (trip: Trip) =>
-      withDeleteFlow(trip.id, (id) => tripsApi.delete(id), flights.refetch),
+      withDeleteFlow(trip.id, (id) => tripsApi.delete(id), flights.refetch, {
+        done: "Trip cancelled",
+        failed: "Couldn't cancel this trip.",
+      }),
     [withDeleteFlow, flights.refetch],
-  );
-
-  const handleDeleteSendParcel = useCallback(
-    (parcel: Parcel) =>
-      withDeleteFlow(parcel.id, (id) => parcelsApi.delete(id), sendParcels.refetch),
-    [withDeleteFlow, sendParcels.refetch],
   );
 
   const handleDeleteReceiveParcel = useCallback(
@@ -122,13 +138,17 @@ export function useMyTravelsActions({
         parcel.id,
         (id) => parcelsApi.delete(id),
         receiveParcels.refetch,
+        { done: "Parcel cancelled", failed: "Couldn't cancel this parcel." },
       ),
     [withDeleteFlow, receiveParcels.refetch],
   );
 
   const handleDeleteBuddy = useCallback(
     (id: string) =>
-      withDeleteFlow(id, (lid) => buddiesApi.deleteListing(lid), partners.refetch),
+      withDeleteFlow(id, (lid) => buddiesApi.deleteListing(lid), partners.refetch, {
+        done: "Buddy listing removed",
+        failed: "Couldn't remove this buddy listing.",
+      }),
     [withDeleteFlow, partners.refetch],
   );
 
@@ -142,6 +162,7 @@ export function useMyTravelsActions({
   );
   const handleEditBuddy = useCallback((listing: BuddyListing) => {
     setFormError(null);
+    setEditBuddyError(null);
     setEditingBuddy(listing);
   }, []);
   const handleEditBuddyCancel = useCallback(() => {
@@ -156,33 +177,18 @@ export function useMyTravelsActions({
     async (values: EditBuddyListingFormValues) => {
       if (!editingBuddy) return;
 
-      // The modal validates before calling this, so every field is present and
-      // in range by now. buddy-handler PUT is still a full upsert — anything
-      // omitted here gets nulled — so the payload must stay exhaustive.
-      const ymd = values.travel_date.trim();
-      const payload = {
-        from_city: values.from_city === ANY_CITY ? "Any" : values.from_city,
-        to_city: values.to_city === ANY_CITY ? "Any" : values.to_city,
-        // Single-date listing: buddy_listings has no date-mode column, so the
-        // "single" case is expressed as from === to.
-        travel_date: ymd,
-        travel_date_from: ymd,
-        travel_date_to: ymd,
-        airline: values.airline.trim(),
-        bio: values.bio.trim(),
-        age: values.age ? Number.parseInt(values.age, 10) : undefined,
-        languages: values.languages,
-        interests: values.interests.trim(),
-        layover: values.layover.trim(),
-      };
+      // Full upsert body, countries included (editBuddyPayload.ts).
+      const payload = buddyEditPayload(values);
 
       setEditBuddyPending(true);
+      setEditBuddyError(null);
       try {
         await buddiesApi.update(editingBuddy.id, payload);
         await partners.refetch();
         setEditingBuddy(null);
+        showToast({ title: "Buddy listing updated", variant: "success" });
       } catch (err) {
-        setFormError(`Couldn't update listing. ${getErrorMessage(err)}`);
+        setEditBuddyError(getErrorMessage(err));
       } finally {
         setEditBuddyPending(false);
       }
@@ -192,84 +198,29 @@ export function useMyTravelsActions({
 
   const handleEditParcel = useCallback((parcel: Parcel) => {
     setFormError(null);
+    setEditParcelError(null);
     setEditingParcel(parcel);
   }, []);
   const handleEditParcelCancel = useCallback(() => {
     if (!editParcelPending) setEditingParcel(null);
   }, [editParcelPending]);
 
+  // List rows carry neither currency_locked nor the private return address
+  // (street, postal code, order number): both come only on the owner's detail
+  // read, so Edit loads it, as web's EditParcelDialog does (28 Oct 2026).
+  const parcelDetail = useParcelDetail(editingParcel?.id);
+  const editParcelDetail =
+    editingParcel && parcelDetail.parcel?.id === editingParcel.id ? parcelDetail.parcel : null;
+
   const handleEditParcelSubmit = useCallback(
-    async (values: EditParcelFormValues) => {
+    async (values: EditParcelFormValues, options: EditParcelSubmitOptions) => {
       if (!editingParcel) return;
-      const data: Parameters<typeof parcelsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setFormError("Select an origin city to update this parcel.");
-        return;
-      }
-      if (!values.to_city) {
-        setFormError("Select a destination city to update this parcel.");
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = editingParcel.any_from ? "Any" : editingParcel.from_city;
-      const curToCity = editingParcel.any_to ? "Any" : editingParcel.to_city;
-      const curFromCountry = (editingParcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (editingParcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const weightNum = Number(values.weight_kg);
-      if (
-        values.weight_kg !== "" &&
-        Number.isFinite(weightNum) &&
-        weightNum !== editingParcel.weight_kg
-      ) {
-        data.weight_kg = weightNum;
-      }
-      if (values.description !== (editingParcel.description ?? "")) {
-        data.description = values.description;
-      }
-      if (values.category && values.category !== editingParcel.category) {
-        data.category = values.category;
-      }
-      const feeNum = Number(values.fee_offered);
-      if (
-        values.fee_offered !== "" &&
-        Number.isFinite(feeNum) &&
-        feeNum !== editingParcel.fee_offered
-      ) {
-        data.fee_offered = feeNum;
-      }
-      if (values.fee_currency !== editingParcel.fee_currency) {
-        data.fee_currency = values.fee_currency;
-      }
-
-      // Dates travel as a set — see ParcelDetailsScreen: the PUT handler does
-      // not default delivery_date_mode, so a date change without it can leave
-      // mode="single" with from != to.
-      const curFrom = editingParcel.delivery_by_from ?? editingParcel.delivery_by ?? "";
-      const curTo = editingParcel.delivery_by_to ?? editingParcel.delivery_by ?? "";
-      const curMode = editingParcel.delivery_date_mode === "range" ? "range" : "single";
-      if (
-        values.delivery_by_from !== curFrom ||
-        values.delivery_by_to !== curTo ||
-        values.delivery_date_mode !== curMode
-      ) {
-        data.delivery_date_mode = values.delivery_date_mode;
-        data.delivery_by_from = values.delivery_by_from;
-        data.delivery_by_to = values.delivery_by_to;
-        data.delivery_by = values.delivery_by_to;
-      }
+      const stored = editParcelDetail ?? editingParcel;
+      const data = parcelEditPayload(
+        values,
+        stored,
+        options.includeReturn ? returnFormChanges(values.returnForm, stored) : {},
+      );
 
       if (Object.keys(data).length === 0) {
         setEditingParcel(null);
@@ -277,22 +228,25 @@ export function useMyTravelsActions({
       }
 
       setEditParcelPending(true);
+      setEditParcelError(null);
       try {
         await parcelsApi.update(editingParcel.id, data);
         // The parcel lives in either Send or Receive — refresh both.
         await Promise.all([sendParcels.refetch(), receiveParcels.refetch()]);
         setEditingParcel(null);
+        showToast({ title: "Parcel updated", variant: "success" });
       } catch (err) {
-        setFormError(`Couldn't update parcel. ${getErrorMessage(err)}`);
+        setEditParcelError(getErrorMessage(err));
       } finally {
         setEditParcelPending(false);
       }
     },
-    [editingParcel, sendParcels, receiveParcels],
+    [editingParcel, editParcelDetail, sendParcels, receiveParcels],
   );
 
   const handleEditTrip = useCallback((trip: Trip) => {
     setFormError(null);
+    setEditTripError(null);
     setEditingTrip(trip);
   }, []);
 
@@ -303,56 +257,8 @@ export function useMyTravelsActions({
   const handleEditTripSubmit = useCallback(
     async (values: EditTripFormValues) => {
       if (!editingTrip) return;
-      const data: Parameters<typeof tripsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setFormError("Select a departure city to update this trip.");
-        return;
-      }
-      if (!values.to_city) {
-        setFormError("Select an arrival city to update this trip.");
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = editingTrip.any_from ? "Any" : editingTrip.from_city;
-      const curToCity = editingTrip.any_to ? "Any" : editingTrip.to_city;
-      const curFromCountry = (editingTrip.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (editingTrip.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const from = values.travel_date_from;
-      const to = values.travel_date_to || from; // empty Return ⇒ single date
-      if (
-        from &&
-        (from !== editingTrip.travel_date_from ||
-          to !== editingTrip.travel_date_to ||
-          from !== editingTrip.travel_date)
-      ) {
-        data.travel_date = from;
-        data.travel_date_from = from;
-        data.travel_date_to = to;
-      }
-      const capacityNum = Number(values.luggage_capacity_kg);
-      if (
-        values.luggage_capacity_kg !== "" &&
-        Number.isFinite(capacityNum) &&
-        capacityNum !== editingTrip.luggage_capacity_kg
-      ) {
-        data.luggage_capacity_kg = capacityNum;
-      }
-      if (values.notes !== (editingTrip.notes ?? "")) {
-        data.notes = values.notes;
-      }
+      // Only what changed; the modal has validated (editTripPayload.ts).
+      const data = tripEditPayload(values, editingTrip);
 
       if (Object.keys(data).length === 0) {
         setEditingTrip(null);
@@ -360,17 +266,22 @@ export function useMyTravelsActions({
       }
 
       setEditPending(true);
+      setEditTripError(null);
       try {
-        await tripsApi.update(editingTrip.id, data);
-        await flights.refetch();
+        const res = await tripsApi.update(editingTrip.id, data);
+        const buddyMsg = editTripBuddyMessage(data.open_to_buddy, res?.data?.buddy_listing);
+        // A buddy listing was added or removed: Travel Partners must show it.
+        await Promise.all([flights.refetch(), ...(buddyMsg ? [partners.refetch()] : [])]);
         setEditingTrip(null);
+        // The buddy note, when there is one, already says the trip saved.
+        showToast(buddyMsg ? { title: buddyMsg.text, variant: buddyMsg.variant } : { title: "Trip updated", variant: "success" });
       } catch (err) {
-        setFormError(`Couldn't update trip. ${getErrorMessage(err)}`);
+        setEditTripError(getErrorMessage(err));
       } finally {
         setEditPending(false);
       }
     },
-    [editingTrip, flights],
+    [editingTrip, flights, partners],
   );
 
   const handleRateDelivery = useCallback(
@@ -389,6 +300,7 @@ export function useMyTravelsActions({
       setFormError(null);
       try {
         await buddiesApi.acceptRequest(id);
+        showToast({ title: "Buddy request accepted", variant: "success" });
         await Promise.all([requests.refetch(), connections.refetch()]);
       } catch (err) {
         setFormError(`Couldn't accept request. ${getErrorMessage(err)}`);
@@ -405,9 +317,11 @@ export function useMyTravelsActions({
       setFormError(null);
       try {
         await buddiesApi.rejectRequest(id);
+        // 27 Oct 2026: same words as web.
+        showToast({ title: "Buddy request declined", variant: "success" });
         await requests.refetch();
       } catch (err) {
-        setFormError(`Couldn't reject request. ${getErrorMessage(err)}`);
+        setFormError(`Couldn't decline request. ${getErrorMessage(err)}`);
       } finally {
         setActioningId(null);
       }
@@ -418,8 +332,8 @@ export function useMyTravelsActions({
   const handleCancelSentRequest = useCallback(
     (request: BuddyRequest, recipientName: string) => {
       showAppAlert({
-        title: "Cancel buddy request?",
-        message: `Your request to ${recipientName} will be removed from their requests. You can send a new one later.`,
+        title: `Cancel your request to ${recipientName}?`,
+        message: "It will be removed from their requests. You can send a new one later.",
         actions: [
           { text: "Keep request", style: "cancel" },
           {
@@ -431,6 +345,7 @@ export function useMyTravelsActions({
                 setFormError(null);
                 try {
                   await buddiesApi.cancelRequest(request.id);
+                  showToast({ title: "Buddy request cancelled", variant: "success" });
                   await sentRequests.refetch();
                 } catch (err) {
                   // 409 = they answered first (or it was already cancelled);
@@ -454,7 +369,15 @@ export function useMyTravelsActions({
       setActioningId(id);
       setFormError(null);
       try {
-        await buddiesApi.completeConnection(id);
+        const res = await buddiesApi.completeConnection(id);
+        // 27 Oct 2026: tell the user where the journey stands (web parity).
+        showToast({
+          title:
+            res.data?.status === "completed"
+              ? "Journey confirmed — you can now leave a review"
+              : "Marked complete — waiting for your buddy to confirm",
+          variant: "success",
+        });
         await connections.refetch();
       } catch (err) {
         setFormError(`Couldn't confirm the journey. ${getErrorMessage(err)}`);
@@ -500,7 +423,7 @@ export function useMyTravelsActions({
       if (!conn.conversation_id) return;
       navigation.navigate("OfferChatTab", {
         conversationId: conn.conversation_id,
-        name: conn.buddy?.name ?? "Travel buddy",
+        name: conn.buddy?.name ?? "Traveler",
         source: "buddies",
       });
     },
@@ -545,10 +468,14 @@ export function useMyTravelsActions({
     setFormError,
     editingTrip,
     editPending,
+    editTripError,
     editingParcel,
     editParcelPending,
+    editParcelError,
+    editParcelDetail,
     editingBuddy,
     editBuddyPending,
+    editBuddyError,
     ratingConn,
     ratePending,
     matchSource,
@@ -557,7 +484,6 @@ export function useMyTravelsActions({
     handleViewTripMatches,
     handleViewParcelMatches,
     handleDeleteTrip,
-    handleDeleteSendParcel,
     handleDeleteReceiveParcel,
     handleDeleteBuddy,
     handleOpenTrip,

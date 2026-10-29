@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
@@ -17,6 +17,7 @@ import { Screen } from "@/components/ui/Screen";
 import { ListSkeleton } from "@/components/ui/Skeletons";
 import { showAppAlert, showToast } from "@/feedback/appFeedback";
 import { useMyNotifications } from "@/hooks/api/useMyNotifications";
+import { useUnreadNotificationsCount } from "@/hooks/api/useUnreadNotificationsCount";
 import { MainTabParamList } from "@/navigation/types";
 import { getErrorMessage, type Notification } from "@/services/api";
 import { resolveNotificationRoute } from "@/services/notifications/notificationRoute";
@@ -83,7 +84,12 @@ export function NotificationsScreen() {
     clearAll,
   } = useMyNotifications({ perPage: 20 });
 
-  const hasUnread = useMemo(() => notifications.some((n) => !n.read), [notifications]);
+  // From the account, not just the loaded rows: an unread notice further down used to
+  // hide "Mark all as read" while the bell still counted it (27 Oct 2026, web parity).
+  const { count: unreadTotal } = useUnreadNotificationsCount();
+  const hasUnread = useMemo(() => unreadTotal > 0 || notifications.some((n) => !n.read), [notifications, unreadTotal]);
+  // One delete per row at a time: a double tap sent two DELETEs.
+  const deletingRef = useRef(new Set<string>());
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -91,18 +97,17 @@ export function NotificationsScreen() {
   }, [navigation]);
 
   const handleNotificationPress = useCallback(
-    async (n: Notification) => {
-      // Optimistic — UI flips before the PUT lands.
+    (n: Notification) => {
+      // Mark read in the background and open at once (web parity): awaiting the
+      // PUT held every tap for a server round trip before anything happened.
       if (!n.read) {
-        try {
-          await markAsRead(n.id);
-        } catch (err) {
+        markAsRead(n.id).catch((err) => {
           showToast({
             title: "Couldn't mark as read",
             message: getErrorMessage(err),
             variant: "error",
           });
-        }
+        });
       }
       // Navigate off `data.link` when we recognise it, else fall back to a
       // per-type landing screen — shared with the OS push-tap handler via
@@ -122,10 +127,14 @@ export function NotificationsScreen() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (deletingRef.current.has(id)) return;
+      deletingRef.current.add(id);
       try {
         await remove(id);
       } catch (err) {
         showToast({ title: "Couldn't delete", message: getErrorMessage(err), variant: "error" });
+      } finally {
+        deletingRef.current.delete(id);
       }
     },
     [remove],
@@ -134,7 +143,7 @@ export function NotificationsScreen() {
   const handleClearAll = useCallback(() => {
     showAppAlert({
       title: "Clear all notifications?",
-      message: "This removes every notification. This can't be undone.",
+      message: "This removes every notification from your list. It can't be undone.",
       actions: [
         { text: "Cancel", style: "cancel" },
         {
@@ -143,8 +152,8 @@ export function NotificationsScreen() {
           onPress: () => {
             void (async () => {
               try {
+                // No success toast (web parity): the list itself empties.
                 await clearAll();
-                showToast({ title: "Notifications cleared", variant: "info", duration: 1800 });
               } catch (err) {
                 showToast({
                   title: "Couldn't clear",
@@ -161,8 +170,8 @@ export function NotificationsScreen() {
 
   const handleMarkAll = useCallback(async () => {
     try {
+      // No success toast (web parity): the rows themselves change.
       await markAllAsRead();
-      showToast({ title: "All caught up", variant: "success", duration: 2000 });
     } catch (err) {
       showToast({
         title: "Couldn't mark all as read",
@@ -240,7 +249,7 @@ export function NotificationsScreen() {
     ({ item }: ListRenderItemInfo<Notification>) => (
       <NotificationRow
         item={item}
-        onPress={() => void handleNotificationPress(item)}
+        onPress={() => handleNotificationPress(item)}
         onDelete={() => void handleDelete(item.id)}
       />
     ),
@@ -274,7 +283,7 @@ export function NotificationsScreen() {
           <Ionicons name="notifications-outline" size={22} color={colors.primary} />
         </View>
         <Text style={styles.emptyTitle}>You're all caught up!</Text>
-        <Text style={styles.emptySubtitle}>No new notifications right now.</Text>
+        <Text style={styles.emptySubtitle}>You don't have any notifications.</Text>
       </View>
     );
   }, [loading, error, refetch]);

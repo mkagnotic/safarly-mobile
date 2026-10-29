@@ -52,14 +52,14 @@ export function useChatVerification({
   // actions that advance the FSM (approve/withdraw) — nudges the workflow pin so
   // it moves on without waiting for the realtime round-trip.
   const handleDocUpload = useCallback(
-    async (file: RNUploadFile) => {
+    async (files: RNUploadFile[]) => {
       setModalError(null);
       try {
-        await travelDoc.upload(file);
+        await travelDoc.upload(files);
         // Done with the sheet once the step is submitted - the pin shows what is
         // next. Client, 22 Oct 2026: it stayed open until the user found the X.
         setTravelDocOpen(false);
-        showToast({ title: "Document uploaded", variant: "success", duration: 1800 });
+        showToast({ title: "Travel document uploaded — awaiting review", variant: "success", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "travelDoc", message: `Upload failed. ${getErrorMessage(err)}` });
@@ -73,7 +73,7 @@ export function useChatVerification({
     try {
       await travelDoc.approve();
       setTravelDocOpen(false);
-      showToast({ title: "Document approved", variant: "success", duration: 1800 });
+      showToast({ title: "Travel document approved", variant: "success", duration: 1800 });
       void refetchActiveDeal();
     } catch (err) {
       setModalError({ modal: "travelDoc", message: `Couldn't approve. ${getErrorMessage(err)}` });
@@ -100,7 +100,7 @@ export function useChatVerification({
     try {
       await travelDoc.requestAdminReview();
       setTravelDocOpen(false);
-      showToast({ title: "Admin review requested", variant: "info", duration: 1800 });
+      showToast({ title: "Admin review requested — our team will follow up", variant: "info", duration: 1800 });
     } catch (err) {
       setModalError({ modal: "travelDoc", message: `Couldn't escalate. ${getErrorMessage(err)}` });
     }
@@ -127,7 +127,7 @@ export function useChatVerification({
         await parcelReview.upload(files);
         // Same as the travel document: submitted means done with the sheet.
         setParcelReviewOpen(false);
-        showToast({ title: "Photos submitted", variant: "success", duration: 1800 });
+        showToast({ title: "Parcel photos uploaded — awaiting carrier review", variant: "success", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "parcelReview", message: `Upload failed. ${getErrorMessage(err)}` });

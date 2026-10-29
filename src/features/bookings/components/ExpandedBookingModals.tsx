@@ -7,6 +7,7 @@ import {
 import { RejectHandoffModal } from "@/features/bookings/components/RejectHandoffModal";
 import type { ExpandedBookingState } from "@/features/bookings/hooks/useExpandedBooking";
 import type { BookingActions } from "@/features/bookings/lib/bookingActions";
+import { cancelMoneyLine } from "@/features/bookings/lib/moneyMessages";
 
 type ExpandedBookingModalsProps = Pick<
   ExpandedBookingState,
@@ -28,7 +29,7 @@ type ExpandedBookingModalsProps = Pick<
     | "handleAcceptHandoff"
     | "handleRejectHandoffConfirm"
     | "handleCancelPostPossessionConfirm"
-  > & { booking: Booking; returnEligible: boolean };
+  > & { booking: Booking; returnEligible: boolean; isSender: boolean };
 
 /**
  * The expanded card's four confirmation modals. A failed action is shown inside
@@ -52,12 +53,14 @@ export function ExpandedBookingModals({
   setCancelPostPossessionOpen,
   handleCancelPostPossessionConfirm,
   returnEligible,
+  isSender,
 }: Readonly<ExpandedBookingModalsProps>) {
   return (
     <>
       <CancelBookingModal
         open={cancelOpen}
         pending={actionPending === "cancel"}
+        moneyLine={cancelMoneyLine(booking, isSender)}
         error={modalError}
         onCancel={() => {
           setModalError(null);
@@ -79,6 +82,8 @@ export function ExpandedBookingModals({
         parcelLikelyWithCarrier={
           booking.handoff_mode === "shipped" && !!booking.handoff_dispatched_at
         }
+        parcelDispatched={!!booking.handoff_dispatched_at}
+        returnEligible={returnEligible}
         error={modalError}
         onCancel={() => {
           setModalError(null);

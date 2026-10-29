@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { ListingFilesField } from "@/components/listing/ListingFilesField";
+import { minAmountProblem } from "@/utils/minAmount";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +23,9 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import type { DeliveryDateMode } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
-import { currencySymbol } from "@/utils/money";
+import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
+import { ReturnAddressFields } from "./ReturnAddressFields";
+import { currencySymbol, formatMoneyShort } from "@/utils/money";
 
 type Country = "IN" | "US";
 type Currency = "USD" | "INR";
@@ -48,6 +52,12 @@ const CATEGORIES: readonly ParcelCategory[] = [
 const MAX_WEIGHT_KG = 23;
 
 const SAME_ROUTE_MSG = "Destination must be different from origin";
+/** One string for the live line and Save (28 Oct 2026 edit canon). */
+const WEIGHT_OVER_MAX_MSG = `Exceeds the airline limit of ${MAX_WEIGHT_KG} kg per item.`;
+const RETURN_SUMMARY_MSG = "Check the seller's return address.";
+
+/** Fields that can carry an inline validation error (28 Oct 2026: was one line above the footer). */
+type FieldKey = "fromCity" | "toCity" | "date" | "weight" | "fee";
 
 function parseYmd(s: string): Date | null {
   if (!s) return null;
@@ -90,6 +100,16 @@ export interface EditParcelFormValues {
   delivery_by_from: string;
   delivery_by_to: string;
   delivery_date_mode: DeliveryDateMode;
+  /** Online order / return block, same fields as the send form (27 Oct 2026). */
+  returnForm: ReturnFormValues;
+}
+
+export interface EditParcelSubmitOptions {
+  /**
+   * False while the private return address hasn't loaded and the user hasn't
+   * touched the block: the caller must not send it (web's checkReturn).
+   */
+  includeReturn: boolean;
 }
 
 interface EditParcelModalProps {
@@ -97,21 +117,38 @@ interface EditParcelModalProps {
   initial: EditParcelFormValues;
   pending: boolean;
   onCancel: () => void;
-  onSubmit: (values: EditParcelFormValues) => void;
+  onSubmit: (values: EditParcelFormValues, options: EditParcelSubmitOptions) => void;
+  /** The listing being edited: its optional owner files are managed here (26 Oct 2026). */
+  listingId?: string;
   /** The parcel already has offers: the server refuses a currency change (409). */
   currencyLocked?: boolean;
+  /** The server's refusal of the last save (e.g. booked parcel), shown in the modal. */
+  serverError?: string | null;
+  /**
+   * The owner's detail read (currency lock, full return address) is still
+   * loading (My Travels, 28 Oct 2026): the currency switch stays off and the
+   * return block isn't checked or sent until it arrives or is edited.
+   */
+  detailPending?: boolean;
 }
 
 export function EditParcelModal({
   open,
   initial,
+  listingId,
   pending,
   onCancel,
   onSubmit,
   currencyLocked = false,
+  serverError = null,
+  detailPending = false,
 }: Readonly<EditParcelModalProps>) {
   const [form, setForm] = useState<EditParcelFormValues>(initial);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [returnSummary, setReturnSummary] = useState<string | null>(null);
+  const [returnErrors, setReturnErrors] = useState<ReturnAddressErrors>({});
+  const [returnTouched, setReturnTouched] = useState(false);
+  const detailPendingRef = useRef(detailPending);
   const [calendarTarget, setCalendarTarget] = useState<"from" | "to" | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
     const d = parseYmd(initial.delivery_by_from) ?? new Date();
@@ -123,12 +160,24 @@ export function EditParcelModal({
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       setForm(initial);
-      setError(null);
+      setErrors({});
+      setReturnSummary(null);
+      setReturnErrors({});
+      setReturnTouched(false);
       const d = parseYmd(initial.delivery_by_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
     wasOpenRef.current = open;
   }, [open, initial]);
+
+  // The private return address arrives with the detail read: fill the block
+  // then, unless the user already started on it (web parity).
+  useEffect(() => {
+    if (open && detailPendingRef.current && !detailPending && !returnTouched) {
+      setForm((prev) => ({ ...prev, returnForm: initial.returnForm }));
+    }
+    detailPendingRef.current = detailPending;
+  }, [open, detailPending, initial.returnForm, returnTouched]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -169,28 +218,52 @@ export function EditParcelModal({
     }
   }, [suggestedFee, form.fee_offered]);
 
+  /** Fee check, on blur (web rule: "Checked when you leave the field, as on Send Parcel") and on Save. */
+  const feeProblem = (): string | undefined => {
+    const fee = Number(form.fee_offered);
+    if (!form.fee_offered || Number.isNaN(fee) || fee <= 0) return "Enter a valid amount";
+    // Same minimum as the server: $5 / ₹500 (client, 26 Oct 2026).
+    return minAmountProblem(fee, form.fee_currency);
+  };
+
+  const clearError = (key: FieldKey) =>
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  // Untouched and not loaded yet: leave the return details alone (web's checkReturn).
+  const checkReturn = !detailPending || returnTouched;
+
   const handleSubmit = () => {
-    if (!form.from_city) return setError("Select an origin city");
-    if (!form.to_city) return setError("Select a destination city");
-    if (isSameRoute) return setError(SAME_ROUTE_MSG);
+    const next: Partial<Record<FieldKey, string>> = {};
+    if (!form.from_city) next.fromCity = "Select an origin city";
+    if (!form.to_city) next.toCity = "Select a destination city";
+    else if (isSameRoute) next.toCity = SAME_ROUTE_MSG;
     if (!form.weight_kg || Number.isNaN(weightNum) || weightNum <= 0) {
-      return setError("Enter the parcel weight");
+      next.weight = "Enter the parcel weight";
+    } else if (weightNum > MAX_WEIGHT_KG) {
+      next.weight = WEIGHT_OVER_MAX_MSG;
     }
-    if (weightNum > MAX_WEIGHT_KG) {
-      return setError(`Weight exceeds the airline limit of ${MAX_WEIGHT_KG} kg per item`);
-    }
-    if (!fromDate) return setError("Pick a delivery deadline");
-    if (form.delivery_date_mode === "range") {
-      if (!toDate) return setError("Pick the latest delivery date");
+    if (!fromDate) {
+      next.date =
+        form.delivery_date_mode === "range" ? "Pick the earliest delivery date" : "Pick a delivery date";
+    } else if (form.delivery_date_mode === "range") {
+      if (!toDate) next.date = "Pick the latest delivery date";
       // Strictly after: equal ends are a single date, which the mode toggle
       // already expresses. `<` allowed them to match despite this wording.
-      if (toDate <= fromDate) return setError("Latest date must be after the earliest");
+      else if (toDate <= fromDate) next.date = "Latest date must be after the earliest";
     }
-    const fee = Number(form.fee_offered);
-    if (!form.fee_offered || Number.isNaN(fee) || fee <= 0) {
-      return setError("Enter a valid amount");
-    }
-    setError(null);
+    const fee = feeProblem();
+    if (fee) next.fee = fee;
+    const ra = checkReturn ? validateReturnForm(form.returnForm) : {};
+    const returnBad = Object.keys(ra).length > 0;
+    setErrors(next);
+    setReturnErrors(ra);
+    setReturnSummary(returnBad ? RETURN_SUMMARY_MSG : null);
+    if (Object.keys(next).length > 0 || returnBad) return;
     // In single mode both dates collapse to the deadline, matching what the
     // handler would do anyway — sending them aligned keeps client and server
     // in agreement rather than relying on the server to fix it up.
@@ -198,8 +271,14 @@ export function EditParcelModal({
       form.delivery_date_mode === "single"
         ? { ...form, delivery_by_to: form.delivery_by_from }
         : form,
+      { includeReturn: checkReturn },
     );
   };
+
+  /** Live: same route under "To", and the weight over the airline max. */
+  const toCityError = isSameRoute ? SAME_ROUTE_MSG : errors.toCity;
+  const weightError = weightNum > MAX_WEIGHT_KG ? WEIGHT_OVER_MAX_MSG : errors.weight;
+  const currencyDisabled = pending || currencyLocked || detailPending;
 
   const fromFlag = form.from_country === "IN" ? "🇮🇳" : "🇺🇸";
   const toFlag = form.to_country === "IN" ? "🇮🇳" : "🇺🇸";
@@ -275,12 +354,17 @@ export function EditParcelModal({
               />
               <CityPicker
                 value={form.from_city}
-                onChange={(v) => setForm((prev) => ({ ...prev, from_city: v }))}
+                onChange={(v) => {
+                  setForm((prev) => ({ ...prev, from_city: v }));
+                  clearError("fromCity");
+                }}
                 cities={fromCities}
                 placeholder="Select origin city"
                 variant="card"
                 disabled={pending}
+                invalid={!!errors.fromCity}
               />
+              {errors.fromCity ? <Text style={styles.inlineError}>{errors.fromCity}</Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -293,12 +377,17 @@ export function EditParcelModal({
               />
               <CityPicker
                 value={form.to_city}
-                onChange={(v) => setForm((prev) => ({ ...prev, to_city: v }))}
+                onChange={(v) => {
+                  setForm((prev) => ({ ...prev, to_city: v }));
+                  clearError("toCity");
+                }}
                 cities={toCities}
                 placeholder="Select destination city"
                 variant="card"
                 disabled={pending}
+                invalid={!!toCityError}
               />
+              {toCityError ? <Text style={styles.inlineError}>{toCityError}</Text> : null}
             </View>
 
             {/* Deliver by — sits below the destination, matching the create form. */}
@@ -306,26 +395,27 @@ export function EditParcelModal({
               <Text style={styles.fieldLabel}>Deliver by</Text>
               <DateModeToggle<DeliveryDateMode>
                 options={[
-                  { value: "single", label: "Single Date" },
-                  { value: "range", label: "Date Range" },
+                  { value: "single", label: "Single date" },
+                  { value: "range", label: "Date range" },
                 ]}
                 value={form.delivery_date_mode}
-                onChange={(next) =>
+                onChange={(next) => {
                   setForm((prev) => ({
                     ...prev,
                     delivery_date_mode: next,
                     // Collapsing here keeps the two in step; the handler would
                     // otherwise do it and the UI would briefly disagree.
                     delivery_by_to: next === "single" ? prev.delivery_by_from : prev.delivery_by_to,
-                  }))
-                }
+                  }));
+                  clearError("date");
+                }}
               />
               <View style={styles.dateRow}>
                 <View style={styles.dateCell}>
                   <DateField
                     label={form.delivery_date_mode === "range" ? "Earliest" : "Deliver by"}
                     value={fromDate ? formatDateLabel(fromDate) : null}
-                    placeholder="Select date"
+                    placeholder="Pick a date"
                     onPress={() => setCalendarTarget("from")}
                   />
                 </View>
@@ -333,12 +423,13 @@ export function EditParcelModal({
                   <DateField
                     label="Latest"
                     value={toDate ? formatDateLabel(toDate) : null}
-                    placeholder="Select date"
+                    placeholder="Pick a date"
                     onPress={() => setCalendarTarget("to")}
                     disabled={form.delivery_date_mode === "single"}
                   />
                 </View>
               </View>
+              {errors.date ? <Text style={styles.inlineError}>{errors.date}</Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -368,20 +459,23 @@ export function EditParcelModal({
               <Text style={styles.fieldLabel}>Weight (kg)</Text>
               <TextInput
                 value={form.weight_kg}
-                onChangeText={(t) =>
-                  setForm((prev) => ({ ...prev, weight_kg: sanitizeDecimalInput(t, 4, 2) }))
-                }
+                onChangeText={(t) => {
+                  setForm((prev) => ({ ...prev, weight_kg: sanitizeDecimalInput(t, 4, 2) }));
+                  clearError("weight");
+                }}
                 keyboardType="decimal-pad"
                 placeholder="0"
                 placeholderTextColor={colors.placeholderText}
-                style={[styles.textInput, weightNum > MAX_WEIGHT_KG && styles.textInputError]}
+                style={[styles.textInput, !!weightError && styles.textInputError]}
                 editable={!pending}
               />
-              {weightNum > MAX_WEIGHT_KG ? (
-                <Text style={styles.inlineError}>
-                  Exceeds the airline limit of {MAX_WEIGHT_KG} kg per item.
+              {weightError ? (
+                <Text style={styles.inlineError}>{weightError}</Text>
+              ) : (
+                <Text style={styles.hint}>
+                  Used to suggest a fair carrier fee. Airline max: {MAX_WEIGHT_KG} kg per item.
                 </Text>
-              ) : null}
+              )}
             </View>
 
             <View style={styles.field}>
@@ -394,44 +488,51 @@ export function EditParcelModal({
                       fee_currency: prev.fee_currency === "USD" ? "INR" : "USD",
                     }))
                   }
-                  disabled={pending || currencyLocked}
-                  style={[styles.currencyToggle, currencyLocked && styles.currencyToggleLocked]}
+                  disabled={currencyDisabled}
+                  style={[styles.currencyToggle, (currencyLocked || detailPending) && styles.currencyToggleLocked]}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: pending || currencyLocked }}
+                  accessibilityState={{ disabled: currencyDisabled }}
                   accessibilityLabel={
                     currencyLocked
                       ? `Currency: ${form.fee_currency}. Locked once offers have been made.`
-                      : `Currency: ${form.fee_currency}. Tap to switch.`
+                      : detailPending
+                        ? `Currency: ${form.fee_currency}.`
+                        : `Currency: ${form.fee_currency}. Tap to switch.`
                   }
                 >
                   <Text style={styles.currencyToggleText}>{form.fee_currency}</Text>
                 </Pressable>
                 <TextInput
                   value={form.fee_offered}
-                  onChangeText={(t) =>
-                    setForm((prev) => ({ ...prev, fee_offered: sanitizeDecimalInput(t, 6, 2) }))
-                  }
+                  onChangeText={(t) => {
+                    setForm((prev) => ({ ...prev, fee_offered: sanitizeDecimalInput(t, 6, 2) }));
+                    clearError("fee");
+                  }}
+                  onBlur={() => {
+                    const problem = feeProblem();
+                    setErrors((prev) => (problem ? { ...prev, fee: problem } : prev));
+                  }}
                   keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor={colors.placeholderText}
-                  style={[styles.textInput, styles.feeInput]}
+                  style={[styles.textInput, styles.feeInput, !!errors.fee && styles.textInputError]}
                   editable={!pending}
                 />
               </View>
+              {errors.fee ? <Text style={styles.inlineError}>{errors.fee}</Text> : null}
               {currencyLocked ? (
                 <Text style={styles.hint}>Currency is locked once offers have been made.</Text>
               ) : null}
               {suggestedFee != null ? (
                 <Text style={styles.hint}>
-                  Suggested for {form.weight_kg} kg: {currencySymbol(form.fee_currency)}
-                  {suggestedFee}
+                  Suggested for {form.weight_kg} kg: {formatMoneyShort(suggestedFee, form.fee_currency)}. You can offer more or less.
                 </Text>
               ) : null}
             </View>
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Description <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                Description <Text style={styles.fieldLabelMuted}>(optional)</Text>
               </Text>
               <TextInput
                 value={form.description}
@@ -446,8 +547,39 @@ export function EditParcelModal({
                 editable={!pending}
               />
             </View>
-            {error ? <Text style={styles.formError}>{error}</Text> : null}
+
+            <ReturnAddressFields
+              value={form.returnForm}
+              onChange={(patch) => {
+                setReturnTouched(true);
+                setForm((prev) => ({ ...prev, returnForm: { ...prev.returnForm, ...patch } }));
+              }}
+              errors={returnErrors}
+              onFieldEdited={(k) =>
+                setReturnErrors((prev) => {
+                  if (!prev[k]) return prev;
+                  const next = { ...prev };
+                  delete next[k];
+                  return next;
+                })
+              }
+              disabled={pending}
+            />
+            {returnSummary ? <Text style={styles.inlineError}>{returnSummary}</Text> : null}
+
+            {/* Last field inside the scroll, as web (28 Oct 2026): pinned outside it ate the
+                form's room on small phones. */}
+            {listingId ? (
+              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos)" />
+            ) : null}
             </ScrollView>
+
+            {/* The server's refusal, above the footer so it is seen however far the form scrolled. */}
+            {serverError ? (
+              <Text style={styles.formError} accessibilityLiveRegion="polite">
+                {serverError}
+              </Text>
+            ) : null}
 
             <View style={styles.footer}>
               <AppButton
@@ -474,7 +606,7 @@ export function EditParcelModal({
 
       <CalendarModal
         open={calendarTarget !== null}
-        title={calendarTarget === "to" ? "Pick the latest date" : "Pick a delivery deadline"}
+        title={calendarTarget === "to" ? "Pick the latest date" : "Pick a delivery date"}
         selected={calendarTarget === "to" ? toDate : fromDate}
         visibleMonth={visibleMonth}
         // The window's end can't precede its start.
@@ -493,7 +625,7 @@ export function EditParcelModal({
                     prev.delivery_date_mode === "single" ? ymd : prev.delivery_by_to,
                 },
           );
-          setError(null);
+          clearError("date");
           setCalendarTarget(null);
         }}
         onChangeMonth={setVisibleMonth}

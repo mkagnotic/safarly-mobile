@@ -25,6 +25,8 @@ export type RootStackParamList = {
         source?: "home" | "messages" | "buddies" | "travels";
         /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
         buddyListingId?: string;
+        /** A link named the deal to open (`?deal=`), as on web. */
+        dealId?: string;
       }
     | undefined;
   SendParcel: undefined;
@@ -55,7 +57,15 @@ export type MainTabParamList = {
    *  Package Delivery Matches (web parity: `&tab=receiver`).
    *  `forId` is the recipient's OWN trip / parcel / buddy listing the match is
    *  for (`&for=`): a summary of several matches scrolls to that listing's group. */
-  Trips: { highlightId?: string; tab?: "package" | "receiver" | "buddy"; forId?: string } | undefined;
+  Trips:
+    | {
+        highlightId?: string;
+        tab?: "package" | "receiver" | "buddy";
+        forId?: string;
+        /** Open `tab` for browsing (My Bookings' empty state), not as a match deep link. */
+        browse?: boolean;
+      }
+    | undefined;
   Buddies: undefined;
   /** Travel-buddy listing form. Editing happens in `EditBuddyListingModal`. */
   CreateBuddyTab: undefined;
@@ -73,23 +83,12 @@ export type MainTabParamList = {
   PreferencesTab: undefined;
   ChangePasswordTab: undefined;
   ChangeEmailTab: undefined;
+  /** Security → Blocked users (web BlockedUsersSection parity). */
+  BlockedUsersTab: undefined;
   DeleteAccountTab: undefined;
   /** Same screen as the root stack's `ForgotPassword`, reached from Change Password. */
   ForgotPasswordTab: { email?: string } | undefined;
   SendParcelTab: undefined;
-  ReviewPayTab: {
-    draft: {
-      from: string;
-      to: string;
-      weight: string;
-      fee: string;
-      category: string;
-    };
-  };
-  PaymentSuccessTab: {
-    amount: string;
-  };
-  PaymentFailureTab: undefined;
   ListTripTab: { source?: "home" | "trips" } | undefined;
   ListTripSuccessTab: undefined;
   TripDetailsTab: { tripId: string };
@@ -103,6 +102,8 @@ export type MainTabParamList = {
         source?: "home" | "messages" | "buddies" | "travels";
         /** Opened from a Travel Buddy card while the chat stays a parcel thread. */
         buddyListingId?: string;
+        /** A link named the deal to open (`?deal=`), as on web. */
+        dealId?: string;
       }
     | undefined;
   ParcelDetailsTab: { parcelId: string };

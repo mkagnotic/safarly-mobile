@@ -30,6 +30,12 @@ export interface UseActiveDealResult {
   buddy: BuddyEntry | null;
   /** Is the chat showing the buddy entry instead of a parcel deal? (client-side choice) */
   buddySelected: boolean;
+  /**
+   * Another deal was tapped and its step hasn't loaded yet. The pin shows a loader:
+   * the previous deal's step used to stay on screen, live, and the chip highlight
+   * stayed on it, so the tap looked ignored (client, 27 Oct 2026). Web parity.
+   */
+  switchingDeal: boolean;
   loading: boolean;
   error: ApiClientError | Error | null;
   refetch: () => Promise<void>;
@@ -47,13 +53,22 @@ export interface UseActiveDealResult {
  */
 const EMPTY_DEALS: DealProjection[] = [];
 
-export function useActiveDeal(conversationId: string | null, buddyListingId?: string | null): UseActiveDealResult {
+/**
+ * `dealHint`: a link named the deal to open (`?deal=`, e.g. a "trip details changed"
+ * notice). With several deals between two people the server's default pick is often
+ * a different one, so the chat opens on the named deal - web `useThreadDeal` parity.
+ */
+export function useActiveDeal(
+  conversationId: string | null,
+  buddyListingId?: string | null,
+  dealHint?: string | null,
+): UseActiveDealResult {
   const [activeDeal, setActiveDeal] = useState<ActiveDeal | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
   const [deals, setDeals] = useState<DealProjection[]>([]);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [buddy, setBuddy] = useState<BuddyEntry | null>(null);
-  const [wantedDealId, setWantedDealId] = useState<string | null>(null);
+  const [wantedDealId, setWantedDealId] = useState<string | null>(dealHint ?? null);
   const [loading, setLoading] = useState(Boolean(conversationId));
   const [error, setError] = useState<ApiClientError | Error | null>(null);
   /**
@@ -67,6 +82,8 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
    * A's, and A's answer is discarded on arrival.
    */
   const [dataConversationId, setDataConversationId] = useState<string | null>(null);
+  /** The deal the data on screen was fetched FOR (null = the server's default). */
+  const [servedForDealId, setServedForDealId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
   // Never drops a refresh asked for mid-fetch — the "Waiting" over "MATCH
@@ -76,8 +93,13 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
   currentConversationRef.current = conversationId;
   // Read inside refetch without making it a dependency: re-creating refetch on every
   // switch would retrigger the realtime subscriptions below.
-  const wantedRef = useRef<string | null>(null);
+  const wantedRef = useRef<string | null>(dealHint ?? null);
   wantedRef.current = wantedDealId;
+  // A new conversation (or a new link into this one) starts from the link's deal,
+  // in THIS render - the fetch below must not ask the new chat for the old chat's deal.
+  const selectionKey = `${conversationId ?? ""}|${dealHint ?? ""}`;
+  const selectionKeyRef = useRef(selectionKey);
+  if (selectionKeyRef.current !== selectionKey) wantedRef.current = dealHint ?? null;
   const buddyHintRef = useRef<string | null>(buddyListingId ?? null);
   buddyHintRef.current = buddyListingId ?? null;
 
@@ -98,6 +120,7 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
         const res = await messagesApi.getActiveDeal(conversationId, wanted, buddyHintRef.current);
         if (!isCurrent()) return;
         setDataConversationId(conversationId);
+        setServedForDealId(wanted);
         setActiveDeal(res.data?.active_deal ?? null);
         setWorkflow(res.data?.workflow ?? null);
         setDeals(res.data?.deals ?? []);
@@ -105,6 +128,8 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
         setBuddy(res.data?.buddy ?? null);
       } catch (err) {
         if (!isCurrent()) return;
+        // Never a loader forever: a failed switch shows the error path, not a spinner.
+        setServedForDealId(wantedRef.current === BUDDY_ENTRY_ID ? null : wantedRef.current);
         // A 404/403 means the conversation is gone or not ours — clear the pin
         // rather than surfacing a scary error over an otherwise-usable chat.
         if (err instanceof ApiClientError && (err.status === 404 || err.status === 403)) {
@@ -131,11 +156,26 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
     };
   }, [refetch]);
 
-  // A different conversation is a different set of deals, so the selection resets.
+  // A different conversation is a different set of deals, so the selection resets -
+  // to the deal a link named, if any (web: `setSelectedDealId(dealHint)`). Runs only
+  // when the conversation or the link changes, never over a chip the user tapped.
+  // Unset on mount, so the first run is "a new conversation" and fetches only once.
+  const lastSelectionRef = useRef<{ conversationId: string | null; dealHint: string | null } | null>(null);
   useEffect(() => {
-    setWantedDealId(null);
-    if (conversationId) setLoading(true);
-  }, [conversationId]);
+    const hint = dealHint ?? null;
+    const last = lastSelectionRef.current;
+    if (last && last.conversationId === conversationId && last.dealHint === hint) return;
+    lastSelectionRef.current = { conversationId, dealHint: hint };
+    selectionKeyRef.current = `${conversationId ?? ""}|${hint ?? ""}`;
+    setWantedDealId(hint);
+    wantedRef.current = hint;
+    if (!last || last.conversationId !== conversationId) {
+      if (conversationId) setLoading(true);
+      return; // `refetch` changed with the conversation; its own effect fetches.
+    }
+    // Same chat, a new link naming a deal: fetch that deal.
+    if (hint) void refetch();
+  }, [conversationId, dealHint, refetch]);
 
   const selectDeal = useCallback((dealId: string | null) => {
     const wasBuddy = wantedRef.current === BUDDY_ENTRY_ID;
@@ -149,6 +189,8 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
 
   // Until this conversation's own answer lands, show nothing rather than the last one's.
   const fresh = dataConversationId === conversationId;
+  const wantedParcel = wantedDealId === BUDDY_ENTRY_ID ? null : wantedDealId;
+  const switchingDeal = fresh && wantedParcel !== null && servedForDealId !== wantedParcel;
   const shownBuddy = fresh ? buddy : null;
   const buddySelected = isBuddyEntrySelected({
     buddy: shownBuddy,
@@ -172,10 +214,12 @@ export function useActiveDeal(conversationId: string | null, buddyListingId?: st
     activeDeal: fresh ? activeDeal : null,
     workflow: fresh ? workflow : null,
     deals: fresh ? deals : EMPTY_DEALS,
-    selectedDealId: fresh ? selectedDealId : null,
+    // The chip the user tapped is highlighted at once, not when its answer lands.
+    selectedDealId: switchingDeal ? wantedParcel : fresh ? selectedDealId : null,
     selectDeal,
     buddy: shownBuddy,
     buddySelected,
+    switchingDeal,
     loading,
     error,
     refetch,

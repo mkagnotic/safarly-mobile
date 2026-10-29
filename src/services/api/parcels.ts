@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { withMyTravelsDay } from "@/utils/localDay";
 
 /** `parcel_requests.delivery_date_mode` — a single deadline or a window. */
 export type DeliveryDateMode = "single" | "range";
@@ -63,14 +64,14 @@ export interface Parcel {
   image_urls: string[];
   created_at: string;
   updated_at: string;
-  sender?: { id: string; name: string; avatar_url: string | null; rating: number };
+  sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number };
   /**
    * Matched carrier, once one is committed. `parcel-handler`'s list resolves it
    * from `carrier_id` and attaches it per row; `normalizeParcel` spreads the raw
    * row, so both already arrived at runtime before being declared here.
    */
   carrier_id?: string | null;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
   /** Marketplace return flow — mirrors `parcel_requests` column names. */
   is_online_order?: boolean;
   return_eligible?: boolean;
@@ -96,7 +97,7 @@ export interface ParcelCarrierMatch {
   airline: string | null;
   open_to_buddy?: boolean;
   match_score?: number;
-  carrier?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }
 
 export interface ParcelListParams {
@@ -145,13 +146,14 @@ export const parcelsApi = {
     return_state?: string;
     return_postal_code?: string;
     return_country?: string;
+    return_reference?: string;
   }) => {
     const { weight_kg, ...rest } = data;
     return api.post<Parcel>("/parcel-handler/", { ...rest, weight: weight_kg });
   },
 
   list: async (params?: ParcelListParams) => {
-    const res = await api.get<Parcel[]>("/parcel-handler/", params);
+    const res = await api.get<Parcel[]>("/parcel-handler/", withMyTravelsDay(params));
     if (Array.isArray(res.data)) {
       res.data = res.data.map((p) => normalizeParcel(p as unknown as RawParcel));
     }
@@ -189,6 +191,18 @@ export const parcelsApi = {
       any_from?: boolean;
       any_to?: boolean;
       status?: string;
+      /**
+       * Online order / return block, editable from the edit modal (27 Oct 2026).
+       * Unticking sends the flag false; the server refuses once the parcel is booked.
+       */
+      is_online_order?: boolean;
+      return_eligible?: boolean;
+      return_address_line1?: string;
+      return_city?: string;
+      return_state?: string;
+      return_postal_code?: string;
+      return_country?: string;
+      return_reference?: string;
     },
   ) => {
     const { weight_kg, ...rest } = data;

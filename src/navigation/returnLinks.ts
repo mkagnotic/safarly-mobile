@@ -24,6 +24,20 @@ const COLD_START_TARGETS: Record<string, string> = {
 export function coldStartReturnLink(url: string | null): string | null {
   if (!url) return url;
   const match = /^safarly:\/\/([a-z-]+)(\/?(?:[?#].*)?)$/i.exec(url);
-  const target = match ? COLD_START_TARGETS[match[1].toLowerCase()] : undefined;
-  return target ? `safarly://${target}${match![2].replace(/^\//, "")}` : url;
+  const source = match?.[1].toLowerCase();
+  const target = source ? COLD_START_TARGETS[source] : undefined;
+  if (!target) return url;
+  const rest = match![2].replace(/^\//, "");
+  // A checkout return names its booking (`booking_id`, set by the server's
+  // /mobile-return URL). Bookings opens a booking from `expandId`, so pass it
+  // on as that: otherwise the user landed on the list with nothing opened and
+  // had to hunt for the booking they had just paid for (29 Oct 2026). The list
+  // reads the booking from the server, so it shows the real paid/unpaid state.
+  if (source === "pay-return") {
+    const id = /[?&]booking_id=([0-9a-f-]{36})(?:[&#]|$)/i.exec(rest)?.[1];
+    if (id && !/[?&]expandId=/.test(rest)) {
+      return `safarly://${target}${rest}${rest.includes("?") ? "&" : "?"}expandId=${id}`;
+    }
+  }
+  return `safarly://${target}${rest}`;
 }

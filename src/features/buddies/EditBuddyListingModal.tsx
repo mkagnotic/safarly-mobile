@@ -81,6 +81,8 @@ interface EditBuddyListingModalProps {
   onCancel: () => void;
   /** Called only once the form validates — callers just map and send. */
   onSubmit: (values: EditBuddyListingFormValues) => void;
+  /** The server's refusal of the last save, shown in the modal (28 Oct 2026). */
+  serverError?: string | null;
 }
 
 /**
@@ -98,6 +100,7 @@ export function EditBuddyListingModal({
   pending,
   onCancel,
   onSubmit,
+  serverError = null,
 }: Readonly<EditBuddyListingModalProps>) {
   const [form, setForm] = useState<EditBuddyListingFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
@@ -235,7 +238,7 @@ export function EditBuddyListingModal({
         <View style={styles.center} pointerEvents="box-none">
           <View style={styles.card}>
             <View style={styles.header}>
-              <Text style={styles.title}>Edit travel partner request</Text>
+              <Text style={styles.title}>Edit buddy listing</Text>
               <Pressable
                 onPress={onCancel}
                 hitSlop={8}
@@ -255,7 +258,7 @@ export function EditBuddyListingModal({
             >
               {/* ───── Route ───── */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>From</Text>
+                <Text style={styles.fieldLabel}>From city</Text>
                 <LocationCard
                   flag={fromFlag}
                   label={fromCountryName}
@@ -278,7 +281,7 @@ export function EditBuddyListingModal({
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>To</Text>
+                <Text style={styles.fieldLabel}>To city</Text>
                 <LocationCard
                   flag={toFlag}
                   label={toCountryName}
@@ -315,18 +318,20 @@ export function EditBuddyListingModal({
                     style={[styles.selectInputText, !selectedDate && styles.selectInputPlaceholder]}
                     numberOfLines={1}
                   >
-                    {selectedDate ? formatDateLabel(selectedDate) : "Select date"}
+                    {selectedDate ? formatDateLabel(selectedDate) : "Pick your travel date"}
                   </Text>
                 </Pressable>
                 {errors.travelDate ? (
                   <Text style={styles.inlineError}>{errors.travelDate}</Text>
-                ) : null}
+                ) : (
+                  <Text style={styles.hint}>Select a travel date up to 12 months from today.</Text>
+                )}
               </View>
 
               {/* ───── Airline ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
-                  Airline <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  Airline <Text style={styles.fieldLabelMuted}>(optional)</Text>
                 </Text>
                 <Pressable
                   style={[styles.input, styles.selectInput]}
@@ -349,7 +354,7 @@ export function EditBuddyListingModal({
               {/* ───── Age ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
-                  Age <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  Age <Text style={styles.fieldLabelMuted}>(optional)</Text>
                 </Text>
                 <TextInput
                   value={form.age}
@@ -363,14 +368,18 @@ export function EditBuddyListingModal({
                   style={[styles.textInput, !!ageError && styles.inputError]}
                   editable={!pending}
                 />
-                {ageError ? <Text style={styles.inlineError}>{ageError}</Text> : null}
+                {ageError ? (
+                  <Text style={styles.inlineError}>{ageError}</Text>
+                ) : (
+                  <Text style={styles.hint}>Between 18 and 120.</Text>
+                )}
               </View>
 
               {/* ───── Languages ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
                   Languages{" "}
-                  <Text style={styles.fieldLabelMuted}>(Optional, up to {MAX_LANGUAGES})</Text>
+                  <Text style={styles.fieldLabelMuted}>(optional, up to {MAX_LANGUAGES})</Text>
                 </Text>
                 {form.languages.length > 0 ? (
                   <View style={styles.chipsRow}>
@@ -409,7 +418,7 @@ export function EditBuddyListingModal({
               {/* ───── Interests ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
-                  Interests <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  Interests <Text style={styles.fieldLabelMuted}>(optional)</Text>
                 </Text>
                 <TextInput
                   value={form.interests}
@@ -424,7 +433,7 @@ export function EditBuddyListingModal({
               {/* ───── Layover ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
-                  Layover <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  Layover <Text style={styles.fieldLabelMuted}>(optional)</Text>
                 </Text>
                 <TextInput
                   value={form.layover}
@@ -439,7 +448,7 @@ export function EditBuddyListingModal({
               {/* ───── Bio ───── */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>
-                  About you <Text style={styles.fieldLabelMuted}>(Optional)</Text>
+                  About you <Text style={styles.fieldLabelMuted}>(optional)</Text>
                 </Text>
                 <TextInput
                   value={form.bio}
@@ -454,6 +463,14 @@ export function EditBuddyListingModal({
                 />
               </View>
             </ScrollView>
+
+            {/* The server's refusal, in the modal itself: the screen behind can't be
+                seen while it is open (28 Oct 2026). */}
+            {serverError ? (
+              <Text style={styles.formError} accessibilityLiveRegion="polite">
+                {serverError}
+              </Text>
+            ) : null}
 
             <View style={styles.footer}>
               <AppButton
@@ -603,6 +620,8 @@ const styles = StyleSheet.create({
   },
   chipText: { color: colors.wordmark, fontSize: 12, lineHeight: 16, fontWeight: "700" },
 
+  hint: { color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "500" },
+  formError: { color: colors.danger, fontSize: 13, lineHeight: 18, fontWeight: "600" },
   footer: { flexDirection: "row", gap: 10, marginTop: 4 },
   footerButton: { flex: 1 },
 });

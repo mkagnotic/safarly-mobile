@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
@@ -25,6 +25,7 @@ import { getErrorMessage, messagesApi, type Conversation } from "@/services/api"
 import { colors } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 
+import { matchModalKind } from "./chat/matchModalKind";
 import { ArchivedBanner, ArchivedEmpty, ArchivedHeader } from "./inbox/ArchivedViews";
 import { ConversationRow } from "./inbox/ConversationRow";
 import { InboxSkeleton } from "./inbox/InboxSkeleton";
@@ -72,9 +73,11 @@ export function MessagesScreen() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+  // Drops a second tap that lands before the re-render disables the button.
+  const unarchiveInFlight = useRef(false);
 
-  // The Buddies tab is `freezeOnBlur: true`, so the initial useEffect refetch
-  // only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
+  // The Buddies tab stays mounted (tabs never unmount), so the initial
+  // useEffect refetch only runs once. Re-pull on every focus (Inbox → Chat → back) so the unread
   // counts the user just cleared by reading messages reflect immediately —
   // belt-and-suspenders for the realtime path. Pull the archived list too so a
   // chat archived from inside the conversation shows up here right away.
@@ -90,6 +93,8 @@ export function MessagesScreen() {
 
   const handleUnarchive = useCallback(
     async (c: Conversation) => {
+      if (unarchiveInFlight.current) return;
+      unarchiveInFlight.current = true;
       setUnarchivingId(c.id);
       try {
         await messagesApi.unarchiveConversation(c.id);
@@ -99,6 +104,7 @@ export function MessagesScreen() {
       } catch (err) {
         showToast({ title: "Couldn't unarchive", message: getErrorMessage(err), variant: "error" });
       } finally {
+        unarchiveInFlight.current = false;
         setUnarchivingId(null);
       }
     },
@@ -311,7 +317,9 @@ export function MessagesScreen() {
         open={!!acceptTarget}
         pending={acceptPending}
         userRole={acceptUserRole}
-        contextType={acceptTarget?.context_type}
+        // No deal is loaded on the inbox row, so this can only fall back to the
+        // thread's label - same rule as web's inbox accept (matchModalKind).
+        contextType={matchModalKind({ contextType: acceptTarget?.context_type, hasParcelDeal: false })}
         onCancel={() => {
           if (!acceptPending) setAcceptTarget(null);
         }}

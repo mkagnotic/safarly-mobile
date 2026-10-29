@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -31,13 +31,20 @@ interface RazorpayPayoutFormProps {
   /** True when a fund account already exists — the form then updates it. */
   hasAccount?: boolean;
   /** Re-read the server status after a successful submit. */
-  onSaved: () => void | Promise<void>;
+  onSaved: () => unknown;
 }
 
 export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonly<RazorpayPayoutFormProps>) {
   const [mode, setMode] = useState<"bank_account" | "vpa">("bank_account");
   const [name, setName] = useState(defaultName ?? "");
+  // The profile can load after this form mounts: fill the name in when it does.
+  useEffect(() => {
+    if (defaultName) setName((cur) => cur || defaultName);
+  }, [defaultName]);
   const [accountNumber, setAccountNumber] = useState("");
+  // Typed twice: one wrong digit would send the carrier's earnings elsewhere.
+  const [accountNumberAgain, setAccountNumberAgain] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
   const [ifsc, setIfsc] = useState("");
   const [vpa, setVpa] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -52,10 +59,12 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
       if (!name.trim()) next.name = "Enter the name on the bank account";
       if (!/^\d{6,18}$/.test(accountNumber.replace(/\s/g, ""))) {
         next.accountNumber = "Enter a valid account number";
+      } else if (accountNumberAgain.replace(/\s/g, "") !== accountNumber.replace(/\s/g, "")) {
+        next.accountNumberAgain = "The account numbers don't match";
       }
       if (!IFSC_RE.test(ifsc.trim())) next.ifsc = "Enter a valid IFSC code (e.g. HDFC0001234)";
     } else if (!VPA_RE.test(vpa.trim())) {
-      next.vpa = "Enter a valid UPI id (e.g. name@bank)";
+      next.vpa = "Enter a valid UPI ID (e.g. name@bank)";
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return null;
@@ -68,19 +77,24 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
           ifsc: ifsc.trim().toUpperCase(),
         }
       : { mode: "vpa", vpa: vpa.trim(), account_holder_name: name.trim() || undefined };
-  }, [mode, name, accountNumber, ifsc, vpa]);
+  }, [mode, name, accountNumber, accountNumberAgain, ifsc, vpa]);
 
   const submit = useCallback(async () => {
     if (busy) return;
     const input = validate();
     if (!input) return;
     setSubmitError(null);
+    setSaved(null);
     setBusy(true);
     try {
-      await paymentsApi.submitRazorpayFundAccount(input);
+      const res = await paymentsApi.submitRazorpayFundAccount(input);
       setAccountNumber("");
+      setAccountNumberAgain("");
       setIfsc("");
       setVpa("");
+      // Say it worked (web parity); it used to only re-read the status, silently.
+      const connected = !!(res as { data?: { connected?: boolean } })?.data?.connected;
+      setSaved(connected ? "Payouts connected — you're all set to accept deliveries." : "Details saved — our payment partner is verifying your account.");
       await onSaved();
     } catch (err) {
       setSubmitError(getErrorMessage(err));
@@ -94,7 +108,7 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
       <View style={styles.modeRow}>
         {[
           { value: "bank_account" as const, label: "Bank account", icon: "cash-outline" as const },
-          { value: "vpa" as const, label: "UPI id", icon: "phone-portrait-outline" as const },
+          { value: "vpa" as const, label: "UPI ID", icon: "phone-portrait-outline" as const },
         ].map((opt) => {
           const active = mode === opt.value;
           return (
@@ -135,6 +149,14 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
             error={errors.accountNumber}
           />
           <AppInput
+            label="Re-enter account number"
+            value={accountNumberAgain}
+            onChangeText={setAccountNumberAgain}
+            placeholder="Type it again to be sure"
+            keyboardType="number-pad"
+            error={errors.accountNumberAgain}
+          />
+          <AppInput
             label="IFSC code"
             value={ifsc}
             onChangeText={(v) => setIfsc(v.toUpperCase())}
@@ -146,7 +168,7 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
         </>
       ) : (
         <AppInput
-          label="UPI id"
+          label="UPI ID"
           value={vpa}
           onChangeText={setVpa}
           placeholder="e.g. yourname@okhdfcbank"
@@ -158,16 +180,17 @@ export function RazorpayPayoutForm({ defaultName, hasAccount, onSaved }: Readonl
       )}
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
+      {saved ? <Text style={styles.savedNote} accessibilityRole="alert">{saved}</Text> : null}
 
       <AppButton
-        label={hasAccount ? "Update payout details" : "Set up payouts"}
+        label={busy ? "Saving…" : hasAccount ? "Update payout details" : "Set up payouts"}
         onPress={() => void submit()}
         disabled={busy}
         leftIcon={busy ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
       />
 
       <Text style={styles.disclaimer}>
-        Your details are sent straight to Razorpay and are never stored by Safarly.
+        Your details are sent straight to our payment partner and are never stored by Safarly.
       </Text>
     </View>
   );
@@ -190,6 +213,7 @@ const styles = StyleSheet.create({
   modeChipActive: { borderColor: colors.primary, backgroundColor: `${colors.primary}14` },
   modeLabel: { color: colors.mutedText, fontSize: 13, fontWeight: "600" },
   modeLabelActive: { color: colors.primary },
+  savedNote: { color: colors.safe, fontSize: 13, marginBottom: 10 },
   submitError: { color: colors.danger, fontSize: 12, fontWeight: "500", marginBottom: 10 },
   disclaimer: {
     color: colors.mutedText,

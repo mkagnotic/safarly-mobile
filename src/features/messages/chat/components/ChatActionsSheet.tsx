@@ -4,6 +4,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { chatStyles as styles } from "../chatStyles";
 import { type ChatActionMenuController } from "../hooks/useChatActionMenu";
+import { showMatchRequestRow } from "../lib/chatModerationRules";
 import { ActionRow } from "./ActionRow";
 
 interface ChatActionsSheetProps {
@@ -11,7 +12,10 @@ interface ChatActionsSheetProps {
   sheetInset: StyleProp<ViewStyle>;
   matchStatus: string;
   matchedByOther: boolean;
+  matchedByMe: boolean;
   isBlocked: boolean;
+  /** Only the person who blocked may unblock (blocked_by). */
+  canUnblock: boolean;
   setMatchModalOpen: (open: boolean) => void;
   setDeclineOpen: (open: boolean) => void;
 }
@@ -26,7 +30,9 @@ export function ChatActionsSheet({
   sheetInset,
   matchStatus,
   matchedByOther,
+  matchedByMe,
   isBlocked,
+  canUnblock,
   setMatchModalOpen,
   setDeclineOpen,
 }: Readonly<ChatActionsSheetProps>) {
@@ -37,6 +43,7 @@ export function ChatActionsSheet({
     afterActionMenu,
     isArchived,
     archivePending,
+    unblockPending,
     setMediaOpen,
     setReportUserOpen,
     handleArchiveToggle,
@@ -45,6 +52,8 @@ export function ChatActionsSheet({
     handleBlock,
     handleUnmatch,
   } = actionMenu;
+  // Hidden once I sent the request: a second press is a silent no-op (flow-18 bug 9).
+  const showMatchRow = showMatchRequestRow(matchStatus, matchedByMe);
 
   return (
     <Modal
@@ -58,7 +67,7 @@ export function ChatActionsSheet({
       <View style={[styles.actionSheet, styles.actionSheetTall, sheetInset]}>
         <Text style={styles.actionSheetTitle}>Chat actions</Text>
         <ScrollView showsVerticalScrollIndicator={false}>
-          {matchStatus === "pending" || matchStatus === "declined" ? (
+          {showMatchRow ? (
             <ActionRow
               icon="checkmark-circle"
               label={matchStatus === "declined" ? "Match again" : "Send match request"}
@@ -76,7 +85,7 @@ export function ChatActionsSheet({
               onPress={() => afterActionMenu(() => setActionMenuOpen(false), () => setDeclineOpen(true))}
             />
           ) : null}
-          {matchStatus === "pending" || matchStatus === "declined" ? (
+          {showMatchRow || matchedByOther ? (
             <View style={styles.actionDivider} />
           ) : null}
 
@@ -95,6 +104,7 @@ export function ChatActionsSheet({
                   : "Archive chat"
             }
             onPress={handleArchiveToggle}
+            busy={archivePending}
           />
           <ActionRow
             icon="flag-outline"
@@ -103,9 +113,11 @@ export function ChatActionsSheet({
           />
           <ActionRow icon="scale-outline" label="Raise dispute" onPress={handleRaiseDispute} />
 
-          {isBlocked ? (
-            <ActionRow icon="checkmark-circle" label="Unblock user" onPress={handleUnblock} />
-          ) : (
+          {/* The person who was blocked gets neither row: they can't unblock (the
+              server refuses) and the thread is already blocked. */}
+          {canUnblock ? (
+            <ActionRow icon="checkmark-circle" label={unblockPending ? "Unblocking…" : "Unblock user"} onPress={handleUnblock} busy={unblockPending} />
+          ) : isBlocked ? null : (
             <ActionRow icon="ban" label="Block user" tone="danger" onPress={handleBlock} />
           )}
           {matchStatus === "matched" ? (

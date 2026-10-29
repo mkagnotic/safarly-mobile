@@ -1,9 +1,11 @@
 import { api } from "./client";
+import { withMyTravelsDay } from "@/utils/localDay";
 
 export interface BuddyListingUser {
   id: string;
   name: string;
   avatar_url: string | null;
+  is_verified?: boolean | null;
   rating: number;
   total_trips: number;
   city?: string | null;
@@ -14,6 +16,9 @@ export interface BuddyListing {
   user_id: string;
   from_city: string;
   to_city: string;
+  /** "IN" / "US" (20260909120000). The only country an "Any" city has. */
+  from_country?: string | null;
+  to_country?: string | null;
   travel_date: string;
   travel_date_from?: string | null;
   travel_date_to?: string | null;
@@ -39,10 +44,10 @@ export interface BuddyRequest {
   message: string | null;
   status: string;
   created_at: string;
-  requester?: { id: string; name: string; avatar_url: string | null };
+  requester?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   /** Server joins the sender profile under this key on the list response — on a
    *  SENT request that is the viewer, not the recipient. */
-  user_profiles?: { id?: string; name: string; avatar_url: string | null } | null;
+  user_profiles?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null } | null;
 }
 
 export interface BuddyConnection {
@@ -51,7 +56,7 @@ export interface BuddyConnection {
   user_b_id: string;
   conversation_id: string | null;
   created_at: string;
-  buddy?: { id: string; name: string; avatar_url: string | null; rating: number } | null;
+  buddy?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
   from_city?: string | null;
   to_city?: string | null;
   travel_date?: string | null;
@@ -79,6 +84,9 @@ export interface BuddyMatch {
 export interface BuddyListingInput {
   from_city: string;
   to_city: string;
+  /** Sent on edit (28 Oct 2026): the server otherwise infers it from the city. */
+  from_country?: string;
+  to_country?: string;
   travel_date: string;
   travel_date_from?: string;
   travel_date_to?: string;
@@ -100,7 +108,7 @@ export const buddiesApi = {
     api.delete<{ deleted: boolean }>(`/buddy-handler/${listingId}`),
 
   list: (params?: { page?: number; per_page?: number; filter?: string }) =>
-    api.get<BuddyListing[]>("/buddy-handler/", params),
+    api.get<BuddyListing[]>("/buddy-handler/", withMyTravelsDay(params)),
 
   /** DB matching function — route + date + airline. */
   findMatches: (listingId: string) =>

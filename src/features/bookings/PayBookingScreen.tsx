@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native";
@@ -17,7 +17,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { DetailSkeleton } from "@/components/ui/Skeletons";
 import { useAuth } from "@/context/AuthContext";
-import { bookingFee, feeBreakdown, formatCountdown, isUrgent } from "@/features/bookings/paymentMath";
+import { bookingFee, feeBreakdown, formatCountdown, isUrgent, payDeadline } from "@/features/bookings/paymentMath";
 import { useBookingDetail } from "@/hooks/api/useBookingDetail";
 import { useKycGate } from "@/hooks/api/useKycGate";
 import { usePayBooking } from "@/hooks/api/usePayBooking";
@@ -25,6 +25,8 @@ import { MainTabParamList, RootStackParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, paymentsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { formatMoney } from "@/utils/money";
+import { bookingStatusLabel } from "@/features/bookings/lib/bookingEventLabel";
+import { formatCategory } from "@/features/bookings/lib/bookingDisplay";
 import { ErrorState } from "@/components/ui/ErrorState";
 
 type Nav = CompositeNavigationProp<
@@ -43,6 +45,9 @@ function isMissing(error: unknown): boolean {
   const status = (error as { status?: unknown } | null)?.status;
   return status === 404 || status === 403;
 }
+
+/** Neutral processor name until the server names one (never default to "Stripe"). */
+export const PAYMENT_PARTNER = "our payment partner";
 
 export function PayBookingScreen() {
   const navigation = useNavigation<Nav>();
@@ -65,9 +70,10 @@ export function PayBookingScreen() {
   const [nowTs, setNowTs] = useState(() => 0);
   // Which processor will charge — Stripe (US) or Razorpay (India). Server-
   // resolved, purely so the copy below can name it; the payment flow itself is
-  // identical either way. Falls back to "Stripe", which is what every existing
-  // booking resolves to, so a failed lookup changes nothing visible.
-  const [providerLabel, setProviderLabel] = useState("Stripe");
+  // identical either way. The name comes ONLY from the server: while the lookup
+  // is in flight, or if it fails, say "our payment partner". Defaulting to
+  // "Stripe" told India senders they were paying Stripe (money canon #4).
+  const [providerLabel, setProviderLabel] = useState(PAYMENT_PARTNER);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -101,15 +107,15 @@ export function PayBookingScreen() {
 
   const isSender = !!booking && booking.sender_id === user?.id;
   const isPayable = booking?.status === "pending_payment";
-  const paying = phase === "paying";
+  const paying = phase === "paying" || phase === "confirming";
 
-  const expiresAt = booking?.payment_expires_at
-    ? new Date(booking.payment_expires_at).getTime()
-    : null;
-  const msLeft = expiresAt != null && nowTs > 0 ? expiresAt - nowTs : null;
+  // The 48 h window, then the 24 h grace while the carrier holds the parcel.
+  const deadline = booking && nowTs > 0 ? payDeadline(booking, nowTs) : null;
+  const inGrace = !!deadline?.grace;
+  const msLeft = deadline ? deadline.at - nowTs : null;
   const expired =
-    booking?.status === "expired_unpaid" || (msLeft != null && msLeft <= 0);
-  const urgent = msLeft != null && isUrgent(msLeft);
+    booking?.status === "expired_unpaid" || booking?.status === "unpaid_return" || (msLeft != null && msLeft <= 0);
+  const urgent = msLeft != null && (inGrace || isUrgent(msLeft));
 
   const goBack = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
@@ -121,12 +127,19 @@ export function PayBookingScreen() {
     navigation.navigate("KycVerificationTab");
   }, [navigation]);
 
-  // Map payment errors to inline banners / KYC routing.
+  // Map payment errors to inline banners / KYC routing — ONCE per error.
+  // useKycGate returns a new object every render and its refetch flips
+  // isLoading, so depending on `kyc` re-ran this effect after every refetch:
+  // an endless KYC/booking refetch loop, and a dismissed banner came straight
+  // back. Each error object is handled exactly once (money canon #1).
+  const handledPayErrorRef = useRef<unknown>(null);
+  const kycRefetch = kyc.refetch;
   useEffect(() => {
-    if (!payError) return;
+    if (!payError || handledPayErrorRef.current === payError) return;
+    handledPayErrorRef.current = payError;
     const code = payError instanceof ApiClientError ? payError.code : "";
     if (code === "KYC_REQUIRED") {
-      void kyc.refetch();
+      void kycRefetch();
       setShowKycPrompt(true);
     } else if (code === "PAYMENT_EXPIRED") {
       setBanner({ variant: "error", title: "Payment window expired", message: "This booking can no longer be paid." });
@@ -158,7 +171,7 @@ export function PayBookingScreen() {
     } else {
       setBanner({ variant: "error", title: "Payment failed", message: getErrorMessage(payError) });
     }
-  }, [payError, kyc, refetch]);
+  }, [payError, kycRefetch, refetch]);
 
   // The user closed the checkout page before finishing — a soft "not completed" prompt.
   useEffect(() => {
@@ -177,18 +190,36 @@ export function PayBookingScreen() {
     return () => clearTimeout(t);
   }, [phase, navigation, bookingId]);
 
+  // The identity re-check below is a network call: without this the button looked
+  // dead during it and a second tap could open a second checkout (27 Oct 2026).
+  const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
   const handlePay = useCallback(async () => {
-    setBanner(null);
-    // The status on screen may be from before the user verified: ask the server
-    // once more before blocking, and pay straight away if they are approved now.
-    if (!kyc.isApproved && !(await kyc.refetch())) {
-      setShowKycPrompt(true);
-      return;
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    setChecking(true);
+    try {
+      setBanner(null);
+      // The status on screen may be from before the user verified: ask the server
+      // once more before blocking, and pay straight away if they are approved now.
+      if (!kyc.isApproved && !(await kyc.refetch())) {
+        // A failed re-check is not "unverified": the card above offers a retry.
+        if (!kyc.lastReadFailed()) setShowKycPrompt(true);
+        return;
+      }
+      await pay();
+    } finally {
+      checkingRef.current = false;
+      setChecking(false);
     }
-    await pay();
   }, [kyc, pay]);
 
-  const headerTitle = useMemo(() => "Secure payment", []);
+  const headerTitle = useMemo(() => "Complete payment", []);
+
+  const goToBookings = useCallback(
+    () => navigation.navigate("BookingsTab", { expandId: bookingId }),
+    [navigation, bookingId],
+  );
 
   // ───────── Render branches ─────────
 
@@ -201,10 +232,10 @@ export function PayBookingScreen() {
           </View>
           <Text style={styles.successTitle}>Payment secured 🎉</Text>
           <Text style={styles.successBody}>
-            {money(total, bookingCurrency)} is held safely in escrow. The funds release automatically to the
-            carrier once you confirm delivery.
+            {money(total, bookingCurrency)} is held safely by Safarly and released to the carrier only after delivery
+            is confirmed.
           </Text>
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 18 }} />
+          <AppButton label="Go to my bookings" onPress={goToBookings} style={styles.successButton} />
         </View>
       </Screen>
     );
@@ -217,7 +248,7 @@ export function PayBookingScreen() {
       : "We couldn't load this booking. It may have been cancelled, or it isn't yours to pay.";
 
   return (
-    <Screen contentContainerStyle={styles.content}>
+    <Screen contentContainerStyle={styles.content} onRefresh={async () => { await Promise.all([refetch(), kyc.refetch()]); }}>
       <View style={styles.headerRow}>
         <Pressable onPress={goBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={18} color={colors.text} />
@@ -268,7 +299,9 @@ export function PayBookingScreen() {
         <Card style={styles.panel}>
           <Ionicons name="information-circle-outline" size={34} color={colors.mutedText} />
           <Text style={styles.panelTitle}>This booking can’t be paid right now</Text>
-          <Text style={styles.panelBody}>Current status: {booking.status.replace(/_/g, " ")}.</Text>
+          <Text style={styles.panelBody}>
+            Current status: {bookingStatusLabel(booking.status)}. Only bookings awaiting payment can use this screen.
+          </Text>
           <AppButton label="Back to bookings" onPress={goBack} style={styles.panelButton} />
         </Card>
       ) : (
@@ -289,7 +322,7 @@ export function PayBookingScreen() {
             <View style={[styles.countdown, urgent && styles.countdownUrgent]}>
               <Ionicons name="time-outline" size={14} color={urgent ? colors.danger : colors.warning} />
               <Text style={[styles.countdownText, urgent && { color: colors.danger }]}>
-                {formatCountdown(msLeft)}
+                {inGrace ? `Grace period: ${formatCountdown(msLeft)}` : formatCountdown(msLeft)}
               </Text>
             </View>
           ) : null}
@@ -304,7 +337,7 @@ export function PayBookingScreen() {
               label="Route"
               value={`${booking.parcel?.from_city ?? "—"} → ${booking.parcel?.to_city ?? "—"}`}
             />
-            {booking.parcel?.category ? <Row label="Category" value={booking.parcel.category} /> : null}
+            {booking.parcel?.category ? <Row label="Category" value={formatCategory(booking.parcel.category)} /> : null}
           </Card>
 
           {/* Fee breakdown */}
@@ -323,7 +356,18 @@ export function PayBookingScreen() {
           </Card>
 
           {/* KYC gate */}
-          {!kyc.isApproved && !kyc.isLoading ? (
+          {/* The lookup failed: this person may well be verified, so never tell
+              them to verify - offer a retry (Pay re-checks on tap anyway). */}
+          {kyc.isError && !kyc.isLoading ? (
+            <Pressable style={styles.kycCard} onPress={() => void kyc.refetch()} accessibilityRole="button" accessibilityLabel="Check identity status again" testID="pay-kyc-retry">
+              <Ionicons name="refresh-outline" size={20} color={colors.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kycTitle}>We couldn't check your identity status</Text>
+                <Text style={styles.kycBody}>Something went wrong. Try again.</Text>
+              </View>
+              <Text style={styles.kycAction}>Try again</Text>
+            </Pressable>
+          ) : !kyc.isApproved && !kyc.isLoading ? (
             <Pressable style={styles.kycCard} onPress={goKyc} accessibilityRole="button" accessibilityLabel="Complete identity verification">
               <Ionicons name="shield-half-outline" size={20} color={colors.warning} />
               <View style={{ flex: 1 }}>
@@ -332,11 +376,11 @@ export function PayBookingScreen() {
                 </Text>
                 <Text style={styles.kycBody}>
                   {kyc.isPending
-                    ? "We’ll enable payment once your verification is approved."
-                    : "Verify your identity to pay and protect both sides."}
+                    ? "You can pay once your verification is approved."
+                    : "Complete identity verification to pay."}
                 </Text>
               </View>
-              <Text style={styles.kycAction}>{kyc.isPending ? "View status" : "Verify"}</Text>
+              <Text style={styles.kycAction}>{kyc.isPending ? "View status" : "Complete verification"}</Text>
             </Pressable>
           ) : null}
 
@@ -345,26 +389,35 @@ export function PayBookingScreen() {
             <View style={styles.stripeRow}>
               <Ionicons name="card-outline" size={18} color={colors.primary} />
               <Text style={styles.stripeText}>
-                You’ll enter your card on {providerLabel}’s secure checkout, then come right back to the app.
+                You’ll pay on {providerLabel}’s secure checkout, then come right back here.
               </Text>
             </View>
             <View style={styles.stripeRow}>
               <Ionicons name="shield-checkmark-outline" size={18} color={colors.warning} />
               <Text style={styles.stripeText}>
-                Your payment is held in escrow and released to the carrier only after you confirm delivery.
+                Your payment is held by Safarly and released to the carrier only after delivery is confirmed.
               </Text>
             </View>
           </View>
 
           <AppButton
-            label={paying ? "Opening secure checkout…" : `Pay ${money(total, bookingCurrency)}`}
+            label={
+              phase === "confirming"
+                ? "Confirming your payment…"
+                : paying
+                  ? "Opening payment…"
+                  : checking
+                    ? "Checking…"
+                    : `Pay ${money(total, bookingCurrency)}`
+            }
             // Not disabled for an unverified status: that status can be stale, and the
             // tap is what re-checks it (handlePay) before showing the KYC prompt.
-            disabled={paying}
+            disabled={paying || checking}
             onPress={() => void handlePay()}
-            leftIcon={paying ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
+            leftIcon={paying || checking ? <ActivityIndicator size="small" color={colors.white} /> : undefined}
             style={styles.payButton}
           />
+          <Text style={styles.footer}>Secured by {providerLabel} · Held by Safarly until delivery</Text>
         </>
       )}
 
@@ -377,7 +430,7 @@ export function PayBookingScreen() {
             title={kyc.isPending ? "Verification under review" : "Identity verification required"}
             message={
               kyc.isPending
-                ? "Payment unlocks once your verification is approved."
+                ? "You can pay once your verification is approved."
                 : "Complete identity verification to pay."
             }
             onDismiss={() => setShowKycPrompt(false)}
@@ -480,6 +533,7 @@ const styles = StyleSheet.create({
   stripeText: { flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18 },
 
   payButton: { borderRadius: 14, minHeight: 50 },
+  footer: { color: colors.mutedText, fontSize: 12, textAlign: "center", marginTop: 10 },
 
   kycPromptWrap: { marginTop: 16 },
 
@@ -496,4 +550,5 @@ const styles = StyleSheet.create({
   },
   successTitle: { color: colors.text, fontSize: 22, fontWeight: "800", marginBottom: 8 },
   successBody: { color: colors.mutedText, fontSize: 14, textAlign: "center", lineHeight: 20, maxWidth: 320 },
+  successButton: { marginTop: 20, alignSelf: "stretch" },
 });

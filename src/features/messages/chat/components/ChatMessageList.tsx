@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { type DisplayMessage, type UseChatMessagesResult } from "@/hooks/api/useChatMessages";
 import { getErrorMessage } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -48,10 +49,7 @@ export function ChatMessageList({
   return (
     <View style={styles.flex}>
       {loading && messages.length === 0 ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.centeredBody}>Loading messages…</Text>
-        </View>
+        <MessageSkeleton />
       ) : error && messages.length === 0 ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedText} />
@@ -135,3 +133,38 @@ const listStyles = StyleSheet.create({
 });
 
 const styles = { ...chatStyles, ...listStyles };
+
+/**
+ * First load of a thread: placeholder bubbles (theirs left, mine right) in
+ * place of a blank screen - the same pattern as web's thread skeleton.
+ */
+const SKELETON_ROWS: { mine: boolean; width: `${number}%` }[] = [
+  { mine: false, width: "62%" },
+  { mine: true, width: "48%" },
+  { mine: false, width: "40%" },
+  { mine: true, width: "66%" },
+  { mine: false, width: "54%" },
+];
+
+function MessageSkeleton() {
+  return (
+    <View
+      style={skeletonStyles.wrap}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading messages…"
+      testID="chat-messages-skeleton"
+    >
+      {SKELETON_ROWS.map((r, i) => (
+        <SkeletonBlock
+          key={i}
+          style={[skeletonStyles.bubble, { width: r.width, alignSelf: r.mine ? "flex-end" : "flex-start" }]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  wrap: { flex: 1, justifyContent: "flex-end", paddingHorizontal: 14, paddingVertical: 16, gap: 10 },
+  bubble: { height: 38, borderRadius: 16 },
+});

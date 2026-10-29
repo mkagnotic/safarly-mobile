@@ -73,7 +73,9 @@ export function BuddyRateRow({ text, connectionId }: Readonly<{ text: string; co
       {open && conn ? (
         <RateBuddyModal
           open
-          buddyName={conn.buddy?.name ?? "your buddy"}
+          buddyName={conn.buddy?.name ?? "Traveler"}
+          fromCity={conn.from_city}
+          toCity={conn.to_city}
           pending={pending}
           onCancel={() => {
             if (!pending) setOpen(false);

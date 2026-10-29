@@ -25,6 +25,8 @@ import {
   formatTxDate,
   txStatusTone,
   txTypeMeta,
+  penaltyView,
+  txStatusLabel,
 } from "@/features/wallet/transactionDisplay";
 import { canDownloadReceipt, shareTransactionReceipt } from "@/features/wallet/receiptPdf";
 import { formatMoney, formatMoneyByCurrency } from "@/utils/money";
@@ -45,8 +47,8 @@ const PER_PAGE = 15;
 /**
  * Payments history — web parity with `CustomerTransactions`. Lists the user's
  * transactions from `GET /payment-handler/me` with lifetime summary tiles, type
- * labels and status pills. (The web receipt-PDF download is intentionally out of
- * scope for v1 — a native share-sheet receipt can follow.)
+ * labels and status pills; each row's receipt is a PDF via the share sheet
+ * (receiptPdf.ts, same lines as web's).
  */
 export function TransactionsScreen() {
   const navigation = useNavigation<Nav>();
@@ -61,6 +63,8 @@ export function TransactionsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const hadItemsRef = useRef(false);
+  hadItemsRef.current = items.length > 0;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -92,7 +96,11 @@ export function TransactionsScreen() {
       }
       if (earnRes.status === "fulfilled") setEarnings(earnRes.value.data ?? null);
     } catch (err) {
-      if (mountedRef.current) setError(getErrorMessage(err));
+      if (!mountedRef.current) return;
+      setError(getErrorMessage(err));
+      // With a list already on screen the error panel is not shown, so a failed
+      // pull-to-refresh used to look like "nothing new" (27 Oct 2026). Say so.
+      if (hadItemsRef.current) showToast({ title: "Couldn't refresh your payments", message: getErrorMessage(err), variant: "error" });
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -114,8 +122,9 @@ export function TransactionsScreen() {
         return [...prev, ...rows.filter((r) => !seen.has(r.id))];
       });
       setPage(next);
-    } catch {
-      // Keep what we have; the user can retry by scrolling/pressing again.
+    } catch (err) {
+      // Keep what we have; the button stays so the user can press it again.
+      showToast({ title: "Couldn't load more payments", message: getErrorMessage(err), variant: "error" });
     } finally {
       if (mountedRef.current) setLoadingMore(false);
     }
@@ -130,9 +139,16 @@ export function TransactionsScreen() {
     if (downloadingId) return;
     setDownloadingId(tx.id);
     try {
-      await shareTransactionReceipt(tx);
-    } catch (err) {
-      showToast({ title: "Couldn't create receipt", message: getErrorMessage(err), variant: "error" });
+      const outcome = await shareTransactionReceipt(tx);
+      if (outcome === "copied") {
+        showToast({
+          title: "Sharing isn't available on this device",
+          message: "We copied the receipt details to your clipboard instead.",
+          variant: "info",
+        });
+      }
+    } catch {
+      showToast({ title: "Couldn't generate the receipt. Please try again.", variant: "error" });
     } finally {
       if (mountedRef.current) setDownloadingId(null);
     }
@@ -159,6 +175,7 @@ export function TransactionsScreen() {
         </Pressable>
         <Text style={styles.title}>Payments</Text>
       </View>
+      <Text style={styles.subtitle}>Your payment history and receipts</Text>
 
       {loading ? (
         <Card style={styles.centerCard}>
@@ -167,7 +184,7 @@ export function TransactionsScreen() {
       ) : error && items.length === 0 ? (
         <Card style={styles.panel}>
           <Ionicons name="cloud-offline-outline" size={34} color={colors.mutedText} />
-          <Text style={styles.panelTitle}>Couldn't load payments</Text>
+          <Text style={styles.panelTitle}>Couldn't load your payments</Text>
           <Text style={styles.panelBody}>{error}</Text>
           <AppButton label="Try again" onPress={() => void load()} style={styles.panelButton} />
         </Card>
@@ -192,11 +209,11 @@ export function TransactionsScreen() {
             <View style={{ flex: 1 }}>
               {(earnings?.pending_payouts ?? 0) > 0 ? (
                 <Text style={styles.payoutNoteStrong}>
-                  {`${formatMoneyByCurrency(earnings?.pending_payouts_by_currency, earnings?.pending_payouts, earnings?.currency)} pending payout`}
+                  {`${formatMoneyByCurrency(earnings?.pending_payouts_by_currency, earnings?.pending_payouts, earnings?.currency)} payout on the way`}
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>
-                Earnings pay out automatically to your linked bank 2–7 business days after each delivery.
+                Earnings pay out automatically to your linked bank 2–7 business days after the sender confirms delivery.
               </Text>
               <Text style={styles.payoutNoteLink}>Manage payout details ›</Text>
             </View>
@@ -206,7 +223,7 @@ export function TransactionsScreen() {
             <Card style={styles.panel}>
               <Ionicons name="receipt-outline" size={34} color={colors.mutedText} />
               <Text style={styles.panelTitle}>No payments yet</Text>
-              <Text style={styles.panelBody}>Your payment history and earnings will appear here.</Text>
+              <Text style={styles.panelBody}>Your payments and receipts will appear here.</Text>
             </Card>
           ) : (
             <Card style={styles.listCard}>
@@ -216,6 +233,8 @@ export function TransactionsScreen() {
                   tx={tx}
                   isLast={i === items.length - 1}
                   downloading={downloadingId === tx.id}
+                  // One receipt at a time: every row is locked while one generates.
+                  locked={downloadingId !== null}
                   onDownload={() => void handleDownload(tx)}
                 />
               ))}
@@ -275,11 +294,13 @@ function TxRow({
   tx,
   isLast,
   downloading,
+  locked,
   onDownload,
-}: Readonly<{ tx: Transaction; isLast?: boolean; downloading?: boolean; onDownload: () => void }>) {
-  const meta = txTypeMeta(tx.type);
+}: Readonly<{ tx: Transaction; isLast?: boolean; downloading?: boolean; locked?: boolean; onDownload: () => void }>) {
+  const pen = penaltyView(tx);
+  const meta = pen ? { ...txTypeMeta(tx.type), label: pen.label, credit: pen.credit } : txTypeMeta(tx.type);
   const tone = txStatusTone(tx.status);
-  const showReceipt = canDownloadReceipt(tx.status);
+  const showReceipt = canDownloadReceipt(tx.status) || !!pen;
   return (
     <View style={[styles.txRow, !isLast && styles.txDivider]}>
       <View style={[styles.txIcon, { backgroundColor: meta.credit ? "rgba(34,195,93,0.10)" : "rgba(255,122,38,0.10)" }]}>
@@ -298,17 +319,18 @@ function TxRow({
           {formatTxAmount(tx.amount, meta.credit, tx.currency)}
         </Text>
         <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
-          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{tx.status}</Text>
+          <Text style={[styles.statusText, { color: tone.fg }]} numberOfLines={1} maxFontSizeMultiplier={COMPACT_CONTROL_MAX_FONT_SCALE}>{pen ? pen.status : txStatusLabel(tx.status)}</Text>
         </View>
       </View>
       {showReceipt ? (
         <Pressable
           onPress={onDownload}
-          disabled={downloading}
+          disabled={downloading || locked}
           hitSlop={8}
           style={styles.receiptBtn}
           accessibilityRole="button"
-          accessibilityLabel="Download receipt"
+          accessibilityLabel={downloading ? "Generating receipt…" : "Download receipt"}
+          accessibilityState={{ busy: !!downloading, disabled: !!(downloading || locked) }}
         >
           {downloading ? (
             <ActivityIndicator size="small" color={colors.primary} />
@@ -333,6 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: { color: colors.text, fontSize: 22, fontWeight: "800", lineHeight: 28 },
+  subtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 14 },
 
   centerCard: { borderRadius: 16, alignItems: "center", paddingVertical: 40 },
   panel: { borderRadius: 16, alignItems: "center", paddingVertical: 28, paddingHorizontal: 18, gap: 8 },

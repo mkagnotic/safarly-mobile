@@ -17,8 +17,8 @@ interface RawRating {
   author_id?: string;
   rater_id?: string;
   rated_user_id: string;
-  user_profiles?: { id?: string; name: string; avatar_url: string | null };
-  rater?: { id?: string; name: string; avatar_url: string | null };
+  user_profiles?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
+  rater?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
   [key: string]: unknown;
 }
 
@@ -59,7 +59,7 @@ export interface Rating {
   review: string | null;
   created_at: string;
   updated_at: string;
-  rater?: { id?: string; name: string; avatar_url: string | null };
+  rater?: { id?: string; name: string; avatar_url: string | null; is_verified?: boolean | null };
 }
 
 export interface UserRatings {

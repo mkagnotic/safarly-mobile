@@ -54,8 +54,9 @@ export function AcceptHandoffModal({
             48 hours, plus a 24-hour grace period. You are accepting before the money is collected.
           </Text>
           <Text style={styles.modalBullet}>
-            <Text style={styles.modalBulletStrong}>The deal can no longer time out or be cancelled.</Text>{" "}
-            Because you&apos;d be holding someone else&apos;s parcel, ending it from here opens a return instead.
+            <Text style={styles.modalBulletStrong}>The deal can no longer time out.</Text>{" "}
+            If you end it after this, the parcel has to go back — and once your sender has paid, that
+            costs you a cash penalty and a strike.
           </Text>
           <Text style={styles.modalBullet}>
             No code is needed now — the 6-digit code belongs to the final delivery step.
@@ -80,7 +81,7 @@ export function AcceptHandoffModal({
               {pending ? (
                 <ActivityIndicator size="small" color={colors.white} />
               ) : (
-                <Text style={styles.modalButtonPrimaryText}>Yes, I have it</Text>
+                <Text style={styles.modalButtonPrimaryText}>Yes, I have it — accept</Text>
               )}
             </Pressable>
           </View>

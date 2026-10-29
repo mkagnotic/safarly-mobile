@@ -11,8 +11,8 @@ test("matchFocusTarget: a summary's `for` scrolls to that listing's group", () =
   assert.equal(matchFocusTarget({ activeTab: "package", highlightId: undefined, forId: "parcel-b", groups, flatIds: [] }), "parcel-b");
   // single match: the group holding the card (the 21 Oct screenshot case)
   assert.equal(matchFocusTarget({ activeTab: "package", highlightId: "t1", forId: undefined, groups, flatIds: [] }), "parcel-a");
-  // for wins over inference; unknown listing / match -> nothing to scroll to
-  assert.equal(matchFocusTarget({ activeTab: "receiver", highlightId: "t1", forId: "parcel-b", groups, flatIds: [] }), "parcel-b");
+  // a live match wins over `for` (web parity); unknown listing / match -> nothing to scroll to
+  assert.equal(matchFocusTarget({ activeTab: "receiver", highlightId: "t1", forId: "parcel-b", groups, flatIds: [] }), "parcel-a");
   assert.equal(matchFocusTarget({ activeTab: "package", highlightId: "zz", forId: "nope", groups, flatIds: [] }), null);
   assert.equal(matchFocusTarget({ activeTab: "package", highlightId: undefined, forId: undefined, groups, flatIds: [] }), null);
 });

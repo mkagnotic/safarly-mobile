@@ -24,7 +24,8 @@ export function ArchiveBookingCard({
 }>) {
   const isSender = !!myUserId && booking.sender_id === myUserId;
   const counterpart = isSender ? booking.carrier : booking.sender;
-  const roleLabel = isSender ? "Carrier" : "Sender";
+  // The parcel owner on a deal is the "Receiver" (client rule, 28 Oct 2026).
+  const roleLabel = isSender ? "Carrier" : "Receiver";
   const route = booking.parcel
     ? `${booking.parcel.from_city} → ${booking.parcel.to_city}`
     : "Delivery";
@@ -43,7 +44,7 @@ export function ArchiveBookingCard({
       accessibilityLabel={`Delivery details: ${route}`}
     >
       <View style={styles.archiveTag}>
-        <Text style={styles.archiveTagText}>DELIVERED</Text>
+        <Text style={styles.archiveTagText}>Delivered</Text>
       </View>
       <Text style={styles.archiveRoute} numberOfLines={2}>
         {route}
@@ -67,7 +68,7 @@ export function ArchiveBookingCard({
           </View>
         ) : (
           <AppButton
-            label={`Rate ${roleLabel}`}
+            label={`Rate ${roleLabel.toLowerCase()}`}
             onPress={onRate}
             gradientColors={[colors.ctaAccent, colors.ctaAccent]}
             style={styles.archiveRateBtn}
@@ -89,10 +90,10 @@ export function ArchiveBuddyCard({
   return (
     <View style={styles.archiveCard}>
       <View style={[styles.archiveTag, styles.archiveTagBuddy]}>
-        <Text style={styles.archiveTagText}>TRAVEL BUDDY</Text>
+        <Text style={styles.archiveTagText}>Travel buddy</Text>
       </View>
       <Text style={styles.archiveRoute} numberOfLines={1}>
-        {c.buddy?.name || "Travel buddy"}
+        {c.buddy?.name || "Traveler"}
       </Text>
       {route ? (
         <Text style={styles.archiveMeta} numberOfLines={1}>
@@ -138,6 +139,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   archiveTagText: {
+    textTransform: "uppercase",
     color: colors.safe,
     fontSize: 10,
     lineHeight: 14,

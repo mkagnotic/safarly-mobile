@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -19,6 +19,7 @@ import {
   requestAndRegisterPushToken,
   unregisterPushToken,
 } from "@/services/notifications/push";
+import { accountPushOn, devicePushState } from "@/services/notifications/pushPolicy";
 import { colors } from "@/theme/colors";
 import { openAppSettings } from "@/utils/permissionBanner";
 
@@ -35,26 +36,36 @@ interface ToggleConfig {
  * Notification preferences — exact parity with web's `CustomerPreferences`
  * (the customer "Preferences" screen is notification toggles only; language /
  * timezone / currency are not customer-facing on web). SMS was removed (dead
- * feature). Push toggles the server-authoritative `push_enabled`, but turning
- * it ON must also secure the OS permission + register a device token (web gates
- * its toggle on the browser Notification permission the same way).
+ * feature). The push switch IS the account setting `push_enabled`, shared by
+ * every device; this phone's own permission is shown as a notice under it, the
+ * same way on web (28 Oct 2026).
  */
 const TOGGLES: readonly ToggleConfig[] = [
   {
     field: "email_notifications",
     icon: "mail-outline",
-    label: "Email Notifications",
-    desc: "Matches, offers, reminders and reviews via email",
+    label: "Email notifications",
+    desc: "Matches, offers, reminders and reviews by email",
   },
   {
     field: "push_enabled",
     icon: "notifications-outline",
-    label: "Push Notifications",
-    desc: "Mobile push notifications",
+    label: "Push notifications",
+    desc: "Alerts on this phone and your other devices, even when Safarly is closed. This one setting covers all your devices.",
   },
 ] as const;
 
-type PushNotice = { kind: "blocked"; canAskAgain: boolean } | { kind: "failed" };
+/** Only a failed token registration; permission is shown from live state (28 Oct 2026). */
+type PushNotice = { kind: "failed" };
+
+/** Same words as web; web says "browser" where the app says "phone". */
+export const PUSH_DEVICE_COPY = {
+  allow: "Notifications are on for your account. Allow them on this phone to get them here too.",
+  allowAction: "Allow on this device",
+  blocked:
+    "Notifications are on for your account, but this phone doesn't allow them. Turn them on in Settings to get them here.",
+  blockedAction: "Open Settings",
+} as const;
 
 /** Replaces the push toggle's description when push cannot work here at all. */
 const PUSH_UNAVAILABLE_COPY: Record<"unsupported" | "not-configured", string> = {
@@ -95,17 +106,19 @@ export function PreferencesScreen() {
   }, [navigation]);
 
   const handleUpdate = useCallback(
-    async (patch: Partial<UserPreferences>) => {
+    async (patch: Partial<UserPreferences>): Promise<boolean> => {
       const fieldName = Object.keys(patch)[0] as keyof UserPreferences;
       setSavingField(fieldName);
       try {
         await update(patch);
+        return true;
       } catch (err) {
         showToast({
           title: "Couldn't save preference",
           message: getErrorMessage(err),
           variant: "error",
         });
+        return false;
       } finally {
         setSavingField(null);
       }
@@ -113,49 +126,50 @@ export function PreferencesScreen() {
     [update],
   );
 
-  // Turning push ON must secure the OS permission and register a device token
-  // before the server flag is set (web parity — web gates its toggle on the
-  // browser Notification permission). When that fails the switch stays off AND
-  // says why, inline, until dismissed: it never quietly flips back. Turning push
-  // OFF clears the server flag, which stops delivery, and deregisters this
-  // device's token.
+  const accountOn = preferences ? accountPushOn(preferences) : false;
+  const deviceState =
+    pushAvailability === "available" && preferences && pushPermission
+      ? devicePushState({ accountOn, ...pushPermission })
+      : null;
+
+  // Asks this phone (prompting only if the OS still can) and registers on yes.
+  const allowOnThisPhone = useCallback(async () => {
+    setPushNotice(null);
+    setSavingField("push_enabled");
+    const result = await requestAndRegisterPushToken();
+    setPushPermission(await getPushPermission());
+    setSavingField(null);
+    if (!result.ok && result.reason !== "denied") setPushNotice({ kind: "failed" });
+  }, []);
+
+  // Account ON and allowed here (e.g. back from Settings): register silently.
+  const registeredHere = useRef(false);
+  useEffect(() => {
+    if (deviceState !== "ready" || registeredHere.current) return;
+    registeredHere.current = true;
+    void requestAndRegisterPushToken();
+  }, [deviceState]);
+
+  // The switch is the account setting (28 Oct 2026). ON saves it, then asks
+  // this phone; a refusal keeps the account ON (other devices still get
+  // pushes) and the notice explains. Only an explicit OFF turns it off - for
+  // every device - and unlinks this phone.
   const handlePushToggle = useCallback(
     async (next: boolean) => {
       setPushNotice(null);
+      if (!(await handleUpdate({ push_enabled: next }))) return;
       if (next) {
-        setSavingField("push_enabled");
-        const result = await requestAndRegisterPushToken();
-        const permission = await getPushPermission();
-        setPushPermission(permission);
-        setSavingField(null);
-        if (!result.ok) {
-          setPushNotice(
-            result.reason === "denied"
-              ? { kind: "blocked", canAskAgain: permission.canAskAgain }
-              : { kind: "failed" },
-          );
-          return;
-        }
+        registeredHere.current = true;
+        await allowOnThisPhone();
+      } else {
+        registeredHere.current = false;
+        void unregisterPushToken();
       }
-      await handleUpdate({ push_enabled: next });
-      if (!next) void unregisterPushToken();
     },
-    [handleUpdate],
+    [handleUpdate, allowOnThisPhone],
   );
 
-  // What the push switch shows. Saved-on but blocked by the OS is shown OFF —
-  // pushes cannot arrive, and claiming otherwise is the confusion this avoids.
-  const pushBlockedByOs =
-    pushAvailability === "available" &&
-    Boolean(preferences?.push_enabled) &&
-    pushPermission !== null &&
-    !pushPermission.granted;
-  const pushValue =
-    pushAvailability === "available" &&
-    Boolean(preferences?.push_enabled) &&
-    (pushPermission?.granted ?? true);
-  const shownPushNotice: PushNotice | null =
-    pushNotice ?? (pushBlockedByOs ? { kind: "blocked", canAskAgain: pushPermission.canAskAgain } : null);
+  const pushValue = pushAvailability === "available" && accountOn;
 
   // ───────── Loading state ─────────
   if (loading && !preferences) {
@@ -204,7 +218,8 @@ export function PreferencesScreen() {
               icon={toggle.icon}
               label={toggle.label}
               desc={pushUnavailable ? PUSH_UNAVAILABLE_COPY[pushAvailability] : toggle.desc}
-              value={isPush ? pushValue : Boolean(preferences?.[toggle.field])}
+              // An unset email preference means ON (server default, web parity).
+              value={isPush ? pushValue : (preferences?.[toggle.field] ?? true) !== false}
               disabled={pushUnavailable}
               saving={savingField === toggle.field}
               onChange={(nextValue) =>
@@ -217,36 +232,31 @@ export function PreferencesScreen() {
         })}
       </View>
 
-      {shownPushNotice ? (
+      {deviceState === "allow" || deviceState === "blocked" ? (
         <View style={styles.pushNotice}>
-          {shownPushNotice.kind === "blocked" ? (
-            <FormBanner
-              variant="warning"
-              title="Notifications are turned off"
-              message={
-                shownPushNotice.canAskAgain
-                  ? "Allow notifications for Safarly to turn on push."
-                  : "Notifications are turned off for Safarly. Turn them on in Settings to receive push notifications."
-              }
-              actionLabel={shownPushNotice.canAskAgain ? undefined : "Open Settings"}
-              onAction={shownPushNotice.canAskAgain ? undefined : openAppSettings}
-              onDismiss={pushNotice ? () => setPushNotice(null) : undefined}
-            />
-          ) : (
-            <FormBanner
-              variant="error"
-              title="Couldn't turn on push notifications"
-              message="Something went wrong setting up push on this device. Please try again."
-              onDismiss={() => setPushNotice(null)}
-            />
-          )}
+          <FormBanner
+            variant="warning"
+            message={PUSH_DEVICE_COPY[deviceState]}
+            actionLabel={deviceState === "allow" ? PUSH_DEVICE_COPY.allowAction : PUSH_DEVICE_COPY.blockedAction}
+            onAction={deviceState === "allow" ? () => void allowOnThisPhone() : openAppSettings}
+          />
+        </View>
+      ) : null}
+      {pushNotice ? (
+        <View style={styles.pushNotice}>
+          <FormBanner
+            variant="error"
+            title="Couldn't turn on push notifications"
+            message="We couldn't set up notifications on this phone. Please try again."
+            onDismiss={() => setPushNotice(null)}
+          />
         </View>
       ) : null}
 
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={16} color={colors.mutedText} />
         <Text style={styles.noteText}>
-          Some essential emails — security alerts and payment receipts — are always sent.
+          Essential emails — payments, payouts, delivery codes, identity checks and cancellations — are always sent, even with email notifications off.
         </Text>
       </View>
     </Screen>

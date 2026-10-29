@@ -62,7 +62,7 @@ export function mapAuthError(error: unknown, ctx: "signin" | "signup"): MappedAu
   if (code === "email_not_confirmed" || text.includes("email not confirmed")) {
     return {
       target: "form",
-      message: "Please confirm your email first — check your inbox for the verification link.",
+      message: "Please confirm your email first — enter the verification code we emailed you.",
     };
   }
 

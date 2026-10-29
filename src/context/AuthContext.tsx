@@ -11,8 +11,7 @@ import { ApiClientError, isTimeoutError } from "@/services/api/client";
 import { usersApi } from "@/services/api/users";
 import { checkOnboarding } from "./onboardingCheck";
 import {
-  syncPushRegistrationOnLogin,
-  clearCachedPushToken,
+  forgetThisDevice,
   unregisterPushToken,
 } from "@/services/notifications/push";
 import { performAppleOAuth } from "@/services/auth/appleOAuth";
@@ -110,7 +109,15 @@ const isDeletedAccount = (error: unknown) =>
 
 const loadOnboardingStatus = () =>
   checkOnboarding(
-    async () => (await usersApi.getMyProfile()).data?.profile?.terms_accepted_at,
+    async () => {
+      const profile = (await usersApi.getMyProfile()).data?.profile;
+      // No id = not a profile (what a failed server read looked like: counts
+      // only, no terms_accepted_at). Reading it as "terms not accepted" sent
+      // onboarded users to ProfileSetup when the database was slow (29 Oct
+      // 2026). Throw, so the check answers "unknown" and shows Try again.
+      if (!profile?.id) throw new Error("We couldn't load your account. Please try again.");
+      return profile.terms_accepted_at;
+    },
     { isTimeout: isTimeoutError, isUnauthenticated, isDeleted: isDeletedAccount },
   );
 
@@ -120,7 +127,9 @@ const loadOnboardingStatus = () =>
  * would only fail against a dead token.
  */
 async function signOutLocally(): Promise<void> {
-  await clearCachedPushToken();
+  // The server refused this session, so the normal DELETE would 401: unlink the
+  // phone with the session-free call, or it keeps getting the pushes.
+  await forgetThisDevice();
   await clearGoogleSession();
   await supabase.auth.signOut({ scope: "local" });
 }
@@ -192,9 +201,8 @@ export function AuthProvider({ children }: Readonly<Props>) {
 
       if (next && !store.authenticated) {
         store.login();
-        // Silently re-register this device's push token if the user already
-        // granted permission (never prompts here — opt-in lives on Preferences).
-        void syncPushRegistrationOnLogin();
+        // Push registration moved to the profile load (useMyProfile): it needs the
+        // account's push_enabled and must also run on app start (28 Oct 2026).
       } else if (!next && store.authenticated) {
         store.logout();
       }
@@ -247,6 +255,7 @@ export function AuthProvider({ children }: Readonly<Props>) {
       refreshSession: () => supabase.auth.refreshSession(),
       hasStoredSession,
       onRevoked: async () => {
+        await forgetThisDevice();
         await signOutThisDevice(supabase.auth, () => sessionStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY));
       },
     });

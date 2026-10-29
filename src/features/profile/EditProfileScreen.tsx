@@ -21,7 +21,7 @@ import {
   ProfileFormFields,
   type ProfileFormErrors,
 } from "@/features/profile/ProfileFormFields";
-import { initialsFromFullName } from "@/features/profile/profileUtils";
+import { initialsFromFullName, profileFormChanged } from "@/features/profile/profileUtils";
 import { useMyProfile } from "@/hooks/api/useMyProfile";
 import { t } from "@/i18n/translations";
 import { MainTabParamList, RootStackParamList } from "@/navigation/types";
@@ -53,12 +53,16 @@ export function EditProfileScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [errors, setErrors] = useState<ProfileFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  // A new photo uploads the moment it is picked: Save waits for its URL, or it
+  // would send the old avatar_url (28 Oct 2026).
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   // Track if user has edited since last hydration. The ref stops a background
-  // refetch from clobbering in-progress edits; the `dirty` state gates the Save
-  // button (web parity: Save is disabled until something changes).
+  // refetch from clobbering in-progress edits.
   const dirtyRef = useRef(false);
-  const [dirty, setDirty] = useState(false);
+  // Save is enabled only when a value really differs (web parity: typing and
+  // undoing it leaves nothing to save).
+  const dirty = profileFormChanged({ name, bio, city, country, avatarUrl }, profile);
 
   useEffect(() => {
     if (!profile) return;
@@ -72,12 +76,13 @@ export function EditProfileScreen() {
 
   const markDirty = useCallback(() => {
     dirtyRef.current = true;
-    setDirty(true);
   }, []);
 
   const validate = useCallback((): boolean => {
     const next: ProfileFormErrors = {};
-    if (!name.trim()) next.name = "Name is required";
+    // The server's rule (profileRules.ts): 2-100 characters. Same words as web.
+    if (name.trim().length < 2) next.name = "Enter your full name (at least 2 characters)";
+    else if (name.trim().length > 100) next.name = "Name must be 100 characters or fewer";
     setErrors(next);
     return Object.keys(next).length === 0;
   }, [name]);
@@ -88,14 +93,16 @@ export function EditProfileScreen() {
   }, [navigation]);
 
   const handleSave = useCallback(async () => {
-    if (submitting) return;
+    if (submitting || photoUploading) return;
     if (!validate()) return;
     setSubmitting(true);
     try {
       const res = await usersApi.updateMyProfile({
         name: name.trim(),
-        bio: bio.trim() || undefined,
-        city: city.trim() || undefined,
+        // "" (not undefined) when emptied: undefined was dropped from the request,
+        // so a cleared bio/city came back while it said "Profile updated" (web parity).
+        bio: bio.trim(),
+        city: city.trim(),
         country: country ?? undefined,
         // Web parity: always send avatar_url; "" clears it server-side.
         avatar_url: avatarUrl ?? "",
@@ -107,15 +114,14 @@ export function EditProfileScreen() {
         setUserProfileFromApi(saved, user?.email ?? "");
       }
 
-      // Clear dirty flags so any subsequent refetch can re-hydrate.
+      // Clear the dirty flag so any subsequent refetch can re-hydrate.
       dirtyRef.current = false;
-      setDirty(false);
 
       showToast({ title: "Profile updated", variant: "success" });
       goBack();
     } catch (err) {
       showToast({
-        title: "Couldn't save profile",
+        title: "Couldn't save your profile",
         message: getErrorMessage(err),
         variant: "error",
       });
@@ -124,6 +130,7 @@ export function EditProfileScreen() {
     }
   }, [
     submitting,
+    photoUploading,
     validate,
     name,
     bio,
@@ -188,6 +195,7 @@ export function EditProfileScreen() {
   }
 
   const initials = initialsFromFullName(name || profile?.name || "");
+  const saveDisabled = submitting || photoUploading || !dirty;
 
   return (
     <Screen contentContainerStyle={styles.scroll} refreshEnabled={false}>
@@ -203,6 +211,8 @@ export function EditProfileScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>{t(language, "profile.editProfile")}</Text>
       </View>
+      {/* Same subtitle as web Edit profile (28 Oct 2026). */}
+      <Text style={styles.subtitle}>Update your photo and personal details.</Text>
 
       <View style={styles.avatarSection}>
         <AvatarUpload
@@ -214,6 +224,7 @@ export function EditProfileScreen() {
             setAvatarUrl(url);
             markDirty();
           }}
+          onUploadingChange={setPhotoUploading}
         />
       </View>
 
@@ -245,14 +256,18 @@ export function EditProfileScreen() {
       />
 
       <Pressable
-        style={[styles.saveButton, (submitting || !dirty) && styles.saveButtonDisabled]}
+        style={[styles.saveButton, saveDisabled && styles.saveButtonDisabled]}
         onPress={handleSave}
-        disabled={submitting || !dirty}
+        disabled={saveDisabled}
         accessibilityRole="button"
         accessibilityLabel={t(language, "profile.saveChanges")}
+        accessibilityState={{ disabled: saveDisabled, busy: submitting }}
       >
         {submitting ? (
-          <ActivityIndicator color={colors.white} />
+          <View style={styles.savingRow}>
+            <ActivityIndicator color={colors.white} />
+            <Text style={styles.saveButtonLabel}>Saving…</Text>
+          </View>
         ) : (
           <Text style={styles.saveButtonLabel}>{t(language, "profile.saveChanges")}</Text>
         )}
@@ -280,6 +295,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitle: { color: colors.text, fontSize: 22, lineHeight: 28, fontWeight: "800" },
+  subtitle: { color: colors.mutedText, fontSize: 14, lineHeight: 20, marginTop: -10, marginBottom: 18 },
+  savingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
   centeredText: { color: colors.mutedText, fontSize: 14, fontWeight: "500" },
   errorTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },

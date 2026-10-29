@@ -33,10 +33,9 @@ export function ConfirmDeliveryStep({
       </View>
       <Text style={sharedStyles.stepCardTitle}>Parcel is ready to be delivered</Text>
       <Text style={sharedStyles.stepCardBody}>
-        Chat with your receiver and agree on the meetup point or the address in
-        chat. Once you deliver to the person, request the 6-digit code from your
-        receiver. Entering it completes the delivery and releases your payout from
-        escrow.
+        Agree the meetup point or address with your receiver in chat. When you hand
+        the parcel over, ask them for the 6-digit delivery code. Entering it
+        completes the delivery and sends your earnings to your bank.
       </Text>
       <Text style={styles.stepCardFieldLabel}>Delivery code from the receiver</Text>
       <View style={styles.otpRow}>
@@ -72,7 +71,10 @@ export function ConfirmDeliveryStep({
       </View>
       <Text style={sharedStyles.stepCardFootnote}>
         Not at the destination yet? Nothing to do — come back to this booking when
-        you hand the parcel over.
+        you hand the parcel over. Can't meet up? Message the receiver in chat.
+      </Text>
+      <Text style={sharedStyles.stepCardFootnote}>
+        Three wrong tries locks the code — the sender then gets a new one.
       </Text>
     </View>
   );

@@ -3,6 +3,13 @@ import { MediaGalleryModal } from "@/components/chat/MediaGalleryModal";
 import { ReportMessageModal } from "@/components/chat/ReportMessageModal";
 
 import { type ChatModal } from "../chatTypes";
+import {
+  BLOCK_CONFIRM_BODY,
+  firstName,
+  REPORT_SUBTITLE,
+  UNBLOCK_CONFIRM_BODY,
+  UNMATCH_CONFIRM_BODY,
+} from "../lib/chatModerationRules";
 import { type ChatActionMenuController } from "../hooks/useChatActionMenu";
 import { type ChatBubbleMenuController } from "../hooks/useChatBubbleMenu";
 
@@ -58,8 +65,8 @@ export function ChatModerationModals({
         open={reportUserOpen}
         pending={reportUserPending}
         error={errorFor("reportUser")}
-        title={`Report ${participantName.split(" ")[0]}`}
-        subtitle="Help us keep Safarly safe. Our trust & safety team reviews every report."
+        title={`Report ${firstName(participantName)}`}
+        subtitle={REPORT_SUBTITLE}
         onCancel={() => {
           if (!reportUserPending) setReportUserOpen(false);
         }}
@@ -73,20 +80,27 @@ export function ChatModerationModals({
         onClose={() => setMediaOpen(false)}
       />
 
-      {/* ───────── Block / Unmatch confirmation ───────── */}
+      {/* ───────── Block / Unblock / Unmatch confirmation ─────────
+          The chat block IS the app-wide block, so it uses the profile menu's words. */}
       <ConfirmActionModal
         open={!!confirmAction}
         title={
-          confirmAction === "block" ? `Block ${participantName}?` : "Unmatch?"
+          confirmAction === "block"
+            ? `Block ${participantName}?`
+            : confirmAction === "unblock"
+              ? `Unblock ${participantName}?`
+              : "Unmatch?"
         }
         body={
           confirmAction === "block"
-            ? "They won't be able to message you. You can unblock from this menu later."
-            : "This conversation will revert to pending. Either side can request a new match anytime."
+            ? BLOCK_CONFIRM_BODY
+            : confirmAction === "unblock"
+              ? UNBLOCK_CONFIRM_BODY
+              : UNMATCH_CONFIRM_BODY
         }
-        confirmLabel={confirmAction === "block" ? "Block" : "Unmatch"}
-        icon={confirmAction === "block" ? "ban" : "link"}
-        tone="destructive"
+        confirmLabel={confirmAction === "block" ? "Block" : confirmAction === "unblock" ? "Unblock" : "Unmatch"}
+        icon={confirmAction === "block" ? "ban" : confirmAction === "unblock" ? "checkmark-circle" : "link"}
+        tone={confirmAction === "unblock" ? "primary" : "destructive"}
         pending={confirmPending}
         error={errorFor("confirm")}
         onCancel={() => {

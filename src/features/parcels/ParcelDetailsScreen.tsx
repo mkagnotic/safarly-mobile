@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/Card";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import { ANY_CITY } from "@/features/search/CityPicker";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import {
   isImplicitStatus,
@@ -22,17 +21,21 @@ import {
   toneForStatus,
 } from "@/features/travels/statusLabels";
 import { isHiddenOwner } from "@/features/moderation/blockFilter";
+import { parcelHasOpenDispute } from "@/features/disputes/disputeRules";
 import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { useBookings } from "@/hooks/api/useBookings";
 import { useParcelDetail } from "@/hooks/api/useParcelDetail";
 import { ParcelJourneyTimeline } from "@/features/travels/ParcelJourneyTracker";
 import { createTrackerBookingResolver } from "@/features/travels/trackerBooking";
 import { useAuth } from "@/context/AuthContext";
+import { showToast } from "@/feedback/appFeedback";
 import { MainTabParamList } from "@/navigation/types";
 import { ApiClientError, getErrorMessage, parcelsApi, type Parcel } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { FIXED_CELL_MAX_FONT_SCALE } from "@/utils/accessibleDate";
-import { EditParcelModal, type EditParcelFormValues } from "./EditParcelModal";
+import { EditParcelModal, type EditParcelFormValues, type EditParcelSubmitOptions } from "./EditParcelModal";
+import { parcelEditInitial, parcelEditPayload } from "./model/editParcelPayload";
+import { returnFormChanges, returnFormFromParcel } from "@/utils/addressOptions";
 import { formatMoneyShort } from "@/utils/money";
 import { formatLocalDate } from "@/utils/travelDate";
 
@@ -81,7 +84,7 @@ function DetailsHeader({ onBack, right }: Readonly<{ onBack: () => void; right?:
 }
 
 function StatusPill({ status }: Readonly<{ status: string }>) {
-  if (!status || isImplicitStatus(status)) return null;
+  if (!status || isImplicitStatus(status) || !labelForStatus(status)) return null;
   const tone = toneForStatus(status);
   return (
     <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
@@ -92,7 +95,7 @@ function StatusPill({ status }: Readonly<{ status: string }>) {
   );
 }
 
-function StatusAlert({ status }: Readonly<{ status: string }>) {
+function StatusAlert({ status, disputeOpen }: Readonly<{ status: string; disputeOpen: boolean }>) {
   if (status === "delivered" || status === "completed") {
     return (
       <View style={styles.bannerSlot}>
@@ -100,13 +103,15 @@ function StatusAlert({ status }: Readonly<{ status: string }>) {
       </View>
     );
   }
-  if (status === "disputed") {
+  // Keyed off the booking: the parcel itself never reads "disputed", so this
+  // banner never showed (28 Oct 2026). Web parity.
+  if (disputeOpen) {
     return (
       <View style={styles.bannerSlot}>
         <FormBanner
           variant="error"
           title="Payment under review"
-          message="A dispute is open on this parcel."
+          message="A dispute is open on this delivery."
         />
       </View>
     );
@@ -235,6 +240,8 @@ export function ParcelDetailsScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editPending, setEditPending] = useState(false);
+  // The server's refusal, shown inside the modal (the banner sits behind it).
+  const [editError, setEditError] = useState<string | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -249,83 +256,24 @@ export function ParcelDetailsScreen() {
     navigation.navigate("Buddies");
   }, [navigation]);
 
-  const handleEditOpen = useCallback(() => setEditOpen(true), []);
+  const handleEditOpen = useCallback(() => {
+    setEditError(null);
+    setEditOpen(true);
+  }, []);
   const handleEditCancel = useCallback(() => {
     if (!editPending) setEditOpen(false);
   }, [editPending]);
 
   const handleEditSubmit = useCallback(
-    async (values: EditParcelFormValues) => {
+    async (values: EditParcelFormValues, options: EditParcelSubmitOptions) => {
       if (!parcelId || !parcel) return;
-      const data: Parameters<typeof parcelsApi.update>[1] = {};
-
-      if (!values.from_city) {
-        setNotice({ variant: "error", title: "Origin city required", message: "Select an origin city." });
-        return;
-      }
-      if (!values.to_city) {
-        setNotice({ variant: "error", title: "Destination city required", message: "Select a destination city." });
-        return;
-      }
-      const fromCity = values.from_city === ANY_CITY ? "Any" : values.from_city;
-      const toCity = values.to_city === ANY_CITY ? "Any" : values.to_city;
-      const curFromCity = parcel.any_from ? "Any" : parcel.from_city;
-      const curToCity = parcel.any_to ? "Any" : parcel.to_city;
-      const curFromCountry = (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      const curToCountry = (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN";
-      if (fromCity !== curFromCity || values.from_country !== curFromCountry) {
-        data.from_city = fromCity;
-        data.from_country = values.from_country;
-        data.any_from = values.from_city === ANY_CITY;
-      }
-      if (toCity !== curToCity || values.to_country !== curToCountry) {
-        data.to_city = toCity;
-        data.to_country = values.to_country;
-        data.any_to = values.to_city === ANY_CITY;
-      }
-
-      const weightNum = Number(values.weight_kg);
-      if (
-        values.weight_kg !== "" &&
-        Number.isFinite(weightNum) &&
-        weightNum !== parcel.weight_kg
-      ) {
-        data.weight_kg = weightNum;
-      }
-      if (values.description !== (parcel.description ?? "")) {
-        data.description = values.description;
-      }
-      if (values.category && values.category !== parcel.category) {
-        data.category = values.category;
-      }
-      const feeNum = Number(values.fee_offered);
-      if (
-        values.fee_offered !== "" &&
-        Number.isFinite(feeNum) &&
-        feeNum !== parcel.fee_offered
-      ) {
-        data.fee_offered = feeNum;
-      }
-      if (values.fee_currency !== parcel.fee_currency) {
-        data.fee_currency = values.fee_currency;
-      }
-
-      // Dates travel as a set. The handler's collapse logic keys off
-      // delivery_date_mode and does NOT default it on PUT, so sending a changed
-      // date without the mode can leave mode="single" with from != to.
-      const curFrom = parcel.delivery_by_from ?? parcel.delivery_by ?? "";
-      const curTo = parcel.delivery_by_to ?? parcel.delivery_by ?? "";
-      const curMode = parcel.delivery_date_mode === "range" ? "range" : "single";
-      if (
-        values.delivery_by_from !== curFrom ||
-        values.delivery_by_to !== curTo ||
-        values.delivery_date_mode !== curMode
-      ) {
-        data.delivery_date_mode = values.delivery_date_mode;
-        data.delivery_by_from = values.delivery_by_from;
-        data.delivery_by_to = values.delivery_by_to;
-        data.delivery_by = values.delivery_by_to;
-      }
+      // Only what changed; the modal has validated (editParcelPayload.ts, shared with My Travels).
+      // This screen reads the owner's detail, so the return address is always loaded.
+      const data = parcelEditPayload(
+        values,
+        parcel,
+        options.includeReturn ? returnFormChanges(values.returnForm, parcel) : {},
+      );
 
       if (Object.keys(data).length === 0) {
         setEditOpen(false);
@@ -333,19 +281,15 @@ export function ParcelDetailsScreen() {
       }
 
       setEditPending(true);
+      setEditError(null);
       try {
         await parcelsApi.update(parcelId, data);
         await refetch();
         setEditOpen(false);
-        setNotice({
-          variant: "success",
-          title: "Parcel updated",
-          message: "Your changes are saved.",
-        });
+        // Same toast as My Travels (28 Oct 2026).
+        showToast({ title: "Parcel updated", variant: "success" });
       } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : getErrorMessage(err as Error);
-        setNotice({ variant: "error", title: "Couldn't update parcel", message });
+        setEditError(err instanceof ApiClientError ? err.message : getErrorMessage(err as Error));
       } finally {
         setEditPending(false);
       }
@@ -423,22 +367,7 @@ export function ParcelDetailsScreen() {
     );
   }
 
-  const editInitial: EditParcelFormValues = {
-    from_city: parcel.any_from ? ANY_CITY : (parcel.from_city ?? ""),
-    from_country: (parcel.from_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    to_city: parcel.any_to ? ANY_CITY : (parcel.to_city ?? ""),
-    to_country: (parcel.to_country ?? "").toUpperCase() === "US" ? "US" : "IN",
-    weight_kg: `${parcel.weight_kg ?? ""}`,
-    description: parcel.description ?? "",
-    category: (parcel.category as EditParcelFormValues["category"]) ?? "personal",
-    fee_offered: `${parcel.fee_offered ?? ""}`,
-    fee_currency: parcel.fee_currency === "INR" ? "INR" : "USD",
-    // Trust the persisted mode rather than re-deriving it from whether the two
-    // dates differ — that inference is exactly what delivery_date_mode replaced.
-    delivery_by_from: parcel.delivery_by_from ?? parcel.delivery_by ?? "",
-    delivery_by_to: parcel.delivery_by_to ?? parcel.delivery_by ?? "",
-    delivery_date_mode: parcel.delivery_date_mode === "range" ? "range" : "single",
-  };
+  const editInitial: EditParcelFormValues = parcelEditInitial(parcel, returnFormFromParcel(parcel));
 
   return (
     <Screen onRefresh={refetch}>
@@ -464,7 +393,7 @@ export function ParcelDetailsScreen() {
 
       <ParcelCard parcel={parcel} />
 
-      <StatusAlert status={parcel.status} />
+      <StatusAlert status={parcel.status} disputeOpen={parcelHasOpenDispute(parcel.id, bookings.bookings)} />
 
       {/* Full delivery timeline. Renders nothing until a carrier is committed —
           the My Travels card carries the one-line summary that leads here. */}
@@ -508,11 +437,13 @@ export function ParcelDetailsScreen() {
 
       <EditParcelModal
         open={editOpen}
+        listingId={parcelId}
         initial={editInitial}
         pending={editPending}
         onCancel={handleEditCancel}
         onSubmit={handleEditSubmit}
         currencyLocked={!!parcel?.currency_locked}
+        serverError={editError}
       />
 
       <ConfirmActionModal

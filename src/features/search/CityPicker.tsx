@@ -8,7 +8,7 @@ import { colors } from "@/theme/colors";
 /** Sentinel value the API recognizes for "any city". Web uses the same. */
 export const ANY_CITY = "ANY";
 
-const ANY_CITY_LABEL = "🌍 Any City";
+const ANY_CITY_LABEL = "🌍 Any city";
 
 interface Props {
   value: string;
@@ -21,7 +21,7 @@ interface Props {
   variant?: "compact" | "card";
 }
 
-/** City field plus the shared searchable picker sheet, with an "Any City" row on top. */
+/** City field plus the shared searchable picker sheet, with an "Any city" row on top. */
 export function CityPicker({
   value,
   onChange,

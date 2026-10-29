@@ -30,9 +30,14 @@ import {
   statusIcon,
   statusTint,
 } from "@/features/disputes/disputeConfig";
+import { DISPUTE_CLOSED_TEXT, disputeStatusLabel, evidenceSkipNote } from "@/features/disputes/disputeRules";
+import { MESSAGE_MAX_LENGTH, messageCounter } from "@/features/messages/chat/lib/chatSendRules";
 import { useAuth } from "@/context/AuthContext";
 import {
   EVIDENCE_MAX_FILES,
+  EVIDENCE_TOTAL_LIMIT_TEXT,
+  evidenceCountLabel,
+  evidenceRoom,
   screenEvidence,
   skippedEvidenceMessage,
   type PickedEvidence,
@@ -240,6 +245,9 @@ function DisputeCard({
   const [uploading, setUploading] = useState(false);
 
   const isResolved = dispute.status === "resolved";
+  // The dispute is the filer talking to our team (client, 26 Oct 2026): the other
+  // party sees the dispute and its outcome, not a chat. Web parity.
+  const isFiler = dispute.filed_by === userId;
   // Web parity: the sender can grant the waiver when the counterparty filed a
   // return-eligibility waiver request that isn't resolved yet.
   const isWaiverRequest =
@@ -250,6 +258,9 @@ function DisputeCard({
   const messages = dispute.messages ?? [];
   const evidence = dispute.evidence_files ?? [];
   const color = statusColor(dispute.status);
+  // 8 per upload, 24 per dispute (server marks extras limit_reached).
+  const room = evidenceRoom(evidence.length);
+  const counter = messageCounter(draft.length);
 
   const sendMessage = useCallback(async () => {
     const text = draft.trim();
@@ -270,7 +281,7 @@ function DisputeCard({
   // same endpoint and limits as the file-a-dispute form.
   const uploadPicked = useCallback(
     async (picked: PickedEvidence[]) => {
-      const screened = screenEvidence(picked);
+      const screened = screenEvidence(picked, Date.now(), evidence.length);
       const skippedNote = skippedEvidenceMessage(screened);
       if (screened.files.length === 0) {
         onBanner({ variant: "error", title: "Nothing to upload", message: skippedNote ?? undefined });
@@ -280,15 +291,11 @@ function DisputeCard({
       try {
         const res = await disputesApi.uploadEvidence(dispute.id, screened.files);
         const stored = res.data?.evidence_files?.length ?? screened.files.length;
-        const serverSkipped = res.data?.skipped_files ?? [];
-        const notes = [
-          skippedNote,
-          ...serverSkipped.map((f) => `${f.name}: ${f.message}`),
-        ].filter(Boolean);
+        const note = evidenceSkipNote(skippedNote, res.data?.skipped_files);
         onBanner({
-          variant: notes.length ? "warning" : "success",
+          variant: note ? "warning" : "success",
           title: `${stored} file${stored === 1 ? "" : "s"} added to the dispute`,
-          message: notes.length ? notes.join(" ") : undefined,
+          message: note ?? undefined,
         });
         await onRefetch();
       } catch (err) {
@@ -297,11 +304,11 @@ function DisputeCard({
         setUploading(false);
       }
     },
-    [dispute.id, onRefetch, onBanner],
+    [dispute.id, evidence.length, onRefetch, onBanner],
   );
 
   const addEvidencePhotos = useCallback(async () => {
-    if (uploading) return;
+    if (uploading || room === 0) return;
     try {
       const perm = await requestLibraryPermission();
       if (perm.status !== "granted") {
@@ -313,7 +320,7 @@ function DisputeCard({
         mediaTypes: ["images"],
         quality: 0.8,
         allowsMultipleSelection: true,
-        selectionLimit: EVIDENCE_MAX_FILES,
+        selectionLimit: room || EVIDENCE_MAX_FILES,
       });
       if (result.canceled || !result.assets?.length) return;
       await uploadPicked(
@@ -322,10 +329,10 @@ function DisputeCard({
     } catch (err) {
       onBanner({ variant: "error", title: "Couldn't open photos", message: getErrorMessage(err) });
     }
-  }, [uploading, uploadPicked, onBanner]);
+  }, [uploading, room, uploadPicked, onBanner]);
 
   const addEvidenceFiles = useCallback(async () => {
-    if (uploading) return;
+    if (uploading || room === 0) return;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"],
@@ -339,7 +346,7 @@ function DisputeCard({
     } catch (err) {
       onBanner({ variant: "error", title: "Couldn't pick file", message: getErrorMessage(err) });
     }
-  }, [uploading, uploadPicked, onBanner]);
+  }, [uploading, room, uploadPicked, onBanner]);
 
   const confirmWaiver = useCallback(async () => {
     if (waiving) return;
@@ -349,11 +356,11 @@ function DisputeCard({
       const refunded = res.data?.refunded_amount;
       onBanner({
         variant: "success",
-        title: "Penalty waived — carrier refunded",
+        title: "Penalty waived",
         message:
           typeof refunded === "number"
-            ? `${formatMoneyShort(refunded, res.data?.currency)} returned to the carrier. The strike record stays.`
-            : "The cash penalty was waived; the strike record stays.",
+            ? `The carrier's ${formatMoneyShort(refunded, res.data?.currency)} penalty is cancelled. The strike on their account stays.`
+            : "The carrier's penalty is cancelled. The strike on their account stays.",
       });
       await onRefetch();
     } catch (err) {
@@ -375,7 +382,7 @@ function DisputeCard({
         <View style={styles.summaryTop}>
           <View style={[styles.statusBadge, { backgroundColor: statusTint(dispute.status) }]}>
             <Ionicons name={statusIcon(dispute.status)} size={12} color={color} />
-            <Text style={[styles.statusText, { color }]}>{dispute.status}</Text>
+            <Text style={[styles.statusText, { color }]}>{disputeStatusLabel(dispute.status)}</Text>
           </View>
           <View style={styles.categoryPill}>
             <Text style={styles.categoryPillText} numberOfLines={1}>
@@ -402,7 +409,7 @@ function DisputeCard({
           {/* Resolution (shown when resolved) */}
           {dispute.resolution ? (
             <View style={styles.resolutionBox}>
-              <Text style={styles.detailLabel}>RESOLUTION</Text>
+              <Text style={styles.detailLabel}>OUTCOME</Text>
               <Text style={styles.resolutionText}>{dispute.resolution}</Text>
             </View>
           ) : null}
@@ -412,11 +419,12 @@ function DisputeCard({
             <View style={styles.waiverBlock}>
               <View style={styles.waiverHeader}>
                 <Ionicons name="shield-checkmark" size={14} color={colors.safe} />
-                <Text style={styles.waiverTitle}>Waiver requested</Text>
+                <Text style={styles.waiverTitle}>Confirm return-eligibility waiver?</Text>
               </View>
               <Text style={styles.waiverBody}>
-                The carrier asked to waive their cash penalty because this parcel is returnable.
-                Confirming refunds the penalty to the carrier; the strike on their record stays.
+                The carrier asked to waive their cash penalty because this parcel is returnable. If you
+                confirm, their penalty is cancelled — the strike on their account stays. Only confirm if
+                you can actually return the parcel.
               </Text>
               <Pressable
                 onPress={() => void confirmWaiver()}
@@ -430,7 +438,7 @@ function DisputeCard({
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={14} color={colors.white} />
-                    <Text style={styles.waiverButtonText}>Confirm waiver — refund penalty</Text>
+                    <Text style={styles.waiverButtonText}>Confirm waiver — cancel penalty</Text>
                   </>
                 )}
               </Pressable>
@@ -485,15 +493,25 @@ function DisputeCard({
             </>
           ) : null}
 
-          {/* Late evidence (open disputes only) */}
-          {!isResolved ? (
+          {!isFiler && !isResolved ? (
+            <Text style={styles.addEvidenceHint} testID="dispute-other-party-note">
+              The other person opened this dispute. The Safarly support team is reviewing it and will contact you if they need anything from you.
+            </Text>
+          ) : null}
+
+          {/* Late evidence (open disputes, filer only) */}
+          {isFiler && !isResolved ? (
             <View style={styles.addEvidenceBlock}>
               {evidence.length === 0 ? (
                 <Text style={[styles.detailLabel, styles.detailLabelGap]}>EVIDENCE</Text>
               ) : null}
               <Text style={styles.addEvidenceHint}>
-                Add photos or PDFs — JPEG, PNG, WebP, GIF or PDF, up to 10 MB each, {EVIDENCE_MAX_FILES} at a time.
+                JPEG, PNG, WebP, GIF or PDF · up to {EVIDENCE_MAX_FILES} files, 10 MB each ·{" "}
+                {evidenceCountLabel(evidence.length)}
               </Text>
+              {room === 0 ? (
+                <Text style={styles.addEvidenceHint}>{EVIDENCE_TOTAL_LIMIT_TEXT}</Text>
+              ) : (
               <View style={styles.addEvidenceRow}>
                 <Pressable
                   onPress={() => void addEvidencePhotos()}
@@ -519,7 +537,15 @@ function DisputeCard({
                 </Pressable>
                 {uploading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
               </View>
+              )}
             </View>
+          ) : null}
+
+          {/* Resolved: closed for new messages and evidence (server 409, same text). */}
+          {isFiler && isResolved ? (
+            <Text style={styles.addEvidenceHint} testID="dispute-closed-note">
+              {DISPUTE_CLOSED_TEXT}
+            </Text>
           ) : null}
 
           {/* Conversation */}
@@ -547,8 +573,8 @@ function DisputeCard({
             </>
           ) : null}
 
-          {/* Add message (hidden once resolved, web parity) */}
-          {!isResolved ? (
+          {/* Add message (filer only, hidden once resolved, web parity) */}
+          {isFiler && !isResolved ? (
             <View style={styles.addMsgRow}>
               <TextInput
                 value={draft}
@@ -557,6 +583,7 @@ function DisputeCard({
                 placeholderTextColor={colors.subtleText}
                 style={styles.addMsgInput}
                 multiline
+                maxLength={MESSAGE_MAX_LENGTH}
                 editable={!sending}
               />
               <Pressable
@@ -573,6 +600,11 @@ function DisputeCard({
                 )}
               </Pressable>
             </View>
+          ) : null}
+          {isFiler && !isResolved && counter ? (
+            <Text style={styles.msgCounter} accessibilityLiveRegion="polite">
+              {counter}
+            </Text>
           ) : null}
         </View>
       ) : null}
@@ -623,7 +655,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 999,
   },
-  statusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3, textTransform: "capitalize" },
+  statusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.3 },
   categoryPill: { flex: 1, minWidth: 0 },
   categoryPillText: { color: colors.text, fontSize: 14, fontWeight: "700" },
   summaryMeta: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" },
@@ -662,7 +694,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   waiverHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-  waiverTitle: { color: colors.safe, fontSize: 12, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase" },
+  waiverTitle: { color: colors.text, fontSize: 14, fontWeight: "700", flexShrink: 1 },
   waiverBody: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
   waiverButton: {
     flexDirection: "row",
@@ -735,6 +767,7 @@ const styles = StyleSheet.create({
   msgTimeMine: { color: "rgba(255,255,255,0.75)" },
 
   // Add message
+  msgCounter: { color: colors.subtleText, fontSize: 12, fontWeight: "500", textAlign: "right" },
   addMsgRow: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 8 },
   addMsgInput: {
     flex: 1,
