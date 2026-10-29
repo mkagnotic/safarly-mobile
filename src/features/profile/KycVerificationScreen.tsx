@@ -441,7 +441,7 @@ function PendingCard({
         </View>
         <Text style={styles.statusHeadline}>Under review</Text>
         <Text style={styles.statusDescription}>
-          We're reviewing your documents. This usually takes 1–2 business days — you'll be notified once it's complete.
+          We're reviewing your documents. This usually takes 1–2 business days, and you'll be notified once it's complete.
         </Text>
       </View>
 

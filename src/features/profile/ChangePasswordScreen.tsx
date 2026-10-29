@@ -100,7 +100,7 @@ export function ChangePasswordScreen() {
       // A wrong current password goes on its field, not a banner. For an account
       // made with Google or Apple the server explains how to set a password; keep that.
       if (/current password|wrong|incorrect/i.test(message)) {
-        setErrors((e) => ({ ...e, current: /Google or Apple/.test(message) ? message : "That's not your current password" }));
+        setErrors((e) => ({ ...e, current: /Google or Apple/.test(message) ? message : "That's not your current password." }));
         currentRef.current?.focus();
       } else {
         setFormError(message);

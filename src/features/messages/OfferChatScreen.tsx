@@ -522,13 +522,16 @@ export function OfferChatScreen() {
           input box for the person who RECEIVED a match request, leaving the
           screen with the Accept banner and empty dead space below it. The
           accept/decline banner now sits above a live composer instead.
+          Blocked: the composer stays, disabled, saying "This conversation is
+          blocked" - the same as web's (handleSend refuses while !canSend).
         */}
-        {canSend ? (
+        {canSend || (isBlocked && !!conversationId) ? (
           <ChatComposer
             composer={composer}
             composerBottomPad={composerBottomPad}
             uploading={uploading}
             stopTyping={stopTyping}
+            blocked={!canSend}
           />
         ) : null}
       </View>

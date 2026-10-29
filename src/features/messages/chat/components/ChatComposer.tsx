@@ -12,6 +12,8 @@ interface ChatComposerProps {
   composerBottomPad: number;
   uploading: boolean;
   stopTyping: () => void;
+  /** Blocked chat: shown disabled with web's placeholder, never hidden (web parity). */
+  blocked?: boolean;
 }
 
 /** ───────── Composer ───────── */
@@ -20,6 +22,7 @@ export function ChatComposer({
   composerBottomPad,
   uploading,
   stopTyping,
+  blocked = false,
 }: Readonly<ChatComposerProps>) {
   const {
     draft,
@@ -35,6 +38,7 @@ export function ChatComposer({
   } = composer;
   // "1,850/2,000", shown only from 1,800 characters on.
   const counter = messageCounter(draft.length);
+  const locked = blocked || uploading;
 
   return (
     <View style={[styles.composerWrap, { paddingBottom: composerBottomPad }]}>
@@ -111,7 +115,7 @@ export function ChatComposer({
           style={styles.composerIconButton}
           accessibilityRole="button"
           accessibilityLabel="Attach"
-          disabled={uploading}
+          disabled={locked}
         >
           <Ionicons name="attach" size={22} color={colors.mutedText} />
         </Pressable>
@@ -120,7 +124,7 @@ export function ChatComposer({
           style={styles.composerIconButton}
           accessibilityRole="button"
           accessibilityLabel="Insert emoji"
-          disabled={uploading}
+          disabled={locked}
         >
           <Ionicons name="happy" size={22} color={colors.mutedText} />
         </Pressable>
@@ -128,19 +132,19 @@ export function ChatComposer({
           value={draft}
           onChangeText={handleDraftChange}
           onBlur={stopTyping}
-          placeholder={uploading ? "Uploading…" : "Type a message"}
+          placeholder={blocked ? "This conversation is blocked" : uploading ? "Uploading…" : "Type a message"}
           placeholderTextColor={colors.subtleText}
           style={styles.composerInput}
           multiline
-          editable={!uploading}
+          editable={!locked}
           maxLength={MESSAGE_MAX_LENGTH}
         />
         <Pressable
           onPress={() => void handleSend()}
-          disabled={uploading || (!draft.trim() && !pendingFile)}
+          disabled={locked || (!draft.trim() && !pendingFile)}
           style={[
             styles.sendButton,
-            (uploading || (!draft.trim() && !pendingFile)) && styles.sendButtonDisabled,
+            (locked || (!draft.trim() && !pendingFile)) && styles.sendButtonDisabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Send"

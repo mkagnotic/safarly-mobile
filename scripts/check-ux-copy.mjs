@@ -2396,7 +2396,7 @@ const CHECKS = [
     file: ["src/features/profile/components/AccountSecuritySettings.tsx", "src/services/i18n/translations.ts", "src/features/moderation/components/BlockedUsersSection.tsx", "src/hooks/api/useBlockedUsers.ts"],
     id: "web-security-screen",
     why: "27 Oct 2026 security flow: say other devices were signed out; keep the server's Google/Apple hint on the field; sign in again when the server had to sign this device out; sentence case like mobile, and the change page asks for the CURRENT password too; a failed Blocked users load said 'You haven't blocked anyone'.",
-    must: ["Password changed. Your other devices have been signed out.", "/Google or Apple/.test(msg) ? msg", "done?.signed_out_here", '"auth.changePasscode": "Change password",', '"auth.resetPasscodeDesc": "Enter your current password, then choose a new one.",', "Couldn't load your blocked users.", "isError: query.isError && !query.data,"],
+    must: ["You're still signed in here. Your other devices have been signed out.", "Use your new password next time you sign in.", "/Google or Apple/.test(msg) ? msg", "done?.signed_out_here", '"auth.changePasscode": "Change password",', '"auth.resetPasscodeDesc": "Enter your current password, then choose a new one.",', "Couldn't load your blocked users.", "isError: query.isError && !query.data,"],
     mustNot: ['"auth.changePasscode": "Change Password",', '"auth.resetPasscodeDesc": "Enter your new password below.",', 'toast.success("Password changed successfully")', ">Email Address<"],
   },
   {
@@ -2406,6 +2406,22 @@ const CHECKS = [
     why: "See web-security-screen and security-password-checks. Plus: mobile had NO Blocked users list - a blocked person is hidden everywhere and their chat closes, so nobody could ever be unblocked; the old Settings screen (only reachable by the 'settings' link) had four rows that did nothing and a 'Payment Methods' feature that doesn't exist; 'Manage your account credentials' was jargon.",
     must: ['navigation.navigate("BlockedUsersTab")', '<Tabs.Screen name="BlockedUsersTab" component={BlockedUsersScreen}', '<Tabs.Screen name="SettingsTab" component={SecurityScreen}', "Couldn't load your blocked users.", "loadFailed: true", "res.data?.signed_out_here", "Your other devices have been signed out.", "Your email, password, blocked users and account."],
     mustNot: ["component={SettingsScreen}", "Manage your account credentials.", "/current password|wrong|incorrect|invalid/i"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/bookings/components/HandoffPlanCard.tsx", "src/features/profile/pages/CustomerKyc.tsx", "src/features/profile/components/AccountSecuritySettings.tsx", "src/components/listing/ListingFilesField.tsx", "src/features/trips/pages/CustomerListTrip.tsx", "src/services/i18n/translations.ts", "src/features/messages/components/ChatComposer.tsx"],
+    id: "copy-parity-oct29-web",
+    why: "29 Oct 2026 cross-check (USER RULE: web, Android and iOS use identical words): the sender-only payment note said 'until delivery is confirmed' where both pay prompts say 'until you confirm delivery'; the password-changed toast differed from the app's; '10 MB' had no full stop; List Trip success had an emoji the app does not; the reset button said 'link' while the one email carries both the link (web) and the code (app). Twin: copy-parity-oct29-mobile.",
+    must: ["Your payment is held by Safarly until you confirm delivery. ", " Your payment is held by Safarly until you confirm delivery.", "This usually takes 1–2 business days, and you'll be notified once it's complete.", "You're still signed in here. Your other devices have been signed out.", "Use your new password next time you sign in.", "That's not your current password.", "Each file must be under 10 MB.", "You're all set</h2>", '"auth.sendResetLink": "Send reset email",', "This conversation is blocked"],
+    mustNot: ["held by Safarly until delivery is confirmed.", "Password changed. Your other devices have been signed out.", '"Each file must be under 10 MB",', "You're all set ✈️", '"auth.sendResetLink": "Send reset link",'],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/HandoffPlanCard.tsx", "src/features/profile/KycVerificationScreen.tsx", "src/features/profile/ChangePasswordScreen.tsx", "src/components/listing/ListingFilesField.tsx", "src/features/trips/ListTripScreen.tsx", "src/features/auth/ForgotPasswordScreen.tsx", "src/features/messages/chat/components/ChatComposer.tsx", "src/features/messages/OfferChatScreen.tsx"],
+    id: "copy-parity-oct29-mobile",
+    why: "29 Oct 2026 cross-check (USER RULE: web, Android and iOS use identical words): the KYC review line used a dash where web says ', and'; 'That's not your current password' had no full stop; a blocked chat hid the composer, where web keeps it disabled saying 'This conversation is blocked'. Twin: copy-parity-oct29-web.",
+    must: ["Your payment is held by Safarly until you confirm delivery. ", " Your payment is held by Safarly until you confirm delivery.", "This usually takes 1–2 business days, and you'll be notified once it's complete.", "You're still signed in here. Your other devices have been signed out.", "Use your new password next time you sign in.", "That's not your current password.", "Each file must be under 10 MB.", "You're all set</Text>", '"Send reset email"', 'placeholder={blocked ? "This conversation is blocked"', "canSend || (isBlocked && !!conversationId) ?", "blocked={!canSend}"],
+    mustNot: ["held by Safarly until delivery is confirmed.", "1–2 business days — you'll be notified", "\"That's not your current password\" }", "{canSend ? ( <ChatComposer"],
   },  {
     repo: "web",
     file: ["supabase/functions/user-handler/index.ts", "src/features/profile/components/DeleteAccountView.tsx", "src/features/profile/pages/CustomerPreferences.tsx", "src/lib/pushDevice.ts"],
