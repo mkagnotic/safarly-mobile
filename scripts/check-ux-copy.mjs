@@ -405,6 +405,18 @@ const CHECKS = [
     must: ["settled.status !== offer.status", "syncOfferCardStatus(supabase, offer.id"],
     mustNot: [],
   },
+  {
+    repo: "web",
+    file: ["supabase/functions/message-handler/lib/contactShare.ts", "supabase/functions/message-handler/routes/messages.ts"],
+    id: "chat-phone-number-refusal",
+    why: "E2E AJ5 (29 Oct 2026): the US-only phone regex let '+91 98765 43210' through and its refusal read like an error. Any common format is refused with friendly words both clients print as is; email / 'pay outside the app' is sent but recorded for admins.",
+    must: [
+      "For your safety, please don't share phone numbers in chat. Keep talking here so your booking stays protected.",
+      "if (containsPhoneNumber(text)) return errorResponse('VALIDATION_ERROR', PHONE_NOT_ALLOWED);",
+      "recordContactFlag(supabase, { messageId: inserted.id, conversationId: convId, senderId, flags })",
+    ],
+    mustNot: ["Sharing phone numbers is not allowed in messages"],
+  },
   // ------------------------- the parcel review names the person, not just the role
   {
     repo: "web",
@@ -2167,6 +2179,14 @@ const CHECKS = [
     why: "27 Oct 2026 login flow test (LI-05): tokens are verified locally, so a deleted account's other devices kept a working token for up to an hour and could still post, message and book. Every write already reads the profile for suspension; it now refuses a deleted account too.",
     must: ["if (row?.deleted_at) return { code: 'UNAUTHENTICATED', message: 'This account has been deleted.' };", ".select('is_suspended, deleted_at')", "const refused = await checkSuspended(result.user!.id, { ignoreSuspension: allowWhileSuspended });", "if ((mePayload.profile as { deleted_at?: string | null } | null | undefined)?.deleted_at) {"],
     mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/auth.ts",
+    id: "deleted-account-cannot-read",
+    why: "E2E AK2 (29 Oct 2026): after the carrier deleted their account, their old token (verified locally, valid up to an hour) still opened the deal's travel document - reads skipped the account row. requireAuth now reads it on every method; suspended accounts can still read.",
+    must: ["const allowWhileSuspended = suspendedMayProceed(method, new URL(req.url).pathname);"],
+    mustNot: ["if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {"],
   },
   {
     repo: "mobile",
