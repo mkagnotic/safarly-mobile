@@ -2250,6 +2250,22 @@ const CHECKS = [
     mustNot: [],
   },
   {
+    repo: "web",
+    file: ["supabase/functions/user-handler/index.ts", "supabase/functions/_shared/rateLimit.ts"],
+    id: "push-token-storm-server-guard",
+    why: "29 Oct 2026 prod incident: app 1.1.1 looped POST /me/push-token ~4/s per phone; each call did a delete + upsert and starved user-handler (Profile / My Travels / Chat stopped loading). A repeat (same user + token, 10 min) is answered from memory, and >30 calls in 10 min are refused before auth.",
+    must: ["if (recentlyRegistered(pushKey)) return successResponse({ registered: true });", "{ name: 'push-token-register', method: 'POST', path: re('me/push-token'), limit: 30, windowMs: 10 * MIN },"],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/services/notifications/push.ts", "src/services/api/client.ts"],
+    id: "mobile-no-push-token-loop",
+    why: "See push-token-storm-server-guard (web repo): expo-notifications emits 'token changed' whenever the app fetches the token, and the listener re-registered on every event - an endless loop. The listener ignores its own echo; every JSON request also passes the app-wide runaway-loop breaker.",
+    must: ["if (registering) return registering;", "!shouldReregisterOnTokenEvent({", "if (!allowCall(method, path)) {"],
+    mustNot: ["addPushTokenListener(() => {"],
+  },
+  {
     repo: "mobile",
     file: ["src/features/auth/LoginScreen.tsx", "src/services/auth/authErrors.ts"],
     id: "mobile-unconfirmed-login-opens-the-code-step",
