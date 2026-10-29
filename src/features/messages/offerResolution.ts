@@ -25,12 +25,16 @@ export interface OfferCardActions {
 export interface OfferRenderState {
   /** Effective status after applying supersession + accept/reject overrides. */
   status: OfferStatus;
+  /** The currency to show the card in - its deal's, see `offerDisplayCurrency` (AN14). */
+  currency?: string;
   actions?: OfferCardActions;
 }
 
 export interface ResolvedOffers {
   /** messageId -> effective status to render that offer_card with. */
   statusById: Map<string, OfferStatus>;
+  /** messageId -> the currency to show that offer_card in (its deal's; AN14). */
+  currencyById: Map<string, string>;
   /** The single live (latest + still open) offer, or null. */
   live: {
     messageId: string;
@@ -50,6 +54,7 @@ export interface ResolvedOffers {
 export function resolveOffers(
   messages: OfferResolutionMessage[],
   currentUserId: string | null,
+  dealCurrencies: ReadonlyMap<string, string> = new Map(),
 ): ResolvedOffers {
   const override = new Map<string, "accepted" | "rejected">();
   const cards: { msg: OfferResolutionMessage; payload: OfferCardPayload; cr: string }[] = [];
@@ -73,6 +78,7 @@ export function resolveOffers(
   }
 
   const statusById = new Map<string, OfferStatus>();
+  const currencyById = new Map<string, string>();
   let live: ResolvedOffers["live"] = null;
 
   for (const { msg, payload, cr } of cards) {
@@ -80,19 +86,21 @@ export function resolveOffers(
     const term = override.get(payload.offer_id);
     const status: OfferStatus = term ?? (isLatest ? payload.status ?? "open" : "superseded");
     statusById.set(msg.id, status);
+    const currency = offerDisplayCurrency(payload, dealCurrencies);
+    currencyById.set(msg.id, currency);
     if (isLatest && status === "open") {
       live = {
         messageId: msg.id,
         offerId: payload.offer_id,
         carrierRequestId: payload.carrier_request_id,
         amount: payload.amount,
-        currency: payload.currency,
+        currency,
         mine: msg.sender_id === currentUserId || msg.from_user_id === currentUserId,
       };
     }
   }
 
-  return { statusById, live };
+  return { statusById, currencyById, live };
 }
 
 /**
@@ -135,4 +143,44 @@ export function offerCurrencyNote(mode: "seed" | "accept" | "counter" | "revise"
 export function ownOfferWaitKind(waitingOnPayouts: boolean, viewerIsCarrier: boolean): "setup" | "payouts" | "plain" {
   if (!waitingOnPayouts) return "plain";
   return viewerIsCarrier ? "setup" : "payouts";
+}
+
+/** Just what `offerDisplayCurrency` reads off a deal (`ActiveDeal` fits). */
+export interface DealCurrencySource {
+  carrier_request_id?: string | null;
+  pricing?: { currency?: string | null } | null;
+  offer?: { currency?: string | null } | null;
+}
+
+/**
+ * carrier_request_id -> the deal's currency, for every deal the thread knows.
+ *
+ * ⚠️ AN14 (29 Oct 2026): offers made before 22 Oct 2026 were all stored as USD,
+ * rupee deals included, so a ₹ deal's card read "$1,400.00". The server already
+ * answers in the parcel's currency (`activeDeal.pricing.currency`, and
+ * `offer.currency` beside it); the card's own frozen label must not win over it.
+ * Same rule on web (`lib/offerCurrency.ts`).
+ */
+export function dealCurrencyMap(
+  deals: ReadonlyArray<DealCurrencySource | null | undefined>,
+): Map<string, "USD" | "INR"> {
+  const map = new Map<string, "USD" | "INR">();
+  for (const d of deals) {
+    const crId = d?.carrier_request_id;
+    const cur = d?.pricing?.currency || d?.offer?.currency;
+    if (crId && cur && !map.has(crId)) map.set(crId, offerCurrencyCode(cur));
+  }
+  return map;
+}
+
+/**
+ * The currency an offer is SHOWN in: its deal's (locked once offers exist), and the
+ * offer's own stored label only when the thread knows nothing about that deal.
+ */
+export function offerDisplayCurrency(
+  offer: { carrier_request_id?: string | null; currency?: string | null },
+  dealCurrencies: ReadonlyMap<string, string>,
+): string {
+  const fromDeal = offer.carrier_request_id ? dealCurrencies.get(offer.carrier_request_id) : undefined;
+  return fromDeal || offer.currency || "USD";
 }

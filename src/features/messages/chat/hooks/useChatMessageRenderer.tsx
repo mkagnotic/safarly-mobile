@@ -55,6 +55,7 @@ export function useChatMessageRenderer({
         const actionable = !!live && live.messageId === item.id && !mine && supportsOffers;
         offer = {
           status,
+          currency: offerState.currencyById.get(item.id),
           actions:
             actionable && live
               ? {

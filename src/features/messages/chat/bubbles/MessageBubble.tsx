@@ -64,6 +64,7 @@ export function MessageBubble({
     return (
       <OfferCardBubble
         payload={p}
+        currency={offer?.currency ?? p.currency}
         mine={mine}
         time={time}
         status={offer?.status ?? p.status ?? "open"}

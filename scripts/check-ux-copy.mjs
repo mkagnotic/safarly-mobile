@@ -2617,6 +2617,23 @@ const CHECKS = [
     ],
     mustNot: ["if (url) await WebBrowser.openBrowserAsync(url);"],
   },
+  // ------------------------------------------- offer currency follows the deal (AN14, 29 Oct 2026)
+  {
+    repo: "web",
+    file: ["src/features/messages/lib/offerCurrency.ts", "src/features/messages/hooks/useOfferTimeline.ts", "src/features/messages/components/ThreadMessages.tsx", "src/features/messages/pages/CustomerMessages.tsx"],
+    id: "offer-currency-follows-the-deal",
+    why: "AN14, 29 Oct 2026: offers made before 22 Oct 2026 were stored as USD on rupee deals too, and the chat printed the card's own label - '$1,400.00' on a ₹ deal. The deal's currency (activeDeal.pricing.currency, the parcel's) wins for the offer bar and every offer card; the stored label only when the deal is unknown. Same rule on mobile (offerResolution.ts).",
+    must: ["const fromDeal = offer.carrier_request_id ? dealCurrencies.get(offer.carrier_request_id) : undefined;", "return fromDeal || offer.currency || \"USD\";", "currency: offerDisplayCurrency(payload, dealCurrencies),", "const shownCurrency = dealCurrencies ? offerDisplayCurrency(payload, dealCurrencies) : payload.currency;", "dealCurrencies={dealCurrencies}"],
+    mustNot: ["currency: payload.currency || \"USD\","],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/offerResolution.ts", "src/features/messages/OfferChatScreen.tsx", "src/features/messages/chat/hooks/useChatMessageRenderer.tsx", "src/features/messages/chat/bubbles/MessageBubble.tsx", "src/features/messages/chat/bubbles/OfferCardBubble.tsx"],
+    id: "mobile-offer-currency-follows-the-deal",
+    why: "See offer-currency-follows-the-deal (web repo): a ₹ deal's pre-22-Oct offer card and offer bar read '$1,400.00'.",
+    must: ["const fromDeal = offer.carrier_request_id ? dealCurrencies.get(offer.carrier_request_id) : undefined;", "return fromDeal || offer.currency || \"USD\";", "const currency = offerDisplayCurrency(payload, dealCurrencies);", "resolveOffers(messages, user?.id ?? null, dealCurrencies)", "currency: offerState.currencyById.get(item.id),", "currency={offer?.currency ?? p.currency}", "formatMoney(payload.amount, currency ?? payload.currency)"],
+    mustNot: ["currency: payload.currency,", "formatMoney(payload.amount, payload.currency)"],
+  },
   // ------------------------------------------- receipts + payments exports (29 Oct 2026)
   {
     repo: "web",

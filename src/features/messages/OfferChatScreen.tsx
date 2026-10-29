@@ -26,7 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
 import { useOffers } from "@/hooks/api/useOffers";
-import { resolveOffers } from "@/features/messages/offerResolution";
+import { dealCurrencyMap, resolveOffers } from "@/features/messages/offerResolution";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { messagesApi } from "@/services/api";
 import { colors } from "@/theme/colors";
@@ -135,9 +135,15 @@ export function OfferChatScreen() {
   // ───────── In-chat offers ─────────
   const { pending: offerPending, seedOffer, postOffer, acceptOffer, rejectOffer } =
     useOffers(conversationId);
+  // Each deal's currency outranks an offer card's stored label: offers made before
+  // 22 Oct 2026 were stored as USD on rupee deals too (AN14, same as web).
+  const dealCurrencies = useMemo(
+    () => dealCurrencyMap([activeDeal, ...(deals ?? []).map((d) => d.active_deal)]),
+    [activeDeal, deals],
+  );
   const offerState = useMemo(
-    () => resolveOffers(messages, user?.id ?? null),
-    [messages, user?.id],
+    () => resolveOffers(messages, user?.id ?? null, dealCurrencies),
+    [messages, user?.id, dealCurrencies],
   );
   /**
    * Offers this screen has already settled, kept until the server's own
