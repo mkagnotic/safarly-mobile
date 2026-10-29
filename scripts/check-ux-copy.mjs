@@ -1173,10 +1173,26 @@ const CHECKS = [
   },
   {
     repo: "web",
+    file: "supabase/functions/scheduled-payment-expiry/index.ts",
+    id: "unpaid-return-same-from-both-sweeps",
+    why: "E2E AE8: the 5-minute payment-expiry job (which usually expires the grace first) opened the return on a held parcel but posted no chat line, never asked the sender where it should go, and told no admin - only the 15-minute timeout job did. Both jobs now use _shared/unpaidReturnNotices.ts.",
+    must: ["announceReturn(supabase, r)", "UNPAID_RETURN.chatEvent", "unpaidReturnAdminKey(row.booking_id)"],
+    mustNot: [],
+  },
+  {
+    repo: "web",
+    file: "supabase/functions/_shared/unpaidReturnNotices.ts",
+    id: "unpaid-return-wording",
+    why: "E2E AE8: a held parcel whose payment lapsed is coming back - never 're-listed' - and the sender is asked where it should go.",
+    must: ["title: 'Please provide return instructions'", "Tell your carrier where to send it within 72 hours."],
+    mustNot: ["re-listed"],
+  },
+  {
+    repo: "web",
     file: "supabase/functions/_shared/dealTermsChange.ts",
     id: "trip-capacity-change-wording",
     why: "E2E AF5: the sender's chat line for a capacity cut names the new number and asks them to check the parcel still fits.",
-    must: ["changed their luggage capacity to ${kg} kg. Check your parcel still fits."],
+    must: ["changed their luggage capacity to ${kg} kg. Check the parcel still fits."],
     mustNot: [],
   },
   {
