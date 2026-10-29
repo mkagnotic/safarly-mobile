@@ -87,7 +87,7 @@ export function ChangePasswordScreen() {
       }
       showToast({
         title: "Password changed",
-        // The server now ends every other session (27 Oct 2026): say so.
+        // The server now ends every other session (27 Oct 2026): say so
         message: res.data?.signed_out_others
           ? "You're still signed in here. Your other devices have been signed out."
           : "Use your new password next time you sign in.",

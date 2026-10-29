@@ -104,6 +104,7 @@ function useMatchCatchUp(
       await rememberPrompted(userId, fresh);
       showToast({
         title: MATCH_PROMPT_COPY.title,
+        // user-facing-ok: fixed app copy, not an error message
         message: MATCH_PROMPT_COPY.message,
         variant: "info",
         duration: 8000,
