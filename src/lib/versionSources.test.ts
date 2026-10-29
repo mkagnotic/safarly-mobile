@@ -33,8 +33,8 @@ import { describe, test } from "node:test";
  *             app.json ios.buildNumber (a local Mac/Xcode build reads that).
  *             yyyymmddNN stays under Play's 2,100,000,000 versionCode cap
  *             until 2100 and only ever grows. Every release raises BOTH.
- *   EAS cloud builds use appVersionSource "remote" + autoIncrement, so they
- *   take EAS's own counter, not these files.
+ *   eas.json uses appVersionSource "local" with no autoIncrement, so EAS
+ *   (cloud or --local) also takes these files' numbers, never its own counter.
  */
 
 const appJson = JSON.parse(readFileSync("app.json", "utf8")) as {
@@ -68,5 +68,16 @@ describe("the app has exactly one version number", () => {
     assert.ok(Number(code) <= 2_100_000_000, "versionCode is above Google Play's cap");
     assert.equal(String(appJson.expo.android?.versionCode), code, "app.json android.versionCode must equal build.gradle versionCode");
     assert.equal(appJson.expo.ios?.buildNumber, code, "app.json ios.buildNumber must equal build.gradle versionCode");
+  });
+});
+
+describe("EAS builds use the numbers in this repo", () => {
+  test("appVersionSource is local and production does not auto-increment", () => {
+    const eas = JSON.parse(readFileSync("eas.json", "utf8")) as {
+      cli?: { appVersionSource?: string };
+      build?: { production?: { autoIncrement?: unknown } };
+    };
+    assert.equal(eas.cli?.appVersionSource, "local");
+    assert.equal(eas.build?.production?.autoIncrement, undefined);
   });
 });
