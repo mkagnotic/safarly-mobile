@@ -63,7 +63,7 @@ export function TripAvailabilityToggle({ trip, onChanged }: Readonly<TripAvailab
       showToast({
         variant: "success",
         title: locked ? "Trip reopened for matches" : "Trip locked",
-        message: locked ? undefined : "No new senders can match with it.",
+        message: locked ? undefined : "No new receivers can match with it.",
       });
       onChanged?.();
     } catch (err) {
@@ -128,8 +128,8 @@ export function TripAvailabilityToggle({ trip, onChanged }: Readonly<TripAvailab
 
       <Text style={styles.hint}>
         {locked
-          ? `${reason ? `${LOCK_REASON_TEXT[reason] ?? ""} ` : ""}It won't appear in search or auto-match and no new senders can start a chat. Deliveries already under way are unaffected.`
-          : "Senders can find this trip in search. Lock it any time you don't want more parcels - you'll still complete the deliveries you've already taken on."}
+          ? `${reason ? `${LOCK_REASON_TEXT[reason] ?? ""} ` : ""}It won't appear in search or auto-match and no new receivers can start a chat. Deliveries already under way are unaffected.`
+          : "Receivers can find this trip in search. Lock it any time you don't want more parcels - you'll still complete the deliveries you've already taken on."}
       </Text>
       {locked && !canReopen ? (
         <Text style={styles.hintStrong}>This lock is automatic, so it can't be undone here.</Text>

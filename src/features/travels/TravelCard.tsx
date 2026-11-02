@@ -159,7 +159,7 @@ export const TravelCard = memo(function TravelCard({
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
         (type === "flight"
-          ? "Your trip will be removed from search and any pending requests from senders will be declined. This can't be undone."
+          ? "Your trip will be removed from search and any pending requests from receivers will be declined. This can't be undone."
           : "Carriers won't see it any more, and any match or offer on it will be closed. This can't be undone."),
       actions: [
         { text: "Keep it", style: "cancel" },

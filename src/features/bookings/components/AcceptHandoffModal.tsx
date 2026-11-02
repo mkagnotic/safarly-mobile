@@ -50,12 +50,12 @@ export function AcceptHandoffModal({
             from the moment you accept.
           </Text>
           <Text style={styles.modalBullet}>
-            <Text style={styles.modalBulletStrong}>Your sender is asked to pay next</Text> — within
+            <Text style={styles.modalBulletStrong}>Your receiver is asked to pay next</Text> — within
             48 hours, plus a 24-hour grace period. You are accepting before the money is collected.
           </Text>
           <Text style={styles.modalBullet}>
             <Text style={styles.modalBulletStrong}>The deal can no longer time out.</Text>{" "}
-            If you end it after this, the parcel has to go back — and once your sender has paid, that
+            If you end it after this, the parcel has to go back — and once your receiver has paid, that
             costs you a cash penalty and a strike.
           </Text>
           <Text style={styles.modalBullet}>

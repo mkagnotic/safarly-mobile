@@ -107,7 +107,7 @@ export function JourneyActionsCard({
           </Text>
           <Text style={styles.body}>
             {isReady
-              ? "Your sender knows you're packed and travelling. Tap start when you actually set off so they can follow along."
+              ? "Your receiver knows you're packed and travelling. Tap start when you actually set off so they can follow along."
               : "Payment is secured and you have the parcel. Confirm it's packed, your documents are ready, and you're still travelling as planned."}
           </Text>
           {!isReady ? (
@@ -241,7 +241,7 @@ export function JourneyActionsCard({
             error={dateError}
           />
           <AppInput
-            label="Anything your sender should know (optional)"
+            label="Anything your receiver should know (optional)"
             placeholder="Add a short note"
             value={note}
             onChangeText={setNote}

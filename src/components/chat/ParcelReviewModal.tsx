@@ -379,8 +379,8 @@ function CarrierView({
   // reader is always the carrier and the other party is always the sender. Naming
   // them cannot be misread as naming the reader - the trap that keeps the price line
   // role-neutral. Kept in step with web `ChatParcelReviewPrompt`.
-  const who = counterpartName?.trim() || "the sender";
-  const Who = counterpartName?.trim() || "The sender";
+  const who = counterpartName?.trim() || "the receiver";
+  const Who = counterpartName?.trim() || "The receiver";
 
   if (review.status === "none" || review.status === "rejected") {
     return (
@@ -435,7 +435,7 @@ function CarrierView({
             onChangeText={setNote}
             multiline
             maxLength={500}
-            placeholder="Add a note for the sender (optional)"
+            placeholder="Add a note for the receiver (optional)"
             placeholderTextColor={colors.subtleText}
             style={styles.noteInput}
           />

@@ -114,8 +114,8 @@ export function RejectHandoffModal({
         <Text style={sharedStyles.modalBody}>
           {copy.body}{" "}
           {returnEligible
-            ? "Because this is a returnable order, the sender can send it back to the seller."
-            : "The sender then arranges collection of the parcel from you."}{" "}
+            ? "Because this is a returnable order, the receiver can send it back to the seller."
+            : "The receiver then arranges collection of the parcel from you."}{" "}
           Tell us what's wrong so we can keep records.
         </Text>
         <TextInput
@@ -154,15 +154,15 @@ export function RejectHandoffModal({
             style={[styles.returnWhereOption, !withCarrier && styles.returnWhereOptionActive]}
             accessibilityRole="radio"
             accessibilityState={{ selected: !withCarrier }}
-            accessibilityLabel="The sender has the parcel"
+            accessibilityLabel="The receiver has the parcel"
           >
-            <Text style={styles.returnWhereTitle}>The sender has it</Text>
+            <Text style={styles.returnWhereTitle}>The receiver has it</Text>
             <Text style={styles.returnWhereHint}>I declined at the meetup — nothing to send back.</Text>
           </Pressable>
         </View>
         <Text style={sharedStyles.modalHelper}>
           {withCarrier
-            ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
+            ? "The receiver will be asked where to send it, and you'll confirm once it's on its way."
             : "Nothing to return — the booking closes as soon as you submit."}
         </Text>
 

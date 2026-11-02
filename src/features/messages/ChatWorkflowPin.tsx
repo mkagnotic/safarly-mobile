@@ -24,17 +24,17 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   accept_match: { icon: "checkmark-circle-outline", tone: "good", blurb: "They asked to match — accept to move forward." },
   await_match_accept: { icon: "hourglass-outline", tone: "neutral", blurb: "Waiting for them to accept your match request." },
   // Travel document
-  upload_travel_doc: { icon: "document-attach-outline", tone: "primary", blurb: "Upload your travel document so the sender can verify the trip." },
+  upload_travel_doc: { icon: "document-attach-outline", tone: "primary", blurb: "Upload your travel document so the receiver can verify the trip." },
   review_travel_doc: { icon: "shield-checkmark-outline", tone: "primary", blurb: "The traveler uploaded their travel document — review it." },
   await_travel_doc: { icon: "time-outline", tone: "neutral", blurb: "The traveler needs to upload a boarding pass or flight ticket before you can pay." },
   await_travel_doc_reupload: { icon: "time-outline", tone: "neutral", blurb: "You asked for a new document. Waiting for the traveler to upload it." },
-  await_travel_doc_review: { icon: "time-outline", tone: "neutral", blurb: "Your travel document is uploaded. The sender is checking it — you'll be notified once it's verified." },
+  await_travel_doc_review: { icon: "time-outline", tone: "neutral", blurb: "Your travel document is uploaded. The receiver is checking it — you'll be notified once it's verified." },
   await_admin_review: { icon: "time-outline", tone: "neutral", blurb: "An admin is reviewing the travel document." },
   // Parcel photos
   upload_parcel_photos: { icon: "images-outline", tone: "primary", blurb: "Add parcel photos so the carrier can review what they'll carry." },
-  review_parcel_photos: { icon: "eye-outline", tone: "primary", blurb: "The sender added parcel photos — review and approve them." },
-  await_parcel_photos: { icon: "time-outline", tone: "neutral", blurb: "The sender needs to add parcel photos before you can review them." },
-  await_parcel_update: { icon: "time-outline", tone: "neutral", blurb: "You asked for changes. Waiting for the sender to update the parcel photos." },
+  review_parcel_photos: { icon: "eye-outline", tone: "primary", blurb: "The receiver added parcel photos — review and approve them." },
+  await_parcel_photos: { icon: "time-outline", tone: "neutral", blurb: "The receiver needs to add parcel photos before you can review them." },
+  await_parcel_update: { icon: "time-outline", tone: "neutral", blurb: "You asked for changes. Waiting for the receiver to update the parcel photos." },
   await_parcel_review: { icon: "time-outline", tone: "neutral", blurb: "Your parcel photos are uploaded. The carrier is reviewing them." },
   // Offer
   make_offer: { icon: "pricetag-outline", tone: "primary", blurb: "Verification is done — send a delivery-fee offer." },
@@ -65,7 +65,7 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   set_handoff_plan: { icon: "location-outline", tone: "primary", blurb: `${P("handoff")}tell them how the parcel reaches you - couriered to your local address, or in person. No code at this step.` },
   await_handoff_plan: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for your carrier to share where to send the parcel.` },
   mark_handoff_sent: { icon: "send-outline", tone: "primary", blurb: `${P("handoff")}send the parcel to the address your carrier shared, then mark it as sent.` },
-  await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for the sender to send the parcel to you.` },
+  await_handoff_dispatch: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}waiting for the receiver to send the parcel to you.` },
   await_handoff_inspection: { icon: "search-outline", tone: "neutral", blurb: `${P("handoff")}your carrier is checking the parcel over before accepting it.` },
   accept_handoff: { icon: "home-outline", tone: "primary", blurb: `${P("handoff")}inspect the parcel - contents, nothing restricted, fits your baggage - then accept or decline. No code at this step.` },
   await_handoff: { icon: "hourglass-outline", tone: "neutral", blurb: `${P("handoff")}get the parcel to your carrier - courier it to their local address or hand it over. They inspect it, then accept.` },
@@ -76,8 +76,8 @@ const CTA_META: Record<string, { icon: IoniconName; tone: Tone; blurb: string }>
   // Parcel hand-back: the deal is cancelled and refunded, but a real parcel is
   // still with the carrier. Deliberately actionable, not a terminal notice.
   set_return_resolution: { icon: "arrow-undo-outline", tone: "warn", blurb: "The parcel is still with your carrier. Choose where it goes: back to the seller, posted to you, or collected by you." },
-  await_return_resolution: { icon: "hourglass-outline", tone: "warn", blurb: "You still have the parcel. The sender is choosing where it goes — back to the seller, posted to them, or collected. Keep it safe until then." },
-  confirm_return_sent: { icon: "arrow-undo-outline", tone: "warn", blurb: "Send the parcel back as the sender asked, then confirm it here to close this off." },
+  await_return_resolution: { icon: "hourglass-outline", tone: "warn", blurb: "You still have the parcel. The receiver is choosing where it goes — back to the seller, posted to them, or collected. Keep it safe until then." },
+  confirm_return_sent: { icon: "arrow-undo-outline", tone: "warn", blurb: "Send the parcel back as the receiver asked, then confirm it here to close this off." },
   await_return_sent: { icon: "hourglass-outline", tone: "warn", blurb: "Waiting for the carrier to confirm the parcel is on its way back." },
   // Terminal
   completed: { icon: "checkmark-done-outline", tone: "good", blurb: "Delivered — rate this delivery to finish." },
@@ -278,14 +278,14 @@ function reviewerCta(cta: WorkflowView["cta"], deal: ActiveDeal | null | undefin
   // waiting for review must never offer "Upload" again. The server answers this
   // too now; this keeps the app right against an older server.
   if (cta.code === "upload_travel_doc" && deal?.travel_doc_status === "pending") {
-    return waiting("await_travel_doc_review", "Waiting for the sender to verify your travel document");
+    return waiting("await_travel_doc_review", "Waiting for the receiver to verify your travel document");
   }
   if (cta.code === "upload_parcel_photos" && deal?.parcel_review_status === "pending") {
     return waiting("await_parcel_review", "Waiting for the carrier to review your parcel photos");
   }
   if (cta.code === "review_parcel_photos") {
     if (deal?.parcel_review_status === "none") return waiting("await_parcel_photos", "Awaiting parcel photos");
-    if (deal?.parcel_review_status === "rejected") return waiting("await_parcel_update", "Waiting for the sender to update the parcel");
+    if (deal?.parcel_review_status === "rejected") return waiting("await_parcel_update", "Waiting for the receiver to update the parcel");
   }
   // Once rated, the bar says so instead of asking again (client, 25 Oct 2026).
   if (cta.code === "completed" && deal?.viewer_has_rated) {

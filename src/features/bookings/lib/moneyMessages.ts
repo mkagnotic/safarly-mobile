@@ -14,7 +14,7 @@ export function cancelMoneyLine(
   booking: { handoff_accepted_at?: string | null; payment_made?: boolean | null },
   isSender: boolean,
 ): string {
-  const refund = isSender ? "You'll be refunded in full." : "The sender will be refunded in full.";
+  const refund = isSender ? "You'll be refunded in full." : "The receiver will be refunded in full.";
   if (booking.handoff_accepted_at) {
     return booking.payment_made
       ? `The parcel is already with the carrier, so it will need to come back. ${refund}`
@@ -40,8 +40,8 @@ export function postPossessionResult(
     penalty > 0 ? `${formatPenalty(penalty)} penalty will be taken from your next payout.` : "No cash penalty.",
     data?.waiver_eligible ? "A waiver request is open." : null,
     Number(data?.refund_amount ?? 0) > 0
-      ? "The sender has been refunded in full."
-      : "The sender hadn't paid yet, so they weren't charged.",
+      ? "The receiver has been refunded in full."
+      : "The receiver hadn't paid yet, so they weren't charged.",
   ];
   return { title: "Delivery cancelled", message: parts.filter(Boolean).join(" ") };
 }
@@ -51,19 +51,19 @@ export function declineCopy(dispatched: boolean): { title: string; body: string 
   return dispatched
     ? {
         title: "Decline this parcel at handoff",
-        body: "Use this when the parcel has reached you but you can't carry it — unsafe, oversized, or not what the listing described. The booking ends with no penalty to you, and your sender won't be charged.",
+        body: "Use this when the parcel has reached you but you can't carry it — unsafe, oversized, or not what the listing described. The booking ends with no penalty to you, and your receiver won't be charged.",
       }
     : {
         title: "Cancel this delivery before the parcel is sent",
-        body: "Use this when you can no longer do this delivery — your trip changed, or you can't take the parcel after all. The booking ends with no penalty to you, and your sender won't be charged.",
+        body: "Use this when you can no longer do this delivery — your trip changed, or you can't take the parcel after all. The booking ends with no penalty to you, and your receiver won't be charged.",
       };
 }
 
 /** Toast after a decline: if the carrier still has it, the deal isn't over. */
 export function declineToast(parcelWithCarrier: boolean): string {
   return parcelWithCarrier
-    ? "Parcel declined — your sender will tell you where to send it back"
-    : "Parcel declined — your sender has been notified";
+    ? "Parcel declined — your receiver will tell you where to send it back"
+    : "Parcel declined — your receiver has been notified";
 }
 
 /** Toast after the sender picks where the parcel goes back to. */

@@ -275,8 +275,8 @@ export function PayBookingScreen() {
       ) : !isSender ? (
         <Card style={styles.panel}>
           <Ionicons name="lock-closed-outline" size={34} color={colors.mutedText} />
-          <Text style={styles.panelTitle}>Only the sender can pay</Text>
-          <Text style={styles.panelBody}>This booking is paid by the parcel sender.</Text>
+          <Text style={styles.panelTitle}>Only the receiver can pay</Text>
+          <Text style={styles.panelBody}>This booking is paid by the receiver.</Text>
           <AppButton label="Go back" onPress={goBack} style={styles.panelButton} />
         </Card>
       ) : expired ? (

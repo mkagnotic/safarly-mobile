@@ -159,7 +159,7 @@ function SenderCard({ sender }: Readonly<{ sender: NonNullable<Parcel["sender"]>
         <Text style={styles.senderName} numberOfLines={2}>
           {sender.name}
         </Text>
-        <Text style={styles.senderRole}>Sender</Text>
+        <Text style={styles.senderRole}>Receiver</Text>
       </View>
     </Card>
   );
@@ -408,10 +408,10 @@ export function ParcelDetailsScreen() {
           style={styles.messageButton}
           onPress={handleMessageSender}
           accessibilityRole="button"
-          accessibilityLabel="Message Sender"
+          accessibilityLabel="Message Receiver"
         >
           <Ionicons name="chatbubble-ellipses" size={16} color={colors.text} />
-          <Text style={styles.messageButtonText}>Message Sender</Text>
+          <Text style={styles.messageButtonText}>Message Receiver</Text>
         </Pressable>
       ) : null}
 

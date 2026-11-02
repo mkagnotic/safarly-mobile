@@ -69,9 +69,9 @@ const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
 // arrange collection from the carrier" (a label lower-cased into a sentence).
 const CARRIER_NEXT: Record<ReturnResolution, string> = {
   return_to_seller: "Post the parcel to the seller's return address below, then confirm it here.",
-  return_to_sender: "Post the parcel to the sender's address below, then confirm it here.",
-  sender_collects: "The sender is arranging collection. Once you've handed the parcel over, confirm it here.",
-  sender_has_parcel: "The sender says they already have the parcel. Confirm it here once that's right.",
+  return_to_sender: "Post the parcel to the receiver's address below, then confirm it here.",
+  sender_collects: "The receiver is arranging collection. Once you've handed the parcel over, confirm it here.",
+  sender_has_parcel: "The receiver says they already have the parcel. Confirm it here once that's right.",
 };
 const SENDER_ASKED: Record<ReturnResolution, string> = {
   return_to_seller: "You asked them to send it back to the seller.",
@@ -106,19 +106,19 @@ function liabilityLine(
     case "carrier_declined":
       return youPay
         ? "The parcel wasn't what your carrier agreed to carry, so the return postage is yours."
-        : "The parcel wasn't what you agreed to carry, so the sender covers the return postage.";
+        : "The parcel wasn't what you agreed to carry, so the receiver covers the return postage.";
     case "sender_unpaid":
       return youPay
         ? "Payment wasn't completed, so the return postage is yours."
-        : "The sender didn't complete payment, so they cover the return postage.";
+        : "The receiver didn't complete payment, so they cover the return postage.";
     case "sender_cancelled":
       return youPay
         ? "You called the delivery off, so the return postage is yours."
-        : "The sender called the delivery off, so they cover the return postage.";
+        : "The receiver called the delivery off, so they cover the return postage.";
     case "no_fault":
       return youPay
         ? "Neither side caused this, so the return postage is yours — it's still your parcel."
-        : "Neither side caused this, so the sender covers the return postage.";
+        : "Neither side caused this, so the receiver covers the return postage.";
     default:
       return youPay ? "The return postage is yours." : "The other side covers the return postage.";
   }
@@ -178,7 +178,7 @@ export function ParcelReturnCard({
 
   const isCarrier = role === "carrier";
   const carrierName = booking.carrier?.name || "your carrier";
-  const senderName = booking.sender?.name || "the sender";
+  const senderName = booking.sender?.name || "the receiver";
 
   const liability = liabilityLine(booking.return_cause, booking.return_shipping_payer, role);
 
@@ -291,7 +291,7 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(
           resolution === "sender_has_parcel"
-            ? "Closed — the parcel never left the sender"
+            ? "Closed — the parcel stayed with the receiver"
             : receivedAt
               ? "Returned safely — this delivery is closed"
               : "The parcel is on its way back",
@@ -440,7 +440,7 @@ export function ParcelReturnCard({
       <View style={styles.card}>
         {header(`You still have the parcel — ${senderName} is deciding where it goes`)}
         <Text style={styles.body}>
-          The booking is closed, but the parcel is still with you. {booking.sender?.name || "The sender"} is choosing
+          The booking is closed, but the parcel is still with you. {booking.sender?.name || "The receiver"} is choosing
           whether it goes back to the seller or they arrange collection. You'll get a
           notification when they choose — keep it safe until then.
         </Text>

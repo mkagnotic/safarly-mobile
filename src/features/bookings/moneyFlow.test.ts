@@ -28,7 +28,7 @@ test("cancel dialog money line: possession first, then paid, else nobody charged
     "The parcel is already with the carrier, so it will need to come back. Nobody has been charged.",
   );
   assert.equal(cancelMoneyLine({ payment_made: true }, true), "You'll be refunded in full.");
-  assert.equal(cancelMoneyLine({ payment_made: true }, false), "The sender will be refunded in full.");
+  assert.equal(cancelMoneyLine({ payment_made: true }, false), "The receiver will be refunded in full.");
   assert.equal(cancelMoneyLine({}, true), "Nobody has been charged.");
 });
 
@@ -43,11 +43,11 @@ test("post-possession cancel: penalty from next payout, waiver, refund only if p
   const fmt = (n: number) => `$${n}`;
   assert.deepEqual(postPossessionResult({ penalty_amount: 5, refund_amount: 50, waiver_eligible: true }, fmt), {
     title: "Delivery cancelled",
-    message: "$5 penalty will be taken from your next payout. A waiver request is open. The sender has been refunded in full.",
+    message: "$5 penalty will be taken from your next payout. A waiver request is open. The receiver has been refunded in full.",
   });
   assert.deepEqual(postPossessionResult({ penalty_amount: 0, refund_amount: 0 }, fmt), {
     title: "Delivery cancelled",
-    message: "No cash penalty. The sender hadn't paid yet, so they weren't charged.",
+    message: "No cash penalty. The receiver hadn't paid yet, so they weren't charged.",
   });
 });
 
@@ -55,8 +55,8 @@ test("decline dialog and toast depend on dispatch / where the parcel is", () => 
   assert.equal(declineCopy(true).title, "Decline this parcel at handoff");
   assert.equal(declineCopy(false).title, "Cancel this delivery before the parcel is sent");
   assert.match(declineCopy(false).body, /your trip changed, or you can't take the parcel after all/);
-  assert.equal(declineToast(true), "Parcel declined — your sender will tell you where to send it back");
-  assert.equal(declineToast(false), "Parcel declined — your sender has been notified");
+  assert.equal(declineToast(true), "Parcel declined — your receiver will tell you where to send it back");
+  assert.equal(declineToast(false), "Parcel declined — your receiver has been notified");
 });
 
 test("'I already have the parcel' closes the delivery at once", () => {
@@ -135,7 +135,7 @@ test("payout dialog no longer promises to bring the carrier straight back", () =
   const s = src("src/components/chat/PayoutRequiredModal.tsx");
   assert.ok(!s.includes("come straight back"));
   assert.ok(s.includes("come back to this chat to finish accepting"));
-  assert.ok(s.includes("once the sender confirms delivery"));
+  assert.ok(s.includes("once the receiver confirms delivery"));
 });
 
 test("receipts: right reference, share fallback says so, rows locked", () => {
@@ -160,9 +160,9 @@ test("handoff card: no escrow claim before payment", () => {
 test("cancel / accept / waiver dialogs tell the truth about money", () => {
   const pp = src("src/features/bookings/components/CancelPostPossessionModal.tsx");
   assert.ok(!pp.includes("cash penalty is refunded"));
-  assert.ok(pp.includes("If the sender agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."));
-  assert.ok(pp.includes("The parcel goes back: the sender chooses where, and you send it"));
-  assert.ok(!pp.includes("the sender can waive the cash penalty."));
+  assert.ok(pp.includes("If the receiver agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."));
+  assert.ok(pp.includes("The parcel goes back: the receiver chooses where, and you send it"));
+  assert.ok(!pp.includes("the receiver can waive the cash penalty."));
   const ac = src("src/features/bookings/components/AcceptHandoffModal.tsx");
   assert.ok(!ac.includes("time out or be cancelled"));
   assert.ok(ac.includes("Yes, I have it — accept"));

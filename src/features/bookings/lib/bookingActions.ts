@@ -69,8 +69,8 @@ export function createBookingActions({
       "set-handoff-plan",
       () => bookingsApi.setHandoffPlan(booking.id, plan),
       plan.mode === "shipped"
-        ? "Address shared — your sender can now send the parcel"
-        : "Meetup details shared with your sender",
+        ? "Address shared — your receiver can now send the parcel"
+        : "Meetup details shared with your receiver",
     );
 
   const handleMarkHandoffSent = (args: { tracking_reference?: string; courier?: string }) =>
@@ -93,7 +93,7 @@ export function createBookingActions({
     runAction(
       "complete-return",
       () => bookingsApi.completeReturn(booking.id, args),
-      "Thanks — the sender has been told the parcel is on its way back",
+      "Thanks — the receiver has been told the parcel is on its way back",
     );
 
   // ⚠️ What actually CLOSES a hand-back. The carrier's step above only says they
@@ -111,7 +111,7 @@ export function createBookingActions({
   // is a real signal the receiver is otherwise left guessing at.
   const handleConfirmReady = () =>
     runAction("confirm-ready", () => bookingsApi.confirmReadyToTravel(bookingId),
-      "Your sender knows you're ready to travel");
+      "Your receiver knows you're ready to travel");
 
   const handleStartJourney = () =>
     runAction("start-journey", () => bookingsApi.startJourney(bookingId),
@@ -119,7 +119,7 @@ export function createBookingActions({
 
   const handleMarkLanded = () =>
     runAction("mark-landed", () => bookingsApi.markLanded(bookingId),
-      "The sender knows you've landed — agree the drop-off in chat.");
+      "The receiver knows you've landed — agree the drop-off in chat.");
 
   // Deliberately separate from cancelling: a delayed flight reschedules the trip
   // and the parcel stays exactly where it is.
@@ -129,7 +129,7 @@ export function createBookingActions({
     new_travel_date?: string;
   }) =>
     runAction("report-delay", () => bookingsApi.reportDelay(bookingId, args),
-      "Delay reported — your sender has been told");
+      "Delay reported — your receiver has been told");
 
   const handleAcceptHandoff = async () => {
     await runAction(
@@ -141,7 +141,7 @@ export function createBookingActions({
       (res) =>
         (res as { data?: { status?: string } } | null)?.data?.status === "in_transit"
           ? "Parcel accepted — you're on your way. Ask the receiver for the delivery code at the destination."
-          : "Parcel accepted. The sender has been asked to pay — don't travel with it until the payment lands.",
+          : "Parcel accepted. The receiver has been asked to pay — don't travel with it until the payment lands.",
     );
     setAcceptHandoffOpen(false);
   };
@@ -192,7 +192,7 @@ export function createBookingActions({
       null,
       (code, base) => {
         if (code === "RETURN_ADDRESS_REQUIRED")
-          return "The sender has no return address on file — a returnable cancellation needs one first.";
+          return "The receiver has no return address on file — a returnable cancellation needs one first.";
         if (code === "STRIKE_LIMIT_REACHED")
           return "You’ve hit the cancellation strike limit and can’t cancel mid-trip.";
         return base;

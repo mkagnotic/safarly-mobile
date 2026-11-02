@@ -36,7 +36,7 @@ interface WaiverQuestion {
 // Web's questions, in web's order (27 Oct 2026): mobile asked about a merchant
 // refund and stored the answer as will_return (whether YOU return the parcel).
 const WAIVER_QUESTIONS: ReadonlyArray<WaiverQuestion> = [
-  { key: "will_return", label: "Will you return the parcel to the sender?" },
+  { key: "will_return", label: "Will you return the parcel to the receiver?" },
   { key: "online_order", label: "Was this an online order shipped to your address?" },
   { key: "free_return_eligible", label: "Is the item eligible for free return / refund?" },
 ];
@@ -105,10 +105,10 @@ export function CancelPostPossessionModal({
         </View>
         <Text style={sharedStyles.modalBody}>You've already accepted this parcel. Cancelling now:</Text>
         <Text style={sharedStyles.modalBody}>
-          {"• Refunds the sender in full, if they have already paid\n" +
+          {"• Refunds the receiver in full, if they have already paid\n" +
             "• Takes a cash penalty (5–25%, depending on how close you are to the deadline) from your next payout\n" +
             "• Adds a strike to your account\n" +
-            "• The parcel goes back: the sender chooses where, and you send it"}
+            "• The parcel goes back: the receiver chooses where, and you send it"}
         </Text>
 
         <Text style={sharedStyles.modalFieldLabel}>Why are you cancelling? (required)</Text>
@@ -135,7 +135,7 @@ export function CancelPostPossessionModal({
         ) : null}
         {parcelIsReturnEligible ? (
         <Text style={sharedStyles.modalHelper}>
-          The sender flagged this parcel as a returnable online order. If you answer "yes" to
+          The receiver flagged this parcel as a returnable online order. If you answer "yes" to
           all three, your cash penalty may be waived (the strike still applies):
         </Text>
         ) : null}
@@ -200,7 +200,7 @@ export function CancelPostPossessionModal({
               ]}
             >
               {allYes
-                ? "A waiver request will be opened. If the sender agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."
+                ? "A waiver request will be opened. If the receiver agrees, the penalty is cancelled and won't be taken from your payouts. The strike still applies."
                 : "A cash penalty will be taken from your next payout."}
             </Text>
           </View>

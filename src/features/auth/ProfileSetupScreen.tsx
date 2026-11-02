@@ -429,7 +429,7 @@ const TERMS_SUMMARY: readonly Readonly<{ heading: string; body: string }>[] = [
   },
   {
     heading: "We connect people, we don't carry parcels.",
-    body: "Safarly doesn't handle, carry, store or insure parcels. Each delivery is agreed between the sender and the traveler.",
+    body: "Safarly doesn't handle, carry, store or insure parcels. Each delivery is agreed between the receiver and the traveler.",
   },
   {
     heading: "Your responsibility.",
@@ -582,7 +582,7 @@ function ProfileStep({
         </Pressable>
         <Text style={styles.authTitle}>Complete profile</Text>
       </View>
-      <Text style={styles.authSubtitle}>A photo and a few details help senders and travelers trust you.</Text>
+      <Text style={styles.authSubtitle}>A photo and a few details help receivers and travelers trust you.</Text>
 
       {formError ? (
         <View style={styles.bannerSlot}>
@@ -775,19 +775,19 @@ function PayoutStep({
             ) : !kycApproved && kycPending ? (
               <>
                 <Text style={styles.payoutNoticeStrong}>Your identity check is in progress.</Text> Once
-                it's approved you can connect your bank from your profile. Senders don't need this.
+                it's approved you can connect your bank from your profile. Receivers don't need this.
               </>
             ) : !kycApproved ? (
               <>
                 <Text style={styles.payoutNoticeStrong}>First, a quick identity check.</Text> To keep
                 everyone safe, carriers verify their ID with a photo and a selfie (about 2 minutes)
-                before connecting a bank. Senders don't need this.
+                before connecting a bank. Receivers don't need this.
               </>
             ) : (
               <>
                 Payouts are handled securely by{" "}
                 <Text style={styles.payoutNoticeStrong}>{providerLabel}</Text>. It's free to connect,
-                and you only need it when someone books you to carry their parcel. Senders don't need
+                and you only need it when someone books you to carry their parcel. Receivers don't need
                 this.
               </>
             )}

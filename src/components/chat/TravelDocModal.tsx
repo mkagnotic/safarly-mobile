@@ -404,7 +404,7 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
         icon="time-outline"
         tone="muted"
         title="Document under review"
-        body="The sender is reviewing your travel document. You'll be notified once it's verified."
+        body="The receiver is reviewing your travel document. You'll be notified once it's verified."
       />
     );
   }
@@ -482,11 +482,11 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
       <InfoBlock
         icon={rejected ? "alert-circle" : "document-attach-outline"}
         tone={rejected ? "warning" : "primary"}
-        title={rejected ? "The sender asked for a new document." : "Upload your travel document"}
+        title={rejected ? "The receiver asked for a new document." : "Upload your travel document"}
         body={
           rejected
             ? `Reason: ${doc.rejection_reason ?? "—"}`
-            : "Add your boarding pass or flight ticket (image or PDF) so the sender can verify your trip."
+            : "Add your boarding pass or flight ticket (image or PDF) so the receiver can verify your trip."
         }
       />
       <Text style={styles.attemptsText}>{attemptsHint(doc.attempts, doc.max_attempts)}</Text>
