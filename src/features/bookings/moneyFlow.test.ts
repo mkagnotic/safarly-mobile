@@ -135,7 +135,7 @@ test("payout dialog no longer promises to bring the carrier straight back", () =
   const s = src("src/components/chat/PayoutRequiredModal.tsx");
   assert.ok(!s.includes("come straight back"));
   assert.ok(s.includes("come back to this chat to finish accepting"));
-  assert.ok(s.includes("once the receiver confirms delivery"));
+  assert.ok(s.includes("once they confirm delivery"));
 });
 
 test("receipts: right reference, share fallback says so, rows locked", () => {
