@@ -34,6 +34,7 @@ import { getErrorMessage, parcelsApi } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { COMPACT_CONTROL_MAX_FONT_SCALE } from "@/theme/typography";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { feeAutofill } from "./model/feeAutofill";
 import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
 import { ReturnAddressFields } from "./ReturnAddressFields";
 import { currencySymbol, formatMoneyShort } from "@/utils/money";
@@ -361,7 +362,8 @@ export function SendParcelScreen() {
   }, [weight, weightUnit, currency]);
 
   useEffect(() => {
-    if (!feeTouched && suggestedFee != null) setFeeOffered(String(suggestedFee));
+    const next = feeAutofill("create", feeTouched, suggestedFee, "");
+    if (next != null) setFeeOffered(next);
   }, [feeTouched, suggestedFee]);
 
 
