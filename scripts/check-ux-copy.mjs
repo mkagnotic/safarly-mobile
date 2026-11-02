@@ -2793,6 +2793,22 @@ const CHECKS = [
     must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
     mustNot: ["toast", "ErrorState"],
   },
+  {
+    repo: "web",
+    file: ["src/lib/listingStatus.ts", "src/features/trips/pages/CustomerTripDetail.tsx"],
+    id: "cancelled-trip-says-so",
+    why: "Client 2 Nov 2026: an owner's cancelled trip stays in the Archive and still opens, but it looked exactly like a live trip. The owner now sees when it was cancelled; Edit/Cancel stay hidden (canModifyListing). Same words on mobile.",
+    must: ["This trip was cancelled on ${date}. It stays in your archive so you can look back at it.", "{isOwner && cancelledTripNotice(trip) && (", "data-testid=\"trip-cancelled-notice\"", "\"cancelled\","],
+    mustNot: [],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/travels/cancelledTripNotice.ts", "src/features/trips/TripDetailsScreen.tsx"],
+    id: "mobile-cancelled-trip-says-so",
+    why: "See cancelled-trip-says-so (web repo): the same dated notice at the top of the owner's cancelled trip.",
+    must: ["This trip was cancelled on ${date}. It stays in your archive so you can look back at it.", "isOwner && cancelledTripNotice(trip) ?", "testID=\"trip-cancelled-notice\"", ") : isOwner && !cancelledTripNotice(trip) ? ("],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

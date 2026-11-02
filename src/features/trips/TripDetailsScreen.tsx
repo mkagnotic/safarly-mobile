@@ -13,6 +13,7 @@ import { FormBanner } from "@/components/ui/FormBanner";
 import { Screen } from "@/components/ui/Screen";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { isListingExpired, isTerminal, labelForStatus } from "@/features/travels/statusLabels";
+import { cancelledTripNotice } from "@/features/travels/cancelledTripNotice";
 import { MetricRow, MetricTile, RouteHeader } from "@/features/search/routeBlocks";
 import { isHiddenOwner } from "@/features/moderation/blockFilter";
 import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
@@ -284,6 +285,15 @@ export function TripDetailsScreen() {
         </View>
       ) : null}
 
+      {/* The owner's cancelled trip stays openable from the Archive; say so at
+          the top, with the date, as on web (client, 2 Nov 2026). */}
+      {isOwner && cancelledTripNotice(trip) ? (
+        <View style={styles.cancelledNotice} testID="trip-cancelled-notice" accessibilityRole="text">
+          <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
+          <Text style={styles.cancelledNoticeText}>{cancelledTripNotice(trip)}</Text>
+        </View>
+      ) : null}
+
       <TripCard trip={trip} />
 
       {/* A cancelled/completed/expired trip is a closed record — editing or
@@ -307,7 +317,7 @@ export function TripDetailsScreen() {
             <Text style={styles.cancelButtonText}>Cancel trip</Text>
           </Pressable>
         </>
-      ) : isOwner ? (
+      ) : isOwner && !cancelledTripNotice(trip) ? (
         <View style={styles.closedNotice}>
           <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} />
           <Text style={styles.closedNoticeText}>
@@ -393,6 +403,25 @@ const styles = StyleSheet.create({
   closedNoticeText: {
     flex: 1,
     color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+
+  cancelledNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(220, 40, 40, 0.3)",
+    backgroundColor: "rgba(220, 40, 40, 0.06)",
+  },
+  cancelledNoticeText: {
+    flex: 1,
+    color: colors.text,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "600",
