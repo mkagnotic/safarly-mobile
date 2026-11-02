@@ -891,6 +891,17 @@ export function SendParcelScreen() {
           </SectionCard>
         </View>
 
+        {/* Parcel photos right above the amount, as on web (client, 2 Nov 2026). */}
+        <View style={styles.submitRow}>
+          <ListingFilesField
+            kind="parcel"
+            staged={ownerFiles}
+            onStagedChange={setOwnerFiles}
+            label="Parcel photos or documents"
+            hint="photos, invoice or order screenshot (PDF or photos)"
+          />
+        </View>
+
         {/* ───────── Section 4 — How much will you pay? ───────── */}
         <View
           onLayout={(e) => {
@@ -962,15 +973,6 @@ export function SendParcelScreen() {
           </View>
         </View>
 
-        <View style={styles.submitRow}>
-          <ListingFilesField
-            kind="parcel"
-            staged={ownerFiles}
-            onStagedChange={setOwnerFiles}
-            label="Parcel photos or documents"
-            hint="photos, invoice or order screenshot (PDF or photos)"
-          />
-        </View>
         <View style={styles.submitRow}>
           <AppButton
             label={submitting ? "Posting…" : "Submit & find carriers"}

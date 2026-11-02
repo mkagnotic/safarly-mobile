@@ -478,6 +478,12 @@ export function EditParcelModal({
               )}
             </View>
 
+            {/* Parcel photos right above the amount, as web and Send Parcel (client, 2 Nov 2026).
+                Inside the scroll: pinned outside it ate the form's room on small phones. */}
+            {listingId ? (
+              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos)" />
+            ) : null}
+
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Fee offered</Text>
               <View style={styles.feeRow}>
@@ -567,11 +573,6 @@ export function EditParcelModal({
             />
             {returnSummary ? <Text style={styles.inlineError}>{returnSummary}</Text> : null}
 
-            {/* Last field inside the scroll, as web (28 Oct 2026): pinned outside it ate the
-                form's room on small phones. */}
-            {listingId ? (
-              <ListingFilesField kind="parcel" listingId={listingId} label="Parcel photos or documents" hint="photos, invoice or order screenshot (PDF or photos)" />
-            ) : null}
             </ScrollView>
 
             {/* The server's refusal, above the footer so it is seen however far the form scrolled. */}

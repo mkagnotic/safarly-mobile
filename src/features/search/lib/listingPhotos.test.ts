@@ -257,3 +257,24 @@ for (const rel of [
     assert.match(src, /<ListingFilesField\b/);
   });
 }
+
+// Where the files field sits (client, 2 Nov 2026), same as web: the travel
+// document right after Airline; parcel photos right before the amount.
+const before = (rel: string, first: string, second: string) => {
+  const text = read(rel);
+  const a = text.indexOf(first);
+  const b = text.indexOf(second);
+  assert.ok(a >= 0, `${rel}: missing ${first}`);
+  assert.ok(b >= 0, `${rel}: missing ${second}`);
+  assert.ok(a < b, `${rel}: "${first}" must come before "${second}"`);
+};
+
+test("List Trip: travel document right after Airline, before the carry section", () => {
+  before("features/trips/ListTripScreen.tsx", "We'll match you with Travel Buddies on the same flight.", 'label="Travel document"');
+  before("features/trips/ListTripScreen.tsx", 'label="Travel document"', "Section 3 — What can you carry?");
+});
+
+test("Send Parcel and Edit parcel: photos right before the amount", () => {
+  before("features/parcels/SendParcelScreen.tsx", 'label="Parcel photos or documents"', "Section 4 — How much will you pay?");
+  before("features/parcels/EditParcelModal.tsx", 'label="Parcel photos or documents"', "Fee offered</Text>");
+});

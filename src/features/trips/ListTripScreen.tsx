@@ -673,6 +673,14 @@ export function ListTripScreen() {
         <Text style={styles.helperText}>
           We'll match you with Travel Buddies on the same flight.
         </Text>
+        {/* Travel document right under Airline, as on web (client, 2 Nov 2026). */}
+        <ListingFilesField
+          kind="trip"
+          staged={ownerFiles}
+          onStagedChange={setOwnerFiles}
+          label="Travel document"
+          hint="ticket, boarding pass or ID page (PDF or photos)"
+        />
         </SectionCard>
       </View>
 
@@ -881,16 +889,6 @@ export function ListTripScreen() {
           </View>
         ) : null}
       </SectionCard>
-      </View>
-
-      <View style={styles.submitRow}>
-        <ListingFilesField
-          kind="trip"
-          staged={ownerFiles}
-          onStagedChange={setOwnerFiles}
-          label="Travel document"
-          hint="ticket, boarding pass or ID page (PDF or photos)"
-        />
       </View>
 
       <View style={styles.submitRow}>
