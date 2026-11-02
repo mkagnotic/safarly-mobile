@@ -425,7 +425,7 @@ const CHECKS = [
     why: "Client request: 'it is best to replace by name - it can say Awaiting Roja parcel photos'. Safe on THIS card and not on the price line: every string sits inside the viewer_role === carrier branch, so the reader is always the carrier and the named party is always the other person. The fallback keeps two forms so it still reads as a sentence.",
     // Web interpolates in JSX (`{Who}`), mobile in a template literal (`${Who}`);
     // the shorter form is a substring of both, so one list covers each platform.
-    must: ["Awaiting ${who}'s parcel photos", "{Who} needs to add photos", "{Who} shared photos of the parcel.", 'const Who = counterpartName?.trim() || "The sender"'],
+    must: ["Awaiting ${who}'s parcel photos", "{Who} needs to add photos", "{Who} shared photos of the parcel.", 'const Who = counterpartName?.trim() || "The receiver"'],
     mustNot: ["Awaiting the sender's parcel photos"],
   },
   {
@@ -433,7 +433,7 @@ const CHECKS = [
     file: "src/components/chat/ParcelReviewModal.tsx",
     id: "parcel-review-names-the-counterpart",
     why: "Same copy as web, word for word.",
-    must: ["Awaiting ${who}'s parcel photos", "{Who} needs to add photos", "{Who} shared photos of the parcel.", 'const Who = counterpartName?.trim() || "The sender"'],
+    must: ["Awaiting ${who}'s parcel photos", "{Who} needs to add photos", "{Who} shared photos of the parcel.", 'const Who = counterpartName?.trim() || "The receiver"'],
     mustNot: ['title="The sender shared photos of the parcel."'],
   },
   {
@@ -1982,7 +1982,7 @@ const CHECKS = [
     file: ["supabase/functions/booking-handler/routes/possession.ts", "src/features/bookings/components/HandoffActions.tsx", "src/features/bookings/components/HandoffPlanCard.tsx", "src/features/messages/components/ChatHandoffPrompt.tsx"],
     id: "handoff-inspect-after-sent",
     why: "Client 26 Oct 2026: 'I've inspected it - accept' was live before the sender had sent anything - nothing to inspect. Accept waits for the sender's sent / handed over (server refuses earlier; legacy pre-paid bookings exempt); the carrier's cancel stays open throughout.",
-    must: ["if (!booking.handoff_dispatched_at && !alreadyPaid) {", "disabled={busy || !parcelDispatched}", "Waiting for your sender to mark the parcel as sent"],
+    must: ["if (!booking.handoff_dispatched_at && !alreadyPaid) {", "disabled={busy || !parcelDispatched}", "Waiting for your receiver to mark the parcel as sent"],
     mustNot: ["you can also accept right away", "or accept straight away if it's already in your hands"],
   },
   {
@@ -2054,7 +2054,7 @@ const CHECKS = [
     file: ["src/features/bookings/components/AcceptHandoffStep.tsx", "src/features/bookings/HandoffPlanCard.tsx"],
     id: "mobile-handoff-inspect-after-sent",
     why: "See handoff-inspect-after-sent (web repo).",
-    must: ["disabled={actionPending !== null || !handoffDispatched}", "Waiting for your sender to mark the parcel as sent"],
+    must: ["disabled={actionPending !== null || !handoffDispatched}", "Waiting for your receiver to mark the parcel as sent"],
     mustNot: ["you can also accept right away"],
   },
   {
@@ -2488,7 +2488,7 @@ const CHECKS = [
     file: ["src/features/bookings/lib/bookingEventLabel.ts", "src/features/bookings/components/CancelPostPossessionModal.tsx", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/hooks/useExpandedBooking.ts", "src/features/bookings/components/BookingRowSummary.tsx", "src/features/bookings/components/BookingTimeline.tsx", "src/components/chat/DeliveryHistoryModal.tsx", "src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/components/ConfirmDeliveryStep.tsx", "src/features/travels/TravelCard.tsx", "src/features/bookings/components/AwaitingPaymentNotice.tsx"],
     id: "mobile-carrier-flow-wording",
     why: "See carrier-flow-wording (web repo). Plus mobile asked 'Will the merchant refund the sender?' and stored it as will_return (whether YOU return the parcel), took the penalty 'from your wallet' (there is none; it comes from the next payout), showed a raw 'Tier: x', titled every failure 'Action failed', and typed labels in capitals.",
-    must: ['{ key: "will_return", label: "Will you return the parcel to the sender?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with your receiver in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
+    must: ['{ key: "will_return", label: "Will you return the parcel to the receiver?" }', "will_return: answers.will_return === \"yes\",", "taken from your next payout", "ACTION_FAILED_TITLE[key]", "{bookingStatusLabel(booking.status)}", "{bookingEventLabel(e.event)}", "return bookingStatusLabel(status);", ">Decline parcel</Text>", "Agree the meetup point or address with your receiver in chat.", '"Trip listing"', ">Awaiting payment</Text>"],
     mustNot: ["seller_will_refund", "deducted from your wallet", "`Tier: ${data.tier}.", 'title: "Action failed"', "Handoff complete — you're in transit.", ".toUpperCase()}", '{e.event.replace(/_/g, " ")}', "Chat with your receiver", '"TRIP LISTING"', ">AWAITING PAYMENT</Text>"],
   },  {
     repo: "web",
@@ -2792,6 +2792,14 @@ const CHECKS = [
     why: "See listing-photos-in-search-* (web repo), client 2 Nov 2026, DISPLAY ONLY: the same form hint, each search row (and every '+N more' row) shows ITS listing's photos, the same labels and viewer words as web, and a photo failure is never a toast or an error state.",
     must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
     mustNot: ["toast", "ErrorState"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/parcels/ParcelDetailsScreen.tsx", "src/features/bookings/components/BookingRowSummary.tsx", "src/features/travels/MatchesModal.tsx", "src/features/bookings/PayBookingScreen.tsx", "src/features/travels/TripAvailabilityToggle.tsx"],
+    id: "mobile-sender-becomes-receiver",
+    why: "Client 2 Nov 2026: the word 'Sender' confused users; the roles are only Receiver and Carrier on web, Android and iOS (and in the legal text). Identifiers like sender_id stay.",
+    must: ["Message Receiver", "? \"Receiver\" : \"Carrier\"", "Matching receivers", "Only the receiver can pay"],
+    mustNot: ["Message Sender", ">Sender<", "\"Sender\"", "Matching senders", "Only the sender can pay", "parcel sender", "Senders can find", "no new senders"],
   },
 ];
 
