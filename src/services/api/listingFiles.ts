@@ -25,7 +25,27 @@ const base = (kind: ListingFileKind, id: string) =>
 
 export const LISTING_FILES_MAX: Record<ListingFileKind, number> = { trip: 3, parcel: 5 };
 
+/**
+ * One of a listing's files as shown to someone who matches it in search
+ * (read-only). The signed `url` lives 600 s.
+ */
+export interface SharedListingFile {
+  url: string;
+  name: string;
+  kind: "image" | "pdf";
+}
+
+export interface SharedListingFilesResponse {
+  files: SharedListingFile[];
+  listing: { id: string; from_city: string; to_city: string; date: string | null };
+}
+
 export const listingFilesApi = {
+  /** Another person's listing files, for search. 404 when the viewer may not see them. */
+  shared: (kind: ListingFileKind, id: string) =>
+    api.get<SharedListingFilesResponse>(
+      `/${kind === "trip" ? "trip-handler" : "parcel-handler"}/${id}/shared-files`,
+    ),
   list: (kind: ListingFileKind, id: string) => api.get<ListingFilesResponse>(base(kind, id)),
   add: (kind: ListingFileKind, id: string, files: RNUploadFile[]) =>
     api.uploadRNFiles<ListingFilesResponse>(base(kind, id), files, "file"),
