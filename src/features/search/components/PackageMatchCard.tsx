@@ -17,6 +17,7 @@ import { capitalize, formatDateLabel } from "@/features/search/lib/searchConfig"
 import { sharedStyles } from "@/features/search/searchStyles";
 import { formatDeliveryWindow, formatTravelDateRange } from "@/utils/travelDate";
 import { MoreListingRow, MoreListings } from "@/features/search/components/MoreListings";
+import { ListingPhotoStrip } from "@/features/search/components/ListingPhotoStrip";
 
 // ───────────────────────── Cards ─────────────────────────
 
@@ -180,6 +181,12 @@ export function PackageMatchCard({
     </View>
   ) : null;
 
+  // This listing's own photos (DISPLAY ONLY: nothing renders when it has none
+  // or they fail to load). Each "+N more" row carries its own strip below.
+  const photosBlock = (
+    <ListingPhotoStrip listing={match} canReport={canReport} style={nested ? undefined : styles.photosCentered} />
+  );
+
   const actionsBlock = (
     <View style={sharedStyles.actionsRow}>
       <AppButton
@@ -231,6 +238,7 @@ export function PackageMatchCard({
             chatStarting={chatStarting && chatFor === o.id}
             disabled={chatStarting || !person?.id}
             onStartChat={() => handleStartChat(o.id)}
+            photos={<ListingPhotoStrip listing={o} canReport={canReport} style={styles.rowPhotos} />}
           />
         );
       }}
@@ -245,6 +253,7 @@ export function PackageMatchCard({
         {metricsBlock}
         {subtitleBlock}
         {warningBlock}
+        {photosBlock}
         {actionsBlock}
         {moreBlock}
       </View>
@@ -262,6 +271,7 @@ export function PackageMatchCard({
       {metricsBlock}
       {subtitleBlock}
       {warningBlock}
+      {photosBlock}
       <View style={styles.divider} />
       {personBlock}
       {actionsBlock}
@@ -306,4 +316,6 @@ const styles = StyleSheet.create({
   capacityPillNested: { alignSelf: "flex-start" },
   capacityPillText: { color: colors.warning, fontSize: 11, lineHeight: 14, fontWeight: "700" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  rowPhotos: { marginTop: 6 },
+  photosCentered: { alignSelf: "center", justifyContent: "center" },
 });

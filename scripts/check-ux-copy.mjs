@@ -2785,6 +2785,14 @@ const CHECKS = [
     must: ["(booking.status === 'disputed' && !!booking.held)", "held: !!bk.handoff_accepted_at,"],
     mustNot: [],
   },
+  {
+    repo: "mobile",
+    file: ["src/components/listing/ListingFilesField.tsx", "src/features/search/components/ListingPhotoViewer.tsx", "src/features/search/components/ListingPhotoStrip.tsx", "src/features/search/lib/listingPhotos.ts", "src/features/search/components/PackageMatchCard.tsx"],
+    id: "mobile-listing-photos-in-search",
+    why: "See listing-photos-in-search-* (web repo), client 2 Nov 2026, DISPLAY ONLY: the same form hint, each search row (and every '+N more' row) shows ITS listing's photos, the same labels and viewer words as web, and a photo failure is never a toast or an error state.",
+    must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
+    mustNot: ["toast", "ErrorState"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

@@ -68,6 +68,11 @@ export interface PackageMatch {
    * match still shows but wears a warning pill.
    */
   exceeds_capacity?: boolean;
+  /**
+   * How many owner files (travel document / parcel photos) the listing has, for
+   * the search photo strip. Missing on an older backend: read it as 0.
+   */
+  photo_count?: number;
   carrier?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
   sender?: { id: string; name: string; avatar_url: string | null; is_verified?: boolean | null; rating: number } | null;
 }

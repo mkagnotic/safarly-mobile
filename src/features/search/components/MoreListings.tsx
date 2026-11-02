@@ -75,9 +75,12 @@ export function MoreListingRow({
   chatStarting,
   disabled,
   onStartChat,
+  photos,
 }: Readonly<{
   title: string;
   detail?: string | null;
+  /** This listing's own photo strip (trips and parcels only). */
+  photos?: ReactNode;
   highlighted?: boolean;
   chatStarting: boolean;
   disabled?: boolean;
@@ -94,6 +97,7 @@ export function MoreListingRow({
             {detail}
           </Text>
         ) : null}
+        {photos}
       </View>
       <AppButton
         label={chatStarting ? "Starting…" : "Start chat"}

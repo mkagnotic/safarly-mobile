@@ -40,6 +40,14 @@ interface ModerationMenuProps {
   onBlocked?: () => void;
   /** Called after an unblock the server accepted. */
   onUnblocked?: () => void;
+  /**
+   * Opens the report sheet from elsewhere (e.g. the search photo viewer's
+   * Report). Leave unset for the usual self-contained button.
+   */
+  reportOpen?: boolean;
+  onReportOpenChange?: (open: boolean) => void;
+  /** No header button: the sheet is opened only through `reportOpen`. */
+  hideTrigger?: boolean;
 }
 
 /**
@@ -58,13 +66,24 @@ export function ModerationMenu({
   blockUser,
   onBlocked,
   onUnblocked,
+  reportOpen: reportOpenProp,
+  onReportOpenChange,
+  hideTrigger,
 }: Readonly<ModerationMenuProps>) {
   const insets = useSafeAreaInsets();
   const { isBlockedByMe, block, unblock } = useBlockedUsers();
   const { after: afterMenu, onDismiss: onMenuDismissed } = useModalHandoff();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
+  const [reportOpenState, setReportOpenState] = useState(false);
+  const reportOpen = reportOpenProp ?? reportOpenState;
+  const setReportOpen = useCallback(
+    (open: boolean) => {
+      if (reportOpenProp === undefined) setReportOpenState(open);
+      onReportOpenChange?.(open);
+    },
+    [reportOpenProp, onReportOpenChange],
+  );
   const [reportPending, setReportPending] = useState(false);
   const [confirm, setConfirm] = useState<"block" | "unblock" | null>(null);
   const [confirmPending, setConfirmPending] = useState(false);
@@ -99,7 +118,7 @@ export function ModerationMenu({
         setReportPending(false);
       }
     },
-    [target.type, target.id],
+    [target.type, target.id, setReportOpen],
   );
 
   const handleConfirm = useCallback(async () => {
@@ -131,7 +150,7 @@ export function ModerationMenu({
 
   return (
     <>
-      {blockUser ? (
+      {hideTrigger ? null : blockUser ? (
         <Pressable
           onPress={() => setMenuOpen(true)}
           style={styles.headerButton}
