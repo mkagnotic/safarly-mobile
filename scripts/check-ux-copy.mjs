@@ -2793,6 +2793,14 @@ const CHECKS = [
     must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
     mustNot: ["toast", "ErrorState"],
   },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/PayBookingScreen.tsx"],
+    id: "pay-screen-state-per-booking",
+    why: "Client 3 Nov 2026: the Pay tab stays mounted, so after paying route A, opening Pay for route B showed A's 'Payment secured' and jumped to Bookings as if B were paid (fixed by logout). The screen body is keyed by booking id. Web: pay-page-state-per-booking.",
+    must: ["return <PayBookingForBooking key={route.params?.bookingId ?? \"none\"} />;"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
