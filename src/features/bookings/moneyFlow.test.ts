@@ -111,6 +111,20 @@ test("pay screen: provider never defaults to Stripe; handoff-first success copy"
   assert.ok(!s.includes("held in escrow"));
 });
 
+// PayBookingTab is a hidden tab and stays mounted: its pay state must not
+// outlive the booking. Paying route A then tapping Pay on route B showed A's
+// "Payment secured" for B and bounced to Bookings (3 Nov 2026).
+test("pay screen: state is per booking (keyed remount on bookingId)", () => {
+  const s = src("src/features/bookings/PayBookingScreen.tsx");
+  assert.match(s, /return <PayBookingForBooking key=\{route\.params\?\.bookingId \?\? "none"\} \/>;/);
+  const exported = s.slice(s.indexOf("export function PayBookingScreen()"), s.indexOf("function PayBookingForBooking()"));
+  assert.ok(!exported.includes("usePayBooking("), "the exported wrapper holds no pay state itself");
+  const body = s.slice(s.indexOf("function PayBookingForBooking()"));
+  assert.ok(body.includes("usePayBooking(bookingId)"), "all pay state lives in the keyed body");
+  const nav = src("src/navigation/RootNavigator.tsx");
+  assert.ok(nav.includes('name="PayBookingTab" component={PayBookingScreen}'));
+});
+
 test("checkout confirm is keyed per session", () => {
   const s = src("src/hooks/api/usePayBooking.ts");
   assert.ok(s.includes("keyForSession(idempotencyKeyRef.current, intent.session_id, newIdempotencyKey)"));

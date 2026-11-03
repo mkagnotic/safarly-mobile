@@ -2800,6 +2800,9 @@ const CHECKS = [
     why: "Client 2 Nov 2026: the word 'Sender' confused users; the roles are only Receiver and Carrier on web, Android and iOS (and in the legal text). Identifiers like sender_id stay.",
     must: ["Message Receiver", "? \"Receiver\" : \"Carrier\"", "Matching receivers", "Only the receiver can pay"],
     mustNot: ["Message Sender", ">Sender<", "\"Sender\"", "Matching senders", "Only the sender can pay", "parcel sender", "Senders can find", "no new senders"],
+  },
+  {
+    repo: "mobile",
     file: ["src/features/parcels/EditParcelModal.tsx", "src/features/parcels/SendParcelScreen.tsx", "src/features/parcels/model/feeAutofill.ts"],
     id: "mobile-fee-suggestion-never-refills-a-cleared-field",
     why: "Client 2 Nov 2026: on Edit parcel, deleting the amount to type a new one snapped the suggested amount straight back (no touched flag), so a new amount could not be entered. The suggestion may only fill an untouched field; web already worked this way.",
@@ -2826,16 +2829,30 @@ const CHECKS = [
     why: "See cancelled-trip-says-so (web repo): the same dated notice at the top of the owner's cancelled trip.",
     must: ["This trip was cancelled on ${date}. It stays in your archive so you can look back at it.", "isOwner && cancelledTripNotice(trip) ?", "testID=\"trip-cancelled-notice\"", ") : isOwner && !cancelledTripNotice(trip) ? ("],
     mustNot: [],
+  },
+  {
+    repo: "mobile",
     file: ["src/components/chat/TravelDocModal.tsx", "src/components/chat/ParcelReviewModal.tsx", "src/features/messages/chat/lib/verificationTries.ts", "src/features/messages/chat/hooks/useChatVerification.ts", "src/services/api/carriers.ts", "src/hooks/api/useTravelDoc.ts"],
     id: "mobile-auto-unmatch-on-verification-limit",
     why: "Client 3 Nov 2026 (option 1): when the 3rd travel document or 5th parcel-photo set is rejected the server ends the match automatically; admin review for travel documents is removed. The rejecter is warned on the last try; the app refreshes like a manual unmatch. Same words as web.",
     must: ["LAST_TRY_REJECT_WARNING", "Last try — if it is rejected, this match ends automatically.", "No more photos can be added to this request.", "This was their last try. Rejecting it will end this match automatically.", "This match has ended automatically.", "await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal)"],
     mustNot: ["Request admin review", "Admin review requested", "our team can review", "our team will review", "contact the Safarly support team", "choose your photos carefully", "request-admin-review", "requestAdminReview"],
+  },
+  {
+    repo: "mobile",
     file: ["src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/lib/handoffPhotos.ts", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/BookingsScreen.tsx", "src/features/bookings/components/HandoffRejectionPhotos.tsx"],
     id: "mobile-handoff-rejection-photos",
     why: "Client 3 Nov 2026: declining at handoff took ONE photo and the receiver never saw it. Up to 5 photos now, sent as photo_paths (+ legacy photo_path), and both parties see them as 'Carrier's photos' on the booking (and in the chat). Same words as web.",
     must: ["Add photos (up to 5)", "You can add up to 5 photos.", "Uploading photos…", "allowsMultipleSelection: true", "selectionLimit: remaining", "export const HANDOFF_PHOTOS_MAX = 5;", "rejectHandoffBody(reason, withCarrier, paths)", "body.photo_paths = photoPaths;", "body.photo_path = photoPaths[0];", "<HandoffRejectionPhotos booking={booking} />", "Carrier's photos", "handoff_rejection_proof_urls"],
     mustNot: ["Add photo evidence (optional)", "let photo_path: string | undefined;"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/PayBookingScreen.tsx"],
+    id: "pay-screen-state-per-booking",
+    why: "Client 3 Nov 2026: the Pay tab stays mounted, so after paying route A, opening Pay for route B showed A's 'Payment secured' and jumped to Bookings as if B were paid (fixed by logout). The screen body is keyed by booking id. Web: pay-page-state-per-booking.",
+    must: ["return <PayBookingForBooking key={route.params?.bookingId ?? \"none\"} />;"],
+    mustNot: [],
   },
 ];
 
