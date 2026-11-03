@@ -32,6 +32,7 @@ import { BookingTimeline } from "@/features/bookings/components/BookingTimeline"
 import { BookingsEmptyCard } from "@/features/bookings/components/BookingsEmptyCard";
 import { ConfirmDeliveryStep } from "@/features/bookings/components/ConfirmDeliveryStep";
 import { DeliveryCodePanel } from "@/features/bookings/components/DeliveryCodePanel";
+import { HandoffRejectionPhotos } from "@/features/bookings/components/HandoffRejectionPhotos";
 import { ExpandedBookingModals } from "@/features/bookings/components/ExpandedBookingModals";
 import { SenderDelayNotice } from "@/features/bookings/components/SenderDelayNotice";
 import { ParcelDetailsSection } from "@/features/bookings/components/ParcelDetailsSection";
@@ -184,6 +185,10 @@ function ExpandedBody({
 
       {/* Timeline */}
       {timeline && timeline.length > 0 ? <BookingTimeline timeline={timeline} /> : null}
+
+      {/* The carrier's photos from a decline at inspection - both parties see
+          them (the receiver never did before). Renders nothing without photos. */}
+      <HandoffRejectionPhotos booking={booking} />
 
       {/* One authoritative position for the whole booking. The action cards below
           can appear out of order (the delivery card is available during transit on

@@ -2831,6 +2831,11 @@ const CHECKS = [
     why: "Client 3 Nov 2026 (option 1): when the 3rd travel document or 5th parcel-photo set is rejected the server ends the match automatically; admin review for travel documents is removed. The rejecter is warned on the last try; the app refreshes like a manual unmatch. Same words as web.",
     must: ["LAST_TRY_REJECT_WARNING", "Last try — if it is rejected, this match ends automatically.", "No more photos can be added to this request.", "This was their last try. Rejecting it will end this match automatically.", "This match has ended automatically.", "await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal)"],
     mustNot: ["Request admin review", "Admin review requested", "our team can review", "our team will review", "contact the Safarly support team", "choose your photos carefully", "request-admin-review", "requestAdminReview"],
+    file: ["src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/lib/handoffPhotos.ts", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/BookingsScreen.tsx", "src/features/bookings/components/HandoffRejectionPhotos.tsx"],
+    id: "mobile-handoff-rejection-photos",
+    why: "Client 3 Nov 2026: declining at handoff took ONE photo and the receiver never saw it. Up to 5 photos now, sent as photo_paths (+ legacy photo_path), and both parties see them as 'Carrier's photos' on the booking (and in the chat). Same words as web.",
+    must: ["Add photos (up to 5)", "You can add up to 5 photos.", "Uploading photos…", "allowsMultipleSelection: true", "selectionLimit: remaining", "export const HANDOFF_PHOTOS_MAX = 5;", "rejectHandoffBody(reason, withCarrier, paths)", "body.photo_paths = photoPaths;", "body.photo_path = photoPaths[0];", "<HandoffRejectionPhotos booking={booking} />", "Carrier's photos", "handoff_rejection_proof_urls"],
+    mustNot: ["Add photo evidence (optional)", "let photo_path: string | undefined;"],
   },
 ];
 

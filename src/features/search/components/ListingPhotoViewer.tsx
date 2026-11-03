@@ -44,6 +44,8 @@ export function ListingPhotoViewer({
   onClose,
   onReport,
   onDismiss,
+  title: titleOverride,
+  fileLabel,
 }: Readonly<{
   open: boolean;
   data: SharedFiles | null;
@@ -57,6 +59,10 @@ export function ListingPhotoViewer({
   onReport: () => void;
   /** iOS: the Modal finished closing (for `useModalHandoff`). */
   onDismiss?: () => void;
+  /** Header text instead of the route (the booking's "Carrier's photos"). */
+  title?: string;
+  /** Each page's accessibility label instead of "Photo 1 of 3 for <route>". */
+  fileLabel?: (index: number, total: number) => string;
 }>) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -75,7 +81,7 @@ export function ListingPhotoViewer({
   }, [open, start, data]);
 
   const listing = data?.listing ?? { ...fallbackRoute, date: null };
-  const title = viewerTitle(listing, formatDateLabel);
+  const title = titleOverride ?? viewerTitle(listing, formatDateLabel);
 
   const onMomentumEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -86,7 +92,7 @@ export function ListingPhotoViewer({
 
   const renderItem = useCallback(
     ({ item, index: i }: ListRenderItemInfo<SharedListingFile>) => {
-      const label = fileA11yLabel(item, i, total, listing);
+      const label = fileLabel ? fileLabel(i, total) : fileA11yLabel(item, i, total, listing);
       if (item.kind === "pdf") {
         return (
           <View style={[styles.pageItem, { width }]} accessible accessibilityLabel={label}>
@@ -122,7 +128,7 @@ export function ListingPhotoViewer({
         </View>
       );
     },
-    [width, total, listing, broken],
+    [width, total, listing, broken, fileLabel],
   );
 
   return (
