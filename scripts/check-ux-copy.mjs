@@ -2800,6 +2800,19 @@ const CHECKS = [
     why: "Client 2 Nov 2026: the word 'Sender' confused users; the roles are only Receiver and Carrier on web, Android and iOS (and in the legal text). Identifiers like sender_id stay.",
     must: ["Message Receiver", "? \"Receiver\" : \"Carrier\"", "Matching receivers", "Only the receiver can pay"],
     mustNot: ["Message Sender", ">Sender<", "\"Sender\"", "Matching senders", "Only the sender can pay", "parcel sender", "Senders can find", "no new senders"],
+    file: ["src/features/parcels/EditParcelModal.tsx", "src/features/parcels/SendParcelScreen.tsx", "src/features/parcels/model/feeAutofill.ts"],
+    id: "mobile-fee-suggestion-never-refills-a-cleared-field",
+    why: "Client 2 Nov 2026: on Edit parcel, deleting the amount to type a new one snapped the suggested amount straight back (no touched flag), so a new amount could not be entered. The suggestion may only fill an untouched field; web already worked this way.",
+    must: ["const [feeTouched, setFeeTouched] = useState(false);", "feeAutofill(\"edit\", feeTouched, suggestedFee, form.fee_offered)", "feeAutofill(\"create\", feeTouched, suggestedFee, \"\")", "if (touched || suggested == null) return null;", "setFeeTouched(true);"],
+    mustNot: ["if (suggestedFee != null && form.fee_offered === \"\") {"],
+  },
+  {
+    repo: "web",
+    file: ["src/features/parcels/components/EditParcelDialog.tsx", "src/features/parcels/pages/CustomerSendParcel.tsx"],
+    id: "fee-suggestion-never-refills-a-cleared-field",
+    why: "Client 2 Nov 2026 (reported on the app): clearing the fee to type a new amount must never bring the suggestion back. Web already guards it with feeTouched; this pins it.",
+    must: ["if (!feeTouched && suggestedFee != null && form.fee_offered === \"\") {", "setFeeTouched(true); setFeeError(undefined);", "if (!feeTouched && suggestedFee != null) setFeeOffered(String(suggestedFee));", "setFeeTouched(true); clearError(\"feeOffered\");"],
+    mustNot: [],
   },
 ];
 
