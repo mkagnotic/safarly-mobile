@@ -2793,6 +2793,14 @@ const CHECKS = [
     must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
     mustNot: ["toast", "ErrorState"],
   },
+  {
+    repo: "mobile",
+    file: ["src/features/bookings/components/RejectHandoffModal.tsx", "src/features/bookings/lib/handoffPhotos.ts", "src/features/bookings/lib/bookingActions.ts", "src/features/bookings/BookingsScreen.tsx", "src/features/bookings/components/HandoffRejectionPhotos.tsx"],
+    id: "mobile-handoff-rejection-photos",
+    why: "Client 3 Nov 2026: declining at handoff took ONE photo and the receiver never saw it. Up to 5 photos now, sent as photo_paths (+ legacy photo_path), and both parties see them as 'Carrier's photos' on the booking (and in the chat). Same words as web.",
+    must: ["Add photos (up to 5)", "You can add up to 5 photos.", "Uploading photos…", "allowsMultipleSelection: true", "selectionLimit: remaining", "export const HANDOFF_PHOTOS_MAX = 5;", "rejectHandoffBody(reason, withCarrier, paths)", "body.photo_paths = photoPaths;", "body.photo_path = photoPaths[0];", "<HandoffRejectionPhotos booking={booking} />", "Carrier's photos", "handoff_rejection_proof_urls"],
+    mustNot: ["Add photo evidence (optional)", "let photo_path: string | undefined;"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
