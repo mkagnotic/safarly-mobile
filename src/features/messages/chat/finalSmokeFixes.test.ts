@@ -22,11 +22,11 @@ test("Send Parcel: the photos sit INSIDE the amount card, above the amount", () 
   assert.ok(!s.includes('<View style={styles.submitRow}>\n          <ListingFilesField'), "not floating between cards");
 });
 
-test("travel card tag is uppercased in code, not with textTransform (Android clipped it to 'YOUR')", () => {
+test("travel card tag: no letterSpacing with textTransform (Android clipped it to 'YOUR')", () => {
   const s = read("src/features/travels/TravelCard.tsx");
-  assert.ok(s.includes("{tagLabel.toUpperCase()}"));
   const tagStyle = s.slice(s.indexOf("  tagText: {"), s.indexOf("  tagMuted:"));
-  assert.ok(!tagStyle.includes('textTransform: "uppercase"'));
+  assert.ok(tagStyle.includes('textTransform: "uppercase"'));
+  assert.ok(!tagStyle.includes("letterSpacing"));
 });
 
 test("live search updates refetch quietly (no skeletons, an open photo viewer stays open)", () => {
