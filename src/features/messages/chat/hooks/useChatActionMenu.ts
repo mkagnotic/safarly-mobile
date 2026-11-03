@@ -5,11 +5,11 @@ import { type UseActiveDealResult } from "@/hooks/api/useActiveDeal";
 import { useBlockedUsers } from "@/hooks/api/useBlockedUsers";
 import { type UseMyConversationsResult } from "@/hooks/api/useMyConversations";
 import { useModalHandoff } from "@/hooks/useModalHandoff";
-import { bumpRealtimeTopic } from "@/store/realtimeBus";
 import { ApiClientError, getErrorMessage, messagesApi, type Conversation } from "@/services/api";
 
 import { type ChatNav, type SetChatModalError } from "../chatTypes";
 import { reportErrorText, reportResultToast } from "../lib/chatModerationRules";
+import { refreshAfterMatchEnded } from "../lib/refreshAfterMatchEnded";
 
 interface UseChatActionMenuInput {
   conversationId: string | null;
@@ -113,10 +113,9 @@ export function useChatActionMenu({
       // (fire-and-forget left the old banner up and looked like nothing
       // happened). The bump wakes the inbox and My Travels, whose listing
       // statuses the unmatch also reverts.
-      for (const t of ["conversations", "messages", "carrier-requests", "parcels", "trips", "bookings"] as const) {
-        bumpRealtimeTopic(t);
-      }
-      await Promise.all([refetchConversations(), refetchActiveDeal()]);
+      // Same refresh as the automatic unmatch on the final verification
+      // rejection (useChatVerification).
+      await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal);
     } catch (err) {
       // Guard may reject if the state moved (e.g. already unmatched). Resync.
       void refetchConversations();

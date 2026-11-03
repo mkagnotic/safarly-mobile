@@ -17,7 +17,11 @@ import {
 
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { BusyLabel } from "@/components/ui/BusyLabel";
-import { travelDocOutOfTries } from "@/features/messages/chat/lib/verificationTries";
+import {
+  isLastTry,
+  LAST_TRY_REJECT_WARNING,
+  travelDocOutOfTries,
+} from "@/features/messages/chat/lib/verificationTries";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
@@ -77,7 +81,6 @@ interface TravelDocModalProps {
   onUpload: (files: RNUploadFile[]) => void;
   onApprove: () => void;
   onReject: (reason: string) => void;
-  onRequestAdminReview: () => void;
   onCancelMatch: () => void;
 }
 
@@ -86,8 +89,8 @@ interface TravelDocModalProps {
  *
  * "3 of 3 uploads remaining" read as a used-up count and announced a retry limit to
  * someone who had not yet tried once. So: state the rule before the first upload,
- * and only count down once an attempt has actually been spent. Running out is not a
- * dead end — it opens admin review — so the last-attempt line says so.
+ * and only count down once an attempt has actually been spent. A rejected last try
+ * ends the match automatically (client, 3 Nov 2026), so the last-try line says so.
  *
  * ⚠️ Web `src/customer/components/ChatDocVerifyPrompt.tsx` carries the identical
  * wording — keep the two in sync.
@@ -97,8 +100,8 @@ function attemptsHint(attempts: number, maxAttempts: number): string {
   // "tries" (not "uploads"/"times"): the files line below also counts to 3, and the two
   // must not read as one limit (client, 26 Oct 2026).
   if (attempts === 0) return `You get ${maxAttempts} tries to have your document approved.`;
-  if (left <= 0) return "No tries left — our team can review it for you.";
-  if (left === 1) return "Last try — after this, our team will review it.";
+  if (left <= 0) return "No tries left.";
+  if (left === 1) return "Last try — if it is rejected, this match ends automatically.";
   return `${left} tries left to have it approved.`;
 }
 
@@ -107,8 +110,8 @@ function attemptsHint(attempts: number, maxAttempts: number): string {
  * `ChatDocVerifyPrompt`, opened from the workflow pin's "Upload" / "Review" CTA.
  *
  * Carrier uploads a boarding pass or flight ticket (image or PDF, capped tries);
- * the sender approves or asks for a re-upload with a reason; after the attempts
- * run out the carrier can escalate to admin or cancel the match. Approval is what
+ * the sender approves or asks for a re-upload with a reason; rejecting the last
+ * try ends the match automatically (server-side). Approval is what
  * unlocks payment — enforced server-side, this is only the UI.
  */
 export function TravelDocModal({
@@ -124,7 +127,6 @@ export function TravelDocModal({
   onUpload,
   onApprove,
   onReject,
-  onRequestAdminReview,
   onCancelMatch,
 }: Readonly<TravelDocModalProps>) {
   // 1 to MAX_FILES staged files, each with an image preview when it has one.
@@ -335,7 +337,6 @@ export function TravelDocModal({
               onUpload={() => files.length && onUpload(files.map((f) => f.file))}
               onApprove={onApprove}
               onReject={() => reason.trim() && onReject(reason.trim())}
-              onRequestAdminReview={onRequestAdminReview}
               onCancelMatch={onCancelMatch}
             />
           )}
@@ -363,7 +364,6 @@ interface ContentProps {
   onUpload: () => void;
   onApprove: () => void;
   onReject: () => void;
-  onRequestAdminReview: () => void;
   onCancelMatch: () => void;
 }
 
@@ -394,7 +394,6 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
     takePhoto,
     pickPdf,
     onUpload,
-    onRequestAdminReview,
     onCancelMatch,
   } = props;
 
@@ -409,6 +408,9 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
     );
   }
 
+  // Only a deal that ran out of tries before the auto-unmatch change (3 Nov 2026)
+  // lands here: today the server ends the match on the final rejection. No admin
+  // review any more (the server refuses it) - cancelling is the way out.
   if (exhausted) {
     return (
       <View style={styles.stack}>
@@ -416,28 +418,8 @@ function CarrierContent(props: Readonly<ContentProps & { exhausted: boolean }>) 
           icon="alert-circle"
           tone="warning"
           title="Verification failed"
-          body="We're unable to verify the travel document. Would you like our team to review it?"
+          body="The travel document was rejected on every try, so this match can't go ahead."
         />
-        {doc.escalated ? (
-          <View style={styles.mutedPill}>
-            <Text style={styles.mutedPillText}>
-              Admin review requested — our team will follow up.
-            </Text>
-          </View>
-        ) : (
-          <Pressable
-            onPress={onRequestAdminReview}
-            disabled={busy}
-            style={[styles.btn, styles.btnPrimary, busy && styles.btnDisabled]}
-            accessibilityRole="button"
-          >
-            {pending === "admin" ? (
-              <BusyLabel label="Sending…" textStyle={styles.btnPrimaryText} />
-            ) : (
-              <Text style={styles.btnPrimaryText}>Request admin review</Text>
-            )}
-          </Pressable>
-        )}
         {confirmCancel ? (
           <View style={styles.row}>
             <Pressable
@@ -568,14 +550,15 @@ function SenderContent(props: Readonly<ContentProps>) {
   }
 
   if (doc.status === "rejected") {
-    // Out of tries = the carrier can't upload; our team reviews (chat spec bug 6).
+    // Out of tries = the carrier can't upload. Only a deal from before the
+    // auto-unmatch change lands here (the server now ends the match instead).
     if (travelDocOutOfTries(doc)) {
       return (
         <InfoBlock
-          icon="time-outline"
-          tone="muted"
-          title="Under review by our team"
-          body="The traveler has no tries left. Our team will review the document and let you both know."
+          icon="alert-circle"
+          tone="warning"
+          title="Verification failed"
+          body="The traveler has no tries left for the travel document."
         />
       );
     }
@@ -639,6 +622,9 @@ function SenderContent(props: Readonly<ContentProps>) {
             placeholderTextColor={colors.subtleText}
             style={styles.reasonInput}
           />
+          {isLastTry(doc, 3) ? (
+            <Text style={styles.lastTryText} testID="travel-doc-last-try">{LAST_TRY_REJECT_WARNING}</Text>
+          ) : null}
           <View style={styles.row}>
             <Pressable
               onPress={onReject}
@@ -806,6 +792,7 @@ const styles = StyleSheet.create({
   infoBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19 },
 
   attemptsText: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  lastTryText: { color: colors.warning, fontSize: 13, fontWeight: "700", lineHeight: 18 },
 
   // File picker
   pickerRow: { flexDirection: "row", gap: 8 },
@@ -877,14 +864,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlignVertical: "top",
   },
-
-  mutedPill: {
-    borderRadius: 12,
-    backgroundColor: colors.surfaceMuted,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  mutedPillText: { color: colors.mutedText, fontSize: 12, fontWeight: "600", textAlign: "center" },
 
   // Buttons
   btn: {

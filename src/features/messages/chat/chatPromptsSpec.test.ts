@@ -44,9 +44,12 @@ test("bugs 4/5: the pin decides 'no tries' from the tries, not the server label"
   assert.match(PIN, /noTries\?\.button \?\? ctaButtonText\(cta\.code\)/);
 });
 
-test("bug 6: the sender sees 'Under review by our team' once the traveler is out of tries", () => {
-  assert.match(TRAVEL, /title="Under review by our team"/);
-  assert.match(TRAVEL, /The traveler has no tries left\. Our team will review the document and let you both know\./);
+// Superseded 3 Nov 2026 (auto-unmatch on the final rejection): no admin review,
+// so the sender is no longer told "our team will review". Only a deal that ran
+// out before that change can still show this state.
+test("bug 6: the sender sees the traveler is out of tries, with no admin-review promise", () => {
+  assert.doesNotMatch(TRAVEL, /Under review by our team/);
+  assert.match(TRAVEL, /The traveler has no tries left for the travel document\./);
 });
 
 test("bug 8: the payout dialog names no processor (Razorpay serves India)", () => {
@@ -123,7 +126,6 @@ test("wording: same words as web", () => {
   for (const t of [
     "Travel document uploaded — awaiting review",
     "Travel document approved",
-    "Admin review requested — our team will follow up",
     "Match cancelled",
     "Parcel photos uploaded — awaiting carrier review",
     "Parcel approved",
