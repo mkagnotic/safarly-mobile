@@ -13,6 +13,7 @@ import {
   type RNUploadFile,
 } from "@/services/api";
 import { formatMoney } from "@/utils/money";
+import { HANDOFF_PHOTOS_MAX, rejectHandoffBody } from "@/features/bookings/lib/handoffPhotos";
 import {
   cancelToast,
   declineToast,
@@ -146,18 +147,20 @@ export function createBookingActions({
     setAcceptHandoffOpen(false);
   };
 
-  const handleRejectHandoffConfirm = async (reason: string, withCarrier: boolean, file?: RNUploadFile) => {
+  const handleRejectHandoffConfirm = async (reason: string, withCarrier: boolean, files: readonly RNUploadFile[] = []) => {
     setModalError(null);
     const result = await runAction(
       "reject-handoff",
       async () => {
-        // Upload evidence first (if attached), then pass its path on reject.
-        let photo_path: string | undefined;
-        if (file) {
+        // Upload each photo first (the endpoint takes one file per call), then
+        // pass every path on reject - plus the first as `photo_path` for an
+        // older backend.
+        const paths: string[] = [];
+        for (const file of files.slice(0, HANDOFF_PHOTOS_MAX)) {
           const up = await bookingsApi.uploadHandoffEvidence(booking.id, file);
-          photo_path = up.path;
+          if (up?.path) paths.push(up.path);
         }
-        return bookingsApi.rejectHandoff(booking.id, { reason, photo_path, parcel_with_carrier: withCarrier });
+        return bookingsApi.rejectHandoff(booking.id, rejectHandoffBody(reason, withCarrier, paths));
       },
       // Still with the carrier = the deal isn't over: it has to go back.
       declineToast(withCarrier),
