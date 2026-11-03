@@ -893,17 +893,6 @@ export function SendParcelScreen() {
           </SectionCard>
         </View>
 
-        {/* Parcel photos right above the amount, as on web (client, 2 Nov 2026). */}
-        <View style={styles.submitRow}>
-          <ListingFilesField
-            kind="parcel"
-            staged={ownerFiles}
-            onStagedChange={setOwnerFiles}
-            label="Parcel photos or documents"
-            hint="photos, invoice or order screenshot (PDF or photos)"
-          />
-        </View>
-
         {/* ───────── Section 4 — How much will you pay? ───────── */}
         <View
           onLayout={(e) => {
@@ -911,6 +900,17 @@ export function SendParcelScreen() {
           }}
         >
           <SectionCard last>
+            {/* Parcel photos right above the amount, as on web (client, 2 Nov 2026).
+                Inside the card: outside it the form card visibly broke (3 Nov 2026). */}
+            <View style={styles.photosInCard}>
+              <ListingFilesField
+                kind="parcel"
+                staged={ownerFiles}
+                onStagedChange={setOwnerFiles}
+                label="Parcel photos or documents"
+                hint="photos, invoice or order screenshot (PDF or photos)"
+              />
+            </View>
             <View style={styles.costRow}>
               <CurrencyToggle value={currency} onChange={setCurrency} />
               <View style={styles.costInputWrap}>
@@ -1344,6 +1344,7 @@ const styles = StyleSheet.create({
   warningStrong: { color: colors.text, fontWeight: "800" },
 
   submitRow: { marginTop: 4 },
+  photosInCard: { marginBottom: 16 },
 
   /** See ListTripScreen: Screen's content style has no flexGrow, so without
    *  the pair of these the block sits at the top with the viewport empty. */

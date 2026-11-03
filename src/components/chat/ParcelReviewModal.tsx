@@ -19,7 +19,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { BusyLabel } from "@/components/ui/BusyLabel";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
-import { isLastTry, LAST_TRY_REJECT_WARNING } from "@/features/messages/chat/lib/verificationTries";
+import { isLastTry, LAST_TRY_REJECT_BUTTON, LAST_TRY_REJECT_WARNING } from "@/features/messages/chat/lib/verificationTries";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
 import {
   getErrorMessage,
@@ -453,7 +453,7 @@ function CarrierView({
               {pending === "reject" ? (
                 <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
-                <Text style={styles.btnWarningText}>Request changes</Text>
+                <Text style={styles.btnWarningText}>{isLastTry(review, 5) ? LAST_TRY_REJECT_BUTTON : "Request changes"}</Text>
               )}
             </Pressable>
             <Pressable

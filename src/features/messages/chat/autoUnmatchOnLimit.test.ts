@@ -31,13 +31,13 @@ function rejectForm(src: string, startMarker: string, endMarker: string): string
 }
 
 test("both reject forms warn on the last try, above the confirm button, reason field kept", () => {
-  const travel = rejectForm(TRAVEL, "<TextInput", "Request re-upload</Text>");
+  const travel = rejectForm(TRAVEL, "<TextInput", ': "Request re-upload"}</Text>');
   assert.match(travel, /isLastTry\(doc, 3\)/);
   assert.match(travel, /LAST_TRY_REJECT_WARNING/);
   assert.ok(travel.indexOf("LAST_TRY_REJECT_WARNING") < travel.indexOf("onPress={onReject}"));
   assert.match(travel, /value=\{reason\}/);
 
-  const parcel = rejectForm(PARCEL, 'placeholder="Add a note for the receiver (optional)"', "Request changes</Text>");
+  const parcel = rejectForm(PARCEL, 'placeholder="Add a note for the receiver (optional)"', ': "Request changes"}</Text>');
   assert.match(parcel, /isLastTry\(review, 5\)/);
   assert.match(parcel, /LAST_TRY_REJECT_WARNING/);
   assert.ok(parcel.indexOf("LAST_TRY_REJECT_WARNING") < parcel.indexOf("onPress={onReject}"));

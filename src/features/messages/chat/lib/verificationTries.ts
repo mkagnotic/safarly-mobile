@@ -67,6 +67,8 @@ export function isLastTry(state: TriesState | null | undefined, fallbackMax: num
 
 /** Shown above the reject confirm button on the last try. Web carries the identical line. */
 export const LAST_TRY_REJECT_WARNING = "This was their last try. Rejecting it will end this match automatically.";
+/** The reject form's confirm button on the last try (3 Nov 2026): it ends the match, so it says so. Same words on web. */
+export const LAST_TRY_REJECT_BUTTON = "Reject and end match";
 
 /** Toast after a reject that ended the match (`auto_unmatched: true`). Web parity. */
 export const AUTO_UNMATCHED_TOAST = "This match has ended automatically.";

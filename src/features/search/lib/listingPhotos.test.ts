@@ -275,6 +275,6 @@ test("List Trip: travel document right after Airline, before the carry section",
 });
 
 test("Send Parcel and Edit parcel: photos right before the amount", () => {
-  before("features/parcels/SendParcelScreen.tsx", 'label="Parcel photos or documents"', "Section 4 — How much will you pay?");
+  before("features/parcels/SendParcelScreen.tsx", 'label="Parcel photos or documents"', "<View style={styles.costRow}>");
   before("features/parcels/EditParcelModal.tsx", 'label="Parcel photos or documents"', "Fee offered</Text>");
 });

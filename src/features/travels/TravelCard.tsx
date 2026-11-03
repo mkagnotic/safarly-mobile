@@ -180,7 +180,7 @@ export const TravelCard = memo(function TravelCard({
       accessibilityLabel={`${tagLabel}: ${item.from_city} to ${item.to_city}`}
     >
       <View style={[styles.tag, tagTone === "muted" && styles.tagMuted]}>
-        <Text style={[styles.tagText, tagTone === "muted" && styles.tagTextMuted]}>{tagLabel}</Text>
+        <Text style={[styles.tagText, tagTone === "muted" && styles.tagTextMuted]}>{tagLabel.toUpperCase()}</Text>
       </View>
 
       <View style={styles.row}>
@@ -321,8 +321,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(249, 115, 22, 0.10)",
     marginBottom: 10,
   },
+  // Uppercased in JS, not with textTransform: on Android, textTransform +
+  // letterSpacing measures the lowercase width and clipped "YOUR PACKAGE" to
+  // "YOUR" (3 Nov 2026).
   tagText: {
-    textTransform: "uppercase",
     color: colors.ctaAccent,
     fontSize: 10,
     lineHeight: 14,

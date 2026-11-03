@@ -2854,6 +2854,14 @@ const CHECKS = [
     must: ["return <PayBookingForBooking key={route.params?.bookingId ?? \"none\"} />;"],
     mustNot: [],
   },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/chat/lib/verificationTries.ts", "src/components/chat/TravelDocModal.tsx", "src/components/chat/ParcelReviewModal.tsx", "src/features/travels/TravelCard.tsx", "src/hooks/api/useSearchMatches.ts"],
+    id: "mobile-final-smoke-fixes-nov3",
+    why: "Final emulator smoke 3 Nov 2026: the last-try reject button now says it ends the match (same words as web); the travel card tag is uppercased in code (Android clipped textTransform+letterSpacing to 'YOUR'); live search updates refetch quietly so an open photo viewer is not closed.",
+    must: ["export const LAST_TRY_REJECT_BUTTON = \"Reject and end match\";", "{isLastTry(doc, 3) ? LAST_TRY_REJECT_BUTTON : \"Request re-upload\"}", "{isLastTry(review, 5) ? LAST_TRY_REJECT_BUTTON : \"Request changes\"}", "{tagLabel.toUpperCase()}", "useRealtimeBus(\"discovery\", silentRefetch);"],
+    mustNot: ["useRealtimeBus(\"discovery\", refetch);"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

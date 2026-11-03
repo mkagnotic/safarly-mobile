@@ -19,6 +19,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { BusyLabel } from "@/components/ui/BusyLabel";
 import {
   isLastTry,
+  LAST_TRY_REJECT_BUTTON,
   LAST_TRY_REJECT_WARNING,
   travelDocOutOfTries,
 } from "@/features/messages/chat/lib/verificationTries";
@@ -640,7 +641,7 @@ function SenderContent(props: Readonly<ContentProps>) {
               {pending === "reject" ? (
                 <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
-                <Text style={styles.btnWarningText}>Request re-upload</Text>
+                <Text style={styles.btnWarningText}>{isLastTry(doc, 3) ? LAST_TRY_REJECT_BUTTON : "Request re-upload"}</Text>
               )}
             </Pressable>
             <Pressable
