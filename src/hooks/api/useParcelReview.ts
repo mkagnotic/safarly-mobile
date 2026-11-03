@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import { rejectEndedMatch } from "@/features/messages/chat/lib/verificationTries";
 import {
   ApiClientError,
   carriersApi,
@@ -24,7 +25,7 @@ export interface UseParcelReviewResult {
   /** Carrier: approve the parcel. */
   approve: () => Promise<void>;
   /** Carrier: request changes with a reason (and optional note). */
-  reject: (reason: ParcelReviewReason, note?: string) => Promise<void>;
+  reject: (reason: ParcelReviewReason, note?: string) => Promise<{ autoUnmatched: boolean }>;
   /** Sender: cancel the carrier's request after a reject. */
   cancel: () => Promise<void>;
 }
@@ -133,12 +134,14 @@ export function useParcelReview(requestId: string | null): UseParcelReviewResult
 
   const reject = useCallback(
     async (reason: ParcelReviewReason, note?: string) => {
-      if (!requestId) return;
+      if (!requestId) return { autoUnmatched: false };
       setPending("reject");
       try {
-        await carriersApi.rejectParcelReview(requestId, reason, note);
+        // `auto_unmatched` = that was the sender's last try and the server ended the match.
+        const res = await carriersApi.rejectParcelReview(requestId, reason, note);
         await refetch();
         syncDealPin();
+        return { autoUnmatched: rejectEndedMatch(res.data) };
       } finally {
         if (mountedRef.current) setPending(null);
       }

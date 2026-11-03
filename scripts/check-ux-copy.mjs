@@ -2826,6 +2826,11 @@ const CHECKS = [
     why: "See cancelled-trip-says-so (web repo): the same dated notice at the top of the owner's cancelled trip.",
     must: ["This trip was cancelled on ${date}. It stays in your archive so you can look back at it.", "isOwner && cancelledTripNotice(trip) ?", "testID=\"trip-cancelled-notice\"", ") : isOwner && !cancelledTripNotice(trip) ? ("],
     mustNot: [],
+    file: ["src/components/chat/TravelDocModal.tsx", "src/components/chat/ParcelReviewModal.tsx", "src/features/messages/chat/lib/verificationTries.ts", "src/features/messages/chat/hooks/useChatVerification.ts", "src/services/api/carriers.ts", "src/hooks/api/useTravelDoc.ts"],
+    id: "mobile-auto-unmatch-on-verification-limit",
+    why: "Client 3 Nov 2026 (option 1): when the 3rd travel document or 5th parcel-photo set is rejected the server ends the match automatically; admin review for travel documents is removed. The rejecter is warned on the last try; the app refreshes like a manual unmatch. Same words as web.",
+    must: ["LAST_TRY_REJECT_WARNING", "Last try — if it is rejected, this match ends automatically.", "No more photos can be added to this request.", "This was their last try. Rejecting it will end this match automatically.", "This match has ended automatically.", "await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal)"],
+    mustNot: ["Request admin review", "Admin review requested", "our team can review", "our team will review", "contact the Safarly support team", "choose your photos carefully", "request-admin-review", "requestAdminReview"],
   },
 ];
 
