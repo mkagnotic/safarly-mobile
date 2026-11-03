@@ -37,7 +37,7 @@ test("both reject forms warn on the last try, above the confirm button, reason f
   assert.ok(travel.indexOf("LAST_TRY_REJECT_WARNING") < travel.indexOf("onPress={onReject}"));
   assert.match(travel, /value=\{reason\}/);
 
-  const parcel = rejectForm(PARCEL, 'placeholder="Add a note for the sender (optional)"', "Request changes</Text>");
+  const parcel = rejectForm(PARCEL, 'placeholder="Add a note for the receiver (optional)"', "Request changes</Text>");
   assert.match(parcel, /isLastTry\(review, 5\)/);
   assert.match(parcel, /LAST_TRY_REJECT_WARNING/);
   assert.ok(parcel.indexOf("LAST_TRY_REJECT_WARNING") < parcel.indexOf("onPress={onReject}"));
