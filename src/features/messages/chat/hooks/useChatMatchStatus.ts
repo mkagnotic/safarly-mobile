@@ -4,6 +4,7 @@ import { type UseActiveDealResult } from "@/hooks/api/useActiveDeal";
 import { type Conversation } from "@/services/api";
 
 import { getRoleForConversation } from "../chatHelpers";
+import { pickMatchableDeal } from "../lib/matchableDeal";
 import { type ChatUser } from "../chatTypes";
 
 interface UseChatMatchStatusInput {
@@ -62,14 +63,7 @@ export function useChatMatchStatus({
   // and if that other delivery ran the other way round the two of them saw the roles
   // reversed. A deal is only the subject of a match while it is still AT the match
   // step. Keep in sync with web CustomerMessages.tsx.
-  const MATCH_STEP_STATES = ["NEGOTIATING", "MATCH_REQUESTED", "MATCH_DECLINED"];
-  const matchableDeal =
-    activeDeal &&
-    activeDeal.request_status !== "rejected" &&
-    activeDeal.request_status !== "withdrawn" &&
-    MATCH_STEP_STATES.includes(workflow?.state ?? "")
-      ? activeDeal
-      : null;
+  const matchableDeal = pickMatchableDeal(activeDeal, workflow?.state);
   const isBlocked = matchStatus === "blocked";
   const matchedByOther =
     matchStatus === "pending" && !!matchRequester && matchRequester !== user?.id;
