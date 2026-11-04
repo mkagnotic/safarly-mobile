@@ -39,6 +39,7 @@ import { ParcelDetailsSection } from "@/features/bookings/components/ParcelDetai
 import { useExpandedBooking } from "@/features/bookings/hooks/useExpandedBooking";
 import { createBookingActions } from "@/features/bookings/lib/bookingActions";
 import { BOOKINGS_SEARCH_SCOPE_NOTE, FILTERS, getRole } from "@/features/bookings/lib/bookingDisplay";
+import { deepLinkBelongsOnTab } from "@/features/bookings/lib/deepLinkTab";
 import { getBookingGates } from "@/features/bookings/lib/bookingGates";
 import { bookingDisputeView } from "@/features/disputes/disputeRules";
 import type { Nav, Route } from "@/features/bookings/lib/navigation";
@@ -541,8 +542,11 @@ export function BookingsScreen() {
       .catch(() => { /* not yours or gone: the list stays as it is */ });
     return () => { cancelled = true; };
   }, [expandId, linkParams, bookings]);
+  // A fetched (off-page) target is pinned only on a tab it belongs to: a booking
+  // declined at handover sat pinned under "Active" (client, 4 Nov 2026).
   const target = expandId
-    ? bookings.find((b) => b.id === expandId) ?? (fetchedTarget?.id === expandId ? fetchedTarget : null)
+    ? bookings.find((b) => b.id === expandId) ??
+      (fetchedTarget?.id === expandId && deepLinkBelongsOnTab(fetchedTarget, filterIdx) ? fetchedTarget : null)
     : null;
 
   const filtered = useMemo(() => {

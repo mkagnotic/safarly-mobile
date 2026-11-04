@@ -173,6 +173,8 @@ export interface Booking {
   return_completed_at?: string | null;
   /** When the SENDER confirmed the parcel arrived back. Null while outstanding. */
   return_received_at?: string | null;
+  /** Detail read only: the list tab this booking belongs on (server bookingTab rule). */
+  tab?: "active" | "delivered" | "cancelled" | null;
   /** Address the sender nominated for the parcel to be posted back to. */
   return_destination_address?: HandoffAddress | null;
   /**

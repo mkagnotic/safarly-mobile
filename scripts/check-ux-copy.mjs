@@ -2934,6 +2934,14 @@ const CHECKS = [
     must: ["if (activeDeal.request_status === \"rejected\" || activeDeal.request_status === \"withdrawn\") return null;", "pickMatchableDeal(activeDeal, workflow?.state)", "...matchTarget(matchableDeal)"],
     mustNot: [],
   },
+  {
+    repo: "mobile",
+    file: "src/features/bookings/BookingsScreen.tsx",
+    id: "mobile-linked-booking-pinned-only-on-its-tab",
+    why: "Client 4 Nov 2026: a cancelled booking opened from a notification stayed pinned under Active. Same rule as web deepLinkBelongsOnTab; never force the tab.",
+    must: ["deepLinkBelongsOnTab(fetchedTarget, filterIdx)"],
+    mustNot: ["setFilterIdx(idx)"],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
