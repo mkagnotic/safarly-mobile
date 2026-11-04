@@ -2870,6 +2870,14 @@ const CHECKS = [
     must: ["export const ADMIN_ACCOUNT_MESSAGE = \"This account is an admin account. Please use the admin login on the website.\";", "if (isAdminOnlyAccount((roles ?? []).map(", "throw new Error(ADMIN_ACCOUNT_MESSAGE);", "if (getErrorMessage(err) === ADMIN_ACCOUNT_MESSAGE) {"],
     mustNot: [],
   },
+  {
+    repo: "mobile",
+    file: ["src/features/messages/chat/lib/liveAttachment.ts", "src/hooks/api/useChatMessages.ts"],
+    id: "mobile-live-attachment-refetched-signed",
+    why: "Client 4 Nov 2026: handoff decline photos (and any photo the other side sends while the chat is open) showed as black boxes - the live row holds a storage path the app cannot load. Such a row is not appended; the thread is refetched (server signs), once per burst. Web already did this.",
+    must: ["export function liveRowNeedsSignedFetch(", "if (liveRowNeedsSignedFetch(incoming)) {", "if (signedRefetchTimer.current) clearTimeout(signedRefetchTimer.current);"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

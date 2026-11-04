@@ -1,3 +1,4 @@
+import { liveRowNeedsSignedFetch } from "@/features/messages/chat/lib/liveAttachment";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
@@ -87,6 +88,11 @@ export function useChatMessages({
   pageSize = 50,
 }: UseChatMessagesOptions): UseChatMessagesResult {
   const [serverMessages, setServerMessages] = useState<Message[]>([]);
+  /** Coalesces the refetches that live attachment rows trigger (liveAttachment.ts). */
+  const signedRefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (signedRefetchTimer.current) clearTimeout(signedRefetchTimer.current);
+  }, []);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(!!conversationId);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -192,7 +198,18 @@ export function useChatMessages({
         (payload) => {
           // Skips a row we already have (e.g. our own send already echoed).
           const incoming = payload.new as Partial<Message> | undefined;
-          setServerMessages((prev) => applyMessageInsert(prev, incoming));
+          if (liveRowNeedsSignedFetch(incoming)) {
+            // An attachment arrives as a storage path the app cannot load (it showed
+            // black): refetch so the server signs it. Several photos at once -> one
+            // refetch (4 Nov 2026; web does the same).
+            if (signedRefetchTimer.current) clearTimeout(signedRefetchTimer.current);
+            signedRefetchTimer.current = setTimeout(() => {
+              signedRefetchTimer.current = null;
+              void refetch();
+            }, 400);
+          } else {
+            setServerMessages((prev) => applyMessageInsert(prev, incoming));
+          }
           // A message from the other side into the chat on screen is read
           // (chat/lib/readRules.ts); it used to stay unread under the badge.
           if (conversationId && shouldMarkIncomingRead({
