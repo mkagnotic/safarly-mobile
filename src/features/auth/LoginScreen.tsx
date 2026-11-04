@@ -1,3 +1,4 @@
+import { ADMIN_ACCOUNT_MESSAGE } from "@/services/auth/adminOnlyAccount";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
@@ -142,6 +143,11 @@ export function LoginScreen() {
       // handling was already avoiding. The Google hint is now stated
       // unconditionally: useful to a Google user, silent about everyone else.
       // Mirrors web `RoleLogin.tsx`.
+      // An admin-only account was signed straight back out (4 Nov 2026): say so, as web does.
+      if (getErrorMessage(err) === ADMIN_ACCOUNT_MESSAGE) {
+        setFormError(ADMIN_ACCOUNT_MESSAGE);
+        return;
+      }
       const raw = getErrorMessage(err).toLowerCase();
       const looksLikeBadCreds = raw.includes("invalid") && (raw.includes("credential") || raw.includes("login"));
       if (looksLikeBadCreds) {

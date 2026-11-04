@@ -2862,6 +2862,14 @@ const CHECKS = [
     must: ["export const LAST_TRY_REJECT_BUTTON = \"Reject and end match\";", "{isLastTry(doc, 3) ? LAST_TRY_REJECT_BUTTON : \"Request re-upload\"}", "{isLastTry(review, 5) ? LAST_TRY_REJECT_BUTTON : \"Request changes\"}", "useRealtimeBus(\"discovery\", silentRefetch);"],
     mustNot: ["useRealtimeBus(\"discovery\", refetch);"],
   },
+  {
+    repo: "mobile",
+    file: ["src/services/auth/adminOnlyAccount.ts", "src/services/api/auth.ts", "src/features/auth/LoginScreen.tsx"],
+    id: "mobile-admin-only-account-refused",
+    why: "Client 4 Nov 2026: an admin account signing in to the app fell through to customer onboarding (the app has no admin console). Email sign-in now refuses an admin-only account (admin role, no customer role), signs it out and says so - the web customer login's rule.",
+    must: ["export const ADMIN_ACCOUNT_MESSAGE = \"This account is an admin account. Please use the admin login on the website.\";", "if (isAdminOnlyAccount((roles ?? []).map(", "throw new Error(ADMIN_ACCOUNT_MESSAGE);", "if (getErrorMessage(err) === ADMIN_ACCOUNT_MESSAGE) {"],
+    mustNot: [],
+  },
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
