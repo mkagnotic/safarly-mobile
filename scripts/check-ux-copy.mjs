@@ -2942,6 +2942,15 @@ const CHECKS = [
     must: ["deepLinkBelongsOnTab(fetchedTarget, filterIdx)"],
     mustNot: ["setFilterIdx(idx)"],
   },
+  {
+    repo: "mobile",
+    file: ["src/hooks/api/useChatMessages.ts", "src/features/messages/chat/lib/pendingReconcile.ts"],
+    id: "mobile-chat-sent-bubble-matched-by-id",
+    why: "Client 4 Nov 2026 (1.1.3): every sent message showed twice. Bubble matched to the saved row by the id the send returns, not text + 60 s across two clocks. Same rule as web.",
+    must: ["const kept = pending.filter((p) => !pendingIsOnServer(p, serverMessages, currentUserId));", "adoptSaved(clientId, res?.data);", "if (p.serverId) return server.some((s) => s.id === p.serverId);"],
+    mustNot: [],
+  },
+
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

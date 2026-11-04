@@ -1,3 +1,4 @@
+import { pendingIsOnServer } from "@/features/messages/chat/lib/pendingReconcile";
 import { liveRowNeedsSignedFetch } from "@/features/messages/chat/lib/liveAttachment";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
@@ -34,6 +35,8 @@ interface PendingMessage {
   attachment_name?: string | null;
   created_at: string;
   status: ClientStatus;
+  /** The saved row's id, once the send replied (pendingReconcile.ts). */
+  serverId?: string | null;
 }
 
 export interface UseChatMessagesOptions {
@@ -238,18 +241,11 @@ export function useChatMessages({
     () => { void refetch(); },
   );
 
-  // Drop pending entries that now exist on the server (match by text + close created_at).
+  // Drop pending entries that now exist on the server - by the saved row's id
+  // once the send replied (pendingReconcile.ts: messages showed twice).
   useEffect(() => {
     if (pending.length === 0) return;
-    const kept = pending.filter((p) => {
-      if (p.status === "failed") return true;
-      return !serverMessages.some(
-        (s) =>
-          (s.from_user_id === currentUserId || s.sender_id === currentUserId) &&
-          (s.text === p.text || (!p.text && s.text === "📎 Attachment")) &&
-          Math.abs(new Date(s.created_at).getTime() - new Date(p.created_at).getTime()) < 60_000,
-      );
-    });
+    const kept = pending.filter((p) => !pendingIsOnServer(p, serverMessages, currentUserId));
     if (kept.length !== pending.length) setPending(kept);
   }, [serverMessages, pending, currentUserId]);
 
@@ -274,6 +270,15 @@ export function useChatMessages({
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
   }, [serverMessages, pending, conversationId, currentUserId]);
+
+  /** The send replied with the saved row: tie the bubble to it and show it. */
+  const adoptSaved = useCallback((clientId: string, row: Message | undefined | null) => {
+    if (!row?.id) return;
+    setPending((prev) => prev.map((p) => (p.clientId === clientId ? { ...p, serverId: row.id } : p)));
+    if (row.conversation_id && row.conversation_id !== conversationId) return;
+    if (liveRowNeedsSignedFetch(row)) return; // an unsigned path: the refetch brings it
+    setServerMessages((prev) => applyMessageInsert(prev, row));
+  }, [conversationId]);
 
   const send = useCallback(
     async ({ text, file }: SendInput) => {
@@ -344,9 +349,10 @@ export function useChatMessages({
       }
 
       try {
-        await messagesApi.sendMessage(conversationId, trimmed, attachment);
-        // The realtime INSERT subscription will pick up the server echo
-        // automatically; the dedupe effect drops the pending row.
+        const res = await messagesApi.sendMessage(conversationId, trimmed, attachment);
+        // The saved row comes back: the bubble is matched to it by id, and the row
+        // goes straight into the thread (the realtime echo is deduped by id).
+        if (mountedRef.current) adoptSaved(clientId, res?.data);
       } catch (err) {
         const failure = new ChatSendError("send", err);
         if (mountedRef.current) {
@@ -361,7 +367,7 @@ export function useChatMessages({
         throw failure;
       }
     },
-    [conversationId],
+    [conversationId, adoptSaved],
   );
 
   const retry = useCallback(
@@ -379,7 +385,8 @@ export function useChatMessages({
         prev.map((p) => (p.clientId === clientId ? { ...p, status: "pending" } : p)),
       );
       try {
-        await messagesApi.sendMessage(conversationId, payload.text, payload.attachment);
+        const res = await messagesApi.sendMessage(conversationId, payload.text, payload.attachment);
+        if (mountedRef.current) adoptSaved(clientId, res?.data);
       } catch (err) {
         if (mountedRef.current) {
           setPending((prev) =>
@@ -389,7 +396,7 @@ export function useChatMessages({
         throw err;
       }
     },
-    [pending, conversationId],
+    [pending, conversationId, adoptSaved],
   );
 
   const discard = useCallback((clientId: string) => {
