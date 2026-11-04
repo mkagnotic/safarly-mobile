@@ -2942,6 +2942,24 @@ const CHECKS = [
     must: ["deepLinkBelongsOnTab(fetchedTarget, filterIdx)"],
     mustNot: ["setFilterIdx(idx)"],
   },
+  {
+    repo: "mobile",
+    file: ["src/hooks/api/useChatMessages.ts", "src/features/messages/chat/lib/pendingReconcile.ts"],
+    id: "mobile-chat-sent-bubble-matched-by-id",
+    why: "Client 4 Nov 2026 (1.1.3): every sent message showed twice. Bubble matched to the saved row by the id the send returns, not text + 60 s across two clocks. Same rule as web.",
+    must: ["const kept = pending.filter((p) => !pendingIsOnServer(p, serverMessages, currentUserId));", "adoptSaved(clientId, res?.data);", "if (p.serverId) return server.some((s) => s.id === p.serverId);"],
+    mustNot: [],
+  },
+
+  {
+    repo: "mobile",
+    file: "src/services/notifications/push.ts",
+    id: "mobile-push-reregisters-after-sign-out",
+    why: "Client 4 Nov 2026 (1.1.3): no push on the test account - prod had 0 tokens for it. 1.1.2's loop fix remembered 'already registered this run' and sign-out (which deletes the server token) never cleared it, so signing back in without closing the app never registered again.",
+    must: ["function resetPushRegistration(): void {", "export async function forgetThisDevice(): Promise<void> {\n  resetPushRegistration();", "export async function clearCachedPushToken(): Promise<void> {\n  resetPushRegistration();", "if (registeredThisRun === token) return;"],
+    mustNot: [],
+  },
+
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
