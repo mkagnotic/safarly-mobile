@@ -238,6 +238,18 @@ export async function syncPushForAccount(accountKey: string, accountOn: boolean)
 }
 
 /**
+ * The next sign-in syncs AND registers again. Every sign-out drops this phone's
+ * token on the server, so "already registered this run" stops being true. Left
+ * set (1.1.2's loop fix), signing out and back in without closing the app never
+ * re-registered, and the account got no push at all until a restart
+ * (client, 4 Nov 2026: production had 0 tokens for the test account).
+ */
+function resetPushRegistration(): void {
+  syncedFor = null;
+  registeredThisRun = null;
+}
+
+/**
  * Remove this device's token server-side. Call from `signOut` BEFORE the
  * Supabase session is torn down — afterwards the JWT is gone and the DELETE
  * would 401. Best-effort; never throws.
@@ -255,7 +267,7 @@ export async function unregisterPushToken(): Promise<void> {
  * the next start (`retryPendingForget`). Never throws.
  */
 export async function forgetThisDevice(): Promise<void> {
-  syncedFor = null; // the next sign-in syncs again
+  resetPushRegistration();
   // Signed out: the previous account's unread count must not stay on the icon.
   if (Platform.OS !== "web") void Notifications.setBadgeCountAsync(0).catch(() => undefined);
   try {
@@ -307,6 +319,7 @@ export async function dismissChatNotifications(conversationId: string): Promise<
  * and the session is gone, so the DELETE in `unregisterPushToken` would only 401.
  */
 export async function clearCachedPushToken(): Promise<void> {
+  resetPushRegistration(); // the server removed every token: register afresh next sign-in
   try {
     await AsyncStorage.removeItem(LAST_TOKEN_KEY);
   } catch {

@@ -2951,6 +2951,15 @@ const CHECKS = [
     mustNot: [],
   },
 
+  {
+    repo: "mobile",
+    file: "src/services/notifications/push.ts",
+    id: "mobile-push-reregisters-after-sign-out",
+    why: "Client 4 Nov 2026 (1.1.3): no push on the test account - prod had 0 tokens for it. 1.1.2's loop fix remembered 'already registered this run' and sign-out (which deletes the server token) never cleared it, so signing back in without closing the app never registered again.",
+    must: ["function resetPushRegistration(): void {", "export async function forgetThisDevice(): Promise<void> {\n  resetPushRegistration();", "export async function clearCachedPushToken(): Promise<void> {\n  resetPushRegistration();", "if (registeredThisRun === token) return;"],
+    mustNot: [],
+  },
+
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */
