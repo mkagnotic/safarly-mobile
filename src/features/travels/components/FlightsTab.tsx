@@ -47,7 +47,7 @@ export function FlightsTab({
       <EmptyBlock
         icon="airplane-outline"
         title="No flights listed"
-        subtitle="List a trip so senders on your route can find you and send match requests."
+        subtitle="List a trip so receivers on your route can find you and send match requests."
       />
     );
   return (

@@ -14,6 +14,7 @@ import {
 
 import { type ChatUser, type SetChatModalError } from "../chatTypes";
 import { matchResultToast } from "../lib/chatModerationRules";
+import { matchTarget } from "../lib/matchableDeal";
 
 interface UseChatMatchActionsInput {
   conversationId: string | null;
@@ -64,10 +65,8 @@ export function useChatMatchActions({
     setModalError(null);
     await matchActions.run("accept", async () => {
       try {
-        await acceptMatch(conversationId, {
-          parcel_id: matchableDeal?.parcel_id ?? undefined,
-          trip_id: matchableDeal?.trip_id ?? undefined,
-        });
+        // Name the deal only when it is still at the match step (lib/matchableDeal.ts).
+        await acceptMatch(conversationId, { ...matchTarget(matchableDeal) });
         // Awaited: the pinned bar is a projection of the server FSM, so hold
         // the confirm button busy until it HAS the next step. Ending the
         // pending state as soon as the PUT returned re-enabled the button under

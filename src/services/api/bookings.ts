@@ -125,6 +125,10 @@ export interface Booking {
   handoff_rejected_at?: string | null;
   handoff_rejection_reason?: string | null;
   handoff_rejection_proof_url?: string | null;
+  /** Every photo the carrier attached to the decline (signed, max 5). Older
+   *  backends send only the single `handoff_rejection_proof_url` - read both
+   *  through `rejectionPhotoUrls`. */
+  handoff_rejection_proof_urls?: string[] | null;
   /** Handoff plan - how the parcel reaches the carrier in the origin city before
    *  they travel. Splits the handoff phase into three sub-steps: agree the plan
    *  (mode/address) -> send it (dispatched_at) -> inspect and accept/decline. */
@@ -169,6 +173,8 @@ export interface Booking {
   return_completed_at?: string | null;
   /** When the SENDER confirmed the parcel arrived back. Null while outstanding. */
   return_received_at?: string | null;
+  /** Detail read only: the list tab this booking belongs on (server bookingTab rule). */
+  tab?: "active" | "delivered" | "cancelled" | null;
   /** Address the sender nominated for the parcel to be posted back to. */
   return_destination_address?: HandoffAddress | null;
   /**
@@ -345,7 +351,9 @@ export const bookingsApi = {
    *  `parcel_with_carrier` decides whether a hand-back is outstanding. */
   rejectHandoff: (
     id: string,
-    body: { reason: string; photo_path?: string; parcel_with_carrier?: boolean },
+    /** `photo_paths` (max 5) for the current backend; `photo_path` = the first,
+     *  for an older one. Build it with `rejectHandoffBody`. */
+    body: { reason: string; photo_path?: string; photo_paths?: string[]; parcel_with_carrier?: boolean },
     idempotencyKey = newIdempotencyKey(),
   ) =>
     api.post<{
@@ -355,7 +363,7 @@ export const bookingsApi = {
       refund_amount: number;
     }>(`/booking-handler/${id}/handoff/reject`, body, { idempotencyKey }),
 
-  /** Upload reject evidence (carrier-only, ≤10MB image); pass the returned `path` as `photo_path`. */
+  /** Upload reject evidence (carrier-only, ≤10MB image); one file per call; pass the returned paths as `photo_paths`. */
   uploadHandoffEvidence: async (id: string, file: RNUploadFile) => {
     // Byte-accurate multipart via api.uploadRNFile — a plain FormData `{uri}` blob
     // arrives empty at the Deno edge fn under Expo/Hermes and 422s (same fix as

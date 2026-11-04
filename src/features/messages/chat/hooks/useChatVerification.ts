@@ -8,6 +8,8 @@ import { useTravelDoc } from "@/hooks/api/useTravelDoc";
 import { getErrorMessage, type ParcelReviewReason, type RNUploadFile } from "@/services/api";
 
 import { type SetChatModalError } from "../chatTypes";
+import { refreshAfterMatchEnded } from "../lib/refreshAfterMatchEnded";
+import { AUTO_UNMATCHED_TOAST } from "../lib/verificationTries";
 
 interface UseChatVerificationInput {
   activeDeal: UseActiveDealResult["activeDeal"];
@@ -84,27 +86,23 @@ export function useChatVerification({
     async (reason: string) => {
       setModalError(null);
       try {
-        await travelDoc.reject(reason);
+        const { autoUnmatched } = await travelDoc.reject(reason);
         setTravelDocOpen(false);
+        if (autoUnmatched) {
+          // That was the carrier's last try: the server ended the match (and posted
+          // the chat line). Refresh exactly as after a manual Unmatch.
+          showToast({ title: AUTO_UNMATCHED_TOAST, variant: "info" });
+          await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal);
+          return;
+        }
         showToast({ title: "Re-upload requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "travelDoc", message: `Couldn't request re-upload. ${getErrorMessage(err)}` });
       }
     },
-    [travelDoc, refetchActiveDeal, setModalError],
+    [travelDoc, refetchActiveDeal, refetchConversations, setModalError],
   );
-
-  const handleDocAdminReview = useCallback(async () => {
-    setModalError(null);
-    try {
-      await travelDoc.requestAdminReview();
-      setTravelDocOpen(false);
-      showToast({ title: "Admin review requested — our team will follow up", variant: "info", duration: 1800 });
-    } catch (err) {
-      setModalError({ modal: "travelDoc", message: `Couldn't escalate. ${getErrorMessage(err)}` });
-    }
-  }, [travelDoc, setModalError]);
 
   const handleDocCancelMatch = useCallback(async () => {
     setModalError(null);
@@ -152,15 +150,21 @@ export function useChatVerification({
     async (reason: ParcelReviewReason, note?: string) => {
       setModalError(null);
       try {
-        await parcelReview.reject(reason, note);
+        const { autoUnmatched } = await parcelReview.reject(reason, note);
         setParcelReviewOpen(false);
+        if (autoUnmatched) {
+          // The sender's last try: the server ended the match. Same refresh as Unmatch.
+          showToast({ title: AUTO_UNMATCHED_TOAST, variant: "info" });
+          await refreshAfterMatchEnded(refetchConversations, refetchActiveDeal);
+          return;
+        }
         showToast({ title: "Changes requested", variant: "info", duration: 1800 });
         void refetchActiveDeal();
       } catch (err) {
         setModalError({ modal: "parcelReview", message: `Couldn't request changes. ${getErrorMessage(err)}` });
       }
     },
-    [parcelReview, refetchActiveDeal, setModalError],
+    [parcelReview, refetchActiveDeal, refetchConversations, setModalError],
   );
 
   const handleParcelCancel = useCallback(async () => {
@@ -186,7 +190,6 @@ export function useChatVerification({
     handleDocUpload,
     handleDocApprove,
     handleDocReject,
-    handleDocAdminReview,
     handleDocCancelMatch,
     handleParcelUpload,
     handleParcelApprove,

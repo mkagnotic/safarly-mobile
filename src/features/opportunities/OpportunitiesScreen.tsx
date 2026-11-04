@@ -239,7 +239,7 @@ function BidForm({ parcel, trips, tripsLoading = false, pending, onSubmit, onLis
         <TextInput
           value={message}
           onChangeText={setMessage}
-          placeholder="Add a note to the sender..."
+          placeholder="Add a note to the receiver..."
           placeholderTextColor={colors.mutedText}
           style={[styles.input, styles.inputMultiline]}
           multiline

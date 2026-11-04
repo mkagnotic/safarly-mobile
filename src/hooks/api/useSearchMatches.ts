@@ -192,8 +192,10 @@ export function useSearchMatches({
   }, [runSearch]);
 
   // Anyone posting or editing a parcel / trip / buddy listing changes what
-  // this search would return. Unfiltered topic, so results stay live.
-  useRealtimeBus("discovery", refetch);
+  // this search would return. Unfiltered topic, so results stay live - and
+  // QUIETLY: the loud refetch blanked the list into skeletons on every listing
+  // change anywhere, closing an open photo viewer under the user (3 Nov 2026).
+  useRealtimeBus("discovery", silentRefetch);
 
   return { results, loading, error, hasAppliedFilters, search, setBaseQuery, refetch, resetToAutoMatch };
 }

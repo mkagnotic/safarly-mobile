@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useRealtimeBus } from "@/hooks/realtime/useRealtimeBus";
 import { bumpRealtimeTopic } from "@/store/realtimeBus";
+import { rejectEndedMatch } from "@/features/messages/chat/lib/verificationTries";
 import {
   ApiClientError,
   carriersApi,
@@ -14,7 +15,6 @@ export type TravelDocPending =
   | "upload"
   | "approve"
   | "reject"
-  | "admin"
   | "withdraw"
   | null;
 
@@ -28,10 +28,11 @@ export interface UseTravelDocResult {
   upload: (files: RNUploadFile[]) => Promise<void>;
   /** Sender: approve the uploaded document (unlocks payment). */
   approve: () => Promise<void>;
-  /** Sender: request a re-upload with a reason. */
-  reject: (reason: string) => Promise<void>;
-  /** Carrier: escalate to admin after exhausting attempts. */
-  requestAdminReview: () => Promise<void>;
+  /**
+   * Sender: request a re-upload with a reason. `autoUnmatched` is true when that
+   * was the carrier's last try and the server ended the match.
+   */
+  reject: (reason: string) => Promise<{ autoUnmatched: boolean }>;
   /** Carrier: cancel the match after a failed verification. */
   withdraw: () => Promise<void>;
 }
@@ -40,7 +41,7 @@ export interface UseTravelDocResult {
  * Travel-document verification state + actions for a carrier_request, the mobile
  * counterpart of web's `useTravelDoc` family (`hooks/api/useCarriers.ts`). The
  * whole flow is server-owned — this only fetches `getTravelDoc` and forwards the
- * carrier's upload/escalate and the sender's approve/reject.
+ * carrier's upload/withdraw and the sender's approve/reject.
  *
  * Pass `null` for `requestId` to keep the hook idle (no fetch); the chat screen
  * only enables it while the deal is in a travel-verification state, so we don't
@@ -144,30 +145,19 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
 
   const reject = useCallback(
     async (reason: string) => {
-      if (!requestId) return;
+      if (!requestId) return { autoUnmatched: false };
       setPending("reject");
       try {
-        await carriersApi.rejectTravelDoc(requestId, reason);
+        const res = await carriersApi.rejectTravelDoc(requestId, reason);
         await refetch();
         syncDealPin();
+        return { autoUnmatched: rejectEndedMatch(res.data) };
       } finally {
         if (mountedRef.current) setPending(null);
       }
     },
     [requestId, refetch],
   );
-
-  const requestAdminReview = useCallback(async () => {
-    if (!requestId) return;
-    setPending("admin");
-    try {
-      await carriersApi.requestTravelDocAdminReview(requestId);
-      await refetch();
-      syncDealPin();
-    } finally {
-      if (mountedRef.current) setPending(null);
-    }
-  }, [requestId, refetch]);
 
   const withdraw = useCallback(async () => {
     if (!requestId || !doc?.parcel_id) return;
@@ -190,7 +180,6 @@ export function useTravelDoc(requestId: string | null): UseTravelDocResult {
     upload,
     approve,
     reject,
-    requestAdminReview,
     withdraw,
   };
 }

@@ -730,7 +730,7 @@ export function ListTripScreen() {
         <Text style={[styles.helperText, hasSizeError && styles.helperError]}>
           {hasSizeError
             ? `Exceeds airline carry-on limit (${maxLimits.l}×${maxLimits.w}×${maxLimits.h} ${sizeUnit}). Consider checked baggage.`
-            : "Optional — helps senders know if their parcel will fit."}
+            : "Optional — helps receivers know if their parcel will fit."}
         </Text>
 
         <View style={[styles.labelToggleRow, styles.labelToggleRowGap]}>

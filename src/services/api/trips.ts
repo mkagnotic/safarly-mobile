@@ -42,6 +42,8 @@ export interface Trip {
   notes: string | null;
   offers_count: number;
   status: string;
+  /** Set when the trip was cancelled; only its owner can still open it. */
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
   open_to_buddy: boolean;

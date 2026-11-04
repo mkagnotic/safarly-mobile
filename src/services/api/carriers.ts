@@ -137,18 +137,15 @@ export const carriersApi = {
       {},
     ),
 
-  /** Sender requests a re-upload with a reason. */
+  /**
+   * Sender requests a re-upload with a reason. On the final try the server ends
+   * the match and answers `auto_unmatched: true` (older servers never send it).
+   * There is no admin-review escalation any more: the server refuses it.
+   */
   rejectTravelDoc: (requestId: string, reason: string) =>
-    api.post<{ status: string; attempts_left: number }>(
+    api.post<{ status: string; attempts_left: number; auto_unmatched?: boolean }>(
       `/carrier-request-handler/travel-doc/${requestId}/reject`,
       { reason },
-    ),
-
-  /** Carrier escalates to admin after exhausting upload attempts. */
-  requestTravelDocAdminReview: (requestId: string) =>
-    api.post<{ escalated: boolean }>(
-      `/carrier-request-handler/travel-doc/${requestId}/request-admin-review`,
-      {},
     ),
 
   // --- Parcel review (sender uploads parcel photos, carrier approves before payment) ---
@@ -176,9 +173,12 @@ export const carriersApi = {
       {},
     ),
 
-  /** Carrier requests changes with a reason (and optional note). */
+  /**
+   * Carrier requests changes with a reason (and optional note). On the final try
+   * the server ends the match and answers `auto_unmatched: true`.
+   */
   rejectParcelReview: (requestId: string, reason: ParcelReviewReason, note?: string) =>
-    api.post<{ status: string; reason: string }>(
+    api.post<{ status: string; reason: string; auto_unmatched?: boolean }>(
       `/carrier-request-handler/parcel-review/${requestId}/reject`,
       { reason, note },
     ),

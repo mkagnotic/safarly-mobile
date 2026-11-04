@@ -38,7 +38,7 @@ export function PayoutRequiredModal({ open, onClose, onSetup }: Readonly<PayoutR
 
           <View style={styles.reasons}>
             <Reason icon="shield-checkmark-outline" text="Handled securely by our payment partner — Safarly never stores your bank details." />
-            <Reason icon="cash-outline" text="Free to connect. The sender's payment is held securely and paid out to your bank once the sender confirms delivery." />
+            <Reason icon="cash-outline" text="Free to connect. The receiver's payment is held securely and paid out to your bank once they confirm delivery." />
           </View>
 
           <View style={styles.footer}>

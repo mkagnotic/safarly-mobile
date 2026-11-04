@@ -196,7 +196,7 @@ export function PayoutSetupScreen() {
 
   // ── Status card content by state ──
   const statusMeta = isConnected
-    ? { icon: "checkmark-circle" as const, tint: colors.safe, title: "Payouts connected", body: "Your bank account is connected. Earnings are paid to it after the sender confirms each delivery." }
+    ? { icon: "checkmark-circle" as const, tint: colors.safe, title: "Payouts connected", body: "Your bank account is connected. Earnings are paid to it after the receiver confirms each delivery." }
     : countryBlock
       ? { icon: "alert-circle" as const, tint: colors.warning, title: "Payouts unavailable in your country", body: `Payouts to ${countryName(countryBlock.country)} aren't available yet, so this can't be completed right now.` }
       : isPending
@@ -322,7 +322,7 @@ export function PayoutSetupScreen() {
                     : `${providerLabel}, our payment partner, checks your bank details${isHostedSetup ? " and identity" : ""}.`
                 }
               />
-              <Benefit icon="cash-outline" title="Direct bank deposits" body="Earnings are paid to your bank account after the sender confirms delivery." />
+              <Benefit icon="cash-outline" title="Direct bank deposits" body="Earnings are paid to your bank account after the receiver confirms delivery." />
               <Benefit icon="pricetag-outline" title="No fees to connect" body="Setting up payouts is free, and you receive your full quoted fee for each delivery." last />
             </Card>
           ) : null}
@@ -415,9 +415,9 @@ export function PayoutSetupScreen() {
           {/* FAQ */}
           <Card style={styles.card}>
             <Text style={styles.faqHeading}>How payouts work</Text>
-            <Faq q="When do I receive my earnings?" a="Earnings are released when the sender confirms delivery and usually reach your bank 2–7 business days later (your first payout can take 7–14 days)." />
+            <Faq q="When do I receive my earnings?" a="Earnings are released when the receiver confirms delivery and usually reach your bank 2–7 business days later (your first payout can take 7–14 days)." />
             <Faq q="What documents do I need?" a={isHostedSetup ? `A government ID, your bank details and your address, entered securely on ${providerLabel}.` : "Your bank account number and IFSC code, or a UPI ID."} />
-            <Faq q="Are there any fees?" a="Safarly adds a 10% platform fee on top of the delivery fee, paid by the sender, so you receive your full quoted fee. Connecting your bank is free." last />
+            <Faq q="Are there any fees?" a="Safarly adds a 10% platform fee on top of the delivery fee, paid by the receiver, so you receive your full quoted fee. Connecting your bank is free." last />
           </Card>
         </>
       )}

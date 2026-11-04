@@ -91,7 +91,7 @@ export function HandoffPlanCard({
   const isOnlineOrder = Boolean(booking.parcel?.is_online_order);
   const originCity = booking.parcel?.from_city?.trim() || null;
   const carrierName = booking.carrier?.name || "your carrier";
-  const senderName = booking.sender?.name || "your sender";
+  const senderName = booking.sender?.name || "your receiver";
   // The carrier's real name, for pre-filling "Name for the parcel". Falls back
   // to empty rather than the "your carrier" placeholder, which must never end
   // up printed on a shipping label.
@@ -248,7 +248,7 @@ export function HandoffPlanCard({
   if (showPlanForm) {
     return (
       <View style={styles.card}>
-        {header("Tell your sender how to get the parcel to you")}
+        {header("Tell your receiver how to get the parcel to you")}
         <Text style={styles.body}>
           You receive the parcel first, before you travel. Pick how it reaches you -
           {` ${senderName}`} sees this immediately and the chat records it.
@@ -267,7 +267,7 @@ export function HandoffPlanCard({
             <Text style={styles.modeHint}>
               {isOnlineOrder
                 ? "The seller ships straight to your address — usual for an online order."
-                : "The sender posts it to your local address."}
+                : "The receiver posts it to your local address."}
             </Text>
           </Pressable>
           <Pressable
@@ -392,7 +392,7 @@ export function HandoffPlanCard({
           disabled={pending !== null}
           style={[styles.primaryButton, pending !== null && styles.disabled]}
           accessibilityRole="button"
-          accessibilityLabel="Share handoff details with your sender"
+          accessibilityLabel="Share handoff details with your receiver"
         >
           {pending === "set-handoff-plan" ? (
             <ActivityIndicator size="small" color={colors.white} />

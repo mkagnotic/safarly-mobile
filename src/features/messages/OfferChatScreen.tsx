@@ -264,7 +264,7 @@ export function OfferChatScreen() {
   } = match;
   const {
     travelDocOpen, setTravelDocOpen, parcelReviewOpen, setParcelReviewOpen, travelDoc,
-    parcelReview, handleDocUpload, handleDocApprove, handleDocReject, handleDocAdminReview,
+    parcelReview, handleDocUpload, handleDocApprove, handleDocReject,
     handleDocCancelMatch, handleParcelUpload, handleParcelApprove, handleParcelReject,
     handleParcelCancel,
   } = useChatVerification({
@@ -610,7 +610,6 @@ export function OfferChatScreen() {
         onUpload={(file) => void handleDocUpload(file)}
         onApprove={() => void handleDocApprove()}
         onReject={(reason) => void handleDocReject(reason)}
-        onRequestAdminReview={() => void handleDocAdminReview()}
         onCancelMatch={() => void handleDocCancelMatch()}
       />
 

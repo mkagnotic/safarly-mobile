@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { ADMIN_ACCOUNT_MESSAGE, isAdminOnlyAccount } from "@/services/auth/adminOnlyAccount";
 
 import { AUTH_TIMEOUT_MS, api, withTimeout } from "./client";
 
@@ -70,6 +71,15 @@ export const authApi = {
       "Signing in is taking longer than usual. Check your connection and try again.",
     );
     if (error) throw error;
+    // Admin-only accounts are refused, as on the web customer login: the app has
+    // no admin console and they fell through to customer onboarding (4 Nov 2026).
+    if (data.user) {
+      const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", data.user.id);
+      if (isAdminOnlyAccount((roles ?? []).map((r: { role: string | null }) => r.role))) {
+        await supabase.auth.signOut({ scope: "local" });
+        throw new Error(ADMIN_ACCOUNT_MESSAGE);
+      }
+    }
     return data;
   },
 

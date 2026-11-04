@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LIBRARY_PICK_OPTIONS, requestLibraryPermission } from "@/lib/imagePicker";
 import { useState } from "react";
-import { ActivityIndicator, Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Modal, StyleSheet, Text, TextInput, View } from "react-native";
 import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 
 import { FormBanner } from "@/components/ui/FormBanner";
@@ -17,6 +17,16 @@ import {
   REJECT_REASON_MIN, minLengthHint,
 } from "@/features/bookings/lib/modalValidation";
 import { declineCopy } from "@/features/bookings/lib/moneyMessages";
+import {
+  ADD_PHOTOS_LABEL,
+  addPhotos,
+  HANDOFF_PHOTOS_MAX,
+  PHOTO_LIMIT_MESSAGE,
+  photoCounter,
+  remainingPhotoSlots,
+  removePhotoAt,
+  UPLOADING_PHOTOS,
+} from "@/features/bookings/lib/handoffPhotos";
 
 // ─────────────── Reject handoff modal ───────────────
 
@@ -33,7 +43,8 @@ interface RejectHandoffModalProps {
   /** Why the last attempt failed — shown inline; the modal stays open to retry. */
   error?: string | null;
   onCancel: () => void;
-  onConfirm: (reason: string, withCarrier: boolean, file?: RNUploadFile) => void;
+  /** `files`: up to 5 photos - uploaded one by one, then sent with the decline. */
+  onConfirm: (reason: string, withCarrier: boolean, files: RNUploadFile[]) => void;
 }
 
 export function RejectHandoffModal({
@@ -47,7 +58,7 @@ export function RejectHandoffModal({
   onConfirm,
 }: Readonly<RejectHandoffModalProps>) {
   const [reason, setReason] = useState("");
-  const [photo, setPhoto] = useState<RNUploadFile | null>(null);
+  const [photos, setPhotos] = useState<RNUploadFile[]>([]);
   // An unusable pick used to be dropped silently, leaving the person thinking
   // their evidence was attached. Say why instead.
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -58,36 +69,58 @@ export function RejectHandoffModal({
   const handleClose = () => {
     if (pending) return;
     setReason("");
-    setPhoto(null);
+    setPhotos([]);
     setPhotoError(null);
     onCancel();
   };
 
-  const pickPhoto = async () => {
+  const pickPhotos = async () => {
+    const remaining = remainingPhotoSlots(photos.length);
+    if (remaining <= 0) {
+      setPhotoError(PHOTO_LIMIT_MESSAGE);
+      return;
+    }
     try {
       const perm = await requestLibraryPermission();
       if (perm.status !== "granted") return;
-      const result = await ImagePicker.launchImageLibraryAsync({ ...LIBRARY_PICK_OPTIONS, mediaTypes: ["images"], quality: 0.8 });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      const type = evidenceMimeType(asset.mimeType, asset.fileName);
-      if (!EVIDENCE_TYPES.has(type)) {
-        setPhotoError("That photo format isn't supported. Choose a JPEG, PNG or WebP image.");
-        return;
-      }
-      if (asset.fileSize && asset.fileSize > MAX_EVIDENCE_BYTES) {
-        setPhotoError("That photo is larger than 10 MB. Choose a smaller one.");
-        return;
-      }
-      setPhotoError(null);
-      setPhoto({
-        uri: asset.uri,
-        name: asset.fileName ?? `evidence-${Date.now()}.jpg`,
-        type,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        ...LIBRARY_PICK_OPTIONS,
+        mediaTypes: ["images"],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: remaining,
       });
+      if (result.canceled || !result.assets?.length) return;
+      const picked: RNUploadFile[] = [];
+      let problem: string | null = null;
+      result.assets.forEach((asset, i) => {
+        const type = evidenceMimeType(asset.mimeType, asset.fileName);
+        if (!EVIDENCE_TYPES.has(type)) {
+          problem = "That photo format isn't supported. Choose a JPEG, PNG or WebP image.";
+          return;
+        }
+        if (asset.fileSize && asset.fileSize > MAX_EVIDENCE_BYTES) {
+          problem = "That photo is larger than 10 MB. Choose a smaller one.";
+          return;
+        }
+        picked.push({
+          uri: asset.uri,
+          name: asset.fileName ?? `evidence-${Date.now()}-${i}.jpg`,
+          type,
+        });
+      });
+      // Functional update: a slow picker must not overwrite photos added meanwhile.
+      // A picker that ignored selectionLimit is trimmed to 5 - and says so.
+      setPhotos((prev) => addPhotos(prev, picked).photos);
+      setPhotoError(problem ?? (picked.length > remaining ? PHOTO_LIMIT_MESSAGE : null));
     } catch {
       /* ignore pick failures */
     }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => removePhotoAt(prev, index));
+    setPhotoError(null);
   };
 
   const trimmed = reason.trim();
@@ -96,7 +129,7 @@ export function RejectHandoffModal({
 
   const handleConfirm = () => {
     if (!reasonOk) return;
-    onConfirm(trimmed, withCarrier, photo ?? undefined);
+    onConfirm(trimmed, withCarrier, photos);
   };
 
   return (
@@ -114,8 +147,8 @@ export function RejectHandoffModal({
         <Text style={sharedStyles.modalBody}>
           {copy.body}{" "}
           {returnEligible
-            ? "Because this is a returnable order, the sender can send it back to the seller."
-            : "The sender then arranges collection of the parcel from you."}{" "}
+            ? "Because this is a returnable order, the receiver can send it back to the seller."
+            : "The receiver then arranges collection of the parcel from you."}{" "}
           Tell us what's wrong so we can keep records.
         </Text>
         <TextInput
@@ -154,34 +187,58 @@ export function RejectHandoffModal({
             style={[styles.returnWhereOption, !withCarrier && styles.returnWhereOptionActive]}
             accessibilityRole="radio"
             accessibilityState={{ selected: !withCarrier }}
-            accessibilityLabel="The sender has the parcel"
+            accessibilityLabel="The receiver has the parcel"
           >
-            <Text style={styles.returnWhereTitle}>The sender has it</Text>
+            <Text style={styles.returnWhereTitle}>The receiver has it</Text>
             <Text style={styles.returnWhereHint}>I declined at the meetup — nothing to send back.</Text>
           </Pressable>
         </View>
         <Text style={sharedStyles.modalHelper}>
           {withCarrier
-            ? "The sender will be asked where to send it, and you'll confirm once it's on its way."
+            ? "The receiver will be asked where to send it, and you'll confirm once it's on its way."
             : "Nothing to return — the booking closes as soon as you submit."}
         </Text>
 
-        <Pressable
-          onPress={() => void pickPhoto()}
-          disabled={pending}
-          style={[styles.photoPickerButton, photo && styles.photoPickerButtonSelected]}
-          accessibilityRole="button"
-          accessibilityLabel={photo ? "Photo selected" : "Add photo evidence"}
-        >
-          <Ionicons
-            name={photo ? "checkmark-circle" : "camera-outline"}
-            size={16}
-            color={photo ? colors.safe : colors.subtleText}
-          />
-          <Text style={[styles.photoPickerText, photo && styles.photoPickerTextSelected]} numberOfLines={1}>
-            {photo ? photo.name : "Add photo evidence (optional)"}
+        <View style={styles.photosHeader}>
+          <Text style={[sharedStyles.modalFieldLabel, styles.photosLabel]}>{ADD_PHOTOS_LABEL}</Text>
+          <Text style={styles.photosCounter} accessibilityLabel={`${photos.length} of ${HANDOFF_PHOTOS_MAX} photos added`}>
+            {photoCounter(photos.length)}
           </Text>
+        </View>
+        {photos.length > 0 ? (
+          <View style={styles.thumbGrid}>
+            {photos.map((p, i) => (
+              <View key={`${i}-${p.uri}`} style={styles.thumb}>
+                <Image source={{ uri: p.uri }} style={styles.thumbImage} />
+                <Pressable
+                  onPress={() => removePhoto(i)}
+                  disabled={pending}
+                  style={styles.thumbRemove}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove photo ${i + 1}`}
+                >
+                  <Ionicons name="close" size={14} color={colors.white} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <Pressable
+          onPress={() => void pickPhotos()}
+          disabled={pending}
+          style={styles.photoPickerButton}
+          accessibilityRole="button"
+          accessibilityLabel={ADD_PHOTOS_LABEL}
+        >
+          <Ionicons name="camera-outline" size={16} color={colors.subtleText} />
+          <Text style={styles.photoPickerText}>{ADD_PHOTOS_LABEL}</Text>
         </Pressable>
+        {pending && photos.length > 0 ? (
+          <Text style={sharedStyles.modalHelper} accessibilityLiveRegion="polite">
+            {UPLOADING_PHOTOS}
+          </Text>
+        ) : null}
 
         <FormBanner message={photoError ?? error} />
 
@@ -233,23 +290,36 @@ const styles = StyleSheet.create({
   returnWhereOptionActive: { borderColor: colors.primary, backgroundColor: primaryTint.fill12 },
   returnWhereTitle: { color: colors.text, fontSize: 12, fontWeight: "800" },
   returnWhereHint: { color: colors.mutedText, fontSize: 10, lineHeight: 14, fontWeight: "500" },
+  photosHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  photosLabel: { flexShrink: 1 },
+  photosCounter: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
+  thumbGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  thumb: { width: 56, height: 56, borderRadius: 10, overflow: "hidden", backgroundColor: colors.surfaceMuted },
+  thumbImage: { width: "100%", height: "100%" },
+  thumbRemove: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   photoPickerButton: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     backgroundColor: colors.surfaceMuted,
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: colors.border,
     borderStyle: "dashed",
   },
-  photoPickerButtonSelected: {
-    backgroundColor: "rgba(34,195,93,0.08)",
-    borderColor: "rgba(34,195,93,0.40)",
-    borderStyle: "solid",
-  },
-  photoPickerText: { color: colors.subtleText, fontSize: 13, fontWeight: "700" },
-  photoPickerTextSelected: { color: colors.safe },
+  photoPickerText: { color: colors.subtleText, fontSize: 13, fontWeight: "700", flexShrink: 1, textAlign: "center" },
 });

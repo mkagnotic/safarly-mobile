@@ -103,10 +103,10 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
   const kind = source?.kind;
   const sourceId = source?.id;
   const isParcel = kind === "parcel";
-  const title = isParcel ? "Matching carriers" : "Matching senders";
+  const title = isParcel ? "Matching carriers" : "Matching receivers";
   const description = isParcel
     ? `Carriers on ${source?.routeLabel ?? ""} who can deliver this parcel.`
-    : `Senders on ${source?.routeLabel ?? ""} with parcels that match your trip.`;
+    : `Receivers on ${source?.routeLabel ?? ""} with parcels that match your trip.`;
 
   /** Bumped by Retry to re-run the load below. */
   const [attempt, setAttempt] = useState(0);
@@ -150,7 +150,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
               return {
                 key: m.parcel_id,
                 personId: m.sender?.id ?? m.sender_id ?? null,
-                name: m.sender?.name ?? m.sender_name ?? "Sender",
+                name: m.sender?.name ?? m.sender_name ?? "Receiver",
                 verified: m.sender?.is_verified === true,
                 rating: m.sender?.rating ?? 0,
                 fromCity: m.from_city,
@@ -257,7 +257,7 @@ export function MatchesModal({ open, source, onClose }: Readonly<Props>) {
               <Ionicons name="people-outline" size={28} color={colors.mutedText} />
               <Text style={styles.emptyTitle}>No matches right now</Text>
               <Text style={styles.stateText}>
-                We&apos;ll keep watching — new {isParcel ? "carriers" : "senders"} on this route
+                We&apos;ll keep watching — new {isParcel ? "carriers" : "receivers"} on this route
                 will show up here.
               </Text>
             </View>

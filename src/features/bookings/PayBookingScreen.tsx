@@ -49,7 +49,21 @@ function isMissing(error: unknown): boolean {
 /** Neutral processor name until the server names one (never default to "Stripe"). */
 export const PAYMENT_PARTNER = "our payment partner";
 
+/**
+ * PayBookingTab is a hidden TAB screen, and tabs stay mounted (unmountOnBlur:
+ * false), so a navigate to it with a new bookingId only swaps the params. All of
+ * the pay state - the checkout phase, the cancelled/declined banners, the
+ * "no longer available" panel - used to outlive the booking it was opened for:
+ * after paying route A, tapping Pay on route B rendered A's "Payment secured"
+ * for B and auto-navigated to Bookings, though B was never paid (3 Nov 2026).
+ * Keying the body by bookingId gives every booking a fresh screen.
+ */
 export function PayBookingScreen() {
+  const route = useRoute<Route>();
+  return <PayBookingForBooking key={route.params?.bookingId ?? "none"} />;
+}
+
+function PayBookingForBooking() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { user } = useAuth();
@@ -275,8 +289,8 @@ export function PayBookingScreen() {
       ) : !isSender ? (
         <Card style={styles.panel}>
           <Ionicons name="lock-closed-outline" size={34} color={colors.mutedText} />
-          <Text style={styles.panelTitle}>Only the sender can pay</Text>
-          <Text style={styles.panelBody}>This booking is paid by the parcel sender.</Text>
+          <Text style={styles.panelTitle}>Only the receiver can pay</Text>
+          <Text style={styles.panelBody}>This booking is paid by the receiver.</Text>
           <AppButton label="Go back" onPress={goBack} style={styles.panelButton} />
         </Card>
       ) : expired ? (

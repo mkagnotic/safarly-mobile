@@ -288,7 +288,7 @@ export const aboutSections: LegalSection[] = [
   {
     title: `What ${PLATFORM_NAME} is`,
     paragraphs: [
-      `${PLATFORM_NAME} connects people who need to send something with travelers who are already going that way. Instead of paying international courier rates, a sender is matched with a verified traveler who has spare luggage capacity on the route.`,
+      `${PLATFORM_NAME} connects people who need to send something with travelers who are already going that way. Instead of paying international courier rates, a receiver is matched with a verified traveler who has spare luggage capacity on the route.`,
       `${PLATFORM_NAME} also connects travelers looking for a companion on a shared journey.`,
     ],
   },

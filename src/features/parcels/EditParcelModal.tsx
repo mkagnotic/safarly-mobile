@@ -23,6 +23,7 @@ import { INDIA_CITIES, USA_CITIES } from "@/features/search/cityLists";
 import type { DeliveryDateMode } from "@/services/api";
 import { colors } from "@/theme/colors";
 import { sanitizeDecimalInput } from "@/utils/inputSanitizers";
+import { feeAutofill } from "./model/feeAutofill";
 import { validateReturnForm, type ReturnAddressErrors, type ReturnFormValues } from "@/utils/addressOptions";
 import { ReturnAddressFields } from "./ReturnAddressFields";
 import { currencySymbol, formatMoneyShort } from "@/utils/money";
@@ -148,6 +149,10 @@ export function EditParcelModal({
   const [returnSummary, setReturnSummary] = useState<string | null>(null);
   const [returnErrors, setReturnErrors] = useState<ReturnAddressErrors>({});
   const [returnTouched, setReturnTouched] = useState(false);
+  // Once the user types in the fee (even clearing it), the suggestion never
+  // refills it - clearing it used to snap the suggested amount straight back,
+  // so a new amount could not be typed (client, 2 Nov 2026). Web parity.
+  const [feeTouched, setFeeTouched] = useState(false);
   const detailPendingRef = useRef(detailPending);
   const [calendarTarget, setCalendarTarget] = useState<"from" | "to" | null>(null);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => {
@@ -164,6 +169,7 @@ export function EditParcelModal({
       setReturnSummary(null);
       setReturnErrors({});
       setReturnTouched(false);
+      setFeeTouched(false);
       const d = parseYmd(initial.delivery_by_from) ?? new Date();
       setVisibleMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
@@ -213,10 +219,9 @@ export function EditParcelModal({
   }, [form.weight_kg, form.fee_currency, weightNum]);
 
   useEffect(() => {
-    if (suggestedFee != null && form.fee_offered === "") {
-      setForm((prev) => ({ ...prev, fee_offered: String(suggestedFee) }));
-    }
-  }, [suggestedFee, form.fee_offered]);
+    const next = feeAutofill("edit", feeTouched, suggestedFee, form.fee_offered);
+    if (next != null) setForm((prev) => ({ ...prev, fee_offered: next }));
+  }, [feeTouched, suggestedFee, form.fee_offered]);
 
   /** Fee check, on blur (web rule: "Checked when you leave the field, as on Send Parcel") and on Save. */
   const feeProblem = (): string | undefined => {
@@ -511,6 +516,7 @@ export function EditParcelModal({
                 <TextInput
                   value={form.fee_offered}
                   onChangeText={(t) => {
+                    setFeeTouched(true);
                     setForm((prev) => ({ ...prev, fee_offered: sanitizeDecimalInput(t, 6, 2) }));
                     clearError("fee");
                   }}

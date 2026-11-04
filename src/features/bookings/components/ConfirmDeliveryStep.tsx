@@ -74,7 +74,7 @@ export function ConfirmDeliveryStep({
         you hand the parcel over. Can't meet up? Message the receiver in chat.
       </Text>
       <Text style={sharedStyles.stepCardFootnote}>
-        Three wrong tries locks the code — the sender then gets a new one.
+        Three wrong tries locks the code — the receiver then gets a new one.
       </Text>
     </View>
   );

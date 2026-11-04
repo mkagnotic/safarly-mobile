@@ -13,7 +13,7 @@ export function AwaitingPaymentNotice() {
       </View>
       <Text style={styles.awaitingPayTitle}>You have the parcel — keep hold of it</Text>
       <Text style={styles.awaitingPayBody}>
-        Your sender has 48 hours to pay and secure the delivery. Please continue holding
+        Your receiver has 48 hours to pay and secure the delivery. Please continue holding
         the parcel; we'll let you know as soon as the payment lands. Don't travel with it
         until then.
       </Text>

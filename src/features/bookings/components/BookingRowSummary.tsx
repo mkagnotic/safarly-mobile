@@ -68,7 +68,7 @@ export function BookingRowSummary({
                   color={roleColor}
                 />
                 <Text style={[styles.roleText, { color: roleColor }]}>
-                  {role === "sender" ? "Sender" : "Carrier"}
+                  {role === "sender" ? "Receiver" : "Carrier"}
                 </Text>
                 <Text style={styles.subDot}>·</Text>
               </>

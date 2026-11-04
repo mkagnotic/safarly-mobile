@@ -19,6 +19,7 @@ import { AppPressable as Pressable } from "@/components/ui/AppPressable";
 import { BusyLabel } from "@/components/ui/BusyLabel";
 import { KeyboardAwareSheet } from "@/components/ui/KeyboardAwareSheet";
 import { FormBanner } from "@/components/ui/FormBanner";
+import { isLastTry, LAST_TRY_REJECT_BUTTON, LAST_TRY_REJECT_WARNING } from "@/features/messages/chat/lib/verificationTries";
 import { permissionDeniedBanner, type PermissionBanner } from "@/utils/permissionBanner";
 import {
   getErrorMessage,
@@ -379,8 +380,8 @@ function CarrierView({
   // reader is always the carrier and the other party is always the sender. Naming
   // them cannot be misread as naming the reader - the trap that keeps the price line
   // role-neutral. Kept in step with web `ChatParcelReviewPrompt`.
-  const who = counterpartName?.trim() || "the sender";
-  const Who = counterpartName?.trim() || "The sender";
+  const who = counterpartName?.trim() || "the receiver";
+  const Who = counterpartName?.trim() || "The receiver";
 
   if (review.status === "none" || review.status === "rejected") {
     return (
@@ -435,10 +436,13 @@ function CarrierView({
             onChangeText={setNote}
             multiline
             maxLength={500}
-            placeholder="Add a note for the sender (optional)"
+            placeholder="Add a note for the receiver (optional)"
             placeholderTextColor={colors.subtleText}
             style={styles.noteInput}
           />
+          {isLastTry(review, 5) ? (
+            <Text style={styles.lastTryText} testID="parcel-last-try">{LAST_TRY_REJECT_WARNING}</Text>
+          ) : null}
           <View style={styles.row}>
             <Pressable
               onPress={onReject}
@@ -449,7 +453,7 @@ function CarrierView({
               {pending === "reject" ? (
                 <BusyLabel label="Sending…" textStyle={styles.btnWarningText} />
               ) : (
-                <Text style={styles.btnWarningText}>Request changes</Text>
+                <Text style={styles.btnWarningText}>{isLastTry(review, 5) ? LAST_TRY_REJECT_BUTTON : "Request changes"}</Text>
               )}
             </Pressable>
             <Pressable
@@ -552,9 +556,11 @@ function SenderView({
           icon="alert-circle"
           tone="warning"
           title={`You've used all ${maxAttempts} tries for parcel photos.`}
-          body="Please contact the Safarly support team, or cancel the request."
+          body="No more photos can be added to this request."
         />
-        {/* The way out the body names (chat spec bug 4): cancel, no new try. */}
+        {/* Only a deal that ran out before the auto-unmatch change (3 Nov 2026)
+            lands here - the server now ends the match on the final rejection.
+            Cancel is the way out (chat spec bug 4); no new try. */}
         <CancelRequestControl
           pending={pending}
           busy={busy}
@@ -568,7 +574,7 @@ function SenderView({
   const triesHint = triesLeft === maxAttempts
     ? `You get ${maxAttempts} tries to have your photos approved.`
     : triesLeft === 1
-      ? "Last try — choose your photos carefully."
+      ? "Last try — if these are rejected, this match ends automatically."
       : `${triesLeft} tries left.`;
   return (
     <View style={styles.stack}>
@@ -844,6 +850,7 @@ const styles = StyleSheet.create({
   infoBody: { color: colors.mutedText, fontSize: 13, lineHeight: 19 },
 
   attemptsText: { color: colors.mutedText, fontSize: 12, fontWeight: "600" },
+  lastTryText: { color: colors.warning, fontSize: 13, fontWeight: "700", lineHeight: 18 },
   fieldLabel: { color: colors.text, fontSize: 12, fontWeight: "800" },
 
   // Photo strip (carrier / under-review view)

@@ -213,7 +213,7 @@ export function TransactionsScreen() {
                 </Text>
               ) : null}
               <Text style={styles.payoutNoteText}>
-                Earnings pay out automatically to your linked bank 2–7 business days after the sender confirms delivery.
+                Earnings pay out automatically to your linked bank 2–7 business days after the receiver confirms delivery.
               </Text>
               <Text style={styles.payoutNoteLink}>Manage payout details ›</Text>
             </View>

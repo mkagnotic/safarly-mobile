@@ -159,7 +159,7 @@ export const TravelCard = memo(function TravelCard({
       message:
         `${item.from_city} → ${item.to_city}\n\n` +
         (type === "flight"
-          ? "Your trip will be removed from search and any pending requests from senders will be declined. This can't be undone."
+          ? "Your trip will be removed from search and any pending requests from receivers will be declined. This can't be undone."
           : "Carriers won't see it any more, and any match or offer on it will be closed. This can't be undone."),
       actions: [
         { text: "Keep it", style: "cancel" },
@@ -321,13 +321,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(249, 115, 22, 0.10)",
     marginBottom: 10,
   },
+  // No letterSpacing with textTransform: on Android the pair measures the
+  // lowercase width and clipped "YOUR PACKAGE" to "YOUR" (3 Nov 2026).
   tagText: {
     textTransform: "uppercase",
     color: colors.ctaAccent,
     fontSize: 10,
     lineHeight: 14,
     fontWeight: "800",
-    letterSpacing: 0.5,
   },
   tagMuted: { backgroundColor: colors.surfaceMuted },
   tagTextMuted: { color: colors.subtleText },
