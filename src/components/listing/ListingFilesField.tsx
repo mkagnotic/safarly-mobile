@@ -230,7 +230,7 @@ export function ListingFilesField({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.hint}>{count}/{max} files - {hint}</Text>
       {/* Search shows these to the people who match the listing (2 Nov 2026) - say so where they are added. Same words as web. */}
-      <Text style={styles.hint}>Photos you add here are shown to people who match this request in search.</Text>
+      <Text style={styles.hint}>Photos you add here are shown to people who see this listing in search.</Text>
     </View>
   );
 }
