@@ -239,7 +239,7 @@ test("every request shows its own strip: the card's listing AND each +N more row
 
 // ---------------------------------------------------------------- form hint
 
-const HINT = "Photos you add here are shown to people who match this request in search.";
+const HINT = "Photos you add here are shown to people who see this listing in search.";
 
 test("the files field tells owners search shows their photos", () => {
   assert.ok(read("components/listing/ListingFilesField.tsx").includes(HINT));
