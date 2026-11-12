@@ -2970,6 +2970,15 @@ const CHECKS = [
     mustNot: [],
   },
 
+  {
+    repo: "mobile",
+    file: "src/features/bookings/components/AcceptHandoffStep.tsx",
+    id: "mobile-handoff-accept-dark-purple",
+    why: "Client 12 Nov 2026: the 'I have it and inspected it - accept' button uses the dark brand purple of the selected KG/CM toggle (colors.wordmark), not the light primary.",
+    must: ["styles.acceptCta,", "acceptCta: { backgroundColor: colors.wordmark },"],
+    mustNot: [],
+  },
+
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

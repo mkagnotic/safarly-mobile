@@ -95,6 +95,7 @@ export function AcceptHandoffStep({
           sharedStyles.actionPrimary,
           sharedStyles.fullWidthAction,
           styles.stepCardCta,
+          styles.acceptCta,
           !handoffDispatched && styles.ctaDisabled,
         ]}
         onPress={() => setAcceptHandoffOpen(true)}
@@ -167,6 +168,9 @@ const styles = StyleSheet.create({
   stepCardNoteText: { color: colors.mutedText, fontSize: 12, lineHeight: 17, fontWeight: "500" },
   stepCardNoteStrong: { color: colors.text, fontWeight: "800" },
   stepCardCta: { marginTop: 4 },
+  // The darker brand purple of the selected KG / CM toggle (client, 12 Nov 2026):
+  // the step's main action stands out from the light-purple chrome around it.
+  acceptCta: { backgroundColor: colors.wordmark },
   ctaDisabled: { opacity: 0.45 },
   waitingNote: {
     marginTop: 4,
