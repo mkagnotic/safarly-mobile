@@ -2979,6 +2979,15 @@ const CHECKS = [
     mustNot: [],
   },
 
+  {
+    repo: "mobile",
+    file: ["src/features/messages/OfferChatScreen.tsx", "src/features/messages/offerResolution.ts", "src/features/messages/chat/hooks/useChatOfferActions.ts"],
+    id: "mobile-no-make-offer-after-accept",
+    why: "Client 13 Nov 2026: after an offer was accepted, the pinned step showed 'Make an offer' for a few seconds (step still PRICE_OFFER until the refresh). Hidden in that gap only (priceJustAgreed), same rule as web useOfferTimeline.",
+    must: ["export function priceJustAgreed(", "acceptedOfferIds: [...acceptedHereIds, ...offerState.acceptedOfferIds],", 'markOfferSettled(offerId, "accepted");'],
+    mustNot: [],
+  },
+
 ];
 
 /** Remove comments so prose ABOUT the old wording is never mistaken for the code. */

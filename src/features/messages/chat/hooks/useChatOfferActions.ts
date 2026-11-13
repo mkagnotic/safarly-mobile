@@ -19,7 +19,7 @@ interface UseChatOfferActionsInput {
   postOffer: UseOffersResult["postOffer"];
   acceptOffer: UseOffersResult["acceptOffer"];
   rejectOffer: UseOffersResult["rejectOffer"];
-  markOfferSettled: (offerId: string) => void;
+  markOfferSettled: (offerId: string, outcome?: "accepted" | "rejected") => void;
   setActionMenuOpen: (open: boolean) => void;
   /** Re-read the deal after a refused offer (its price or currency may have moved). */
   refetchActiveDeal?: () => Promise<void>;
@@ -129,7 +129,7 @@ export function useChatOfferActions({
       setOfferBanner(null);
       try {
         await acceptOffer(offerId);
-        markOfferSettled(offerId);
+        markOfferSettled(offerId, "accepted");
         setOfferBanner({ variant: "success", title: "Offer accepted — match confirmed!" });
         // Both sides stay in the chat. Handoff-first: the booking starts
         // awaiting_handoff with no payment window, so the pin moves to the
@@ -167,7 +167,7 @@ export function useChatOfferActions({
       setOfferBanner(null);
       try {
         await rejectOffer(offerId);
-        markOfferSettled(offerId);
+        markOfferSettled(offerId, "rejected");
         setOfferBanner({ variant: "info", title: "Offer declined" });
       } catch (err) {
         setOfferBanner({
