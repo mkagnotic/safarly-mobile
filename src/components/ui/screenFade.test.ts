@@ -2,25 +2,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-// 29 Oct 2026 (emulator): the bell on Inbox opened a BLANK Notifications screen.
-// Screen's entrance fade sets opacity 0 then animates to 1; a fade that is
-// stopped or never runs left the re-visited tab invisible. Guard the three
-// ways back to opacity 1.
-const src = readFileSync(new URL("./Screen.tsx", import.meta.url), "utf8");
-const start = src.indexOf("if (!isFocused) return;");
-const end = src.indexOf("[isFocused, transition]", start);
-const effect = src.slice(start, end);
+// Screen used to fade its body from opacity 0 to 1 on every focus (native
+// driver). It left whole screens invisible, with only the tab bar and gradient
+// showing: Notifications on the emulator (29 Oct 2026), then My Bookings on
+// staging (13 Nov 2026), AFTER the 29 Oct fix had added a reset-to-1 fallback.
+// The JS value said 1; the native view stayed at 0. The fix is no fade at all.
+const raw = readFileSync(new URL("./Screen.tsx", import.meta.url), "utf8");
+// Comments explain the history and may name the old API; only code counts.
+const code = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
-test("an interrupted fade snaps back to fully visible", () => {
-  assert.match(effect, /\.start\(\(\{ finished \}\) => \{[\s\S]*?if \(!finished\) transition\.setValue\(1\)/);
+test("Screen has no entrance animation that could leave it invisible", () => {
+  for (const banned of ["Animated", "opacity", "InteractionManager", "useIsFocused"]) {
+    assert.ok(!code.includes(banned), `Screen.tsx must not use ${banned}`);
+  }
 });
 
-test("leaving the screen resets the fade to visible", () => {
-  const cleanup = effect.slice(effect.lastIndexOf("return () => {"));
-  assert.match(cleanup, /transition\.setValue\(1\)/);
-});
-
-test("a fallback timer shows the screen if the fade never ran", () => {
-  assert.match(effect, /const fallback = setTimeout\(/);
-  assert.match(effect, /clearTimeout\(fallback\)/);
+test("the screen body is wrapped in plain Views on both keyboard paths", () => {
+  assert.match(code, /<View style=\{\[styles\.flex, \{ backgroundColor: innerBg \}\]\}>\{screenBody\}<\/View>/);
+  assert.match(code, /<View style=\{styles\.flex\}>\{screenBody\}<\/View>/);
 });
