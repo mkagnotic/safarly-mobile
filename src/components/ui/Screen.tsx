@@ -1,8 +1,5 @@
-import { PropsWithChildren, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { PropsWithChildren, createContext, useCallback, useContext, useState } from "react";
 import {
-  Animated,
-  Easing,
-  InteractionManager,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
@@ -12,7 +9,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { useIsFocused } from "@react-navigation/native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { colors } from "@/theme/colors";
@@ -55,14 +51,10 @@ export function Screen({
   safeBackgroundColor,
   disableKeyboardAvoiding = false,
 }: Props) {
-  const isFocused = useIsFocused();
   const { provided: backgroundProvidedByAncestor } = useContext(ScreenBackgroundContext);
   const surfaceBg = safeBackgroundColor ?? colors.background;
   const useFadedGradient = safeBackgroundColor === undefined;
   const renderHeroHere = useFadedGradient && !backgroundProvidedByAncestor;
-  const transition = useRef(new Animated.Value(1)).current;
-  /** Avoid a visible flash (1 → 0 → 1) on the first paint of each screen instance. */
-  const skipNextEntrance = useRef(true);
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -78,49 +70,13 @@ export function Screen({
     }
   }, [onRefresh, refreshing]);
 
-  useEffect(() => {
-    if (!isFocused) return;
-    if (skipNextEntrance.current) {
-      skipNextEntrance.current = false;
-      transition.setValue(1);
-      return;
-    }
-    const enterMs = Platform.OS === "android" ? 180 : Platform.OS === "web" ? 200 : 210;
-    // The fade must never be able to leave a screen invisible. Emulator, 29 Oct
-    // 2026: the bell on Inbox opened a blank Notifications screen. A re-visited
-    // tab whose fade is stopped or never finishes stays at opacity 0. So: an
-    // interrupted fade snaps to 1, leaving the screen resets it to 1, and a
-    // fallback timer forces 1 if the fade never got to run.
-    let settled = false;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      if (settled) return; // the fallback already showed the screen; don't blink it
-      transition.setValue(0);
-      Animated.timing(transition, {
-        toValue: 1,
-        duration: enterMs,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        settled = true;
-        if (!finished) transition.setValue(1);
-      });
-    });
-    const fallback = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      transition.stopAnimation();
-      transition.setValue(1);
-    }, enterMs + 400);
-    return () => {
-      handle.cancel();
-      clearTimeout(fallback);
-      transition.stopAnimation();
-      transition.setValue(1);
-    };
-  }, [isFocused, transition]);
-
-  /** Opacity-only entrance: avoids stacking transforms with tab transitions (smoother than translate + fade). */
-  const animatedScreenStyle = { opacity: transition };
+  // No entrance fade, ever. The screen body used to fade from opacity 0 to 1 on
+  // every focus (native driver). Twice that left a whole screen invisible while
+  // the tab bar and gradient still showed: Notifications (29 Oct 2026), then
+  // My Bookings on staging (13 Nov 2026), after the 29 Oct fallback had already
+  // reset the JS value to 1. A native-driven opacity can stay at 0 on the
+  // native view whatever JS believes. A screen's visibility must not depend on
+  // an animation finishing, so the body is a plain View (guard: screenFade.test.ts).
 
   const screenBody = scroll ? (
     <ScrollView
@@ -152,15 +108,13 @@ export function Screen({
       {renderHeroHere ? <HeroBackground /> : null}
       <SafeAreaView style={[styles.safe, { backgroundColor: innerBg }]} edges={edges}>
         {disableKeyboardAvoiding ? (
-          <Animated.View style={[styles.flex, { backgroundColor: innerBg }, animatedScreenStyle]}>
-            {screenBody}
-          </Animated.View>
+          <View style={[styles.flex, { backgroundColor: innerBg }]}>{screenBody}</View>
         ) : (
           <KeyboardAvoidingView
             behavior={Platform.select({ ios: "padding", android: "height", default: undefined })}
             style={[styles.flex, { backgroundColor: innerBg }]}
           >
-            <Animated.View style={[styles.flex, animatedScreenStyle]}>{screenBody}</Animated.View>
+            <View style={styles.flex}>{screenBody}</View>
           </KeyboardAvoidingView>
         )}
       </SafeAreaView>

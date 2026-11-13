@@ -65,6 +65,16 @@ const CHECKS = [
     mustNot: ["Step 2 (In transit) ends when your carrier reaches", "Never send the code to the carrier"],
   },
 
+  // ------------------------------------------------------------ blank screens
+  {
+    repo: "mobile",
+    file: "src/components/ui/Screen.tsx",
+    id: "screen-never-faded",
+    why: "Every screen's body faded in from opacity 0 on focus. Twice it stayed at 0: a blank Notifications screen (29 Oct 2026) and a blank My Bookings screen on staging (13 Nov 2026), tab bar and gradient still showing. A screen's visibility must never depend on an animation finishing.",
+    must: ["<View style={styles.flex}>{screenBody}</View>"],
+    mustNot: ["Animated", "opacity", "useIsFocused", "runAfterInteractions"],
+  },
+
   // ------------------------------------------------------------- party labelling
   {
     repo: "web",
