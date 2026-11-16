@@ -35,6 +35,8 @@ export interface ResolvedOffers {
   statusById: Map<string, OfferStatus>;
   /** messageId -> the currency to show that offer_card in (its deal's; AN14). */
   currencyById: Map<string, string>;
+  /** Offers the thread shows as ACCEPTED (an `offer_accept` message landed). */
+  acceptedOfferIds: string[];
   /** The single live (latest + still open) offer, or null. */
   live: {
     messageId: string;
@@ -100,7 +102,33 @@ export function resolveOffers(
     }
   }
 
-  return { statusById, currencyById, live };
+  const acceptedOfferIds = [...override].filter(([, v]) => v === "accepted").map(([id]) => id);
+  return { statusById, currencyById, acceptedOfferIds, live };
+}
+
+/**
+ * Has the price just been agreed while the screen still shows the pricing step?
+ * (client, 13 Nov 2026: after an offer was accepted, "Make an offer" came back in
+ * the chat for a few seconds.)
+ *
+ * Accepting settles the offer at once - the offer bar goes - but the step comes
+ * from the server and still reads PRICE_OFFER until the refresh lands, so the
+ * pinned step fell back to its "Make an offer" action. In that gap nothing is
+ * shown. It is only that gap: the server's own snapshot must still hold THIS offer
+ * as open (read just before the accept), or already say accepted. A deal that went
+ * back to pricing later (a cancel, a re-match) has an accepted offer in its
+ * history but a snapshot that no longer calls it open - there the step shows.
+ * Same rule as web (useOfferTimeline `newestAccepted`, 29 Oct 2026).
+ */
+export function priceJustAgreed(input: {
+  workflowState: string | null | undefined;
+  serverOffer: { offer_id?: string | null; status?: string | null } | null | undefined;
+  acceptedOfferIds: ReadonlyArray<string>;
+}): boolean {
+  const { workflowState, serverOffer, acceptedOfferIds } = input;
+  if (workflowState !== "PRICE_OFFER" || !serverOffer?.offer_id) return false;
+  if (serverOffer.status === "accepted") return true;
+  return serverOffer.status === "open" && acceptedOfferIds.includes(serverOffer.offer_id);
 }
 
 /**

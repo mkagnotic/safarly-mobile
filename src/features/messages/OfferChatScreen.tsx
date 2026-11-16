@@ -26,7 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useActiveDeal } from "@/hooks/api/useActiveDeal";
 import { useChatMessages } from "@/hooks/api/useChatMessages";
 import { useOffers } from "@/hooks/api/useOffers";
-import { dealCurrencyMap, resolveOffers } from "@/features/messages/offerResolution";
+import { dealCurrencyMap, priceJustAgreed, resolveOffers } from "@/features/messages/offerResolution";
 import { offerSeedAmount } from "@/features/messages/offerSeedAmount";
 import { useConversationPresence } from "@/hooks/realtime/useConversationPresence";
 import { messagesApi } from "@/services/api";
@@ -162,8 +162,11 @@ export function OfferChatScreen() {
    * resolver returns null on its own.
    */
   const [settledOfferIds, setSettledOfferIds] = useState<string[]>([]);
-  const markOfferSettled = useCallback((offerId: string) => {
+  /** The settled offers this screen ACCEPTED (see `priceJustAgreed`). */
+  const [acceptedHereIds, setAcceptedHereIds] = useState<string[]>([]);
+  const markOfferSettled = useCallback((offerId: string, outcome?: "accepted" | "rejected") => {
     setSettledOfferIds((prev) => (prev.includes(offerId) ? prev : [...prev, offerId]));
+    if (outcome === "accepted") setAcceptedHereIds((prev) => (prev.includes(offerId) ? prev : [...prev, offerId]));
   }, []);
 
   /**
@@ -222,12 +225,18 @@ export function OfferChatScreen() {
     if (!workflow) return false;
     if (workflow.state === "MATCHED") return false; // nothing to prompt between stages
     if (workflow.state === "PRICE_OFFER" && liveOffer) return false; // offer bar owns it
+    // Price just agreed, the step not refreshed yet: never "Make an offer" here.
+    if (priceJustAgreed({
+      workflowState: workflow.state,
+      serverOffer: activeDeal?.offer,
+      acceptedOfferIds: [...acceptedHereIds, ...offerState.acceptedOfferIds],
+    })) return false;
     const isMatchState = (
       ["NEGOTIATING", "MATCH_REQUESTED", "MATCH_DECLINED", "BLOCKED"] as const
     ).includes(workflow.state as never);
     if (isMatchState && matchBannerVisible) return false; // banner owns it
     return true;
-  }, [workflow, liveOffer, matchBannerVisible]);
+  }, [workflow, liveOffer, matchBannerVisible, activeDeal?.offer, acceptedHereIds, offerState.acceptedOfferIds]);
   // Delivery offers only exist in a booking context, never for buddy matches.
   const supportsOffers = isMatched && conversation?.context_type !== "buddy";
   // The deal's currency (the parcel's) first — the server makes every offer and

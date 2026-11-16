@@ -183,9 +183,9 @@ export function PackageMatchCard({
 
   // This listing's own photos (DISPLAY ONLY: nothing renders when it has none
   // or they fail to load). Each "+N more" row carries its own strip below.
-  const photosBlock = (
-    <ListingPhotoStrip listing={match} canReport={canReport} style={nested ? undefined : styles.photosCentered} />
-  );
+  // Left-aligned in BOTH layouts, like web (client 16 Nov 2026: centred on
+  // "All listings" but left on "Matches for my routes" looked broken).
+  const photosBlock = <ListingPhotoStrip listing={match} canReport={canReport} />;
 
   const actionsBlock = (
     <View style={sharedStyles.actionsRow}>
@@ -317,5 +317,4 @@ const styles = StyleSheet.create({
   capacityPillText: { color: colors.warning, fontSize: 11, lineHeight: 14, fontWeight: "700" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   rowPhotos: { marginTop: 6 },
-  photosCentered: { alignSelf: "center", justifyContent: "center" },
 });

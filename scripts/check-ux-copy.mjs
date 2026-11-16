@@ -65,6 +65,16 @@ const CHECKS = [
     mustNot: ["Step 2 (In transit) ends when your carrier reaches", "Never send the code to the carrier"],
   },
 
+  // ------------------------------------------------------------ blank screens
+  {
+    repo: "mobile",
+    file: "src/components/ui/Screen.tsx",
+    id: "screen-never-faded",
+    why: "Every screen's body faded in from opacity 0 on focus. Twice it stayed at 0: a blank Notifications screen (29 Oct 2026) and a blank My Bookings screen on staging (13 Nov 2026), tab bar and gradient still showing. A screen's visibility must never depend on an animation finishing.",
+    must: ["<View style={styles.flex}>{screenBody}</View>"],
+    mustNot: ["Animated", "opacity", "useIsFocused", "runAfterInteractions"],
+  },
+
   // ------------------------------------------------------------- party labelling
   {
     repo: "web",
@@ -2790,8 +2800,16 @@ const CHECKS = [
     file: ["src/components/listing/ListingFilesField.tsx", "src/features/search/components/ListingPhotoViewer.tsx", "src/features/search/components/ListingPhotoStrip.tsx", "src/features/search/lib/listingPhotos.ts", "src/features/search/components/PackageMatchCard.tsx"],
     id: "mobile-listing-photos-in-search",
     why: "See listing-photos-in-search-* (web repo), client 2 Nov 2026, DISPLAY ONLY: the same form hint, each search row (and every '+N more' row) shows ITS listing's photos, the same labels and viewer words as web, and a photo failure is never a toast or an error state.",
-    must: ["Photos you add here are shown to people who match this request in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
+    must: ["Photos you add here are shown to people who see this listing in search.", "const noun = file.kind === \"pdf\" ? \"Document\" : \"Photo\";", "return `${noun} ${index + 1} of ${total} for ${routeLabel(listing)}`;", "return `${extra} more ${extra === 1 ? \"photo\" : \"photos\"} for ${routeLabel(listing)}`;", "Open PDF", "accessibilityLabel=\"Close\"", "<ListingPhotoStrip listing={match}", "photos={<ListingPhotoStrip listing={o}"],
     mustNot: ["toast", "ErrorState"],
+  },
+  {
+    repo: "mobile",
+    file: ["src/features/search/components/PackageMatchCard.tsx"],
+    id: "search-photos-left-aligned",
+    why: "Client 16 Nov 2026: listing photos sat centred on Search 'All listings' but left-aligned on 'Matches for my routes' (and on web). One alignment everywhere: left.",
+    must: ["const photosBlock = <ListingPhotoStrip listing={match} canReport={canReport} />;"],
+    mustNot: ["photosCentered"],
   },
   {
     repo: "mobile",
@@ -2957,6 +2975,24 @@ const CHECKS = [
     id: "mobile-push-reregisters-after-sign-out",
     why: "Client 4 Nov 2026 (1.1.3): no push on the test account - prod had 0 tokens for it. 1.1.2's loop fix remembered 'already registered this run' and sign-out (which deletes the server token) never cleared it, so signing back in without closing the app never registered again.",
     must: ["function resetPushRegistration(): void {", "export async function forgetThisDevice(): Promise<void> {\n  resetPushRegistration();", "export async function clearCachedPushToken(): Promise<void> {\n  resetPushRegistration();", "if (registeredThisRun === token) return;"],
+    mustNot: [],
+  },
+
+  {
+    repo: "mobile",
+    file: "src/features/bookings/components/AcceptHandoffStep.tsx",
+    id: "mobile-handoff-accept-dark-purple",
+    why: "Client 12 Nov 2026: the 'I have it and inspected it - accept' button uses the dark brand purple of the selected KG/CM toggle (colors.wordmark), not the light primary.",
+    must: ["styles.acceptCta,", "acceptCta: { backgroundColor: colors.wordmark },"],
+    mustNot: [],
+  },
+
+  {
+    repo: "mobile",
+    file: ["src/features/messages/OfferChatScreen.tsx", "src/features/messages/offerResolution.ts", "src/features/messages/chat/hooks/useChatOfferActions.ts"],
+    id: "mobile-no-make-offer-after-accept",
+    why: "Client 13 Nov 2026: after an offer was accepted, the pinned step showed 'Make an offer' for a few seconds (step still PRICE_OFFER until the refresh). Hidden in that gap only (priceJustAgreed), same rule as web useOfferTimeline.",
+    must: ["export function priceJustAgreed(", "acceptedOfferIds: [...acceptedHereIds, ...offerState.acceptedOfferIds],", 'markOfferSettled(offerId, "accepted");'],
     mustNot: [],
   },
 
