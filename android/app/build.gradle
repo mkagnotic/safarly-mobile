@@ -127,8 +127,8 @@ android {
         applicationId 'com.mysafarly.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2026110401
-        versionName "1.1.4"
+        versionCode 2026111601
+        versionName "1.1.5"
     }
     signingConfigs {
         debug {
