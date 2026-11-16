@@ -3,7 +3,7 @@
     "name": "Safarly",
     "slug": "safarly",
     "owner": "mysafarly",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "scheme": "safarly",
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mysafarly.app",
-      "buildNumber": "2026110401",
+      "buildNumber": "2026111601",
       "usesAppleSignIn": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -40,7 +40,7 @@
         "backgroundColor": "#FAECF3"
       },
       "package": "com.mysafarly.app",
-      "versionCode": 2026110401,
+      "versionCode": 2026111601,
       "googleServicesFile": "./google-services.json",
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
