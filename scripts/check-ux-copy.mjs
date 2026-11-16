@@ -2805,6 +2805,14 @@ const CHECKS = [
   },
   {
     repo: "mobile",
+    file: ["src/features/search/components/PackageMatchCard.tsx"],
+    id: "search-photos-left-aligned",
+    why: "Client 16 Nov 2026: listing photos sat centred on Search 'All listings' but left-aligned on 'Matches for my routes' (and on web). One alignment everywhere: left.",
+    must: ["const photosBlock = <ListingPhotoStrip listing={match} canReport={canReport} />;"],
+    mustNot: ["photosCentered"],
+  },
+  {
+    repo: "mobile",
     file: ["src/features/parcels/ParcelDetailsScreen.tsx", "src/features/bookings/components/BookingRowSummary.tsx", "src/features/travels/MatchesModal.tsx", "src/features/bookings/PayBookingScreen.tsx", "src/features/travels/TripAvailabilityToggle.tsx"],
     id: "mobile-sender-becomes-receiver",
     why: "Client 2 Nov 2026: the word 'Sender' confused users; the roles are only Receiver and Carrier on web, Android and iOS (and in the legal text). Identifiers like sender_id stay.",

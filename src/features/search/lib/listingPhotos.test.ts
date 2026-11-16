@@ -232,6 +232,9 @@ test("every request shows its own strip: the card's listing AND each +N more row
   assert.match(src, /photos=\{<ListingPhotoStrip listing=\{o\}/);
   // Both card layouts place it.
   assert.equal(src.split("{photosBlock}").length - 1, 2);
+  // ...left-aligned in both, like web: never centred on "All listings" (16 Nov 2026).
+  assert.match(src, /const photosBlock = <ListingPhotoStrip listing=\{match\} canReport=\{canReport\} \/>;/);
+  assert.doesNotMatch(src, /photosCentered|justifyContent: "center" \}/);
   // Rows behind a collapsed "+N more" are not mounted, so they never fetch.
   const more = read("features/search/components/MoreListings.tsx");
   assert.match(more, /\{open \? \(/);
